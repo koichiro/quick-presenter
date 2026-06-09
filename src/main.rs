@@ -11,6 +11,9 @@ use tracing_subscriber::EnvFilter;
 
 slint::include_modules!();
 
+const CURRENT_RENDER_WIDTH: i32 = 1600;
+const PREVIEW_RENDER_WIDTH: i32 = 600;
+
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
@@ -57,6 +60,11 @@ struct AppWindowRefs {
 struct AppState {
     pdf: Option<PdfDocumentState>,
     presentation: PresentationState,
+}
+
+struct RenderedPages {
+    current: slint::Image,
+    next: Option<slint::Image>,
 }
 
 fn wire_callbacks(app: &PresenterWindow, windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
@@ -132,20 +140,34 @@ fn render_into_windows(
         .pdf
         .as_ref()
         .expect("presentation snapshot should have an open PDF");
-    let image = doc.render_page(snapshot.current_index, 1600)?;
+    let rendered = render_pages(doc, snapshot)?;
 
     if let Some(presenter) = windows.presenter.upgrade() {
-        presenter.set_current_page_image(image.clone());
+        presenter.set_current_page_image(rendered.current.clone());
+        presenter.set_has_next_page(rendered.next.is_some());
+        if let Some(next) = rendered.next.as_ref() {
+            presenter.set_next_page_image(next.clone());
+        }
         presenter.set_document_title(snapshot.title.clone().into());
         presenter.set_page_label(snapshot.page_label.clone().into());
         presenter.set_status_text("Ready".into());
     }
 
     if let Some(slide) = windows.slide.upgrade() {
-        slide.set_page_image(image);
+        slide.set_page_image(rendered.current);
     }
 
     Ok(())
+}
+
+fn render_pages(doc: &PdfDocumentState, snapshot: &PageSnapshot) -> Result<RenderedPages> {
+    Ok(RenderedPages {
+        current: doc.render_page(snapshot.current_index, CURRENT_RENDER_WIDTH)?,
+        next: match snapshot.next_index {
+            Some(index) => Some(doc.render_page(index, PREVIEW_RENDER_WIDTH)?),
+            None => None,
+        },
+    })
 }
 
 fn set_status(weak: &Weak<PresenterWindow>, message: String) {

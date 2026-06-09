@@ -17,6 +17,8 @@ component SlideView inherits Rectangle {
 
 export component PresenterWindow inherits Window {
     in property <image> current-page-image;
+    in property <image> next-page-image;
+    in property <bool> has-next-page: false;
     in property <string> document-title: "No PDF opened";
     in property <string> page-label: "";
     in property <string> status-text: "Open a PDF to start";
@@ -74,10 +76,53 @@ export component PresenterWindow inherits Window {
             }
         }
 
-        SlideView {
-            page-image: root.current-page-image;
+        HorizontalBox {
             horizontal-stretch: 1;
             vertical-stretch: 1;
+            spacing: 10px;
+
+            SlideView {
+                page-image: root.current-page-image;
+                horizontal-stretch: 3;
+                vertical-stretch: 1;
+            }
+
+            VerticalBox {
+                width: 260px;
+                spacing: 6px;
+
+                Text {
+                    text: "Next";
+                    color: #d9dce0;
+                    height: 22px;
+                    vertical-alignment: center;
+                }
+
+                SlideView {
+                    page-image: root.next-page-image;
+                    visible: root.has-next-page;
+                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
+                }
+
+                Rectangle {
+                    visible: !root.has-next-page;
+                    background: #111315;
+                    border-color: #3c4043;
+                    border-width: 1px;
+                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
+
+                    Text {
+                        text: "End";
+                        color: #d9dce0;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                        width: parent.width;
+                        height: parent.height;
+                    }
+                }
+            }
         }
 
         Text {
