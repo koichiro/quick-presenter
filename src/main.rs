@@ -1,3 +1,4 @@
+pub mod fullscreen;
 pub mod notes;
 pub mod pdf;
 pub mod presentation;
@@ -5,10 +6,11 @@ pub mod presentation;
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 use anyhow::Result;
+use fullscreen::FullscreenState;
 use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
-use slint::Weak;
+use slint::{ComponentHandle, Weak};
 use tracing_subscriber::EnvFilter;
 
 slint::include_modules!();
@@ -60,6 +62,7 @@ struct AppWindowRefs {
 
 #[derive(Default)]
 struct AppState {
+    fullscreen: FullscreenState,
     pdf: Option<PdfDocumentState>,
     notes: SpeakerNotes,
     presentation: PresentationState,
@@ -94,9 +97,10 @@ fn wire_callbacks(app: &PresenterWindow, windows: AppWindowRefs, state: Rc<RefCe
         }
     });
 
-    let window_refs = windows;
+    let window_refs = windows.clone();
+    let state_for_next = state.clone();
     app.on_next_page(move || {
-        let mut state = state.borrow_mut();
+        let mut state = state_for_next.borrow_mut();
         state.presentation.next_page();
         if let Some(snapshot) = state.presentation.snapshot() {
             if let Err(err) = render_into_windows(&window_refs, &state, &snapshot) {
@@ -104,6 +108,38 @@ fn wire_callbacks(app: &PresenterWindow, windows: AppWindowRefs, state: Rc<RefCe
             }
         }
     });
+
+    let window_refs = windows.clone();
+    let state_for_toggle = state.clone();
+    app.on_toggle_slide_fullscreen(move || {
+        let mut state = state_for_toggle.borrow_mut();
+        let fullscreen = state.fullscreen.toggle_slide_fullscreen();
+        set_slide_fullscreen(&window_refs, fullscreen);
+    });
+
+    let window_refs = windows;
+    let state_for_slide_exit = state;
+    if let Some(slide) = window_refs.slide.upgrade() {
+        slide.on_exit_fullscreen(move || {
+            exit_slide_fullscreen(&window_refs, &state_for_slide_exit);
+        });
+    }
+}
+
+fn exit_slide_fullscreen(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+    let mut state = state.borrow_mut();
+    let fullscreen = state.fullscreen.exit_slide_fullscreen();
+    set_slide_fullscreen(windows, fullscreen);
+}
+
+fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
+    if let Some(slide) = windows.slide.upgrade() {
+        slide.window().set_fullscreen(fullscreen);
+    }
+
+    if let Some(presenter) = windows.presenter.upgrade() {
+        presenter.set_slide_fullscreen(fullscreen);
+    }
 }
 
 fn pick_pdf_file() -> Option<PathBuf> {
