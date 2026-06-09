@@ -85,6 +85,20 @@ cargo test
 
 フルテスト時は、利用するカバレッジツールを決めたうえで 80% 以上を目標に確認してください。Rust では `cargo llvm-cov` などの標準的なツールを候補にします。
 
+このプロジェクトでは、カバレッジ確認に `cargo-llvm-cov` を使います。導入されていない場合は次を実行してください。
+
+```sh
+cargo install cargo-llvm-cov
+```
+
+カバレッジの実測は次で行います。
+
+```sh
+scripts/coverage.sh
+```
+
+`scripts/coverage.sh` はラインカバレッジ 80% 以上を閾値にします。`src/main.rs` はアプリ起動と Slint/winit の UI バックエンド配線が中心で、macOS では通常の並列ユニットテスト内で安全にウィンドウを生成できないため、カバレッジ集計から除外します。
+
 PDFium の取得が必要な環境では、先に次を実行します。
 
 ```sh
