@@ -310,9 +310,11 @@ fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) 
             SLIDE_WINDOW_MAX_HEIGHT,
             aspect_ratio,
         );
-        slide
-            .window()
-            .set_size(LogicalSize::new(size.width.round(), size.height.round()));
+        let width = size.width.round();
+        let height = size.height.round();
+        slide.set_slide_window_width(width);
+        slide.set_slide_window_height(height);
+        slide.window().set_size(LogicalSize::new(width, height));
     }
 }
 
