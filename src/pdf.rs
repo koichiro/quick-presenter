@@ -8,7 +8,7 @@ pub struct PdfDocumentState {
     _pdfium: Pdfium,
     document: PdfDocument<'static>,
     path: PathBuf,
-    page_index: PdfPageIndex,
+    pages: PageNavigation,
 }
 
 impl PdfDocumentState {
@@ -20,34 +20,33 @@ impl PdfDocumentState {
         let document =
             unsafe { std::mem::transmute::<PdfDocument<'_>, PdfDocument<'static>>(document) };
 
+        let page_count = document.pages().len();
+
         Ok(Self {
             _pdfium: pdfium,
             document,
             path,
-            page_index: 0,
+            pages: PageNavigation::new(page_count),
         })
     }
 
     pub fn previous_page(&mut self) {
-        self.page_index = self.page_index.saturating_sub(1);
+        self.pages.previous();
     }
 
     pub fn next_page(&mut self) {
-        let page_count = self.page_count();
-        if page_count > 0 && self.page_index < page_count - 1 {
-            self.page_index += 1;
-        }
+        self.pages.next();
     }
 
     pub fn render_current_page(&self, target_width: i32) -> Result<Image> {
         let page = self
             .document
             .pages()
-            .get(self.page_index)
-            .with_context(|| format!("failed to load page {}", self.page_index + 1))?;
+            .get(self.pages.current_index())
+            .with_context(|| format!("failed to load page {}", self.pages.current_number()))?;
         let bitmap = page
             .render_with_config(&PdfRenderConfig::new().set_target_width(target_width))
-            .with_context(|| format!("failed to render page {}", self.page_index + 1))?;
+            .with_context(|| format!("failed to render page {}", self.pages.current_number()))?;
         let image = bitmap.as_image()?;
         let rgba = image.to_rgba8();
         let width = rgba.width();
@@ -59,20 +58,62 @@ impl PdfDocumentState {
     }
 
     pub fn title(&self) -> String {
-        self.path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("Untitled PDF")
-            .to_owned()
+        document_title(&self.path)
     }
 
     pub fn page_label(&self) -> String {
-        format!("{} / {}", self.page_index + 1, self.page_count())
+        self.pages.label()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+struct PageNavigation {
+    current_index: PdfPageIndex,
+    total_pages: PdfPageIndex,
+}
+
+impl PageNavigation {
+    fn new(total_pages: PdfPageIndex) -> Self {
+        Self {
+            current_index: 0,
+            total_pages: total_pages.max(0),
+        }
     }
 
-    fn page_count(&self) -> PdfPageIndex {
-        self.document.pages().len()
+    fn previous(&mut self) {
+        if self.current_index > 0 {
+            self.current_index -= 1;
+        }
     }
+
+    fn next(&mut self) {
+        if self.total_pages > 0 && self.current_index < self.total_pages - 1 {
+            self.current_index += 1;
+        }
+    }
+
+    fn current_index(&self) -> PdfPageIndex {
+        self.current_index
+    }
+
+    fn current_number(&self) -> PdfPageIndex {
+        if self.total_pages == 0 {
+            0
+        } else {
+            self.current_index + 1
+        }
+    }
+
+    fn label(&self) -> String {
+        format!("{} / {}", self.current_number(), self.total_pages)
+    }
+}
+
+fn document_title(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Untitled PDF")
+        .to_owned()
 }
 
 fn create_pdfium() -> Result<Pdfium> {
@@ -95,5 +136,185 @@ fn new_or_reuse(bindings: Result<Box<dyn PdfiumLibraryBindings>, PdfiumError>) -
         Ok(bindings) => Ok(Pdfium::new(bindings)),
         Err(PdfiumError::PdfiumLibraryBindingsAlreadyInitialized) => Ok(Pdfium::default()),
         Err(err) => Err(err.into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    #[test]
+    fn page_navigation_starts_at_first_page() {
+        let navigation = PageNavigation::new(5);
+
+        assert_eq!(navigation.current_index(), 0);
+        assert_eq!(navigation.current_number(), 1);
+        assert_eq!(navigation.label(), "1 / 5");
+    }
+
+    #[test]
+    fn page_navigation_clamps_negative_total_to_empty() {
+        let mut navigation = PageNavigation::new(-3);
+
+        navigation.next();
+
+        assert_eq!(navigation.current_index(), 0);
+        assert_eq!(navigation.current_number(), 0);
+        assert_eq!(navigation.label(), "0 / 0");
+    }
+
+    #[test]
+    fn next_advances_until_last_page() {
+        let mut navigation = PageNavigation::new(3);
+
+        navigation.next();
+        assert_eq!(navigation.label(), "2 / 3");
+
+        navigation.next();
+        assert_eq!(navigation.label(), "3 / 3");
+
+        navigation.next();
+        assert_eq!(navigation.current_index(), 2);
+        assert_eq!(navigation.label(), "3 / 3");
+    }
+
+    #[test]
+    fn previous_moves_back_until_first_page() {
+        let mut navigation = PageNavigation::new(3);
+        navigation.next();
+        navigation.next();
+
+        navigation.previous();
+        assert_eq!(navigation.label(), "2 / 3");
+
+        navigation.previous();
+        assert_eq!(navigation.label(), "1 / 3");
+
+        navigation.previous();
+        assert_eq!(navigation.current_index(), 0);
+        assert_eq!(navigation.label(), "1 / 3");
+    }
+
+    #[test]
+    fn single_page_document_never_moves() {
+        let mut navigation = PageNavigation::new(1);
+
+        navigation.next();
+        navigation.previous();
+
+        assert_eq!(navigation.current_index(), 0);
+        assert_eq!(navigation.current_number(), 1);
+        assert_eq!(navigation.label(), "1 / 1");
+    }
+
+    #[test]
+    fn document_title_uses_file_name() {
+        let title = document_title(Path::new("/tmp/decks/product-demo.pdf"));
+
+        assert_eq!(title, "product-demo.pdf");
+    }
+
+    #[test]
+    fn document_title_falls_back_for_directory_path() {
+        let title = document_title(Path::new("/"));
+
+        assert_eq!(title, "Untitled PDF");
+    }
+
+    #[test]
+    fn pdf_document_state_opens_navigates_and_renders_pdf() {
+        if !local_pdfium_available() {
+            return;
+        }
+
+        let path = write_test_pdf();
+        let mut document = PdfDocumentState::open(path.clone()).expect("test PDF should open");
+
+        assert_eq!(
+            document.title(),
+            path.file_name().unwrap().to_string_lossy()
+        );
+        assert_eq!(document.page_label(), "1 / 2");
+
+        let first_page = document
+            .render_current_page(200)
+            .expect("first page should render");
+        assert!(first_page.size().width > 0);
+        assert!(first_page.size().height > 0);
+
+        document.next_page();
+        assert_eq!(document.page_label(), "2 / 2");
+
+        document.next_page();
+        assert_eq!(document.page_label(), "2 / 2");
+
+        document.previous_page();
+        assert_eq!(document.page_label(), "1 / 2");
+
+        fs::remove_file(path).expect("test PDF should be removable");
+    }
+
+    fn local_pdfium_available() -> bool {
+        std::env::var("PDFIUM_DYNAMIC_LIB_PATH").is_ok()
+            || Pdfium::pdfium_platform_library_name_at_path(Path::new("pdfium/lib")).exists()
+    }
+
+    fn write_test_pdf() -> PathBuf {
+        let id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after UNIX epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!("quick-presenter-test-{id}.pdf"));
+
+        fs::write(&path, minimal_pdf()).expect("test PDF should be writable");
+
+        path
+    }
+
+    fn minimal_pdf() -> Vec<u8> {
+        let mut pdf = Vec::from("%PDF-1.4\n".as_bytes());
+        let objects = [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n".to_owned(),
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>\nendobj\n".to_owned(),
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> /Contents 4 0 R >>\nendobj\n".to_owned(),
+            stream_object(4, "0.2 0.4 0.8 rg\n20 20 160 160 re f\n"),
+            "5 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> /Contents 6 0 R >>\nendobj\n".to_owned(),
+            stream_object(6, "0.8 0.3 0.2 rg\n40 40 120 120 re f\n"),
+        ];
+        let mut offsets = Vec::with_capacity(objects.len() + 1);
+        offsets.push(0);
+
+        for object in objects {
+            offsets.push(pdf.len());
+            pdf.extend_from_slice(object.as_bytes());
+        }
+
+        let xref_offset = pdf.len();
+        pdf.extend_from_slice(format!("xref\n0 {}\n", offsets.len()).as_bytes());
+        pdf.extend_from_slice(b"0000000000 65535 f \n");
+        for offset in offsets.iter().skip(1) {
+            pdf.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+        }
+        pdf.extend_from_slice(
+            format!(
+                "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n",
+                offsets.len()
+            )
+            .as_bytes(),
+        );
+
+        pdf
+    }
+
+    fn stream_object(id: usize, contents: &str) -> String {
+        format!(
+            "{id} 0 obj\n<< /Length {} >>\nstream\n{}endstream\nendobj\n",
+            contents.len(),
+            contents
+        )
     }
 }
