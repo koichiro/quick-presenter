@@ -23,11 +23,13 @@ export component PresenterWindow inherits Window {
     in property <string> document-title: "No PDF opened";
     in property <string> page-label: "";
     in property <string> notes-text: "";
+    in property <bool> slide-fullscreen: false;
     in property <string> status-text: "Open a PDF to start";
 
     callback open-pdf();
     callback previous-page();
     callback next-page();
+    callback toggle-slide-fullscreen();
 
     title: "Quick Presenter";
     width: 1024px;
@@ -60,6 +62,13 @@ export component PresenterWindow inherits Window {
                 text: "Next";
                 clicked => {
                     root.next-page();
+                }
+            }
+
+            Button {
+                text: root.slide-fullscreen ? "Exit Fullscreen" : "Fullscreen";
+                clicked => {
+                    root.toggle-slide-fullscreen();
                 }
             }
 
@@ -166,14 +175,28 @@ export component PresenterWindow inherits Window {
 export component SlideWindow inherits Window {
     in property <image> page-image;
 
+    callback exit-fullscreen();
+
     title: "Quick Presenter - Slide";
     width: 1024px;
     height: 720px;
     background: #111315;
 
-    SlideView {
-        page-image: root.page-image;
+    FocusScope {
         width: parent.width;
         height: parent.height;
+
+        KeyBinding {
+            keys: @keys(Escape);
+            activated => {
+                root.exit-fullscreen();
+            }
+        }
+
+        SlideView {
+            page-image: root.page-image;
+            width: parent.width;
+            height: parent.height;
+        }
     }
 }
