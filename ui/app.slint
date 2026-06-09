@@ -15,6 +15,26 @@ component SlideView inherits Rectangle {
     }
 }
 
+component NotesView inherits Rectangle {
+    in property <bool> has-notes: false;
+    in property <string> notes-text: "";
+
+    background: #111315;
+    border-color: #3c4043;
+    border-width: 1px;
+
+    Text {
+        text: root.has-notes ? root.notes-text : "No notes";
+        color: root.has-notes ? #f1f3f4 : #9aa0a6;
+        x: 10px;
+        y: 10px;
+        width: parent.width - 20px;
+        height: parent.height - 20px;
+        wrap: word-wrap;
+        overflow: clip;
+    }
+}
+
 export component PresenterWindow inherits Window {
     in property <image> current-page-image;
     in property <image> next-page-image;
@@ -134,10 +154,30 @@ export component PresenterWindow inherits Window {
                 vertical-stretch: 1;
                 spacing: 10px;
 
-                SlideView {
-                    page-image: root.current-page-image;
+                VerticalBox {
                     horizontal-stretch: 3;
                     vertical-stretch: 1;
+                    spacing: 6px;
+
+                    SlideView {
+                        page-image: root.current-page-image;
+                        horizontal-stretch: 1;
+                        vertical-stretch: 4;
+                    }
+
+                    Text {
+                        text: "Notes";
+                        color: #d9dce0;
+                        height: 22px;
+                        vertical-alignment: center;
+                    }
+
+                    NotesView {
+                        has-notes: root.has-notes;
+                        notes-text: root.notes-text;
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+                    }
                 }
 
                 VerticalBox {
@@ -173,32 +213,6 @@ export component PresenterWindow inherits Window {
                             horizontal-alignment: center;
                             width: parent.width;
                             height: parent.height;
-                        }
-                    }
-
-                    Text {
-                        text: "Notes";
-                        color: #d9dce0;
-                        height: 22px;
-                        vertical-alignment: center;
-                    }
-
-                    Rectangle {
-                        background: #111315;
-                        border-color: #3c4043;
-                        border-width: 1px;
-                        horizontal-stretch: 1;
-                        vertical-stretch: 1;
-
-                        Text {
-                            text: root.has-notes ? root.notes-text : "No notes";
-                            color: root.has-notes ? #f1f3f4 : #9aa0a6;
-                            x: 10px;
-                            y: 10px;
-                            width: parent.width - 20px;
-                            height: parent.height - 20px;
-                            wrap: word-wrap;
-                            overflow: clip;
                         }
                     }
                 }
