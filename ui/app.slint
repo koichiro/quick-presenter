@@ -37,8 +37,9 @@ export component PresenterWindow inherits Window {
     width: 1024px;
     height: 720px;
     background: #202124;
+    forward-focus: presenter-focus;
 
-    FocusScope {
+    presenter-focus := FocusScope {
         width: parent.width;
         height: parent.height;
 
@@ -225,8 +226,9 @@ export component SlideWindow inherits Window {
     width: 1024px;
     height: 720px;
     background: #111315;
+    forward-focus: slide-focus;
 
-    FocusScope {
+    slide-focus := FocusScope {
         width: parent.width;
         height: parent.height;
 
