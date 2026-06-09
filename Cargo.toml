@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rfd = "0.15"
 slint = "1.16"
 pdfium-render = "0.9.1"
 

@@ -1,1 +1,85 @@
 import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+export component AppWindow inherits Window {
+    in property <image> page-image;
+    in property <string> document-title: "No PDF opened";
+    in property <string> page-label: "";
+    in property <string> status-text: "Open a PDF to start";
+
+    callback open-pdf();
+    callback previous-page();
+    callback next-page();
+
+    title: "Quick Presenter";
+    width: 1024px;
+    height: 720px;
+    background: #202124;
+
+    VerticalBox {
+        padding: 12px;
+        spacing: 10px;
+
+        HorizontalBox {
+            height: 36px;
+            spacing: 8px;
+
+            Button {
+                text: "Open PDF";
+                clicked => {
+                    root.open-pdf();
+                }
+            }
+
+            Button {
+                text: "Previous";
+                clicked => {
+                    root.previous-page();
+                }
+            }
+
+            Button {
+                text: "Next";
+                clicked => {
+                    root.next-page();
+                }
+            }
+
+            Text {
+                text: root.document-title;
+                color: white;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+
+            Text {
+                text: root.page-label;
+                color: #d9dce0;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            background: #111315;
+            border-color: #3c4043;
+            border-width: 1px;
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            Image {
+                source: root.page-image;
+                image-fit: contain;
+                width: parent.width;
+                height: parent.height;
+            }
+        }
+
+        Text {
+            text: root.status-text;
+            color: #d9dce0;
+            height: 24px;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
