@@ -16,6 +16,11 @@ Quick Presenter maps those annotations to the corresponding one-based PDF page
 number. Multiple note annotations on the same page are joined with a blank line.
 Empty notes and page number zero are ignored.
 
+The current PDFium extraction path reads `Text` annotations with non-empty
+`Contents`. The Marp `/Name /Note` value documents the expected source format,
+but `pdfium-render` does not currently expose that icon name as the annotation
+name API.
+
 This keeps the initial workflow simple:
 
 1. Authors write slides and speaker notes in Markdown.
