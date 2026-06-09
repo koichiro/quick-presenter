@@ -16,7 +16,7 @@ fn main() -> Result<()> {
         .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
         .init();
 
-    let app = AppWindow::new()?;
+    let app = PresenterWindow::new()?;
     let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState::default()));
 
     wire_callbacks(&app, state.clone());
@@ -31,7 +31,7 @@ struct AppState {
     presentation: PresentationState,
 }
 
-fn wire_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>) {
+fn wire_callbacks(app: &PresenterWindow, state: Rc<RefCell<AppState>>) {
     let weak = app.as_weak();
     let state_for_open = state.clone();
     app.on_open_pdf(move || {
@@ -74,7 +74,7 @@ fn pick_pdf_file() -> Option<PathBuf> {
 }
 
 fn open_and_render(
-    weak: &Weak<AppWindow>,
+    weak: &Weak<PresenterWindow>,
     state: &Rc<RefCell<AppState>>,
     path: PathBuf,
 ) -> Result<()> {
@@ -96,7 +96,7 @@ fn open_and_render(
 }
 
 fn render_into_app(
-    weak: &Weak<AppWindow>,
+    weak: &Weak<PresenterWindow>,
     state: &AppState,
     snapshot: &PageSnapshot,
 ) -> Result<()> {
@@ -106,14 +106,14 @@ fn render_into_app(
         .expect("presentation snapshot should have an open PDF");
     let image = doc.render_page(snapshot.current_index, 1600)?;
     let app = weak.upgrade().expect("window should still be alive");
-    app.set_page_image(image);
+    app.set_current_page_image(image);
     app.set_document_title(snapshot.title.clone().into());
     app.set_page_label(snapshot.page_label.clone().into());
     app.set_status_text("Ready".into());
     Ok(())
 }
 
-fn set_status(weak: &Weak<AppWindow>, message: String) {
+fn set_status(weak: &Weak<PresenterWindow>, message: String) {
     if let Some(app) = weak.upgrade() {
         app.set_status_text(message.into());
     }
