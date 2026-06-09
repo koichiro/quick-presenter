@@ -1,0 +1,15 @@
+# Rust build artifacts
+/target/
+
+# Locally downloaded PDFium binaries and licenses
+/pdfium/
+
+# Local environment overrides
+.env
+.env.*
+
+# OS/editor noise
+.DS_Store
+*.swp
+*.swo
+*~
