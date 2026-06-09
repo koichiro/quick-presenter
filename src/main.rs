@@ -1,3 +1,4 @@
+pub mod errors;
 pub mod fullscreen;
 pub mod input;
 pub mod notes;
@@ -12,7 +13,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::Result;
+use anyhow::{bail, Result};
+use errors::{presenter_error_message, speaker_notes_warning, PresenterMessage};
 use fullscreen::FullscreenState;
 use input::{apply_presentation_command, PresentationCommand};
 use notes::SpeakerNotes;
@@ -20,6 +22,7 @@ use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
 use slint::{ComponentHandle, LogicalPosition, Timer, TimerMode, Weak};
 use timer::{is_first_page_advance, PresentationTimer};
+use tracing::{error, warn};
 use tracing_subscriber::EnvFilter;
 
 slint::include_modules!();
@@ -105,7 +108,8 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     app.on_open_pdf(move || {
         if let Some(path) = pick_pdf_file() {
             if let Err(err) = open_and_render(&window_refs, &state_for_open, path) {
-                set_status(&window_refs.presenter, format!("Error: {err:#}"));
+                error!(error = ?err, "failed to open and render PDF");
+                set_presenter_message(&window_refs.presenter, presenter_error_message(&err));
             }
         }
     });
@@ -202,7 +206,8 @@ fn handle_presentation_command(
     maybe_start_elapsed_timer(command, before.as_ref(), after.as_ref(), &mut state.timer);
     if let Some(snapshot) = after {
         if let Err(err) = render_into_windows(windows, &state, &snapshot) {
-            set_status(&windows.presenter, format!("Error: {err:#}"));
+            error!(error = ?err, "failed to render presentation page");
+            set_presenter_message(&windows.presenter, presenter_error_message(&err));
         }
     }
 }
@@ -255,10 +260,13 @@ fn open_and_render(
     let doc = PdfDocumentState::open(path)?;
     let (notes, status_text) = match doc.speaker_notes() {
         Ok(notes) => (notes, "Ready".to_owned()),
-        Err(err) => (
-            SpeakerNotes::empty(),
-            format!("Ready (speaker notes unavailable: {err:#})"),
-        ),
+        Err(err) => {
+            warn!(error = ?err, "speaker notes unavailable");
+            (
+                SpeakerNotes::empty(),
+                speaker_notes_warning(&err).text().to_owned(),
+            )
+        }
     };
     let presentation = PresentationState::open_document(doc.title(), doc.page_count());
     let snapshot = presentation.snapshot();
@@ -284,10 +292,9 @@ fn render_into_windows(
     state: &AppState,
     snapshot: &PageSnapshot,
 ) -> Result<()> {
-    let doc = state
-        .pdf
-        .as_ref()
-        .expect("presentation snapshot should have an open PDF");
+    let Some(doc) = state.pdf.as_ref() else {
+        bail!("missing open PDF for current presentation");
+    };
     let rendered = render_pages(doc, snapshot)?;
 
     if let Some(presenter) = windows.presenter.upgrade() {
@@ -323,9 +330,9 @@ fn render_pages(doc: &PdfDocumentState, snapshot: &PageSnapshot) -> Result<Rende
     })
 }
 
-fn set_status(weak: &Weak<PresenterWindow>, message: String) {
+fn set_presenter_message(weak: &Weak<PresenterWindow>, message: PresenterMessage) {
     if let Some(app) = weak.upgrade() {
-        app.set_status_text(message.into());
+        app.set_status_text(message.text().into());
     }
 }
 
