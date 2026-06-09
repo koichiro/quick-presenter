@@ -44,6 +44,7 @@ export component PresenterWindow inherits Window {
     in property <string> page-label: "";
     in property <string> notes-text: "";
     in property <bool> slide-fullscreen: false;
+    in property <string> elapsed-time-label: "00:00";
     in property <string> status-text: "Open a PDF to start";
 
     callback open-pdf();
@@ -140,6 +141,14 @@ export component PresenterWindow inherits Window {
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                     overflow: elide;
+                }
+
+                Text {
+                    text: root.elapsed-time-label;
+                    color: #f1f3f4;
+                    font-size: 20px;
+                    font-weight: 700;
+                    vertical-alignment: center;
                 }
 
                 Text {

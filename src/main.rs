@@ -3,8 +3,14 @@ pub mod input;
 pub mod notes;
 pub mod pdf;
 pub mod presentation;
+pub mod timer;
 
-use std::{cell::RefCell, path::PathBuf, rc::Rc};
+use std::{
+    cell::RefCell,
+    path::PathBuf,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 use anyhow::Result;
 use fullscreen::FullscreenState;
@@ -12,7 +18,8 @@ use input::{apply_presentation_command, PresentationCommand};
 use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
-use slint::{ComponentHandle, LogicalPosition, Weak};
+use slint::{ComponentHandle, LogicalPosition, Timer, TimerMode, Weak};
+use timer::{is_first_page_advance, PresentationTimer};
 use tracing_subscriber::EnvFilter;
 
 slint::include_modules!();
@@ -21,6 +28,7 @@ const CURRENT_RENDER_WIDTH: i32 = 1600;
 const PREVIEW_RENDER_WIDTH: i32 = 600;
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
 const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
+const ELAPSED_TIMER_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -31,6 +39,7 @@ fn main() -> Result<()> {
     let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState::default()));
 
     wire_callbacks(&windows, windows.refs(), state.clone());
+    let _elapsed_timer = start_elapsed_timer(windows.refs(), state.clone());
 
     windows.apply_initial_positions();
     windows.slide.show()?;
@@ -79,6 +88,7 @@ struct AppState {
     pdf: Option<PdfDocumentState>,
     notes: SpeakerNotes,
     presentation: PresentationState,
+    timer: PresentationTimer,
     status_text: String,
 }
 
@@ -186,11 +196,31 @@ fn handle_presentation_command(
     }
 
     let mut state = state.borrow_mut();
+    let before = state.presentation.snapshot();
     apply_presentation_command(&mut state.presentation, command);
-    if let Some(snapshot) = state.presentation.snapshot() {
+    let after = state.presentation.snapshot();
+    maybe_start_elapsed_timer(command, before.as_ref(), after.as_ref(), &mut state.timer);
+    if let Some(snapshot) = after {
         if let Err(err) = render_into_windows(windows, &state, &snapshot) {
             set_status(&windows.presenter, format!("Error: {err:#}"));
         }
+    }
+}
+
+fn maybe_start_elapsed_timer(
+    command: PresentationCommand,
+    before: Option<&PageSnapshot>,
+    after: Option<&PageSnapshot>,
+    timer: &mut PresentationTimer,
+) {
+    if command == PresentationCommand::NextPage
+        && !timer.is_running()
+        && is_first_page_advance(
+            before.map(|snapshot| snapshot.current_index),
+            after.map(|snapshot| snapshot.current_index),
+        )
+    {
+        timer.start(Instant::now());
     }
 }
 
@@ -238,6 +268,7 @@ fn open_and_render(
         state.pdf = Some(doc);
         state.notes = notes;
         state.presentation = presentation;
+        state.timer.reset();
         state.status_text = status_text;
     }
 
@@ -267,6 +298,7 @@ fn render_into_windows(
         }
         presenter.set_document_title(snapshot.title.clone().into());
         presenter.set_page_label(snapshot.page_label.clone().into());
+        presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
         presenter.set_status_text(state.status_text.clone().into());
 
         let current_note = state.notes.note_for_page_index(snapshot.current_index);
@@ -294,5 +326,21 @@ fn render_pages(doc: &PdfDocumentState, snapshot: &PageSnapshot) -> Result<Rende
 fn set_status(weak: &Weak<PresenterWindow>, message: String) {
     if let Some(app) = weak.upgrade() {
         app.set_status_text(message.into());
+    }
+}
+
+fn start_elapsed_timer(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
+    let timer = Timer::default();
+    timer.start(
+        TimerMode::Repeated,
+        ELAPSED_TIMER_UPDATE_INTERVAL,
+        move || update_elapsed_timer_label(&windows.presenter, &state.borrow().timer),
+    );
+    timer
+}
+
+fn update_elapsed_timer_label(presenter: &Weak<PresenterWindow>, timer: &PresentationTimer) {
+    if let Some(presenter) = presenter.upgrade() {
+        presenter.set_elapsed_time_label(timer.elapsed_label_at(Instant::now()).into());
     }
 }
