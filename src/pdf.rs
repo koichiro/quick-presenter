@@ -8,7 +8,7 @@ pub struct PdfDocumentState {
     _pdfium: Pdfium,
     document: PdfDocument<'static>,
     path: PathBuf,
-    pages: PageNavigation,
+    page_count: u32,
 }
 
 impl PdfDocumentState {
@@ -26,27 +26,24 @@ impl PdfDocumentState {
             _pdfium: pdfium,
             document,
             path,
-            pages: PageNavigation::new(page_count),
+            page_count: page_count.max(0) as u32,
         })
     }
 
-    pub fn previous_page(&mut self) {
-        self.pages.previous();
+    pub fn page_count(&self) -> u32 {
+        self.page_count
     }
 
-    pub fn next_page(&mut self) {
-        self.pages.next();
-    }
-
-    pub fn render_current_page(&self, target_width: i32) -> Result<Image> {
+    pub fn render_page(&self, page_index: u32, target_width: i32) -> Result<Image> {
+        let page_number = page_index + 1;
         let page = self
             .document
             .pages()
-            .get(self.pages.current_index())
-            .with_context(|| format!("failed to load page {}", self.pages.current_number()))?;
+            .get(page_index as PdfPageIndex)
+            .with_context(|| format!("failed to load page {page_number}"))?;
         let bitmap = page
             .render_with_config(&PdfRenderConfig::new().set_target_width(target_width))
-            .with_context(|| format!("failed to render page {}", self.pages.current_number()))?;
+            .with_context(|| format!("failed to render page {page_number}"))?;
         let image = bitmap.as_image()?;
         let rgba = image.to_rgba8();
         let width = rgba.width();
@@ -59,53 +56,6 @@ impl PdfDocumentState {
 
     pub fn title(&self) -> String {
         document_title(&self.path)
-    }
-
-    pub fn page_label(&self) -> String {
-        self.pages.label()
-    }
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-struct PageNavigation {
-    current_index: PdfPageIndex,
-    total_pages: PdfPageIndex,
-}
-
-impl PageNavigation {
-    fn new(total_pages: PdfPageIndex) -> Self {
-        Self {
-            current_index: 0,
-            total_pages: total_pages.max(0),
-        }
-    }
-
-    fn previous(&mut self) {
-        if self.current_index > 0 {
-            self.current_index -= 1;
-        }
-    }
-
-    fn next(&mut self) {
-        if self.total_pages > 0 && self.current_index < self.total_pages - 1 {
-            self.current_index += 1;
-        }
-    }
-
-    fn current_index(&self) -> PdfPageIndex {
-        self.current_index
-    }
-
-    fn current_number(&self) -> PdfPageIndex {
-        if self.total_pages == 0 {
-            0
-        } else {
-            self.current_index + 1
-        }
-    }
-
-    fn label(&self) -> String {
-        format!("{} / {}", self.current_number(), self.total_pages)
     }
 }
 
@@ -148,70 +98,6 @@ mod tests {
     };
 
     #[test]
-    fn page_navigation_starts_at_first_page() {
-        let navigation = PageNavigation::new(5);
-
-        assert_eq!(navigation.current_index(), 0);
-        assert_eq!(navigation.current_number(), 1);
-        assert_eq!(navigation.label(), "1 / 5");
-    }
-
-    #[test]
-    fn page_navigation_clamps_negative_total_to_empty() {
-        let mut navigation = PageNavigation::new(-3);
-
-        navigation.next();
-
-        assert_eq!(navigation.current_index(), 0);
-        assert_eq!(navigation.current_number(), 0);
-        assert_eq!(navigation.label(), "0 / 0");
-    }
-
-    #[test]
-    fn next_advances_until_last_page() {
-        let mut navigation = PageNavigation::new(3);
-
-        navigation.next();
-        assert_eq!(navigation.label(), "2 / 3");
-
-        navigation.next();
-        assert_eq!(navigation.label(), "3 / 3");
-
-        navigation.next();
-        assert_eq!(navigation.current_index(), 2);
-        assert_eq!(navigation.label(), "3 / 3");
-    }
-
-    #[test]
-    fn previous_moves_back_until_first_page() {
-        let mut navigation = PageNavigation::new(3);
-        navigation.next();
-        navigation.next();
-
-        navigation.previous();
-        assert_eq!(navigation.label(), "2 / 3");
-
-        navigation.previous();
-        assert_eq!(navigation.label(), "1 / 3");
-
-        navigation.previous();
-        assert_eq!(navigation.current_index(), 0);
-        assert_eq!(navigation.label(), "1 / 3");
-    }
-
-    #[test]
-    fn single_page_document_never_moves() {
-        let mut navigation = PageNavigation::new(1);
-
-        navigation.next();
-        navigation.previous();
-
-        assert_eq!(navigation.current_index(), 0);
-        assert_eq!(navigation.current_number(), 1);
-        assert_eq!(navigation.label(), "1 / 1");
-    }
-
-    #[test]
     fn document_title_uses_file_name() {
         let title = document_title(Path::new("/tmp/decks/product-demo.pdf"));
 
@@ -226,34 +112,31 @@ mod tests {
     }
 
     #[test]
-    fn pdf_document_state_opens_navigates_and_renders_pdf() {
+    fn pdf_document_state_opens_and_renders_pdf_pages() {
         if !local_pdfium_available() {
             return;
         }
 
         let path = write_test_pdf();
-        let mut document = PdfDocumentState::open(path.clone()).expect("test PDF should open");
+        let document = PdfDocumentState::open(path.clone()).expect("test PDF should open");
 
         assert_eq!(
             document.title(),
             path.file_name().unwrap().to_string_lossy()
         );
-        assert_eq!(document.page_label(), "1 / 2");
+        assert_eq!(document.page_count(), 2);
 
         let first_page = document
-            .render_current_page(200)
+            .render_page(0, 200)
             .expect("first page should render");
         assert!(first_page.size().width > 0);
         assert!(first_page.size().height > 0);
 
-        document.next_page();
-        assert_eq!(document.page_label(), "2 / 2");
-
-        document.next_page();
-        assert_eq!(document.page_label(), "2 / 2");
-
-        document.previous_page();
-        assert_eq!(document.page_label(), "1 / 2");
+        let second_page = document
+            .render_page(1, 200)
+            .expect("second page should render");
+        assert!(second_page.size().width > 0);
+        assert!(second_page.size().height > 0);
 
         fs::remove_file(path).expect("test PDF should be removable");
     }

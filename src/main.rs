@@ -5,6 +5,7 @@ use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 use anyhow::Result;
 use pdf::PdfDocumentState;
+use presentation::{PageSnapshot, PresentationState};
 use slint::Weak;
 use tracing_subscriber::EnvFilter;
 
@@ -16,7 +17,7 @@ fn main() -> Result<()> {
         .init();
 
     let app = AppWindow::new()?;
-    let state: Rc<RefCell<Option<PdfDocumentState>>> = Rc::new(RefCell::new(None));
+    let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState::default()));
 
     wire_callbacks(&app, state.clone());
 
@@ -24,7 +25,13 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn wire_callbacks(app: &AppWindow, state: Rc<RefCell<Option<PdfDocumentState>>>) {
+#[derive(Default)]
+struct AppState {
+    pdf: Option<PdfDocumentState>,
+    presentation: PresentationState,
+}
+
+fn wire_callbacks(app: &AppWindow, state: Rc<RefCell<AppState>>) {
     let weak = app.as_weak();
     let state_for_open = state.clone();
     app.on_open_pdf(move || {
@@ -38,9 +45,10 @@ fn wire_callbacks(app: &AppWindow, state: Rc<RefCell<Option<PdfDocumentState>>>)
     let weak = app.as_weak();
     let state_for_previous = state.clone();
     app.on_previous_page(move || {
-        if let Some(ref mut doc) = *state_for_previous.borrow_mut() {
-            doc.previous_page();
-            if let Err(err) = render_into_app(&weak, doc) {
+        let mut state = state_for_previous.borrow_mut();
+        state.presentation.previous_page();
+        if let Some(snapshot) = state.presentation.snapshot() {
+            if let Err(err) = render_into_app(&weak, &state, &snapshot) {
                 set_status(&weak, format!("Error: {err:#}"));
             }
         }
@@ -48,9 +56,10 @@ fn wire_callbacks(app: &AppWindow, state: Rc<RefCell<Option<PdfDocumentState>>>)
 
     let weak = app.as_weak();
     app.on_next_page(move || {
-        if let Some(ref mut doc) = *state.borrow_mut() {
-            doc.next_page();
-            if let Err(err) = render_into_app(&weak, doc) {
+        let mut state = state.borrow_mut();
+        state.presentation.next_page();
+        if let Some(snapshot) = state.presentation.snapshot() {
+            if let Err(err) = render_into_app(&weak, &state, &snapshot) {
                 set_status(&weak, format!("Error: {err:#}"));
             }
         }
@@ -66,23 +75,40 @@ fn pick_pdf_file() -> Option<PathBuf> {
 
 fn open_and_render(
     weak: &Weak<AppWindow>,
-    state: &Rc<RefCell<Option<PdfDocumentState>>>,
+    state: &Rc<RefCell<AppState>>,
     path: PathBuf,
 ) -> Result<()> {
     let doc = PdfDocumentState::open(path)?;
-    *state.borrow_mut() = Some(doc);
-    if let Some(ref doc) = *state.borrow() {
-        render_into_app(weak, doc)?;
+    let presentation = PresentationState::open_document(doc.title(), doc.page_count());
+    let snapshot = presentation.snapshot();
+
+    {
+        let mut state = state.borrow_mut();
+        state.pdf = Some(doc);
+        state.presentation = presentation;
     }
+
+    if let Some(snapshot) = snapshot {
+        render_into_app(weak, &state.borrow(), &snapshot)?;
+    }
+
     Ok(())
 }
 
-fn render_into_app(weak: &Weak<AppWindow>, doc: &PdfDocumentState) -> Result<()> {
-    let image = doc.render_current_page(1600)?;
+fn render_into_app(
+    weak: &Weak<AppWindow>,
+    state: &AppState,
+    snapshot: &PageSnapshot,
+) -> Result<()> {
+    let doc = state
+        .pdf
+        .as_ref()
+        .expect("presentation snapshot should have an open PDF");
+    let image = doc.render_page(snapshot.current_index, 1600)?;
     let app = weak.upgrade().expect("window should still be alive");
     app.set_page_image(image);
-    app.set_document_title(doc.title().into());
-    app.set_page_label(doc.page_label().into());
+    app.set_document_title(snapshot.title.clone().into());
+    app.set_page_label(snapshot.page_label.clone().into());
     app.set_status_text("Ready".into());
     Ok(())
 }
