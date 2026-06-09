@@ -1,4 +1,5 @@
 mod pdf;
+pub mod presentation;
 
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
