@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use pdfium_render::prelude::*;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
+use crate::aspect::sanitize_aspect_ratio;
 use crate::notes::{is_pdf_speaker_note_annotation, SpeakerNotes};
 
 pub struct PdfDocumentState {
@@ -54,6 +55,19 @@ impl PdfDocumentState {
             SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(rgba.as_raw(), width, height);
 
         Ok(Image::from_rgba8(buffer))
+    }
+
+    pub fn page_aspect_ratio(&self, page_index: u32) -> Result<f32> {
+        let page_number = page_index + 1;
+        let page = self
+            .document
+            .pages()
+            .get(page_index as PdfPageIndex)
+            .with_context(|| format!("failed to load page {page_number}"))?;
+        let width = page.width().value;
+        let height = page.height().value;
+
+        Ok(sanitize_aspect_ratio(width / height))
     }
 
     pub fn title(&self) -> String {
@@ -162,6 +176,7 @@ mod tests {
             .expect("first page should render");
         assert!(first_page.size().width > 0);
         assert!(first_page.size().height > 0);
+        assert_eq!(document.page_aspect_ratio(0).unwrap(), 1.0);
 
         let second_page = document
             .render_page(1, 200)

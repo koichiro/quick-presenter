@@ -2,16 +2,29 @@ import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
 
 component SlideView inherits Rectangle {
     in property <image> page-image;
+    in property <float> page-aspect-ratio: 16.0 / 9.0;
 
-    background: #111315;
-    border-color: #3c4043;
-    border-width: 1px;
+    background: transparent;
+    property <float> safe-page-aspect-ratio: root.page-aspect-ratio > 0 ? root.page-aspect-ratio : 16.0 / 9.0;
+    property <float> viewport-aspect-ratio: (root.width / 1px) / max(1, root.height / 1px);
+    property <length> surface-width: root.viewport-aspect-ratio > root.safe-page-aspect-ratio ? root.height * root.safe-page-aspect-ratio : root.width;
+    property <length> surface-height: root.viewport-aspect-ratio > root.safe-page-aspect-ratio ? root.height : root.width / root.safe-page-aspect-ratio;
 
-    Image {
-        source: root.page-image;
-        image-fit: contain;
-        width: parent.width;
-        height: parent.height;
+    Rectangle {
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        width: root.surface-width;
+        height: root.surface-height;
+        background: #111315;
+        border-color: #3c4043;
+        border-width: 1px;
+
+        Image {
+            source: root.page-image;
+            image-fit: contain;
+            width: parent.width;
+            height: parent.height;
+        }
     }
 }
 
@@ -38,6 +51,8 @@ component NotesView inherits Rectangle {
 export component PresenterWindow inherits Window {
     in property <image> current-page-image;
     in property <image> next-page-image;
+    in property <float> current-page-aspect-ratio: 16.0 / 9.0;
+    in property <float> next-page-aspect-ratio: 16.0 / 9.0;
     in property <bool> has-next-page: false;
     in property <bool> has-notes: false;
     in property <string> document-title: "No PDF opened";
@@ -177,6 +192,7 @@ export component PresenterWindow inherits Window {
 
                     SlideView {
                         page-image: root.current-page-image;
+                        page-aspect-ratio: root.current-page-aspect-ratio;
                         horizontal-stretch: 1;
                         vertical-stretch: 4;
                     }
@@ -209,6 +225,7 @@ export component PresenterWindow inherits Window {
 
                     SlideView {
                         page-image: root.next-page-image;
+                        page-aspect-ratio: root.next-page-aspect-ratio;
                         visible: root.has-next-page;
                         horizontal-stretch: 1;
                         vertical-stretch: 1;
@@ -247,6 +264,7 @@ export component PresenterWindow inherits Window {
 
 export component SlideWindow inherits Window {
     in property <image> page-image;
+    in property <float> page-aspect-ratio: 16.0 / 9.0;
 
     callback exit-fullscreen();
     callback keyboard-previous-page();
@@ -306,6 +324,7 @@ export component SlideWindow inherits Window {
 
         SlideView {
             page-image: root.page-image;
+            page-aspect-ratio: root.page-aspect-ratio;
             width: parent.width;
             height: parent.height;
         }
