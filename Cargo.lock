@@ -3741,6 +3741,7 @@ name = "quick-presenter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "pdfium-render",
  "rfd",
  "slint",

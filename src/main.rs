@@ -1,3 +1,4 @@
+pub mod clock;
 pub mod errors;
 pub mod fullscreen;
 pub mod input;
@@ -14,6 +15,7 @@ use std::{
 };
 
 use anyhow::{bail, Result};
+use clock::current_clock_label;
 use errors::{presenter_error_message, speaker_notes_warning, PresenterMessage};
 use fullscreen::FullscreenState;
 use input::{apply_presentation_command, PresentationCommand};
@@ -31,7 +33,7 @@ const CURRENT_RENDER_WIDTH: i32 = 1600;
 const PREVIEW_RENDER_WIDTH: i32 = 600;
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
 const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
-const ELAPSED_TIMER_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
+const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -42,7 +44,7 @@ fn main() -> Result<()> {
     let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState::default()));
 
     wire_callbacks(&windows, windows.refs(), state.clone());
-    let _elapsed_timer = start_elapsed_timer(windows.refs(), state.clone());
+    let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
 
     windows.apply_initial_positions();
     windows.slide.show()?;
@@ -305,6 +307,7 @@ fn render_into_windows(
         }
         presenter.set_document_title(snapshot.title.clone().into());
         presenter.set_page_label(snapshot.page_label.clone().into());
+        presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
         presenter.set_status_text(state.status_text.clone().into());
 
@@ -336,18 +339,19 @@ fn set_presenter_message(weak: &Weak<PresenterWindow>, message: PresenterMessage
     }
 }
 
-fn start_elapsed_timer(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
+fn start_presenter_time_updates(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
     let timer = Timer::default();
     timer.start(
         TimerMode::Repeated,
-        ELAPSED_TIMER_UPDATE_INTERVAL,
-        move || update_elapsed_timer_label(&windows.presenter, &state.borrow().timer),
+        PRESENTER_TIME_UPDATE_INTERVAL,
+        move || update_presenter_time_labels(&windows.presenter, &state.borrow().timer),
     );
     timer
 }
 
-fn update_elapsed_timer_label(presenter: &Weak<PresenterWindow>, timer: &PresentationTimer) {
+fn update_presenter_time_labels(presenter: &Weak<PresenterWindow>, timer: &PresentationTimer) {
     if let Some(presenter) = presenter.upgrade() {
+        presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(timer.elapsed_label_at(Instant::now()).into());
     }
 }
