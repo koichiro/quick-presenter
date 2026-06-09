@@ -1,3 +1,4 @@
+pub mod aspect;
 pub mod clock;
 pub mod errors;
 pub mod fullscreen;
@@ -99,7 +100,9 @@ struct AppState {
 
 struct RenderedPages {
     current: slint::Image,
+    current_aspect_ratio: f32,
     next: Option<slint::Image>,
+    next_aspect_ratio: Option<f32>,
 }
 
 fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<AppState>>) {
@@ -301,9 +304,13 @@ fn render_into_windows(
 
     if let Some(presenter) = windows.presenter.upgrade() {
         presenter.set_current_page_image(rendered.current.clone());
+        presenter.set_current_page_aspect_ratio(rendered.current_aspect_ratio);
         presenter.set_has_next_page(rendered.next.is_some());
         if let Some(next) = rendered.next.as_ref() {
             presenter.set_next_page_image(next.clone());
+        }
+        if let Some(next_aspect_ratio) = rendered.next_aspect_ratio {
+            presenter.set_next_page_aspect_ratio(next_aspect_ratio);
         }
         presenter.set_document_title(snapshot.title.clone().into());
         presenter.set_page_label(snapshot.page_label.clone().into());
@@ -317,6 +324,7 @@ fn render_into_windows(
     }
 
     if let Some(slide) = windows.slide.upgrade() {
+        slide.set_page_aspect_ratio(rendered.current_aspect_ratio);
         slide.set_page_image(rendered.current);
     }
 
@@ -326,10 +334,15 @@ fn render_into_windows(
 fn render_pages(doc: &PdfDocumentState, snapshot: &PageSnapshot) -> Result<RenderedPages> {
     Ok(RenderedPages {
         current: doc.render_page(snapshot.current_index, CURRENT_RENDER_WIDTH)?,
-        next: match snapshot.next_index {
-            Some(index) => Some(doc.render_page(index, PREVIEW_RENDER_WIDTH)?),
-            None => None,
-        },
+        current_aspect_ratio: doc.page_aspect_ratio(snapshot.current_index)?,
+        next: snapshot
+            .next_index
+            .map(|index| doc.render_page(index, PREVIEW_RENDER_WIDTH))
+            .transpose()?,
+        next_aspect_ratio: snapshot
+            .next_index
+            .map(|index| doc.page_aspect_ratio(index))
+            .transpose()?,
     })
 }
 
