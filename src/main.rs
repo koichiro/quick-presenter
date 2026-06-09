@@ -16,6 +16,7 @@ use std::{
 };
 
 use anyhow::{bail, Result};
+use aspect::fitted_logical_size_within;
 use clock::current_clock_label;
 use errors::{presenter_error_message, speaker_notes_warning, PresenterMessage};
 use fullscreen::FullscreenState;
@@ -23,7 +24,7 @@ use input::{apply_presentation_command, PresentationCommand};
 use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
-use slint::{ComponentHandle, LogicalPosition, Timer, TimerMode, Weak};
+use slint::{ComponentHandle, LogicalPosition, LogicalSize, Timer, TimerMode, Weak};
 use timer::{is_first_page_advance, PresentationTimer};
 use tracing::{error, warn};
 use tracing_subscriber::EnvFilter;
@@ -34,6 +35,8 @@ const CURRENT_RENDER_WIDTH: i32 = 1600;
 const PREVIEW_RENDER_WIDTH: i32 = 600;
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
 const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
+const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
+const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
 const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 
 fn main() -> Result<()> {
@@ -275,6 +278,10 @@ fn open_and_render(
     };
     let presentation = PresentationState::open_document(doc.title(), doc.page_count());
     let snapshot = presentation.snapshot();
+    let initial_slide_aspect_ratio = snapshot
+        .as_ref()
+        .map(|snapshot| doc.page_aspect_ratio(snapshot.current_index))
+        .transpose()?;
 
     {
         let mut state = state.borrow_mut();
@@ -285,11 +292,28 @@ fn open_and_render(
         state.status_text = status_text;
     }
 
+    if let Some(aspect_ratio) = initial_slide_aspect_ratio {
+        fit_slide_window_to_aspect_ratio(windows, aspect_ratio);
+    }
+
     if let Some(snapshot) = snapshot {
         render_into_windows(windows, &state.borrow(), &snapshot)?;
     }
 
     Ok(())
+}
+
+fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
+    if let Some(slide) = windows.slide.upgrade() {
+        let size = fitted_logical_size_within(
+            SLIDE_WINDOW_MAX_WIDTH,
+            SLIDE_WINDOW_MAX_HEIGHT,
+            aspect_ratio,
+        );
+        slide
+            .window()
+            .set_size(LogicalSize::new(size.width.round(), size.height.round()));
+    }
 }
 
 fn render_into_windows(

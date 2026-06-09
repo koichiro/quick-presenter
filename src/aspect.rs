@@ -42,6 +42,14 @@ pub fn fit_slide_surface(
     }
 }
 
+pub fn fitted_logical_size_within(
+    max_width: f32,
+    max_height: f32,
+    aspect_ratio: f32,
+) -> FittedSlideSurface {
+    fit_slide_surface(max_width, max_height, aspect_ratio)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,5 +97,21 @@ mod tests {
                 height: 0.0
             }
         );
+    }
+
+    #[test]
+    fn fitted_logical_size_within_matches_wide_slide_to_max_width() {
+        let size = fitted_logical_size_within(1024.0, 720.0, 16.0 / 9.0);
+
+        assert_eq!(size.width, 1024.0);
+        assert_eq!(size.height, 576.0);
+    }
+
+    #[test]
+    fn fitted_logical_size_within_matches_standard_slide_to_max_height() {
+        let size = fitted_logical_size_within(1024.0, 720.0, 4.0 / 3.0);
+
+        assert_eq!(size.width, 960.0);
+        assert_eq!(size.height, 720.0);
     }
 }
