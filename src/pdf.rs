@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use pdfium_render::prelude::*;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
+use crate::notes::{is_pdf_speaker_note_annotation, SpeakerNotes};
+
 pub struct PdfDocumentState {
     _pdfium: Pdfium,
     document: PdfDocument<'static>,
@@ -56,6 +58,33 @@ impl PdfDocumentState {
 
     pub fn title(&self) -> String {
         document_title(&self.path)
+    }
+
+    pub fn speaker_notes(&self) -> Result<SpeakerNotes> {
+        let mut notes = Vec::new();
+
+        for page_index in 0..self.page_count {
+            let page = self
+                .document
+                .pages()
+                .get(page_index as PdfPageIndex)
+                .with_context(|| format!("failed to load page {}", page_index + 1))?;
+
+            for annotation in page.annotations().iter() {
+                if annotation.annotation_type() != PdfPageAnnotationType::Text {
+                    continue;
+                }
+
+                if let Some(contents) = annotation.contents() {
+                    if is_pdf_speaker_note_annotation(annotation.name().as_deref(), Some(&contents))
+                    {
+                        notes.push((page_index + 1, contents));
+                    }
+                }
+            }
+        }
+
+        Ok(SpeakerNotes::from_page_notes(notes))
     }
 }
 
