@@ -12,13 +12,15 @@ use input::{apply_presentation_command, PresentationCommand};
 use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
-use slint::{ComponentHandle, Weak};
+use slint::{ComponentHandle, LogicalPosition, Weak};
 use tracing_subscriber::EnvFilter;
 
 slint::include_modules!();
 
 const CURRENT_RENDER_WIDTH: i32 = 1600;
 const PREVIEW_RENDER_WIDTH: i32 = 600;
+const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
+const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -30,8 +32,10 @@ fn main() -> Result<()> {
 
     wire_callbacks(&windows, windows.refs(), state.clone());
 
+    windows.apply_initial_positions();
     windows.slide.show()?;
-    windows.presenter.run()?;
+    windows.presenter.show()?;
+    slint::run_event_loop()?;
     Ok(())
 }
 
@@ -53,6 +57,13 @@ impl AppWindows {
             presenter: self.presenter.as_weak(),
             slide: self.slide.as_weak(),
         }
+    }
+
+    fn apply_initial_positions(&self) {
+        self.presenter
+            .window()
+            .set_position(PRESENTER_WINDOW_POSITION);
+        self.slide.window().set_position(SLIDE_WINDOW_POSITION);
     }
 }
 
