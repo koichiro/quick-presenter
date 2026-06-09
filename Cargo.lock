@@ -3745,6 +3745,7 @@ dependencies = [
  "rfd",
  "slint",
  "slint-build",
+ "tracing",
  "tracing-subscriber",
 ]
 
