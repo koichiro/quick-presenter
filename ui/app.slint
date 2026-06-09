@@ -19,8 +19,10 @@ export component PresenterWindow inherits Window {
     in property <image> current-page-image;
     in property <image> next-page-image;
     in property <bool> has-next-page: false;
+    in property <bool> has-notes: false;
     in property <string> document-title: "No PDF opened";
     in property <string> page-label: "";
+    in property <string> notes-text: "";
     in property <string> status-text: "Open a PDF to start";
 
     callback open-pdf();
@@ -120,6 +122,32 @@ export component PresenterWindow inherits Window {
                         horizontal-alignment: center;
                         width: parent.width;
                         height: parent.height;
+                    }
+                }
+
+                Text {
+                    text: "Notes";
+                    color: #d9dce0;
+                    height: 22px;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    background: #111315;
+                    border-color: #3c4043;
+                    border-width: 1px;
+                    horizontal-stretch: 1;
+                    vertical-stretch: 1;
+
+                    Text {
+                        text: root.has-notes ? root.notes-text : "No notes";
+                        color: root.has-notes ? #f1f3f4 : #9aa0a6;
+                        x: 10px;
+                        y: 10px;
+                        width: parent.width - 20px;
+                        height: parent.height - 20px;
+                        wrap: word-wrap;
+                        overflow: clip;
                     }
                 }
             }

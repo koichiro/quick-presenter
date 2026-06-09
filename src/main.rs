@@ -5,6 +5,7 @@ pub mod presentation;
 use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 use anyhow::Result;
+use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
 use slint::Weak;
@@ -60,7 +61,9 @@ struct AppWindowRefs {
 #[derive(Default)]
 struct AppState {
     pdf: Option<PdfDocumentState>,
+    notes: SpeakerNotes,
     presentation: PresentationState,
+    status_text: String,
 }
 
 struct RenderedPages {
@@ -116,13 +119,22 @@ fn open_and_render(
     path: PathBuf,
 ) -> Result<()> {
     let doc = PdfDocumentState::open(path)?;
+    let (notes, status_text) = match doc.speaker_notes() {
+        Ok(notes) => (notes, "Ready".to_owned()),
+        Err(err) => (
+            SpeakerNotes::empty(),
+            format!("Ready (speaker notes unavailable: {err:#})"),
+        ),
+    };
     let presentation = PresentationState::open_document(doc.title(), doc.page_count());
     let snapshot = presentation.snapshot();
 
     {
         let mut state = state.borrow_mut();
         state.pdf = Some(doc);
+        state.notes = notes;
         state.presentation = presentation;
+        state.status_text = status_text;
     }
 
     if let Some(snapshot) = snapshot {
@@ -151,7 +163,11 @@ fn render_into_windows(
         }
         presenter.set_document_title(snapshot.title.clone().into());
         presenter.set_page_label(snapshot.page_label.clone().into());
-        presenter.set_status_text("Ready".into());
+        presenter.set_status_text(state.status_text.clone().into());
+
+        let current_note = state.notes.note_for_page_index(snapshot.current_index);
+        presenter.set_has_notes(current_note.is_some());
+        presenter.set_notes_text(current_note.unwrap_or_default().into());
     }
 
     if let Some(slide) = windows.slide.upgrade() {
