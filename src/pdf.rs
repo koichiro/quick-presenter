@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use pdfium_render::prelude::*;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
+use crate::notes::{is_pdf_speaker_note_annotation, SpeakerNotes};
+
 pub struct PdfDocumentState {
     _pdfium: Pdfium,
     document: PdfDocument<'static>,
@@ -57,6 +59,32 @@ impl PdfDocumentState {
     pub fn title(&self) -> String {
         document_title(&self.path)
     }
+
+    pub fn speaker_notes(&self) -> Result<SpeakerNotes> {
+        let mut notes = Vec::new();
+
+        for page_index in 0..self.page_count {
+            let page = self
+                .document
+                .pages()
+                .get(page_index as PdfPageIndex)
+                .with_context(|| format!("failed to load page {}", page_index + 1))?;
+
+            for annotation in page.annotations().iter() {
+                if annotation.annotation_type() != PdfPageAnnotationType::Text {
+                    continue;
+                }
+
+                if let Some(contents) = annotation.contents() {
+                    if is_pdf_speaker_note_annotation(None, Some(&contents)) {
+                        notes.push((page_index + 1, contents));
+                    }
+                }
+            }
+        }
+
+        Ok(SpeakerNotes::from_page_notes(notes))
+    }
 }
 
 fn document_title(path: &Path) -> String {
@@ -94,6 +122,7 @@ mod tests {
     use super::*;
     use std::{
         fs,
+        sync::{Mutex, OnceLock},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -113,6 +142,8 @@ mod tests {
 
     #[test]
     fn pdf_document_state_opens_and_renders_pdf_pages() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+
         if !local_pdfium_available() {
             return;
         }
@@ -139,6 +170,34 @@ mod tests {
         assert!(second_page.size().height > 0);
 
         fs::remove_file(path).expect("test PDF should be removable");
+    }
+
+    #[test]
+    fn pdf_document_state_extracts_marp_speaker_notes() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+
+        if !local_pdfium_available() {
+            return;
+        }
+
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/marp-speaker-notes.pdf");
+        let document = PdfDocumentState::open(path).expect("sample PDF should open");
+        let notes = document
+            .speaker_notes()
+            .expect("sample PDF speaker notes should be readable");
+
+        assert_eq!(notes.note_for_page_number(1), None);
+        assert_eq!(notes.note_for_page_number(2), Some("Presenter note text"));
+        assert_eq!(
+            notes.note_for_page_number(3),
+            Some("\u{65e5}\u{672c}\u{8a9e}\u{306e}\u{30ce}\u{30fc}\u{30c8}")
+        );
+    }
+
+    fn pdfium_test_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
     }
 
     fn local_pdfium_available() -> bool {
