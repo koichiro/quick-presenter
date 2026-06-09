@@ -16,13 +16,41 @@ fn main() -> Result<()> {
         .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
         .init();
 
-    let app = PresenterWindow::new()?;
+    let windows = AppWindows::new()?;
     let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState::default()));
 
-    wire_callbacks(&app, state.clone());
+    wire_callbacks(&windows.presenter, windows.refs(), state.clone());
 
-    app.run()?;
+    windows.slide.show()?;
+    windows.presenter.run()?;
     Ok(())
+}
+
+struct AppWindows {
+    presenter: PresenterWindow,
+    slide: SlideWindow,
+}
+
+impl AppWindows {
+    fn new() -> Result<Self> {
+        Ok(Self {
+            presenter: PresenterWindow::new()?,
+            slide: SlideWindow::new()?,
+        })
+    }
+
+    fn refs(&self) -> AppWindowRefs {
+        AppWindowRefs {
+            presenter: self.presenter.as_weak(),
+            slide: self.slide.as_weak(),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct AppWindowRefs {
+    presenter: Weak<PresenterWindow>,
+    slide: Weak<SlideWindow>,
 }
 
 #[derive(Default)]
@@ -31,36 +59,36 @@ struct AppState {
     presentation: PresentationState,
 }
 
-fn wire_callbacks(app: &PresenterWindow, state: Rc<RefCell<AppState>>) {
-    let weak = app.as_weak();
+fn wire_callbacks(app: &PresenterWindow, windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
+    let window_refs = windows.clone();
     let state_for_open = state.clone();
     app.on_open_pdf(move || {
         if let Some(path) = pick_pdf_file() {
-            if let Err(err) = open_and_render(&weak, &state_for_open, path) {
-                set_status(&weak, format!("Error: {err:#}"));
+            if let Err(err) = open_and_render(&window_refs, &state_for_open, path) {
+                set_status(&window_refs.presenter, format!("Error: {err:#}"));
             }
         }
     });
 
-    let weak = app.as_weak();
+    let window_refs = windows.clone();
     let state_for_previous = state.clone();
     app.on_previous_page(move || {
         let mut state = state_for_previous.borrow_mut();
         state.presentation.previous_page();
         if let Some(snapshot) = state.presentation.snapshot() {
-            if let Err(err) = render_into_app(&weak, &state, &snapshot) {
-                set_status(&weak, format!("Error: {err:#}"));
+            if let Err(err) = render_into_windows(&window_refs, &state, &snapshot) {
+                set_status(&window_refs.presenter, format!("Error: {err:#}"));
             }
         }
     });
 
-    let weak = app.as_weak();
+    let window_refs = windows;
     app.on_next_page(move || {
         let mut state = state.borrow_mut();
         state.presentation.next_page();
         if let Some(snapshot) = state.presentation.snapshot() {
-            if let Err(err) = render_into_app(&weak, &state, &snapshot) {
-                set_status(&weak, format!("Error: {err:#}"));
+            if let Err(err) = render_into_windows(&window_refs, &state, &snapshot) {
+                set_status(&window_refs.presenter, format!("Error: {err:#}"));
             }
         }
     });
@@ -74,7 +102,7 @@ fn pick_pdf_file() -> Option<PathBuf> {
 }
 
 fn open_and_render(
-    weak: &Weak<PresenterWindow>,
+    windows: &AppWindowRefs,
     state: &Rc<RefCell<AppState>>,
     path: PathBuf,
 ) -> Result<()> {
@@ -89,14 +117,14 @@ fn open_and_render(
     }
 
     if let Some(snapshot) = snapshot {
-        render_into_app(weak, &state.borrow(), &snapshot)?;
+        render_into_windows(windows, &state.borrow(), &snapshot)?;
     }
 
     Ok(())
 }
 
-fn render_into_app(
-    weak: &Weak<PresenterWindow>,
+fn render_into_windows(
+    windows: &AppWindowRefs,
     state: &AppState,
     snapshot: &PageSnapshot,
 ) -> Result<()> {
@@ -105,11 +133,18 @@ fn render_into_app(
         .as_ref()
         .expect("presentation snapshot should have an open PDF");
     let image = doc.render_page(snapshot.current_index, 1600)?;
-    let app = weak.upgrade().expect("window should still be alive");
-    app.set_current_page_image(image);
-    app.set_document_title(snapshot.title.clone().into());
-    app.set_page_label(snapshot.page_label.clone().into());
-    app.set_status_text("Ready".into());
+
+    if let Some(presenter) = windows.presenter.upgrade() {
+        presenter.set_current_page_image(image.clone());
+        presenter.set_document_title(snapshot.title.clone().into());
+        presenter.set_page_label(snapshot.page_label.clone().into());
+        presenter.set_status_text("Ready".into());
+    }
+
+    if let Some(slide) = windows.slide.upgrade() {
+        slide.set_page_image(image);
+    }
+
     Ok(())
 }
 
