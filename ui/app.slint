@@ -265,14 +265,16 @@ export component PresenterWindow inherits Window {
 export component SlideWindow inherits Window {
     in property <image> page-image;
     in property <float> page-aspect-ratio: 16.0 / 9.0;
+    in property <length> slide-window-width: 1024px;
+    in property <length> slide-window-height: 720px;
 
     callback exit-fullscreen();
     callback keyboard-previous-page();
     callback keyboard-next-page();
 
     title: "Quick Presenter - Slide";
-    width: 1024px;
-    height: 720px;
+    width: root.slide-window-width;
+    height: root.slide-window-height;
     background: #111315;
     forward-focus: slide-focus;
 
