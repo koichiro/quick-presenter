@@ -71,8 +71,10 @@ export component PresenterWindow inherits Window {
     callback keyboard-next-page();
 
     title: "Quick Presenter";
-    width: 1024px;
-    height: 720px;
+    preferred-width: 1024px;
+    preferred-height: 720px;
+    min-width: 800px;
+    min-height: 560px;
     background: #202124;
     forward-focus: presenter-focus;
 
@@ -273,8 +275,10 @@ export component SlideWindow inherits Window {
     callback keyboard-next-page();
 
     title: "Quick Presenter - Slide";
-    width: root.slide-window-width;
-    height: root.slide-window-height;
+    preferred-width: root.slide-window-width;
+    preferred-height: root.slide-window-height;
+    min-width: 640px;
+    min-height: 360px;
     background: #111315;
     forward-focus: slide-focus;
 
