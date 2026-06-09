@@ -30,144 +30,186 @@ export component PresenterWindow inherits Window {
     callback previous-page();
     callback next-page();
     callback toggle-slide-fullscreen();
+    callback keyboard-previous-page();
+    callback keyboard-next-page();
 
     title: "Quick Presenter";
     width: 1024px;
     height: 720px;
     background: #202124;
 
-    VerticalBox {
-        padding: 12px;
-        spacing: 10px;
+    FocusScope {
+        width: parent.width;
+        height: parent.height;
 
-        HorizontalBox {
-            height: 36px;
-            spacing: 8px;
-
-            Button {
-                text: "Open PDF";
-                clicked => {
-                    root.open-pdf();
-                }
-            }
-
-            Button {
-                text: "Previous";
-                clicked => {
-                    root.previous-page();
-                }
-            }
-
-            Button {
-                text: "Next";
-                clicked => {
-                    root.next-page();
-                }
-            }
-
-            Button {
-                text: root.slide-fullscreen ? "Exit Fullscreen" : "Fullscreen";
-                clicked => {
-                    root.toggle-slide-fullscreen();
-                }
-            }
-
-            Text {
-                text: root.document-title;
-                color: white;
-                vertical-alignment: center;
-                horizontal-stretch: 1;
-                overflow: elide;
-            }
-
-            Text {
-                text: root.page-label;
-                color: #d9dce0;
-                vertical-alignment: center;
+        KeyBinding {
+            keys: @keys(Space);
+            activated => {
+                root.keyboard-next-page();
             }
         }
 
-        HorizontalBox {
-            horizontal-stretch: 1;
-            vertical-stretch: 1;
+        KeyBinding {
+            keys: @keys(RightArrow);
+            activated => {
+                root.keyboard-next-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(PageDown);
+            activated => {
+                root.keyboard-next-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(LeftArrow);
+            activated => {
+                root.keyboard-previous-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(PageUp);
+            activated => {
+                root.keyboard-previous-page();
+            }
+        }
+
+        VerticalBox {
+            padding: 12px;
             spacing: 10px;
 
-            SlideView {
-                page-image: root.current-page-image;
-                horizontal-stretch: 3;
-                vertical-stretch: 1;
-            }
+            HorizontalBox {
+                height: 36px;
+                spacing: 8px;
 
-            VerticalBox {
-                width: 260px;
-                spacing: 6px;
+                Button {
+                    text: "Open PDF";
+                    clicked => {
+                        root.open-pdf();
+                    }
+                }
+
+                Button {
+                    text: "Previous";
+                    clicked => {
+                        root.previous-page();
+                    }
+                }
+
+                Button {
+                    text: "Next";
+                    clicked => {
+                        root.next-page();
+                    }
+                }
+
+                Button {
+                    text: root.slide-fullscreen ? "Exit Fullscreen" : "Fullscreen";
+                    clicked => {
+                        root.toggle-slide-fullscreen();
+                    }
+                }
 
                 Text {
-                    text: "Next";
+                    text: root.document-title;
+                    color: white;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+
+                Text {
+                    text: root.page-label;
                     color: #d9dce0;
-                    height: 22px;
                     vertical-alignment: center;
                 }
+            }
+
+            HorizontalBox {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                spacing: 10px;
 
                 SlideView {
-                    page-image: root.next-page-image;
-                    visible: root.has-next-page;
-                    horizontal-stretch: 1;
+                    page-image: root.current-page-image;
+                    horizontal-stretch: 3;
                     vertical-stretch: 1;
                 }
 
-                Rectangle {
-                    visible: !root.has-next-page;
-                    background: #111315;
-                    border-color: #3c4043;
-                    border-width: 1px;
-                    horizontal-stretch: 1;
-                    vertical-stretch: 1;
+                VerticalBox {
+                    width: 260px;
+                    spacing: 6px;
 
                     Text {
-                        text: "End";
+                        text: "Next";
                         color: #d9dce0;
+                        height: 22px;
                         vertical-alignment: center;
-                        horizontal-alignment: center;
-                        width: parent.width;
-                        height: parent.height;
                     }
-                }
 
-                Text {
-                    text: "Notes";
-                    color: #d9dce0;
-                    height: 22px;
-                    vertical-alignment: center;
-                }
+                    SlideView {
+                        page-image: root.next-page-image;
+                        visible: root.has-next-page;
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+                    }
 
-                Rectangle {
-                    background: #111315;
-                    border-color: #3c4043;
-                    border-width: 1px;
-                    horizontal-stretch: 1;
-                    vertical-stretch: 1;
+                    Rectangle {
+                        visible: !root.has-next-page;
+                        background: #111315;
+                        border-color: #3c4043;
+                        border-width: 1px;
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+
+                        Text {
+                            text: "End";
+                            color: #d9dce0;
+                            vertical-alignment: center;
+                            horizontal-alignment: center;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+                    }
 
                     Text {
-                        text: root.has-notes ? root.notes-text : "No notes";
-                        color: root.has-notes ? #f1f3f4 : #9aa0a6;
-                        x: 10px;
-                        y: 10px;
-                        width: parent.width - 20px;
-                        height: parent.height - 20px;
-                        wrap: word-wrap;
-                        overflow: clip;
+                        text: "Notes";
+                        color: #d9dce0;
+                        height: 22px;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        background: #111315;
+                        border-color: #3c4043;
+                        border-width: 1px;
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+
+                        Text {
+                            text: root.has-notes ? root.notes-text : "No notes";
+                            color: root.has-notes ? #f1f3f4 : #9aa0a6;
+                            x: 10px;
+                            y: 10px;
+                            width: parent.width - 20px;
+                            height: parent.height - 20px;
+                            wrap: word-wrap;
+                            overflow: clip;
+                        }
                     }
                 }
             }
-        }
 
-        Text {
-            text: root.status-text;
-            color: #d9dce0;
-            height: 24px;
-            vertical-alignment: center;
-            overflow: elide;
+            Text {
+                text: root.status-text;
+                color: #d9dce0;
+                height: 24px;
+                vertical-alignment: center;
+                overflow: elide;
+            }
         }
     }
 }
@@ -176,6 +218,8 @@ export component SlideWindow inherits Window {
     in property <image> page-image;
 
     callback exit-fullscreen();
+    callback keyboard-previous-page();
+    callback keyboard-next-page();
 
     title: "Quick Presenter - Slide";
     width: 1024px;
@@ -190,6 +234,41 @@ export component SlideWindow inherits Window {
             keys: @keys(Escape);
             activated => {
                 root.exit-fullscreen();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(Space);
+            activated => {
+                root.keyboard-next-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(RightArrow);
+            activated => {
+                root.keyboard-next-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(PageDown);
+            activated => {
+                root.keyboard-next-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(LeftArrow);
+            activated => {
+                root.keyboard-previous-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(PageUp);
+            activated => {
+                root.keyboard-previous-page();
             }
         }
 

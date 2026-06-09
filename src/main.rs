@@ -1,4 +1,5 @@
 pub mod fullscreen;
+pub mod input;
 pub mod notes;
 pub mod pdf;
 pub mod presentation;
@@ -7,6 +8,7 @@ use std::{cell::RefCell, path::PathBuf, rc::Rc};
 
 use anyhow::Result;
 use fullscreen::FullscreenState;
+use input::{apply_presentation_command, PresentationCommand};
 use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
@@ -26,7 +28,7 @@ fn main() -> Result<()> {
     let windows = AppWindows::new()?;
     let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState::default()));
 
-    wire_callbacks(&windows.presenter, windows.refs(), state.clone());
+    wire_callbacks(&windows, windows.refs(), state.clone());
 
     windows.slide.show()?;
     windows.presenter.run()?;
@@ -74,8 +76,10 @@ struct RenderedPages {
     next: Option<slint::Image>,
 }
 
-fn wire_callbacks(app: &PresenterWindow, windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
-    let window_refs = windows.clone();
+fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<AppState>>) {
+    let app = &windows.presenter;
+
+    let window_refs = refs.clone();
     let state_for_open = state.clone();
     app.on_open_pdf(move || {
         if let Some(path) = pick_pdf_file() {
@@ -85,31 +89,43 @@ fn wire_callbacks(app: &PresenterWindow, windows: AppWindowRefs, state: Rc<RefCe
         }
     });
 
-    let window_refs = windows.clone();
+    let window_refs = refs.clone();
     let state_for_previous = state.clone();
     app.on_previous_page(move || {
-        let mut state = state_for_previous.borrow_mut();
-        state.presentation.previous_page();
-        if let Some(snapshot) = state.presentation.snapshot() {
-            if let Err(err) = render_into_windows(&window_refs, &state, &snapshot) {
-                set_status(&window_refs.presenter, format!("Error: {err:#}"));
-            }
-        }
+        handle_presentation_command(
+            &window_refs,
+            &state_for_previous,
+            PresentationCommand::PreviousPage,
+        );
     });
 
-    let window_refs = windows.clone();
+    let window_refs = refs.clone();
     let state_for_next = state.clone();
     app.on_next_page(move || {
-        let mut state = state_for_next.borrow_mut();
-        state.presentation.next_page();
-        if let Some(snapshot) = state.presentation.snapshot() {
-            if let Err(err) = render_into_windows(&window_refs, &state, &snapshot) {
-                set_status(&window_refs.presenter, format!("Error: {err:#}"));
-            }
-        }
+        handle_presentation_command(&window_refs, &state_for_next, PresentationCommand::NextPage);
     });
 
-    let window_refs = windows.clone();
+    let window_refs = refs.clone();
+    let state_for_keyboard_previous = state.clone();
+    app.on_keyboard_previous_page(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_keyboard_previous,
+            PresentationCommand::PreviousPage,
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_keyboard_next = state.clone();
+    app.on_keyboard_next_page(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_keyboard_next,
+            PresentationCommand::NextPage,
+        );
+    });
+
+    let window_refs = refs.clone();
     let state_for_toggle = state.clone();
     app.on_toggle_slide_fullscreen(move || {
         let mut state = state_for_toggle.borrow_mut();
@@ -117,12 +133,53 @@ fn wire_callbacks(app: &PresenterWindow, windows: AppWindowRefs, state: Rc<RefCe
         set_slide_fullscreen(&window_refs, fullscreen);
     });
 
-    let window_refs = windows;
+    let window_refs = refs.clone();
+    let state_for_slide_previous = state.clone();
+    windows.slide.on_keyboard_previous_page(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_slide_previous,
+            PresentationCommand::PreviousPage,
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_slide_next = state.clone();
+    windows.slide.on_keyboard_next_page(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_slide_next,
+            PresentationCommand::NextPage,
+        );
+    });
+
+    let window_refs = refs;
     let state_for_slide_exit = state;
-    if let Some(slide) = window_refs.slide.upgrade() {
-        slide.on_exit_fullscreen(move || {
-            exit_slide_fullscreen(&window_refs, &state_for_slide_exit);
-        });
+    windows.slide.on_exit_fullscreen(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_slide_exit,
+            PresentationCommand::ExitSlideFullscreen,
+        );
+    });
+}
+
+fn handle_presentation_command(
+    windows: &AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+    command: PresentationCommand,
+) {
+    if command == PresentationCommand::ExitSlideFullscreen {
+        exit_slide_fullscreen(windows, state);
+        return;
+    }
+
+    let mut state = state.borrow_mut();
+    apply_presentation_command(&mut state.presentation, command);
+    if let Some(snapshot) = state.presentation.snapshot() {
+        if let Err(err) = render_into_windows(windows, &state, &snapshot) {
+            set_status(&windows.presenter, format!("Error: {err:#}"));
+        }
     }
 }
 
