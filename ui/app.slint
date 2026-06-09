@@ -1,7 +1,22 @@
 import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
 
-export component AppWindow inherits Window {
+component SlideView inherits Rectangle {
     in property <image> page-image;
+
+    background: #111315;
+    border-color: #3c4043;
+    border-width: 1px;
+
+    Image {
+        source: root.page-image;
+        image-fit: contain;
+        width: parent.width;
+        height: parent.height;
+    }
+}
+
+export component PresenterWindow inherits Window {
+    in property <image> current-page-image;
     in property <string> document-title: "No PDF opened";
     in property <string> page-label: "";
     in property <string> status-text: "Open a PDF to start";
@@ -59,19 +74,10 @@ export component AppWindow inherits Window {
             }
         }
 
-        Rectangle {
-            background: #111315;
-            border-color: #3c4043;
-            border-width: 1px;
+        SlideView {
+            page-image: root.current-page-image;
             horizontal-stretch: 1;
             vertical-stretch: 1;
-
-            Image {
-                source: root.page-image;
-                image-fit: contain;
-                width: parent.width;
-                height: parent.height;
-            }
         }
 
         Text {
@@ -81,5 +87,20 @@ export component AppWindow inherits Window {
             vertical-alignment: center;
             overflow: elide;
         }
+    }
+}
+
+export component SlideWindow inherits Window {
+    in property <image> page-image;
+
+    title: "Quick Presenter - Slide";
+    width: 1024px;
+    height: 720px;
+    background: #111315;
+
+    SlideView {
+        page-image: root.page-image;
+        width: parent.width;
+        height: parent.height;
     }
 }
