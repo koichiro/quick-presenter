@@ -7,8 +7,8 @@ the presenter and slide windows together.
 
 ## Page Navigation
 
-- Next page: `Space`, `Right Arrow`, `Page Down`
-- Previous page: `Left Arrow`, `Page Up`
+- Next page: `Space`, `Return`, `Right Arrow`, `Down Arrow`, `Page Down`
+- Previous page: `Left Arrow`, `Up Arrow`, `Page Up`, `Backspace`
 - First page: `Home`
 - Last page: `End`
 
@@ -20,11 +20,12 @@ synchronized.
 
 ## Fullscreen
 
+- Toggle slide fullscreen: `F5`, `F`
 - Exit slide fullscreen: `Escape`
 
-The Escape key is handled by the slide window. It requires the slide window to
-have keyboard focus. The presenter fullscreen button remains available as a
-mouse-driven fallback.
+Fullscreen shortcuts are handled through the same shared fullscreen state as the
+presenter fullscreen button. `Escape` exits slide fullscreen without toggling it
+back on.
 
 Future presentation controls such as black screen, go-to-page, and timer actions
 should be added as new Rust presentation commands before adding UI key bindings.

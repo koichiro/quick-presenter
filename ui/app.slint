@@ -67,6 +67,7 @@ export component PresenterWindow inherits Window {
     callback previous-page();
     callback next-page();
     callback toggle-slide-fullscreen();
+    callback exit-slide-fullscreen();
     callback keyboard-previous-page();
     callback keyboard-next-page();
     callback keyboard-first-page();
@@ -92,7 +93,21 @@ export component PresenterWindow inherits Window {
         }
 
         KeyBinding {
+            keys: @keys(Return);
+            activated => {
+                root.keyboard-next-page();
+            }
+        }
+
+        KeyBinding {
             keys: @keys(RightArrow);
+            activated => {
+                root.keyboard-next-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(DownArrow);
             activated => {
                 root.keyboard-next-page();
             }
@@ -113,7 +128,21 @@ export component PresenterWindow inherits Window {
         }
 
         KeyBinding {
+            keys: @keys(UpArrow);
+            activated => {
+                root.keyboard-previous-page();
+            }
+        }
+
+        KeyBinding {
             keys: @keys(PageUp);
+            activated => {
+                root.keyboard-previous-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(Backspace);
             activated => {
                 root.keyboard-previous-page();
             }
@@ -130,6 +159,27 @@ export component PresenterWindow inherits Window {
             keys: @keys(End);
             activated => {
                 root.keyboard-last-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(Escape);
+            activated => {
+                root.exit-slide-fullscreen();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(F5);
+            activated => {
+                root.toggle-slide-fullscreen();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(F);
+            activated => {
+                root.toggle-slide-fullscreen();
             }
         }
 
@@ -287,6 +337,7 @@ export component SlideWindow inherits Window {
     in property <length> slide-window-height: 720px;
 
     callback exit-fullscreen();
+    callback toggle-slide-fullscreen();
     callback keyboard-previous-page();
     callback keyboard-next-page();
     callback keyboard-first-page();
@@ -319,7 +370,21 @@ export component SlideWindow inherits Window {
         }
 
         KeyBinding {
+            keys: @keys(Return);
+            activated => {
+                root.keyboard-next-page();
+            }
+        }
+
+        KeyBinding {
             keys: @keys(RightArrow);
+            activated => {
+                root.keyboard-next-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(DownArrow);
             activated => {
                 root.keyboard-next-page();
             }
@@ -340,7 +405,21 @@ export component SlideWindow inherits Window {
         }
 
         KeyBinding {
+            keys: @keys(UpArrow);
+            activated => {
+                root.keyboard-previous-page();
+            }
+        }
+
+        KeyBinding {
             keys: @keys(PageUp);
+            activated => {
+                root.keyboard-previous-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(Backspace);
             activated => {
                 root.keyboard-previous-page();
             }
@@ -357,6 +436,20 @@ export component SlideWindow inherits Window {
             keys: @keys(End);
             activated => {
                 root.keyboard-last-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(F5);
+            activated => {
+                root.toggle-slide-fullscreen();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(F);
+            activated => {
+                root.toggle-slide-fullscreen();
             }
         }
 
