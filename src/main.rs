@@ -7,6 +7,7 @@ pub mod input;
 pub mod notes;
 pub mod pdf;
 pub mod presentation;
+pub mod recent;
 pub mod timer;
 
 use std::{
@@ -26,6 +27,7 @@ use input::{apply_presentation_command, PresentationCommand};
 use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
+use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
 use slint::{ComponentHandle, LogicalPosition, LogicalSize, Timer, TimerMode, Weak};
 use timer::{leaves_first_page, PresentationTimer};
 use tracing::{error, warn};
@@ -48,7 +50,13 @@ fn main() -> Result<()> {
 
     let startup_options = parse_startup_options(std::env::args_os().skip(1))?;
     let windows = AppWindows::new()?;
-    let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState::default()));
+    let recent_store = default_recent_file_store();
+    let recent_files = load_recent_files(recent_store.as_ref());
+    let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState {
+        recent_files,
+        recent_store,
+        ..AppState::default()
+    }));
 
     wire_callbacks(&windows, windows.refs(), state.clone());
     let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
@@ -106,6 +114,8 @@ struct AppState {
     notes: SpeakerNotes,
     presentation: PresentationState,
     timer: PresentationTimer,
+    recent_files: RecentFiles,
+    recent_store: Option<RecentFileStore>,
     status_text: String,
 }
 
@@ -338,6 +348,7 @@ fn open_and_render(
     state: &Rc<RefCell<AppState>>,
     path: PathBuf,
 ) -> Result<()> {
+    let loaded_path = path.clone();
     let doc = PdfDocumentState::open(path)?;
     let (notes, status_text) = match doc.speaker_notes() {
         Ok(notes) => (notes, "Ready".to_owned()),
@@ -373,7 +384,35 @@ fn open_and_render(
         render_into_windows(windows, &state.borrow(), &snapshot)?;
     }
 
+    record_recent_pdf(state, loaded_path);
+
     Ok(())
+}
+
+fn load_recent_files(store: Option<&RecentFileStore>) -> RecentFiles {
+    let Some(store) = store else {
+        warn!("recent file storage is unavailable");
+        return RecentFiles::new();
+    };
+
+    match store.load() {
+        Ok(recent_files) => recent_files,
+        Err(err) => {
+            warn!(error = ?err, "failed to load recent files");
+            RecentFiles::new()
+        }
+    }
+}
+
+fn record_recent_pdf(state: &Rc<RefCell<AppState>>, path: PathBuf) {
+    let mut state = state.borrow_mut();
+    state.recent_files.add(path);
+
+    if let Some(store) = state.recent_store.as_ref() {
+        if let Err(err) = store.save(&state.recent_files) {
+            warn!(error = ?err, "failed to save recent files");
+        }
+    }
 }
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
