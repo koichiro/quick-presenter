@@ -69,6 +69,8 @@ export component PresenterWindow inherits Window {
     callback toggle-slide-fullscreen();
     callback keyboard-previous-page();
     callback keyboard-next-page();
+    callback keyboard-first-page();
+    callback keyboard-last-page();
 
     title: "Quick Presenter";
     preferred-width: 1024px;
@@ -114,6 +116,20 @@ export component PresenterWindow inherits Window {
             keys: @keys(PageUp);
             activated => {
                 root.keyboard-previous-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(Home);
+            activated => {
+                root.keyboard-first-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(End);
+            activated => {
+                root.keyboard-last-page();
             }
         }
 
@@ -273,6 +289,8 @@ export component SlideWindow inherits Window {
     callback exit-fullscreen();
     callback keyboard-previous-page();
     callback keyboard-next-page();
+    callback keyboard-first-page();
+    callback keyboard-last-page();
 
     title: "Quick Presenter - Slide";
     preferred-width: root.slide-window-width;
@@ -325,6 +343,20 @@ export component SlideWindow inherits Window {
             keys: @keys(PageUp);
             activated => {
                 root.keyboard-previous-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(Home);
+            activated => {
+                root.keyboard-first-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(End);
+            activated => {
+                root.keyboard-last-page();
             }
         }
 

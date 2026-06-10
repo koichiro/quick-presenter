@@ -159,6 +159,26 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     });
 
     let window_refs = refs.clone();
+    let state_for_keyboard_first = state.clone();
+    app.on_keyboard_first_page(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_keyboard_first,
+            PresentationCommand::FirstPage,
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_keyboard_last = state.clone();
+    app.on_keyboard_last_page(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_keyboard_last,
+            PresentationCommand::LastPage,
+        );
+    });
+
+    let window_refs = refs.clone();
     let state_for_toggle = state.clone();
     app.on_toggle_slide_fullscreen(move || {
         let mut state = state_for_toggle.borrow_mut();
@@ -183,6 +203,26 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
             &window_refs,
             &state_for_slide_next,
             PresentationCommand::NextPage,
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_slide_first = state.clone();
+    windows.slide.on_keyboard_first_page(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_slide_first,
+            PresentationCommand::FirstPage,
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_slide_last = state.clone();
+    windows.slide.on_keyboard_last_page(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_slide_last,
+            PresentationCommand::LastPage,
         );
     });
 
