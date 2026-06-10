@@ -68,7 +68,8 @@ export component PresenterWindow inherits Window {
     in property <string> about-version-label: "";
     in property <string> about-license-id: "";
     in property <string> about-license-summary: "";
-    in property <string> about-pdfium-notice: "";
+    in property <string> about-pdfium-version-label: "";
+    in property <string> about-pdfium-license-summary: "";
     property <bool> about-visible: false;
 
     callback open-pdf();
@@ -455,7 +456,7 @@ export component PresenterWindow inherits Window {
                 }
 
                 Text {
-                    text: root.about-pdfium-notice;
+                    text: root.about-pdfium-version-label + "\n" + root.about-pdfium-license-summary;
                     color: #d9dce0;
                     wrap: word-wrap;
                     vertical-stretch: 1;
