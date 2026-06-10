@@ -1,4 +1,5 @@
 pub mod aspect;
+pub mod cli;
 pub mod clock;
 pub mod errors;
 pub mod fullscreen;
@@ -17,6 +18,7 @@ use std::{
 
 use anyhow::{bail, Result};
 use aspect::fitted_logical_size_within;
+use cli::parse_startup_options;
 use clock::current_clock_label;
 use errors::{presenter_error_message, speaker_notes_warning, PresenterMessage};
 use fullscreen::FullscreenState;
@@ -44,6 +46,7 @@ fn main() -> Result<()> {
         .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
         .init();
 
+    let startup_options = parse_startup_options(std::env::args_os().skip(1))?;
     let windows = AppWindows::new()?;
     let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState::default()));
 
@@ -53,6 +56,11 @@ fn main() -> Result<()> {
     windows.apply_initial_positions();
     windows.slide.show()?;
     windows.presenter.show()?;
+
+    if let Some(path) = startup_options.pdf_path {
+        load_startup_pdf(&windows.refs(), &state, path);
+    }
+
     slint::run_event_loop()?;
     Ok(())
 }
@@ -298,6 +306,13 @@ fn pick_pdf_file() -> Option<PathBuf> {
         .add_filter("PDF", &["pdf"])
         .set_title("Open PDF")
         .pick_file()
+}
+
+fn load_startup_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, path: PathBuf) {
+    if let Err(err) = open_and_render(windows, state, path) {
+        error!(error = ?err, "failed to open startup PDF");
+        set_presenter_message(&windows.presenter, presenter_error_message(&err));
+    }
 }
 
 fn open_and_render(

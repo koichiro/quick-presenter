@@ -8,5 +8,10 @@ Quick Presenter is a Rust + Slint + PDFium scaffold for a presentation playback 
 cargo run --bin qp
 ```
 
-The Cargo package remains `quick-presenter`, while the runtime executable is named `qp`.
+Load a PDF at startup:
 
+```sh
+cargo run --bin qp -- --pdf path/to/slides.pdf
+```
+
+The Cargo package remains `quick-presenter`, while the runtime executable is named `qp`.
