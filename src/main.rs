@@ -195,6 +195,16 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     });
 
     let window_refs = refs.clone();
+    let state_for_presenter_exit = state.clone();
+    app.on_exit_slide_fullscreen(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_presenter_exit,
+            PresentationCommand::ExitSlideFullscreen,
+        );
+    });
+
+    let window_refs = refs.clone();
     let state_for_slide_previous = state.clone();
     windows.slide.on_keyboard_previous_page(move || {
         handle_presentation_command(
@@ -232,6 +242,14 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
             &state_for_slide_last,
             PresentationCommand::LastPage,
         );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_slide_toggle = state.clone();
+    windows.slide.on_toggle_slide_fullscreen(move || {
+        let mut state = state_for_slide_toggle.borrow_mut();
+        let fullscreen = state.fullscreen.toggle_slide_fullscreen();
+        set_slide_fullscreen(&window_refs, fullscreen);
     });
 
     let window_refs = refs;
