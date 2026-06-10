@@ -14,4 +14,10 @@ Load a PDF at startup:
 cargo run --bin qp -- --pdf path/to/slides.pdf
 ```
 
-The Cargo package remains `quick-presenter`, while the runtime executable is named `qp`.
+The Cargo package remains `quick-presenter`, while the development executable is named `qp`.
+
+On macOS, launch through the display-name wrapper when checking the user-facing process name:
+
+```sh
+scripts/run_macos_display_name.sh --pdf path/to/slides.pdf
+```
