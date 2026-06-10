@@ -64,6 +64,12 @@ export component PresenterWindow inherits Window {
     in property <string> status-text: "Open a PDF to start";
     in property <[string]> recent-file-labels: [];
     in property <bool> has-recent-files: false;
+    in property <string> about-app-name: "Quick Presenter";
+    in property <string> about-version-label: "";
+    in property <string> about-license-id: "";
+    in property <string> about-license-summary: "";
+    in property <string> about-pdfium-notice: "";
+    property <bool> about-visible: false;
 
     callback open-pdf();
     callback open-recent-file(int);
@@ -114,6 +120,17 @@ export component PresenterWindow inherits Window {
                     activated => {
                         root.clear-recent-files();
                     }
+                }
+            }
+        }
+
+        Menu {
+            title: "Help";
+
+            MenuItem {
+                title: "About Quick Presenter";
+                activated => {
+                    root.about-visible = true;
                 }
             }
         }
@@ -363,6 +380,99 @@ export component PresenterWindow inherits Window {
                 height: 24px;
                 vertical-alignment: center;
                 overflow: elide;
+            }
+        }
+    }
+
+    if root.about-visible : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #00000080;
+
+        TouchArea {
+            width: parent.width;
+            height: parent.height;
+            clicked => {
+                root.about-visible = false;
+            }
+        }
+
+        Rectangle {
+            width: min(parent.width - 48px, 560px);
+            height: min(parent.height - 48px, 420px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: #202124;
+            border-color: #5f6368;
+            border-width: 1px;
+
+            VerticalBox {
+                padding: 24px;
+                spacing: 12px;
+
+                Text {
+                    text: root.about-app-name;
+                    color: #f1f3f4;
+                    font-size: 28px;
+                    font-weight: 700;
+                    height: 36px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: root.about-version-label;
+                    color: #d9dce0;
+                    height: 24px;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    height: 1px;
+                    background: #3c4043;
+                }
+
+                Text {
+                    text: "Application License";
+                    color: #f1f3f4;
+                    font-weight: 700;
+                    height: 24px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: root.about-license-id + "\n" + root.about-license-summary;
+                    color: #d9dce0;
+                    wrap: word-wrap;
+                    height: 54px;
+                }
+
+                Text {
+                    text: "Bundled Components";
+                    color: #f1f3f4;
+                    font-weight: 700;
+                    height: 24px;
+                    vertical-alignment: center;
+                }
+
+                Text {
+                    text: root.about-pdfium-notice;
+                    color: #d9dce0;
+                    wrap: word-wrap;
+                    vertical-stretch: 1;
+                    overflow: clip;
+                }
+
+                HorizontalBox {
+                    height: 36px;
+                    alignment: end;
+
+                    Button {
+                        text: "Close";
+                        clicked => {
+                            root.about-visible = false;
+                        }
+                    }
+                }
             }
         }
     }
