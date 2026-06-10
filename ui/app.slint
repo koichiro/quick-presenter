@@ -62,8 +62,12 @@ export component PresenterWindow inherits Window {
     in property <string> clock-time-label: "--:--";
     in property <string> elapsed-time-label: "00:00";
     in property <string> status-text: "Open a PDF to start";
+    in property <[string]> recent-file-labels: [];
+    in property <bool> has-recent-files: false;
 
     callback open-pdf();
+    callback open-recent-file(int);
+    callback clear-recent-files();
     callback previous-page();
     callback next-page();
     callback toggle-slide-fullscreen();
@@ -80,6 +84,40 @@ export component PresenterWindow inherits Window {
     min-height: 560px;
     background: #202124;
     forward-focus: presenter-focus;
+
+    MenuBar {
+        Menu {
+            title: "File";
+
+            MenuItem {
+                title: "Open PDF...";
+                activated => {
+                    root.open-pdf();
+                }
+            }
+
+            Menu {
+                title: "Open Recent";
+                enabled: root.has-recent-files;
+
+                for label[index] in root.recent-file-labels: MenuItem {
+                    title: label;
+                    activated => {
+                        root.open-recent-file(index);
+                    }
+                }
+
+                if root.has-recent-files : MenuSeparator { }
+
+                if root.has-recent-files : MenuItem {
+                    title: "Clear Recent Files";
+                    activated => {
+                        root.clear-recent-files();
+                    }
+                }
+            }
+        }
+    }
 
     presenter-focus := FocusScope {
         width: parent.width;

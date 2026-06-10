@@ -28,7 +28,10 @@ use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
 use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
-use slint::{ComponentHandle, LogicalPosition, LogicalSize, Timer, TimerMode, Weak};
+use slint::{
+    ComponentHandle, LogicalPosition, LogicalSize, ModelRc, SharedString, Timer, TimerMode,
+    VecModel, Weak,
+};
 use timer::{leaves_first_page, PresentationTimer};
 use tracing::{error, warn};
 use tracing_subscriber::EnvFilter;
@@ -60,6 +63,7 @@ fn main() -> Result<()> {
 
     wire_callbacks(&windows, windows.refs(), state.clone());
     let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
+    update_recent_file_menu(&windows.refs().presenter, &state.borrow().recent_files);
 
     windows.apply_initial_positions();
     windows.slide.show()?;
@@ -139,6 +143,8 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
             }
         }
     });
+
+    wire_recent_file_callbacks(app, refs.clone(), state.clone());
 
     let window_refs = refs.clone();
     let state_for_previous = state.clone();
@@ -273,6 +279,19 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     });
 }
 
+fn wire_recent_file_callbacks(
+    app: &PresenterWindow,
+    refs: AppWindowRefs,
+    state: Rc<RefCell<AppState>>,
+) {
+    let window_refs = refs.clone();
+    let state_for_recent = state.clone();
+    app.on_open_recent_file(move |index| open_recent_pdf(&window_refs, &state_for_recent, index));
+
+    let presenter = refs.presenter;
+    app.on_clear_recent_files(move || clear_recent_files(&presenter, &state));
+}
+
 fn handle_presentation_command(
     windows: &AppWindowRefs,
     state: &Rc<RefCell<AppState>>,
@@ -384,9 +403,31 @@ fn open_and_render(
         render_into_windows(windows, &state.borrow(), &snapshot)?;
     }
 
-    record_recent_pdf(state, loaded_path);
+    record_recent_pdf(&windows.presenter, state, loaded_path);
 
     Ok(())
+}
+
+fn open_recent_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, index: i32) {
+    let Ok(index) = usize::try_from(index) else {
+        return;
+    };
+
+    let path = state
+        .borrow()
+        .recent_files
+        .paths()
+        .get(index)
+        .map(PathBuf::from);
+
+    let Some(path) = path else {
+        return;
+    };
+
+    if let Err(err) = open_and_render(windows, state, path) {
+        error!(error = ?err, "failed to open recent PDF");
+        set_presenter_message(&windows.presenter, presenter_error_message(&err));
+    }
 }
 
 fn load_recent_files(store: Option<&RecentFileStore>) -> RecentFiles {
@@ -404,7 +445,11 @@ fn load_recent_files(store: Option<&RecentFileStore>) -> RecentFiles {
     }
 }
 
-fn record_recent_pdf(state: &Rc<RefCell<AppState>>, path: PathBuf) {
+fn record_recent_pdf(
+    presenter: &Weak<PresenterWindow>,
+    state: &Rc<RefCell<AppState>>,
+    path: PathBuf,
+) {
     let mut state = state.borrow_mut();
     state.recent_files.add(path);
 
@@ -413,6 +458,44 @@ fn record_recent_pdf(state: &Rc<RefCell<AppState>>, path: PathBuf) {
             warn!(error = ?err, "failed to save recent files");
         }
     }
+
+    update_recent_file_menu(presenter, &state.recent_files);
+}
+
+fn clear_recent_files(presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppState>>) {
+    let mut state = state.borrow_mut();
+    state.recent_files.clear();
+
+    if let Some(store) = state.recent_store.as_ref() {
+        if let Err(err) = store.save(&state.recent_files) {
+            warn!(error = ?err, "failed to save cleared recent files");
+        }
+    }
+
+    update_recent_file_menu(presenter, &state.recent_files);
+}
+
+fn update_recent_file_menu(presenter: &Weak<PresenterWindow>, recent_files: &RecentFiles) {
+    let Some(presenter) = presenter.upgrade() else {
+        return;
+    };
+
+    let labels: Vec<String> = recent_files
+        .paths()
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect();
+    let has_recent_files = !labels.is_empty();
+
+    let label_model = ModelRc::new(Rc::new(VecModel::from(
+        labels
+            .into_iter()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
+    )));
+
+    presenter.set_has_recent_files(has_recent_files);
+    presenter.set_recent_file_labels(label_model);
 }
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
