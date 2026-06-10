@@ -4,6 +4,8 @@ use crate::presentation::PresentationState;
 pub enum PresentationCommand {
     NextPage,
     PreviousPage,
+    FirstPage,
+    LastPage,
     ExitSlideFullscreen,
 }
 
@@ -14,6 +16,8 @@ pub fn apply_presentation_command(
     match command {
         PresentationCommand::NextPage => presentation.next_page(),
         PresentationCommand::PreviousPage => presentation.previous_page(),
+        PresentationCommand::FirstPage => presentation.first_page(),
+        PresentationCommand::LastPage => presentation.last_page(),
         PresentationCommand::ExitSlideFullscreen => {}
     }
 }
@@ -46,11 +50,33 @@ mod tests {
     }
 
     #[test]
+    fn first_page_command_jumps_back_to_first_page() {
+        let mut presentation = PresentationState::open_document("Deck", 3);
+        apply_presentation_command(&mut presentation, PresentationCommand::LastPage);
+
+        apply_presentation_command(&mut presentation, PresentationCommand::FirstPage);
+
+        assert_eq!(presentation.snapshot().unwrap().page_label, "1 / 3");
+    }
+
+    #[test]
+    fn last_page_command_jumps_to_final_page() {
+        let mut presentation = PresentationState::open_document("Deck", 3);
+
+        apply_presentation_command(&mut presentation, PresentationCommand::LastPage);
+
+        assert_eq!(presentation.snapshot().unwrap().page_label, "3 / 3");
+        assert_eq!(presentation.snapshot().unwrap().next_index, None);
+    }
+
+    #[test]
     fn commands_on_empty_presentation_are_noops() {
         let mut presentation = PresentationState::empty();
 
         apply_presentation_command(&mut presentation, PresentationCommand::NextPage);
         apply_presentation_command(&mut presentation, PresentationCommand::PreviousPage);
+        apply_presentation_command(&mut presentation, PresentationCommand::FirstPage);
+        apply_presentation_command(&mut presentation, PresentationCommand::LastPage);
         apply_presentation_command(&mut presentation, PresentationCommand::ExitSlideFullscreen);
 
         assert_eq!(presentation.snapshot(), None);

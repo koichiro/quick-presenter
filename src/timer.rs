@@ -44,8 +44,8 @@ pub fn format_elapsed(elapsed: Duration) -> String {
     }
 }
 
-pub fn is_first_page_advance(before_index: Option<u32>, after_index: Option<u32>) -> bool {
-    before_index == Some(0) && after_index == Some(1)
+pub fn leaves_first_page(before_index: Option<u32>, after_index: Option<u32>) -> bool {
+    before_index == Some(0) && after_index.is_some_and(|index| index > 0)
 }
 
 #[cfg(test)]
@@ -107,15 +107,17 @@ mod tests {
     }
 
     #[test]
-    fn first_page_advance_is_detected() {
-        assert!(is_first_page_advance(Some(0), Some(1)));
+    fn leaving_first_page_is_detected() {
+        assert!(leaves_first_page(Some(0), Some(1)));
+        assert!(leaves_first_page(Some(0), Some(4)));
     }
 
     #[test]
-    fn other_page_transitions_do_not_count_as_first_page_advance() {
-        assert!(!is_first_page_advance(None, Some(1)));
-        assert!(!is_first_page_advance(Some(0), Some(0)));
-        assert!(!is_first_page_advance(Some(1), Some(2)));
-        assert!(!is_first_page_advance(Some(1), Some(0)));
+    fn other_page_transitions_do_not_count_as_leaving_first_page() {
+        assert!(!leaves_first_page(None, Some(1)));
+        assert!(!leaves_first_page(Some(0), Some(0)));
+        assert!(!leaves_first_page(Some(0), None));
+        assert!(!leaves_first_page(Some(1), Some(2)));
+        assert!(!leaves_first_page(Some(1), Some(0)));
     }
 }

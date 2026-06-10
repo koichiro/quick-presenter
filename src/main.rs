@@ -25,7 +25,7 @@ use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
 use slint::{ComponentHandle, LogicalPosition, LogicalSize, Timer, TimerMode, Weak};
-use timer::{is_first_page_advance, PresentationTimer};
+use timer::{leaves_first_page, PresentationTimer};
 use tracing::{error, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -226,9 +226,9 @@ fn maybe_start_elapsed_timer(
     after: Option<&PageSnapshot>,
     timer: &mut PresentationTimer,
 ) {
-    if command == PresentationCommand::NextPage
+    if command != PresentationCommand::ExitSlideFullscreen
         && !timer.is_running()
-        && is_first_page_advance(
+        && leaves_first_page(
             before.map(|snapshot| snapshot.current_index),
             after.map(|snapshot| snapshot.current_index),
         )

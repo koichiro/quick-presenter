@@ -33,6 +33,18 @@ impl PresentationState {
         }
     }
 
+    pub fn first_page(&mut self) {
+        if let Some(document) = self.document.as_mut() {
+            document.pages.first();
+        }
+    }
+
+    pub fn last_page(&mut self) {
+        if let Some(document) = self.document.as_mut() {
+            document.pages.last();
+        }
+    }
+
     pub fn snapshot(&self) -> Option<PageSnapshot> {
         self.document.as_ref().map(PresentationDocument::snapshot)
     }
@@ -97,6 +109,14 @@ impl PageCursor {
         if self.current_index > 0 {
             self.current_index -= 1;
         }
+    }
+
+    fn first(&mut self) {
+        self.current_index = 0;
+    }
+
+    fn last(&mut self) {
+        self.current_index = self.last_index();
     }
 
     fn current_index(&self) -> u32 {
@@ -209,11 +229,47 @@ mod tests {
     }
 
     #[test]
+    fn first_page_jumps_back_to_first_page() {
+        let mut state = PresentationState::open_document("Deck", 4);
+        state.next_page();
+        state.next_page();
+
+        state.first_page();
+
+        assert_eq!(state.snapshot().unwrap().current_index, 0);
+        assert_eq!(state.snapshot().unwrap().page_label, "1 / 4");
+    }
+
+    #[test]
+    fn last_page_jumps_to_final_page() {
+        let mut state = PresentationState::open_document("Deck", 4);
+
+        state.last_page();
+
+        assert_eq!(state.snapshot().unwrap().current_index, 3);
+        assert_eq!(state.snapshot().unwrap().page_label, "4 / 4");
+        assert_eq!(state.snapshot().unwrap().next_index, None);
+    }
+
+    #[test]
+    fn page_jumps_are_safe_for_single_page_document() {
+        let mut state = PresentationState::open_document("Deck", 1);
+
+        state.last_page();
+        assert_eq!(state.snapshot().unwrap().page_label, "1 / 1");
+
+        state.first_page();
+        assert_eq!(state.snapshot().unwrap().page_label, "1 / 1");
+    }
+
+    #[test]
     fn navigation_on_empty_state_is_a_noop() {
         let mut state = PresentationState::empty();
 
         state.next_page();
         state.previous_page();
+        state.first_page();
+        state.last_page();
 
         assert_eq!(state.snapshot(), None);
     }
