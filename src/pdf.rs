@@ -93,7 +93,8 @@ impl PdfDocumentState {
                 }
 
                 if let Some(contents) = annotation.contents() {
-                    if is_pdf_speaker_note_annotation(None, Some(&contents)) {
+                    let name = annotation.name();
+                    if is_pdf_speaker_note_annotation(name.as_deref(), Some(&contents)) {
                         notes.push((page_index + 1, contents));
                     }
                 }
@@ -191,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn pdf_document_state_extracts_marp_speaker_notes() {
+    fn pdf_document_state_ignores_unnamed_text_annotations() {
         let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
 
         if !local_pdfium_available() {
@@ -203,14 +204,11 @@ mod tests {
         let document = PdfDocumentState::open(path).expect("sample PDF should open");
         let notes = document
             .speaker_notes()
-            .expect("sample PDF speaker notes should be readable");
+            .expect("sample PDF text annotations should be readable");
 
         assert_eq!(notes.note_for_page_number(1), None);
-        assert_eq!(notes.note_for_page_number(2), Some("Presenter note text"));
-        assert_eq!(
-            notes.note_for_page_number(3),
-            Some("\u{65e5}\u{672c}\u{8a9e}\u{306e}\u{30ce}\u{30fc}\u{30c8}")
-        );
+        assert_eq!(notes.note_for_page_number(2), None);
+        assert_eq!(notes.note_for_page_number(3), None);
     }
 
     fn pdfium_test_lock() -> &'static Mutex<()> {

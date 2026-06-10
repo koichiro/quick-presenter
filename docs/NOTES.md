@@ -20,10 +20,14 @@ Speaker note annotations are used only as presenter metadata. They are not
 rendered into slide images, so note markers and other PDF annotation icons do
 not appear during playback.
 
-The current PDFium extraction path reads `Text` annotations with non-empty
-`Contents`. The Marp `/Name /Note` value documents the expected source format,
-but `pdfium-render` does not currently expose that icon name as the annotation
-name API.
+The current PDFium extraction path reads only `Text` annotations whose `Name`
+value is exactly `Note` and whose `Contents` value is not empty. Anonymous text
+annotations are ignored so ordinary PDF comments are not imported into the
+presenter notes view. This also avoids passing arbitrary annotation text, such
+as Japanese review comments, through the Slint text layout path during startup.
+
+PDF exporters that omit `/Name /Note` are intentionally ignored until Quick
+Presenter has a more reliable format detector for those files.
 
 This keeps the initial workflow simple:
 
