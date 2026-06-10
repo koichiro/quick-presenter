@@ -1,3 +1,4 @@
+pub mod app_metadata;
 pub mod aspect;
 pub mod cli;
 pub mod clock;
@@ -18,6 +19,9 @@ use std::{
 };
 
 use anyhow::{bail, Result};
+use app_metadata::{
+    about_version_label, APP_LICENSE_ID, APP_LICENSE_SUMMARY, APP_NAME, PDFIUM_LICENSE_NOTICE,
+};
 use aspect::fitted_logical_size_within;
 use cli::parse_startup_options;
 use clock::current_clock_label;
@@ -64,6 +68,7 @@ fn main() -> Result<()> {
     wire_callbacks(&windows, windows.refs(), state.clone());
     let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
     update_recent_file_menu(&windows.refs().presenter, &state.borrow().recent_files);
+    apply_app_metadata(&windows.presenter);
 
     windows.apply_initial_positions();
     windows.slide.show()?;
@@ -277,6 +282,14 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
             PresentationCommand::ExitSlideFullscreen,
         );
     });
+}
+
+fn apply_app_metadata(app: &PresenterWindow) {
+    app.set_about_app_name(APP_NAME.into());
+    app.set_about_version_label(about_version_label().into());
+    app.set_about_license_id(APP_LICENSE_ID.into());
+    app.set_about_license_summary(APP_LICENSE_SUMMARY.into());
+    app.set_about_pdfium_notice(PDFIUM_LICENSE_NOTICE.into());
 }
 
 fn wire_recent_file_callbacks(
