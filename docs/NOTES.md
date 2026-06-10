@@ -16,6 +16,10 @@ Quick Presenter maps those annotations to the corresponding one-based PDF page
 number. Multiple note annotations on the same page are joined with a blank line.
 Empty notes and page number zero are ignored.
 
+Speaker note annotations are used only as presenter metadata. They are not
+rendered into slide images, so note markers and other PDF annotation icons do
+not appear during playback.
+
 The current PDFium extraction path reads `Text` annotations with non-empty
 `Contents`. The Marp `/Name /Note` value documents the expected source format,
 but `pdfium-render` does not currently expose that icon name as the annotation

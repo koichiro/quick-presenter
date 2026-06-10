@@ -44,8 +44,11 @@ impl PdfDocumentState {
             .pages()
             .get(page_index as PdfPageIndex)
             .with_context(|| format!("failed to load page {page_number}"))?;
+        let render_config = PdfRenderConfig::new()
+            .set_target_width(target_width)
+            .render_annotations(false);
         let bitmap = page
-            .render_with_config(&PdfRenderConfig::new().set_target_width(target_width))
+            .render_with_config(&render_config)
             .with_context(|| format!("failed to render page {page_number}"))?;
         let image = bitmap.as_image()?;
         let rgba = image.to_rgba8();
