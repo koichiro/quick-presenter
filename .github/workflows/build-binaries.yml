@@ -1,0 +1,92 @@
+name: Build Binaries
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build ${{ matrix.artifact-name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact-name: quick-presenter-ubuntu-x64
+            binary-name: qp
+          - os: macos-latest
+            artifact-name: quick-presenter-macos
+            binary-name: qp
+          - os: windows-latest
+            artifact-name: quick-presenter-windows-x64
+            binary-name: qp.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Ubuntu build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1-mesa-dev \
+            libfontconfig1-dev \
+            libgl1-mesa-dev \
+            libudev-dev \
+            libwayland-dev \
+            libx11-dev \
+            libxcb1-dev \
+            libxkbcommon-dev \
+            pkg-config
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Fetch PDFium
+        run: python scripts/fetch_pdfium.py
+
+      - name: Build release binary
+        run: cargo build --release --bin qp
+
+      - name: Stage artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          artifact_dir="artifacts/${{ matrix.artifact-name }}"
+          mkdir -p "$artifact_dir"
+
+          cp "target/release/${{ matrix.binary-name }}" "$artifact_dir/"
+          cp -R pdfium "$artifact_dir/pdfium"
+
+          cat > "$artifact_dir/README.txt" <<'README'
+          Quick Presenter development binary artifact.
+
+          This archive contains the qp executable and the PDFium files
+          downloaded by scripts/fetch_pdfium.py during the workflow run.
+
+          If the executable cannot locate PDFium automatically, set
+          PDFIUM_DYNAMIC_LIB_PATH to the PDFium native library inside pdfium.
+
+          Full installer packaging is intentionally out of scope for this
+          workflow.
+          README
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: artifacts/${{ matrix.artifact-name }}
+          if-no-files-found: error
