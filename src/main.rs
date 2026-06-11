@@ -77,6 +77,7 @@ fn main() -> Result<()> {
     windows.apply_initial_positions();
     windows.slide.show()?;
     windows.presenter.show()?;
+    set_application_icon();
     remove_macos_native_about_menu_item();
 
     if let Some(path) = startup_options.pdf_path {
@@ -86,6 +87,43 @@ fn main() -> Result<()> {
     slint::run_event_loop()?;
     Ok(())
 }
+
+#[cfg(target_os = "macos")]
+fn set_application_icon() {
+    set_application_icon_now();
+    Timer::single_shot(Duration::from_millis(0), set_application_icon_now);
+    Timer::single_shot(Duration::from_millis(250), set_application_icon_now);
+    Timer::single_shot(Duration::from_millis(1000), set_application_icon_now);
+}
+
+#[cfg(target_os = "macos")]
+fn set_application_icon_now() {
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::{MainThreadMarker, NSData};
+    use std::ffi::c_void;
+
+    let Some(main_thread) = MainThreadMarker::new() else {
+        warn!("failed to set application icon because the main thread marker is unavailable");
+        return;
+    };
+
+    let icon_bytes = include_bytes!("../assets/icons/macos/QuickPresenter.icns");
+    let icon_data = unsafe {
+        NSData::dataWithBytes_length(icon_bytes.as_ptr().cast::<c_void>(), icon_bytes.len())
+    };
+    let Some(icon) = NSImage::initWithData(main_thread.alloc(), &icon_data) else {
+        warn!("failed to decode application icon");
+        return;
+    };
+
+    let app = NSApplication::sharedApplication(main_thread);
+    unsafe {
+        app.setApplicationIconImage(Some(&icon));
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_application_icon() {}
 
 #[cfg(target_os = "macos")]
 fn remove_macos_native_about_menu_item() {

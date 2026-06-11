@@ -28,7 +28,7 @@ The committed generated assets cover the common platform packaging requirements:
 
 The PNG set is intended for Linux and generic packaging flows. The Windows ICO contains 16, 24, 32, 48, 64, 128, and 256 px entries. The macOS ICNS contains the standard iconset entries from 16 px through 1024 px.
 
-The older `assets/icon.png` file is kept unchanged until packaging and runtime icon wiring are migrated explicitly.
+The older `assets/icon.png` file is kept unchanged for now. New packaging and runtime icon wiring should use the assets under `assets/icons/`.
 
 ## Regeneration
 
