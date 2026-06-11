@@ -44,7 +44,7 @@ impl SpeakerNotes {
 }
 
 pub fn is_pdf_speaker_note_annotation(name: Option<&str>, contents: Option<&str>) -> bool {
-    let has_note_name = name == Some("Note");
+    let has_note_name = matches!(name, Some("Note") | None);
     let has_contents = contents.is_some_and(|contents| !contents.trim().is_empty());
 
     has_note_name && has_contents
@@ -124,8 +124,8 @@ mod tests {
     }
 
     #[test]
-    fn pdf_speaker_note_annotation_rejects_missing_name() {
-        assert!(!is_pdf_speaker_note_annotation(None, Some("Speaker note")));
+    fn pdf_speaker_note_annotation_accepts_missing_name_as_fallback() {
+        assert!(is_pdf_speaker_note_annotation(None, Some("Speaker note")));
     }
 
     #[test]
