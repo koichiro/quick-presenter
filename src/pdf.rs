@@ -234,8 +234,12 @@ mod tests {
                 "Open with the product promise: Quick Presenter does one thing well by playing prepared PDF slide decks with presenter-focused controls."
             )
         );
+        let english_note = notes
+            .note_for_page_number(4)
+            .expect("English sample flow slide should have speaker notes");
+        assert!(english_note.contains("English counterpart"));
         let japanese_note = notes
-            .note_for_page_number(5)
+            .note_for_page_number(6)
             .expect("Japanese sample slide should have speaker notes");
         assert!(japanese_note.contains("README"));
         assert!(japanese_note.contains("UI"));

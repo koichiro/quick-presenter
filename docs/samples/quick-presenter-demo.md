@@ -268,6 +268,23 @@ This is a good slide for README presenter screenshots because it has enough stru
 
 ---
 
+<div class="kicker">Basic flow</div>
+
+## Keep the live presentation path short.
+
+<div class="timeline">
+  <div class="step"><div class="number">1</div><div><strong>Open the PDF</strong><span>Use the final PDF exported from Keynote, PowerPoint, Marp, or Beamer.</span></div></div>
+  <div class="step"><div class="number">2</div><div><strong>Check speaker notes</strong><span>Keep private notes aligned with the current slide in the presenter window.</span></div></div>
+  <div class="step"><div class="number">3</div><div><strong>Share the slide window</strong><span>Send only the clean audience view to a projector or online meeting.</span></div></div>
+</div>
+
+<!--
+This page is the English counterpart to the Japanese README screenshot page.
+It shows the same audience-facing workflow without exposing presenter-only UI.
+-->
+
+---
+
 <!-- _class: japanese lead -->
 
 <div class="eyebrow">研究発表と技術発表のための再生ツール</div>
