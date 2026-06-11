@@ -84,6 +84,30 @@ jobs:
           workflow.
           README
 
+      - name: Verify Windows executable icon
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $artifactDir = 'artifacts/${{ matrix.artifact-name }}'
+          $exe = Join-Path $artifactDir '${{ matrix.binary-name }}'
+          $preview = Join-Path $artifactDir 'qp-associated-icon.png'
+          $previewFullPath = [System.IO.Path]::GetFullPath($preview)
+
+          Add-Type -AssemblyName System.Drawing
+          $icon = [System.Drawing.Icon]::ExtractAssociatedIcon((Resolve-Path $exe))
+          if ($null -eq $icon) {
+            throw "Windows could not extract an associated icon from $exe"
+          }
+
+          $bitmap = $icon.ToBitmap()
+          $bitmap.Save($previewFullPath, [System.Drawing.Imaging.ImageFormat]::Png)
+
+          if ((Get-Item $preview).Length -le 0) {
+            throw "Extracted icon preview is empty"
+          }
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
