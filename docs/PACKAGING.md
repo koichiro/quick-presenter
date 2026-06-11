@@ -42,18 +42,61 @@ into the executable and set it through AppKit at runtime. This makes the app ico
 available to macOS app switching surfaces such as Cmd+Tab without depending on a
 filesystem path next to the executable.
 
-Future `.app` packaging should also wire the bundle metadata:
+macOS app bundle artifacts are staged with `scripts/stage_macos_app_bundle.sh`.
+The staged layout is:
 
-- Copy `assets/icons/macos/QuickPresenter.icns` to `Contents/Resources/`.
-- Set `CFBundleIconFile` to `QuickPresenter.icns`.
-- Keep `CFBundleName` and `CFBundleDisplayName` as `Quick Presenter`.
-- Keep the executable name as `qp` unless a packaging decision explicitly changes
-  the bundle layout.
+```text
+Quick Presenter.app/
+  Contents/
+    Info.plist
+    MacOS/
+      qp
+    Resources/
+      QuickPresenter.icns
+      pdfium/
+      licenses/
+        QuickPresenter-LICENSE.txt
+        PDFium-LICENSE.txt
+```
+
+The bundle metadata uses:
+
+- `CFBundleName`: `Quick Presenter`
+- `CFBundleDisplayName`: `Quick Presenter`
+- `CFBundleExecutable`: `qp`
+- `CFBundleIconFile`: `QuickPresenter`
+- `NSPrincipalClass`: `NSApplication`
+
+The bundled PDFium directory is copied to `Contents/Resources/pdfium/`, which is
+covered by the runtime lookup order documented above.
+
+To stage the app bundle locally:
+
+```sh
+python3 scripts/fetch_pdfium.py
+cargo build --release --bin qp
+scripts/stage_macos_app_bundle.sh /tmp/quick-presenter-macos
+```
+
+The `build-binaries.yml` workflow stages the `.app` inside the macOS artifact
+and validates:
+
+- `Contents/Info.plist` is valid,
+- bundle display name, executable, icon file, package type, and principal class
+  are set,
+- `Contents/MacOS/qp` is executable,
+- `QuickPresenter.icns` exists in `Contents/Resources/`,
+- bundled PDFium and license files are present.
 
 Manual verification:
 
-- Run `cargo run --bin qp -- --pdf tests/fixtures/marp-speaker-notes.pdf`.
+- Stage the app bundle locally.
+- Run `open "/tmp/quick-presenter-macos/Quick Presenter.app"`.
+- Open `tests/fixtures/marp-speaker-notes.pdf` without `PDFIUM_DYNAMIC_LIB_PATH`.
 - Press Cmd+Tab and confirm the Quick Presenter icon is shown.
+
+Developer ID signing, notarization, `.dmg` creation, and universal binary
+packaging are tracked separately from the first `.app` bundle staging flow.
 
 ### Windows
 

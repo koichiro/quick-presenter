@@ -84,13 +84,45 @@ jobs:
 
           PDFIUM_DYNAMIC_LIB_PATH remains available as a development override.
 
-          Full installer packaging is intentionally out of scope for this
-          workflow.
+          Full installer or disk image packaging is intentionally out of scope
+          for this workflow.
           README
 
       - name: Stage Linux desktop metadata
         if: runner.os == 'Linux'
         run: scripts/stage_linux_desktop_assets.sh "artifacts/${{ matrix.artifact-name }}"
+
+      - name: Stage macOS app bundle
+        if: runner.os == 'macOS'
+        run: scripts/stage_macos_app_bundle.sh "artifacts/${{ matrix.artifact-name }}" "target/release/${{ matrix.binary-name }}"
+
+      - name: Verify macOS app bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          artifact_dir="artifacts/${{ matrix.artifact-name }}"
+          app="$artifact_dir/Quick Presenter.app"
+          plist="$app/Contents/Info.plist"
+          executable="$app/Contents/MacOS/qp"
+          resources="$app/Contents/Resources"
+
+          test -x "$executable"
+          test -s "$plist"
+          test -s "$resources/QuickPresenter.icns"
+          test -s "$resources/pdfium/LICENSE"
+          test -d "$resources/pdfium/licenses"
+          test -s "$resources/licenses/QuickPresenter-LICENSE.txt"
+          test -s "$resources/licenses/PDFium-LICENSE.txt"
+
+          plutil -lint "$plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$plist")" = "Quick Presenter"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$plist")" = "Quick Presenter"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")" = "qp"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$plist")" = "QuickPresenter"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$plist")" = "APPL"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSPrincipalClass' "$plist")" = "NSApplication"
 
       - name: Verify Linux desktop metadata
         if: runner.os == 'Linux'
