@@ -56,6 +56,14 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: Install WiX Toolset
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet tool install --global wix
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Fetch PDFium
         run: python scripts/fetch_pdfium.py
 
@@ -217,6 +225,72 @@ jobs:
 
           if ((Get-Item $preview).Length -le 0) {
             throw "Extracted icon preview is empty"
+          }
+
+      - name: Build Windows MSI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          scripts/build_windows_msi.ps1 `
+            -ArtifactDir 'artifacts/${{ matrix.artifact-name }}' `
+            -Binary 'target/release/${{ matrix.binary-name }}'
+
+      - name: Verify Windows MSI
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Remove-Item Env:PDFIUM_DYNAMIC_LIB_PATH -ErrorAction SilentlyContinue
+
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}'
+          $msi = Join-Path $artifactDir 'Quick Presenter.msi'
+          $extractDir = Join-Path $env:RUNNER_TEMP 'quick-presenter-msi-extract'
+          $pdf = Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/marp-speaker-notes.pdf'
+
+          if (-not (Test-Path $msi -PathType Leaf)) {
+            throw "Missing MSI artifact: $msi"
+          }
+
+          Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $extractDir | Out-Null
+
+          & msiexec.exe /a $msi /qn "TARGETDIR=$extractDir"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Administrative MSI extraction failed with exit code $LASTEXITCODE"
+          }
+
+          $exe = Get-ChildItem $extractDir -Recurse -Filter 'qp.exe' | Select-Object -First 1
+          if ($null -eq $exe) {
+            throw "Extracted MSI layout does not contain qp.exe"
+          }
+
+          $installDir = $exe.Directory.FullName
+          $pdfiumDir = Join-Path $installDir 'pdfium'
+          $licenseDir = Join-Path $installDir 'licenses'
+
+          if (-not (Test-Path (Join-Path $pdfiumDir 'LICENSE') -PathType Leaf)) {
+            throw "Extracted MSI layout is missing bundled PDFium license"
+          }
+          if (-not (Test-Path (Join-Path $pdfiumDir 'licenses') -PathType Container)) {
+            throw "Extracted MSI layout is missing PDFium component licenses"
+          }
+          if (-not (Test-Path (Join-Path $licenseDir 'QuickPresenter-LICENSE.txt') -PathType Leaf)) {
+            throw "Extracted MSI layout is missing Quick Presenter license"
+          }
+          if (-not (Test-Path (Join-Path $licenseDir 'PDFium-LICENSE.txt') -PathType Leaf)) {
+            throw "Extracted MSI layout is missing PDFium license copy"
+          }
+
+          Push-Location $env:TEMP
+          try {
+            & $exe.FullName --smoke-open-pdf $pdf
+            if ($LASTEXITCODE -ne 0) {
+              throw "Extracted MSI smoke test failed with exit code $LASTEXITCODE"
+            }
+          } finally {
+            Pop-Location
           }
 
       - name: Smoke test staged artifact

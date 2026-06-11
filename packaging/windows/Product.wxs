@@ -1,0 +1,47 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="Quick Presenter"
+    Manufacturer="Quick Presenter"
+    Version="$(var.ProductVersion)"
+    UpgradeCode="{7F4C7EF9-7602-46C7-9AC5-6A3D6EE85CF1}"
+    Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Quick Presenter is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="QuickPresenterIcon.ico" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="QuickPresenterIcon.ico" />
+
+    <Feature Id="MainFeature" Title="Quick Presenter" Level="1">
+      <ComponentGroupRef Id="ApplicationFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Quick Presenter" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="Quick Presenter" />
+    </StandardDirectory>
+
+    <DirectoryRef Id="ApplicationProgramsFolder">
+      <Component Id="StartMenuShortcut" Guid="{D7D95D10-847C-43F3-915B-9B7C1AC53E8E}">
+        <Shortcut
+          Id="ApplicationStartMenuShortcut"
+          Name="Quick Presenter"
+          Description="Open Quick Presenter"
+          Target="[INSTALLFOLDER]qp.exe"
+          WorkingDirectory="INSTALLFOLDER"
+          Icon="QuickPresenterIcon.ico" />
+        <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue
+          Root="HKLM"
+          Key="Software\Quick Presenter"
+          Name="installed"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Package>
+</Wix>
