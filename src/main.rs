@@ -49,6 +49,7 @@ const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0
 const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
 const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
 const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
+const FILE_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const PRESENTER_WINDOW_TITLE: &str = "Quick Presenter";
 const SLIDE_WINDOW_TITLE: &str = "Quick Presenter - Slide";
@@ -220,10 +221,12 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let state_for_open = state.clone();
     app.on_open_pdf(move || {
         if let Some(path) = pick_pdf_file() {
-            if let Err(err) = open_and_render(&window_refs, &state_for_open, path) {
-                error!(error = ?err, "failed to open and render PDF");
-                set_presenter_message(&window_refs.presenter, presenter_error_message(&err));
-            }
+            schedule_open_pdf(
+                window_refs.clone(),
+                state_for_open.clone(),
+                path,
+                "failed to open and render PDF",
+            );
         }
     });
 
@@ -309,7 +312,7 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
         set_slide_fullscreen(&window_refs, fullscreen);
     });
 
-    wire_window_menu_callbacks(app, &windows.slide, refs.clone(), state.clone());
+    wire_window_menu_callbacks(app, refs.clone(), state.clone());
 
     let window_refs = refs.clone();
     let state_for_presenter_exit = state.clone();
@@ -393,7 +396,6 @@ fn apply_app_metadata(app: &PresenterWindow) {
 
 fn wire_window_menu_callbacks(
     presenter: &PresenterWindow,
-    slide: &SlideWindow,
     refs: AppWindowRefs,
     state: Rc<RefCell<AppState>>,
 ) {
@@ -468,78 +470,6 @@ fn wire_window_menu_callbacks(
             },
         );
     });
-
-    let window_refs = refs.clone();
-    let state_for_presenter_toggle = state.clone();
-    slide.on_show_presenter_window(move || {
-        schedule_window_menu_action(
-            window_refs.clone(),
-            state_for_presenter_toggle.clone(),
-            |windows, state| {
-                show_presenter_window_from_menu(&windows, &state);
-            },
-        );
-    });
-
-    let window_refs = refs.clone();
-    let state_for_slide_toggle = state.clone();
-    slide.on_hide_presenter_window(move || {
-        schedule_window_menu_action(
-            window_refs.clone(),
-            state_for_slide_toggle.clone(),
-            |windows, state| {
-                hide_presenter_window_from_menu(&windows, &state);
-            },
-        );
-    });
-
-    let window_refs = refs.clone();
-    let state_for_presenter_front = state.clone();
-    slide.on_show_slide_window(move || {
-        schedule_window_menu_action(
-            window_refs.clone(),
-            state_for_presenter_front.clone(),
-            |windows, state| {
-                show_slide_window_from_menu(&windows, &state);
-            },
-        );
-    });
-
-    let window_refs = refs.clone();
-    let state_for_slide_front = state.clone();
-    slide.on_hide_slide_window(move || {
-        schedule_window_menu_action(
-            window_refs.clone(),
-            state_for_slide_front.clone(),
-            |windows, state| {
-                hide_slide_window_from_menu(&windows, &state);
-            },
-        );
-    });
-
-    let window_refs = refs.clone();
-    let state_for_presenter_front = state.clone();
-    slide.on_bring_presenter_window_to_front(move || {
-        schedule_window_menu_action(
-            window_refs.clone(),
-            state_for_presenter_front.clone(),
-            |windows, state| {
-                bring_presenter_window_to_front(&windows, &state);
-            },
-        );
-    });
-
-    let window_refs = refs;
-    let state_for_slide_front = state;
-    slide.on_bring_slide_window_to_front(move || {
-        schedule_window_menu_action(
-            window_refs.clone(),
-            state_for_slide_front.clone(),
-            |windows, state| {
-                bring_slide_window_to_front(&windows, &state);
-            },
-        );
-    });
 }
 
 fn schedule_window_menu_action(
@@ -548,6 +478,20 @@ fn schedule_window_menu_action(
     action: impl FnOnce(AppWindowRefs, Rc<RefCell<AppState>>) + 'static,
 ) {
     Timer::single_shot(WINDOW_MENU_ACTION_DELAY, move || action(windows, state));
+}
+
+fn schedule_open_pdf(
+    windows: AppWindowRefs,
+    state: Rc<RefCell<AppState>>,
+    path: PathBuf,
+    error_context: &'static str,
+) {
+    Timer::single_shot(FILE_MENU_ACTION_DELAY, move || {
+        if let Err(err) = open_and_render(&windows, &state, path) {
+            error!(error = ?err, "{}", error_context);
+            set_presenter_message(&windows.presenter, presenter_error_message(&err));
+        }
+    });
 }
 
 fn wire_recent_file_callbacks(
@@ -848,10 +792,12 @@ fn open_recent_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, index
         return;
     };
 
-    if let Err(err) = open_and_render(windows, state, path) {
-        error!(error = ?err, "failed to open recent PDF");
-        set_presenter_message(&windows.presenter, presenter_error_message(&err));
-    }
+    schedule_open_pdf(
+        windows.clone(),
+        state.clone(),
+        path,
+        "failed to open recent PDF",
+    );
 }
 
 fn load_recent_files(store: Option<&RecentFileStore>) -> RecentFiles {
@@ -870,7 +816,7 @@ fn load_recent_files(store: Option<&RecentFileStore>) -> RecentFiles {
 }
 
 fn record_recent_pdf(
-    presenter: &Weak<PresenterWindow>,
+    _presenter: &Weak<PresenterWindow>,
     state: &Rc<RefCell<AppState>>,
     path: PathBuf,
 ) {
@@ -882,11 +828,9 @@ fn record_recent_pdf(
             warn!(error = ?err, "failed to save recent files");
         }
     }
-
-    update_recent_file_menu(presenter, &state.recent_files);
 }
 
-fn clear_recent_files(presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppState>>) {
+fn clear_recent_files(_presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppState>>) {
     let mut state = state.borrow_mut();
     state.recent_files.clear();
 
@@ -895,20 +839,23 @@ fn clear_recent_files(presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppS
             warn!(error = ?err, "failed to save cleared recent files");
         }
     }
-
-    update_recent_file_menu(presenter, &state.recent_files);
 }
 
 fn update_recent_file_menu(presenter: &Weak<PresenterWindow>, recent_files: &RecentFiles) {
-    let Some(presenter) = presenter.upgrade() else {
-        return;
-    };
-
     let labels: Vec<String> = recent_files
         .paths()
         .iter()
         .map(|path| path.display().to_string())
         .collect();
+
+    update_recent_file_menu_labels(presenter, labels);
+}
+
+fn update_recent_file_menu_labels(presenter: &Weak<PresenterWindow>, labels: Vec<String>) {
+    let Some(presenter) = presenter.upgrade() else {
+        return;
+    };
+
     let has_recent_files = !labels.is_empty();
 
     let label_model = ModelRc::new(Rc::new(VecModel::from(
