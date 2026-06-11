@@ -29,16 +29,31 @@ Manual verification:
 
 ### Windows
 
-Windows packaging should use `assets/icons/windows/quick-presenter.ico`.
+Raw Windows `qp.exe` builds embed `assets/icons/windows/quick-presenter.ico`
+as an executable resource from `build.rs`. This keeps the development binary
+name as `qp.exe` while allowing Windows shell surfaces to discover the Quick
+Presenter icon.
 
-For a raw `qp.exe`, the icon must be embedded as a Windows executable resource
-before Explorer, Alt+Tab, and the taskbar can reliably show it. Add that as a
-Windows-only build or packaging step when Windows packaging is introduced.
+The `build-binaries.yml` workflow runs on `windows-latest`, builds `qp.exe`, and
+extracts the associated executable icon into `qp-associated-icon.png` inside the
+uploaded Windows artifact. That preview is a CI smoke test that the executable
+has an associated icon resource.
+
+CI cannot fully verify final Windows shell behavior because Explorer, Alt+Tab,
+and taskbar rendering depend on an interactive Windows session and icon cache
+state. Use a real Windows machine for final acceptance.
 
 Manual verification:
 
+- Download the `quick-presenter-windows-x64` artifact or build locally with
+  `cargo build --release --bin qp`.
 - Inspect `qp.exe` in Explorer.
 - Run the app and confirm the icon appears in Alt+Tab and the taskbar.
+- If Explorer shows a stale generic icon, copy the artifact to a fresh path and
+  retry before treating it as a failure.
+
+Future installer packaging is tracked separately from raw executable icon
+embedding.
 
 ### Linux
 
