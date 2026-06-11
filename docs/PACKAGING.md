@@ -158,6 +158,49 @@ has an associated icon resource.
 The workflow also runs `qp.exe --smoke-open-pdf` from the staged artifact with
 `PDFIUM_DYNAMIC_LIB_PATH` unset.
 
+Windows MSI packages are built with WiX Toolset from the staged release binary
+and bundled PDFium files. The installer keeps the executable name as `qp.exe`
+while presenting the product name as `Quick Presenter` in installer metadata
+and the Start Menu shortcut.
+
+The installed layout is:
+
+```text
+Quick Presenter/
+  qp.exe
+  pdfium/
+  licenses/
+    QuickPresenter-LICENSE.txt
+    PDFium-LICENSE.txt
+```
+
+The bundled PDFium directory is installed next to `qp.exe`, which is covered by
+the runtime lookup order documented above.
+
+To build the MSI locally on Windows:
+
+```powershell
+python scripts/fetch_pdfium.py
+cargo build --release --bin qp
+dotnet tool install --global wix
+scripts/build_windows_msi.ps1
+```
+
+The MSI is written to:
+
+```text
+artifacts/quick-presenter-windows-x64/Quick Presenter.msi
+```
+
+The `build-binaries.yml` workflow builds this MSI on `windows-latest` and
+validates:
+
+- the MSI artifact exists,
+- administrative extraction with `msiexec /a` succeeds,
+- the extracted layout contains `qp.exe`, bundled PDFium, and license files,
+- the extracted `qp.exe` can run `--smoke-open-pdf` without
+  `PDFIUM_DYNAMIC_LIB_PATH`.
+
 CI cannot fully verify final Windows shell behavior because Explorer, Alt+Tab,
 and taskbar rendering depend on an interactive Windows session and icon cache
 state. Use a real Windows machine for final acceptance.
@@ -167,12 +210,21 @@ Manual verification:
 - Download the `quick-presenter-windows-x64` artifact or build locally with
   `cargo build --release --bin qp`.
 - Inspect `qp.exe` in Explorer.
+- Run `scripts/build_windows_msi.ps1` on Windows.
+- Install `artifacts/quick-presenter-windows-x64/Quick Presenter.msi`.
+- Confirm the Start Menu contains `Quick Presenter`.
+- Launch Quick Presenter from the Start Menu.
+- Open `tests/fixtures/marp-speaker-notes.pdf` without
+  `PDFIUM_DYNAMIC_LIB_PATH`.
+- Confirm Windows Apps/Installed apps can uninstall Quick Presenter cleanly.
 - Run the app and confirm the icon appears in Alt+Tab and the taskbar.
 - If Explorer shows a stale generic icon, copy the artifact to a fresh path and
   retry before treating it as a failure.
 
-Future installer packaging is tracked separately from raw executable icon
-embedding.
+The current MSI is unsigned. Authenticode signing is tracked separately in #109.
+MSIX packaging, Microsoft Store distribution, PDF file associations, and
+auto-update infrastructure are tracked separately from the first MSI packaging
+flow.
 
 ### Linux
 
