@@ -37,13 +37,14 @@ pub fn presenter_error_message(error: &Error) -> PresenterMessage {
         &chain,
         &[
             "failed to bind PDFium",
+            "failed to bind bundled PDFium",
             "failed to bind local PDFium",
             "failed to bind system PDFium",
             "PDFIUM_DYNAMIC_LIB_PATH",
         ],
     ) {
         return PresenterMessage::new(
-            "PDF engine unavailable. Install PDFium or set PDFIUM_DYNAMIC_LIB_PATH.",
+            "PDF engine unavailable. Reinstall Quick Presenter or set PDFIUM_DYNAMIC_LIB_PATH.",
             MessageSeverity::Error,
         );
     }
@@ -100,7 +101,7 @@ mod tests {
 
         assert_eq!(
             message.text(),
-            "PDF engine unavailable. Install PDFium or set PDFIUM_DYNAMIC_LIB_PATH."
+            "PDF engine unavailable. Reinstall Quick Presenter or set PDFIUM_DYNAMIC_LIB_PATH."
         );
         assert_eq!(message.severity(), MessageSeverity::Error);
     }

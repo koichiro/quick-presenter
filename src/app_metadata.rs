@@ -7,8 +7,8 @@ pub const PDFIUM_VERSION_FILE: &str = "pdfium/VERSION";
 
 pub const PDFIUM_LICENSE_SUMMARY: &str = "\
 PDFium is distributed under the PDFium/BSD-style license and includes \
-third-party components under their respective licenses. Packaged Windows and \
-macOS builds must include the full PDFium license files alongside the bundled \
+third-party components under their respective licenses. Packaged builds must \
+include the full PDFium license files alongside the bundled \
 PDFium binaries.";
 
 pub struct AboutMetadata {

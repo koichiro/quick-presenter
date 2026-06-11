@@ -3,6 +3,34 @@
 Quick Presenter currently builds raw development binaries in CI. Full installer
 or app bundle packaging is intentionally separate from the binary build workflow.
 
+## Bundled PDFium
+
+Release packages and binary artifacts must include PDFium. Quick Presenter does
+not download PDFium at first launch for MVP releases because presentation startup
+must work without network access.
+
+Runtime PDFium lookup order:
+
+1. `PDFIUM_DYNAMIC_LIB_PATH`
+2. `pdfium/` next to the running executable
+3. `pdfium/` one directory above the running executable, for layouts such as
+   `bin/qp` plus a sibling `pdfium/`
+4. macOS app bundle locations:
+   - `Contents/Resources/pdfium/`
+   - `Contents/Frameworks/pdfium/`
+   - `Contents/MacOS/pdfium/`
+5. repository-local `pdfium/` under the current working directory for
+   development runs
+6. system PDFium as a final fallback
+
+For each `pdfium/` directory, the app checks `lib/`, `bin/`, then the directory
+itself for the platform PDFium library name.
+
+Package builders must keep the bundled `pdfium/` directory and its license files
+with the installed application. This applies to the macOS app bundle, Windows
+installer, Linux package artifacts, and packaged artifact smoke tests tracked by
+#87, #94, #96, and #88.
+
 ## Application Icons
 
 The source icon assets are documented in `docs/ICONS.md`.

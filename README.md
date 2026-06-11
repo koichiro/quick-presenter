@@ -146,14 +146,15 @@ completed.
 
 Current distribution work focuses on:
 
-- locating bundled PDFium reliably from packaged builds,
+- including PDFium in packaged builds so the app works without first-launch downloads,
 - macOS app bundle packaging,
 - Windows executable icon and packaging metadata,
 - Linux desktop entry and hicolor icon installation,
 - smoke tests for staged release artifacts.
 
-Until those items are complete, development runs may require a repository-local
-PDFium directory or `PDFIUM_DYNAMIC_LIB_PATH`.
+Development runs use the repository-local `pdfium/` directory fetched by
+`scripts/fetch_pdfium.py`. `PDFIUM_DYNAMIC_LIB_PATH` remains available as an
+override for development and troubleshooting.
 
 ## Roadmap
 
