@@ -124,6 +124,12 @@ cargo check
 cargo test
 ```
 
+Run the packaged-artifact smoke path without opening UI windows:
+
+```sh
+cargo run --bin qp -- --smoke-open-pdf tests/fixtures/marp-speaker-notes.pdf
+```
+
 Regenerate the README screenshot sample PDF from Marp Markdown:
 
 ```sh

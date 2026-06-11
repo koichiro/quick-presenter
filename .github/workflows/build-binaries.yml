@@ -172,6 +172,51 @@ jobs:
             throw "Extracted icon preview is empty"
           }
 
+      - name: Smoke test staged artifact
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          artifact_dir="$GITHUB_WORKSPACE/artifacts/${{ matrix.artifact-name }}"
+          pdf="$GITHUB_WORKSPACE/tests/fixtures/marp-speaker-notes.pdf"
+
+          (
+            cd /tmp
+            env -u PDFIUM_DYNAMIC_LIB_PATH "$artifact_dir/${{ matrix.binary-name }}" \
+              --smoke-open-pdf "$pdf"
+          )
+
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            (
+              cd /tmp
+              env -u PDFIUM_DYNAMIC_LIB_PATH "$artifact_dir/Quick Presenter.app/Contents/MacOS/qp" \
+                --smoke-open-pdf "$pdf"
+            )
+          fi
+
+      - name: Smoke test staged artifact
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Remove-Item Env:PDFIUM_DYNAMIC_LIB_PATH -ErrorAction SilentlyContinue
+
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}'
+          $exe = Join-Path $artifactDir '${{ matrix.binary-name }}'
+          $pdf = Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/marp-speaker-notes.pdf'
+
+          Push-Location $env:TEMP
+          try {
+            & $exe --smoke-open-pdf $pdf
+            if ($LASTEXITCODE -ne 0) {
+              throw "Smoke test failed with exit code $LASTEXITCODE"
+            }
+          } finally {
+            Pop-Location
+          }
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
