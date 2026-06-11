@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use pdfium_render::prelude::*;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
+use tracing::debug;
 
 use crate::aspect::sanitize_aspect_ratio;
 use crate::notes::{is_pdf_speaker_note_annotation, SpeakerNotes};
@@ -113,17 +114,81 @@ fn document_title(path: &Path) -> String {
 
 fn create_pdfium() -> Result<Pdfium> {
     if let Ok(path) = std::env::var("PDFIUM_DYNAMIC_LIB_PATH") {
-        return new_or_reuse(Pdfium::bind_to_library(path))
+        return new_or_reuse(Pdfium::bind_to_library(&path))
             .context("failed to bind PDFium from PDFIUM_DYNAMIC_LIB_PATH");
     }
 
-    let local_library = Pdfium::pdfium_platform_library_name_at_path(Path::new("pdfium/lib"));
-    if local_library.exists() {
-        return new_or_reuse(Pdfium::bind_to_library(&local_library))
-            .with_context(|| format!("failed to bind local PDFium: {}", local_library.display()));
+    for candidate in bundled_pdfium_library_candidates(
+        std::env::current_exe().ok().as_deref(),
+        std::env::current_dir().ok().as_deref(),
+    ) {
+        if !candidate.exists() {
+            debug!(
+                path = %candidate.display(),
+                "PDFium bundled candidate does not exist"
+            );
+            continue;
+        }
+
+        return new_or_reuse(Pdfium::bind_to_library(&candidate))
+            .with_context(|| format!("failed to bind bundled PDFium: {}", candidate.display()));
     }
 
     new_or_reuse(Pdfium::bind_to_system_library()).context("failed to bind system PDFium")
+}
+
+fn bundled_pdfium_library_candidates(
+    current_exe: Option<&Path>,
+    current_dir: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Some(exe_dir) = current_exe.and_then(Path::parent) {
+        push_pdfium_layout_candidates(&mut candidates, &exe_dir.join("pdfium"));
+
+        if let Some(parent_dir) = exe_dir.parent() {
+            push_pdfium_layout_candidates(&mut candidates, &parent_dir.join("pdfium"));
+
+            if exe_dir.file_name().and_then(|name| name.to_str()) == Some("MacOS") {
+                push_pdfium_layout_candidates(
+                    &mut candidates,
+                    &parent_dir.join("Resources/pdfium"),
+                );
+                push_pdfium_layout_candidates(
+                    &mut candidates,
+                    &parent_dir.join("Frameworks/pdfium"),
+                );
+            }
+        }
+    }
+
+    if let Some(current_dir) = current_dir {
+        push_pdfium_layout_candidates(&mut candidates, &current_dir.join("pdfium"));
+    }
+
+    dedupe_paths(candidates)
+}
+
+fn push_pdfium_layout_candidates(candidates: &mut Vec<PathBuf>, pdfium_dir: &Path) {
+    for library_dir in [
+        pdfium_dir.join("lib"),
+        pdfium_dir.join("bin"),
+        pdfium_dir.to_path_buf(),
+    ] {
+        candidates.push(Pdfium::pdfium_platform_library_name_at_path(&library_dir));
+    }
+}
+
+fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut deduped = Vec::new();
+
+    for path in paths {
+        if !deduped.contains(&path) {
+            deduped.push(path);
+        }
+    }
+
+    deduped
 }
 
 fn new_or_reuse(bindings: Result<Box<dyn PdfiumLibraryBindings>, PdfiumError>) -> Result<Pdfium> {
@@ -155,6 +220,56 @@ mod tests {
         let title = document_title(Path::new("/"));
 
         assert_eq!(title, "Untitled PDF");
+    }
+
+    #[test]
+    fn bundled_pdfium_candidates_include_raw_artifact_layout() {
+        let exe = Path::new("/tmp/quick-presenter/qp");
+        let candidates = bundled_pdfium_library_candidates(Some(exe), None);
+
+        assert!(candidates.contains(&platform_library_at("/tmp/quick-presenter/pdfium/lib")));
+        assert!(candidates.contains(&platform_library_at("/tmp/quick-presenter/pdfium/bin")));
+        assert!(candidates.contains(&platform_library_at("/tmp/quick-presenter/pdfium")));
+    }
+
+    #[test]
+    fn bundled_pdfium_candidates_include_macos_app_layout() {
+        let exe = Path::new("/Applications/Quick Presenter.app/Contents/MacOS/qp");
+        let candidates = bundled_pdfium_library_candidates(Some(exe), None);
+
+        assert!(candidates.contains(&platform_library_at(
+            "/Applications/Quick Presenter.app/Contents/Resources/pdfium/lib"
+        )));
+        assert!(candidates.contains(&platform_library_at(
+            "/Applications/Quick Presenter.app/Contents/Frameworks/pdfium/lib"
+        )));
+        assert!(candidates.contains(&platform_library_at(
+            "/Applications/Quick Presenter.app/Contents/MacOS/pdfium/lib"
+        )));
+    }
+
+    #[test]
+    fn bundled_pdfium_candidates_include_development_layout() {
+        let candidates =
+            bundled_pdfium_library_candidates(None, Some(Path::new("/work/quick-presenter")));
+
+        assert!(candidates.contains(&platform_library_at("/work/quick-presenter/pdfium/lib")));
+    }
+
+    #[test]
+    fn bundled_pdfium_candidates_are_deduplicated() {
+        let exe = Path::new("/work/quick-presenter/qp");
+        let cwd = Path::new("/work/quick-presenter");
+        let candidates = bundled_pdfium_library_candidates(Some(exe), Some(cwd));
+
+        let unique_count = candidates
+            .iter()
+            .filter(|candidate| {
+                **candidate == platform_library_at("/work/quick-presenter/pdfium/lib")
+            })
+            .count();
+
+        assert_eq!(unique_count, 1);
     }
 
     #[test]
@@ -253,6 +368,10 @@ mod tests {
     fn local_pdfium_available() -> bool {
         std::env::var("PDFIUM_DYNAMIC_LIB_PATH").is_ok()
             || Pdfium::pdfium_platform_library_name_at_path(Path::new("pdfium/lib")).exists()
+    }
+
+    fn platform_library_at(path: impl AsRef<Path>) -> PathBuf {
+        Pdfium::pdfium_platform_library_name_at_path(path.as_ref())
     }
 
     fn write_test_pdf() -> PathBuf {

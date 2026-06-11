@@ -79,8 +79,10 @@ jobs:
           This archive contains the qp executable and the PDFium files
           downloaded by scripts/fetch_pdfium.py during the workflow run.
 
-          If the executable cannot locate PDFium automatically, set
-          PDFIUM_DYNAMIC_LIB_PATH to the PDFium native library inside pdfium.
+          The executable locates the bundled PDFium files relative to its own
+          path. If you move the executable, keep the pdfium directory next to it.
+
+          PDFIUM_DYNAMIC_LIB_PATH remains available as a development override.
 
           Full installer packaging is intentionally out of scope for this
           workflow.
