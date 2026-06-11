@@ -1,4 +1,11 @@
-import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Button, VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
+
+export struct ThumbnailItem {
+    page_index: int,
+    page_label: string,
+    image: image,
+    is_current: bool,
+}
 
 component SlideView inherits Rectangle {
     in property <image> page-image;
@@ -198,6 +205,72 @@ component KeyboardBindingsPanel inherits Rectangle {
     }
 }
 
+component ThumbnailTile inherits Rectangle {
+    in property <ThumbnailItem> thumbnail;
+    callback clicked(int);
+
+    height: 92px;
+    background: root.thumbnail.is_current ? #23395d : #111315;
+    border-color: root.thumbnail.is_current ? #8ab4f8 : #3c4043;
+    border-width: root.thumbnail.is_current ? 2px : 1px;
+
+    TouchArea {
+        width: parent.width;
+        height: parent.height;
+        clicked => {
+            root.clicked(root.thumbnail.page_index);
+        }
+    }
+
+    Image {
+        source: root.thumbnail.image;
+        image-fit: contain;
+        x: 6px;
+        y: 6px;
+        width: parent.width - 12px;
+        height: 62px;
+    }
+
+    Text {
+        text: root.thumbnail.page_label;
+        color: root.thumbnail.is_current ? #f1f3f4 : #d9dce0;
+        x: 6px;
+        y: 69px;
+        width: parent.width - 12px;
+        height: 18px;
+        font-size: 12px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+}
+
+component ThumbnailPane inherits Rectangle {
+    in property <[ThumbnailItem]> thumbnails;
+    callback jump-to-page(int);
+
+    background: transparent;
+
+    ScrollView {
+        width: parent.width;
+        height: parent.height;
+        viewport-width: parent.width;
+
+        VerticalBox {
+            width: parent.width;
+            spacing: 6px;
+
+            for thumbnail in root.thumbnails: ThumbnailTile {
+                thumbnail: thumbnail;
+                width: parent.width;
+                clicked(page-index) => {
+                    root.jump-to-page(page-index);
+                }
+            }
+        }
+    }
+}
+
 export component PresenterWindow inherits Window {
     in property <image> current-page-image;
     in property <image> next-page-image;
@@ -220,6 +293,7 @@ export component PresenterWindow inherits Window {
     in property <string> about-license-summary: "";
     in property <string> about-pdfium-version-label: "";
     in property <string> about-pdfium-license-summary: "";
+    in property <[ThumbnailItem]> thumbnails: [];
     property <bool> about-visible: false;
     property <float> safe-next-page-aspect-ratio: root.next-page-aspect-ratio > 0 ? root.next-page-aspect-ratio : 16.0 / 9.0;
     property <length> next-preview-natural-height: 260px / root.safe-next-page-aspect-ratio;
@@ -245,6 +319,7 @@ export component PresenterWindow inherits Window {
     callback keyboard-next-page();
     callback keyboard-first-page();
     callback keyboard-last-page();
+    callback jump-to-page(int);
 
     title: "Quick Presenter";
     preferred-width: 1024px;
@@ -660,6 +735,28 @@ export component PresenterWindow inherits Window {
                     KeyboardBindingsPanel {
                         height: 146px;
                         horizontal-stretch: 1;
+                    }
+                }
+
+                VerticalBox {
+                    width: 128px;
+                    vertical-stretch: 1;
+                    spacing: 6px;
+
+                    Text {
+                        text: "Slides";
+                        color: #d9dce0;
+                        height: 22px;
+                        vertical-alignment: center;
+                    }
+
+                    ThumbnailPane {
+                        thumbnails: root.thumbnails;
+                        horizontal-stretch: 1;
+                        vertical-stretch: 1;
+                        jump-to-page(page-index) => {
+                            root.jump-to-page(page-index);
+                        }
                     }
                 }
             }

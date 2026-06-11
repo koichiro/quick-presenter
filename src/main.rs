@@ -50,6 +50,7 @@ slint::include_modules!();
 
 const CURRENT_RENDER_WIDTH: i32 = 1600;
 const PREVIEW_RENDER_WIDTH: i32 = 600;
+const THUMBNAIL_RENDER_WIDTH: i32 = 180;
 const PRESENTATION_CACHE_RADIUS: u32 = 2;
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
 const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
@@ -293,6 +294,7 @@ struct AppState {
     pdf: Option<PdfDocumentState>,
     render_cache: RenderCache,
     render_generation: u64,
+    thumbnail_pages: Vec<RenderedPage>,
     notes: SpeakerNotes,
     presentation: PresentationState,
     timer: PresentationTimer,
@@ -355,6 +357,19 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let state_for_last = state.clone();
     app.on_last_page(move || {
         handle_presentation_command(&window_refs, &state_for_last, PresentationCommand::LastPage);
+    });
+
+    let window_refs = refs.clone();
+    let state_for_jump = state.clone();
+    app.on_jump_to_page(move |page_index| {
+        let Ok(page_index) = u32::try_from(page_index) else {
+            return;
+        };
+        handle_presentation_command(
+            &window_refs,
+            &state_for_jump,
+            PresentationCommand::JumpToPage(page_index),
+        );
     });
 
     let window_refs = refs.clone();
@@ -914,6 +929,7 @@ fn open_and_render(
         state.pdf = Some(doc);
         state.render_cache.clear();
         state.render_generation = state.render_generation.wrapping_add(1);
+        state.thumbnail_pages.clear();
         state.notes = notes;
         state.presentation = presentation;
         state.black_screen.set_active(false);
@@ -931,6 +947,7 @@ fn open_and_render(
             render_into_windows(windows, &mut state, &snapshot)?;
         }
         schedule_presentation_preload(state.clone(), snapshot);
+        schedule_thumbnail_render(windows.clone(), state.clone());
     }
 
     record_recent_pdf(&windows.presenter, state, loaded_path);
@@ -1074,6 +1091,10 @@ fn render_into_windows(
         presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
         presenter.set_status_text(presenter_status_text(state).into());
+        presenter.set_thumbnails(thumbnail_model(
+            &state.thumbnail_pages,
+            snapshot.current_index,
+        ));
 
         let current_note = state.notes.note_for_page_index(snapshot.current_index);
         presenter.set_has_notes(current_note.is_some());
@@ -1155,6 +1176,81 @@ fn render_pdf_page_cached(
             aspect_ratio: doc.page_aspect_ratio(request.page_index)?,
         })
     })
+}
+
+fn thumbnail_model(thumbnails: &[RenderedPage], current_index: u32) -> ModelRc<ThumbnailItem> {
+    let items = thumbnails
+        .iter()
+        .enumerate()
+        .map(|(index, thumbnail)| ThumbnailItem {
+            page_index: i32::try_from(index).unwrap_or(i32::MAX),
+            page_label: format!("{}", index + 1).into(),
+            image: thumbnail.image.clone(),
+            is_current: u32::try_from(index) == Ok(current_index),
+        })
+        .collect::<Vec<_>>();
+
+    ModelRc::new(Rc::new(VecModel::from(items)))
+}
+
+fn schedule_thumbnail_render(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
+    let generation = state.borrow().render_generation;
+
+    Timer::single_shot(Duration::from_millis(0), move || {
+        let mut state = state.borrow_mut();
+        if state.render_generation != generation {
+            return;
+        }
+
+        let Some(snapshot) = state.presentation.snapshot() else {
+            return;
+        };
+
+        match render_thumbnail_pages(&mut state, &snapshot) {
+            Ok(thumbnails) => {
+                state.thumbnail_pages = thumbnails;
+                if let Some(presenter) = windows.presenter.upgrade() {
+                    presenter.set_thumbnails(thumbnail_model(
+                        &state.thumbnail_pages,
+                        snapshot.current_index,
+                    ));
+                }
+            }
+            Err(err) => {
+                warn!(error = ?err, "failed to render slide thumbnails");
+            }
+        }
+    });
+}
+
+fn render_thumbnail_pages(
+    state: &mut AppState,
+    snapshot: &PageSnapshot,
+) -> Result<Vec<RenderedPage>> {
+    let Some(doc) = state.pdf.as_ref() else {
+        return Ok(Vec::new());
+    };
+
+    let mut thumbnails = Vec::with_capacity(snapshot.total_pages as usize);
+    for page_index in 0..snapshot.total_pages {
+        thumbnails.push(render_pdf_page_cached(
+            doc,
+            &mut state.render_cache,
+            RenderRequest {
+                page_index,
+                width: THUMBNAIL_RENDER_WIDTH,
+                purpose: RenderPurpose::Thumbnail,
+            },
+        )?);
+    }
+
+    state.render_cache.retain_presentation_window(
+        snapshot.current_index,
+        snapshot.total_pages,
+        PRESENTATION_CACHE_RADIUS,
+    );
+
+    Ok(thumbnails)
 }
 
 fn schedule_presentation_preload(state: Rc<RefCell<AppState>>, snapshot: PageSnapshot) {

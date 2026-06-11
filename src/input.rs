@@ -6,6 +6,7 @@ pub enum PresentationCommand {
     PreviousPage,
     FirstPage,
     LastPage,
+    JumpToPage(u32),
     ExitSlideFullscreen,
     ToggleBlackScreen,
 }
@@ -19,6 +20,7 @@ pub fn apply_presentation_command(
         PresentationCommand::PreviousPage => presentation.previous_page(),
         PresentationCommand::FirstPage => presentation.first_page(),
         PresentationCommand::LastPage => presentation.last_page(),
+        PresentationCommand::JumpToPage(page_index) => presentation.jump_to_page_index(page_index),
         PresentationCommand::ExitSlideFullscreen | PresentationCommand::ToggleBlackScreen => {}
     }
 }
@@ -71,6 +73,24 @@ mod tests {
     }
 
     #[test]
+    fn jump_to_page_command_moves_to_requested_page() {
+        let mut presentation = PresentationState::open_document("Deck", 3);
+
+        apply_presentation_command(&mut presentation, PresentationCommand::JumpToPage(1));
+
+        assert_eq!(presentation.snapshot().unwrap().page_label, "2 / 3");
+    }
+
+    #[test]
+    fn jump_to_page_command_clamps_to_last_page() {
+        let mut presentation = PresentationState::open_document("Deck", 3);
+
+        apply_presentation_command(&mut presentation, PresentationCommand::JumpToPage(99));
+
+        assert_eq!(presentation.snapshot().unwrap().page_label, "3 / 3");
+    }
+
+    #[test]
     fn commands_on_empty_presentation_are_noops() {
         let mut presentation = PresentationState::empty();
 
@@ -78,6 +98,7 @@ mod tests {
         apply_presentation_command(&mut presentation, PresentationCommand::PreviousPage);
         apply_presentation_command(&mut presentation, PresentationCommand::FirstPage);
         apply_presentation_command(&mut presentation, PresentationCommand::LastPage);
+        apply_presentation_command(&mut presentation, PresentationCommand::JumpToPage(3));
         apply_presentation_command(&mut presentation, PresentationCommand::ExitSlideFullscreen);
         apply_presentation_command(&mut presentation, PresentationCommand::ToggleBlackScreen);
 

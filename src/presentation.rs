@@ -45,6 +45,12 @@ impl PresentationState {
         }
     }
 
+    pub fn jump_to_page_index(&mut self, page_index: u32) {
+        if let Some(document) = self.document.as_mut() {
+            document.pages.jump_to_index(page_index);
+        }
+    }
+
     pub fn snapshot(&self) -> Option<PageSnapshot> {
         self.document.as_ref().map(PresentationDocument::snapshot)
     }
@@ -117,6 +123,10 @@ impl PageCursor {
 
     fn last(&mut self) {
         self.current_index = self.last_index();
+    }
+
+    fn jump_to_index(&mut self, page_index: u32) {
+        self.current_index = page_index.min(self.last_index());
     }
 
     fn current_index(&self) -> u32 {
@@ -260,6 +270,26 @@ mod tests {
 
         state.first_page();
         assert_eq!(state.snapshot().unwrap().page_label, "1 / 1");
+    }
+
+    #[test]
+    fn jump_to_page_index_moves_to_requested_page() {
+        let mut state = PresentationState::open_document("Deck", 4);
+
+        state.jump_to_page_index(2);
+
+        assert_eq!(state.snapshot().unwrap().current_index, 2);
+        assert_eq!(state.snapshot().unwrap().page_label, "3 / 4");
+    }
+
+    #[test]
+    fn jump_to_page_index_clamps_to_last_page() {
+        let mut state = PresentationState::open_document("Deck", 4);
+
+        state.jump_to_page_index(99);
+
+        assert_eq!(state.snapshot().unwrap().current_index, 3);
+        assert_eq!(state.snapshot().unwrap().page_label, "4 / 4");
     }
 
     #[test]

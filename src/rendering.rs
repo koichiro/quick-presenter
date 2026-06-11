@@ -79,7 +79,7 @@ fn should_retain_presentation_request(
             page_is_within_radius(request.page_index, current_index, radius)
         }
         RenderPurpose::NextPreview => request.page_index == current_index.saturating_add(1),
-        RenderPurpose::Thumbnail => false,
+        RenderPurpose::Thumbnail => true,
     }
 }
 
@@ -213,7 +213,7 @@ mod tests {
 
         cache.retain_presentation_window(3, 7, 2);
 
-        assert_eq!(cache.len(), 6);
+        assert_eq!(cache.len(), 7);
         for page_index in 1..=5 {
             assert!(cache.pages.contains_key(&request(
                 page_index,
@@ -224,6 +224,9 @@ mod tests {
         assert!(cache
             .pages
             .contains_key(&request(4, 600, RenderPurpose::NextPreview)));
+        assert!(cache
+            .pages
+            .contains_key(&request(3, 240, RenderPurpose::Thumbnail)));
     }
 
     #[test]
