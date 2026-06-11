@@ -134,6 +134,10 @@ fn set_application_icon() {}
 
 #[cfg(target_os = "macos")]
 fn remove_macos_native_about_menu_item() {
+    if running_from_macos_app_bundle() {
+        return;
+    }
+
     // Slint/muda always adds the native App > About item on macOS when a MenuBar exists.
     // Quick Presenter uses its own Help > About dialog so PDFium licensing is visible.
     remove_macos_native_about_menu_item_now();
@@ -200,6 +204,24 @@ fn is_macos_app_menu(menu: &objc2_app_kit::NSMenu) -> bool {
     }
 
     has_services && has_hide
+}
+
+#[cfg(target_os = "macos")]
+fn running_from_macos_app_bundle() -> bool {
+    let Ok(exe) = std::env::current_exe() else {
+        return false;
+    };
+
+    exe.parent()
+        .and_then(std::path::Path::file_name)
+        .and_then(|name| name.to_str())
+        == Some("MacOS")
+        && exe
+            .parent()
+            .and_then(std::path::Path::parent)
+            .and_then(std::path::Path::file_name)
+            .and_then(|name| name.to_str())
+            == Some("Contents")
 }
 
 #[cfg(not(target_os = "macos"))]

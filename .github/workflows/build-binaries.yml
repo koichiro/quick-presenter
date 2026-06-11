@@ -122,6 +122,7 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")" = "qp"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$plist")" = "QuickPresenter"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$plist")" = "APPL"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSPrincipalClass' "$plist")" = "NSApplication"
 
       - name: Verify Linux desktop metadata
         if: runner.os == 'Linux'

@@ -65,6 +65,7 @@ The bundle metadata uses:
 - `CFBundleDisplayName`: `Quick Presenter`
 - `CFBundleExecutable`: `qp`
 - `CFBundleIconFile`: `QuickPresenter`
+- `NSPrincipalClass`: `NSApplication`
 
 The bundled PDFium directory is copied to `Contents/Resources/pdfium/`, which is
 covered by the runtime lookup order documented above.
@@ -81,7 +82,8 @@ The `build-binaries.yml` workflow stages the `.app` inside the macOS artifact
 and validates:
 
 - `Contents/Info.plist` is valid,
-- bundle display name, executable, icon file, and package type are set,
+- bundle display name, executable, icon file, package type, and principal class
+  are set,
 - `Contents/MacOS/qp` is executable,
 - `QuickPresenter.icns` exists in `Contents/Resources/`,
 - bundled PDFium and license files are present.
