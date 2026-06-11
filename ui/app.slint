@@ -79,6 +79,7 @@ export component PresenterWindow inherits Window {
     callback next-page();
     callback first-page();
     callback last-page();
+    callback toggle-black-screen();
     callback toggle-slide-fullscreen();
     callback exit-slide-fullscreen();
     callback show-presenter-window();
@@ -174,6 +175,13 @@ export component PresenterWindow inherits Window {
                 title: root.slide-fullscreen ? "Exit Slide Fullscreen" : "Enter Slide Fullscreen";
                 activated => {
                     root.toggle-slide-fullscreen();
+                }
+            }
+
+            MenuItem {
+                title: "Toggle Black Screen";
+                activated => {
+                    root.toggle-black-screen();
                 }
             }
         }
@@ -340,6 +348,13 @@ export component PresenterWindow inherits Window {
             }
         }
 
+        KeyBinding {
+            keys: @keys(B);
+            activated => {
+                root.toggle-black-screen();
+            }
+        }
+
         VerticalBox {
             padding: 12px;
             spacing: 10px;
@@ -373,6 +388,13 @@ export component PresenterWindow inherits Window {
                     text: root.slide-fullscreen ? "Exit Fullscreen" : "Fullscreen";
                     clicked => {
                         root.toggle-slide-fullscreen();
+                    }
+                }
+
+                Button {
+                    text: "Black";
+                    clicked => {
+                        root.toggle-black-screen();
                     }
                 }
 
@@ -604,6 +626,7 @@ export component SlideWindow inherits Window {
     in property <length> slide-window-height: 720px;
 
     callback exit-fullscreen();
+    callback toggle-black-screen();
     callback toggle-slide-fullscreen();
     callback keyboard-previous-page();
     callback keyboard-next-page();
@@ -720,11 +743,19 @@ export component SlideWindow inherits Window {
             }
         }
 
+        KeyBinding {
+            keys: @keys(B);
+            activated => {
+                root.toggle-black-screen();
+            }
+        }
+
         SlideView {
             page-image: root.page-image;
             page-aspect-ratio: root.page-aspect-ratio;
             width: parent.width;
             height: parent.height;
         }
+
     }
 }

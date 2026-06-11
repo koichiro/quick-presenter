@@ -1,5 +1,6 @@
 pub mod app_metadata;
 pub mod aspect;
+pub mod black_screen;
 pub mod cli;
 pub mod clock;
 pub mod errors;
@@ -22,6 +23,7 @@ use std::{
 use anyhow::{bail, Result};
 use app_metadata::about_metadata;
 use aspect::fitted_logical_size_within;
+use black_screen::BlackScreenState;
 use cli::parse_startup_options;
 use clock::current_clock_label;
 use errors::{presenter_error_message, speaker_notes_warning, PresenterMessage};
@@ -32,8 +34,8 @@ use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
 use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
 use slint::{
-    ComponentHandle, LogicalPosition, LogicalSize, ModelRc, SharedString, Timer, TimerMode,
-    VecModel, Weak,
+    ComponentHandle, LogicalPosition, LogicalSize, ModelRc, Rgba8Pixel, SharedPixelBuffer,
+    SharedString, Timer, TimerMode, VecModel, Weak,
 };
 use timer::{leaves_first_page, PresentationTimer};
 use tracing::{error, warn};
@@ -234,6 +236,7 @@ struct AppWindowRefs {
 
 #[derive(Default)]
 struct AppState {
+    black_screen: BlackScreenState,
     fullscreen: FullscreenState,
     pdf: Option<PdfDocumentState>,
     notes: SpeakerNotes,
@@ -300,6 +303,16 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let state_for_last = state.clone();
     app.on_last_page(move || {
         handle_presentation_command(&window_refs, &state_for_last, PresentationCommand::LastPage);
+    });
+
+    let window_refs = refs.clone();
+    let state_for_black_screen = state.clone();
+    app.on_toggle_black_screen(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_black_screen,
+            PresentationCommand::ToggleBlackScreen,
+        );
     });
 
     let window_refs = refs.clone();
@@ -399,6 +412,16 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
             &window_refs,
             &state_for_slide_last,
             PresentationCommand::LastPage,
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_slide_black_screen = state.clone();
+    windows.slide.on_toggle_black_screen(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_slide_black_screen,
+            PresentationCommand::ToggleBlackScreen,
         );
     });
 
@@ -555,12 +578,29 @@ fn handle_presentation_command(
         return;
     }
 
+    if command == PresentationCommand::ToggleBlackScreen {
+        toggle_black_screen(windows, state);
+        return;
+    }
+
     let mut state = state.borrow_mut();
     let before = state.presentation.snapshot();
     apply_presentation_command(&mut state.presentation, command);
     let after = state.presentation.snapshot();
     maybe_start_elapsed_timer(command, before.as_ref(), after.as_ref(), &mut state.timer);
     if let Some(snapshot) = after {
+        if let Err(err) = render_into_windows(windows, &state, &snapshot) {
+            error!(error = ?err, "failed to render presentation page");
+            set_presenter_message(&windows.presenter, presenter_error_message(&err));
+        }
+    }
+}
+
+fn toggle_black_screen(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+    let mut state = state.borrow_mut();
+    state.black_screen.toggle();
+
+    if let Some(snapshot) = state.presentation.snapshot() {
         if let Err(err) = render_into_windows(windows, &state, &snapshot) {
             error!(error = ?err, "failed to render presentation page");
             set_presenter_message(&windows.presenter, presenter_error_message(&err));
@@ -797,6 +837,7 @@ fn open_and_render(
         state.pdf = Some(doc);
         state.notes = notes;
         state.presentation = presentation;
+        state.black_screen.set_active(false);
         state.timer.reset();
         state.status_text = status_text;
     }
@@ -946,7 +987,7 @@ fn render_into_windows(
         presenter.set_page_label(snapshot.page_label.clone().into());
         presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
-        presenter.set_status_text(state.status_text.clone().into());
+        presenter.set_status_text(presenter_status_text(state).into());
 
         let current_note = state.notes.note_for_page_index(snapshot.current_index);
         presenter.set_has_notes(current_note.is_some());
@@ -955,10 +996,34 @@ fn render_into_windows(
 
     if let Some(slide) = windows.slide.upgrade() {
         slide.set_page_aspect_ratio(rendered.current_aspect_ratio);
-        slide.set_page_image(rendered.current);
+        slide.set_page_image(if state.black_screen.is_active() {
+            black_slide_image()
+        } else {
+            rendered.current
+        });
     }
 
     Ok(())
+}
+
+fn presenter_status_text(state: &AppState) -> String {
+    if state.black_screen.is_active() {
+        "Black screen active. Audience slide is hidden.".to_owned()
+    } else {
+        state.status_text.clone()
+    }
+}
+
+fn black_slide_image() -> slint::Image {
+    const WIDTH: u32 = 16;
+    const HEIGHT: u32 = 9;
+
+    let mut pixels = vec![0; (WIDTH * HEIGHT * 4) as usize];
+    for alpha in pixels.iter_mut().skip(3).step_by(4) {
+        *alpha = 255;
+    }
+    let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, WIDTH, HEIGHT);
+    slint::Image::from_rgba8(buffer)
 }
 
 fn render_pages(doc: &PdfDocumentState, snapshot: &PageSnapshot) -> Result<RenderedPages> {
