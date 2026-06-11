@@ -19,9 +19,7 @@ use std::{
 };
 
 use anyhow::{bail, Result};
-use app_metadata::{
-    about_version_label, APP_LICENSE_ID, APP_LICENSE_SUMMARY, APP_NAME, PDFIUM_LICENSE_NOTICE,
-};
+use app_metadata::about_metadata;
 use aspect::fitted_logical_size_within;
 use cli::parse_startup_options;
 use clock::current_clock_label;
@@ -73,6 +71,7 @@ fn main() -> Result<()> {
     windows.apply_initial_positions();
     windows.slide.show()?;
     windows.presenter.show()?;
+    remove_macos_native_about_menu_item();
 
     if let Some(path) = startup_options.pdf_path {
         load_startup_pdf(&windows.refs(), &state, path);
@@ -81,6 +80,79 @@ fn main() -> Result<()> {
     slint::run_event_loop()?;
     Ok(())
 }
+
+#[cfg(target_os = "macos")]
+fn remove_macos_native_about_menu_item() {
+    // Slint/muda always adds the native App > About item on macOS when a MenuBar exists.
+    // Quick Presenter uses its own Help > About dialog so PDFium licensing is visible.
+    remove_macos_native_about_menu_item_now();
+    Timer::single_shot(
+        Duration::from_millis(0),
+        remove_macos_native_about_menu_item_now,
+    );
+    Timer::single_shot(
+        Duration::from_millis(250),
+        remove_macos_native_about_menu_item_now,
+    );
+    Timer::single_shot(
+        Duration::from_millis(1000),
+        remove_macos_native_about_menu_item_now,
+    );
+}
+
+#[cfg(target_os = "macos")]
+fn remove_macos_native_about_menu_item_now() {
+    use objc2_app_kit::NSApplication;
+    use objc2_foundation::MainThreadMarker;
+
+    let Some(main_thread) = MainThreadMarker::new() else {
+        return;
+    };
+    let app = NSApplication::sharedApplication(main_thread);
+    let Some(main_menu) = app.mainMenu() else {
+        return;
+    };
+
+    for index in 0..main_menu.numberOfItems() {
+        let Some(menu_item) = main_menu.itemAtIndex(index) else {
+            continue;
+        };
+        let Some(submenu) = menu_item.submenu() else {
+            continue;
+        };
+        let Some(first_item) = submenu.itemAtIndex(0) else {
+            continue;
+        };
+
+        if first_item.title().to_string().starts_with("About ") && is_macos_app_menu(&submenu) {
+            submenu.removeItemAtIndex(0);
+            if submenu.numberOfItems() > 0 {
+                submenu.removeItemAtIndex(0);
+            }
+            return;
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn is_macos_app_menu(menu: &objc2_app_kit::NSMenu) -> bool {
+    let mut has_services = false;
+    let mut has_hide = false;
+
+    for index in 0..menu.numberOfItems() {
+        let Some(item) = menu.itemAtIndex(index) else {
+            continue;
+        };
+        let title = item.title().to_string();
+        has_services |= title == "Services";
+        has_hide |= title.starts_with("Hide ");
+    }
+
+    has_services && has_hide
+}
+
+#[cfg(not(target_os = "macos"))]
+fn remove_macos_native_about_menu_item() {}
 
 struct AppWindows {
     presenter: PresenterWindow,
@@ -285,11 +357,14 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
 }
 
 fn apply_app_metadata(app: &PresenterWindow) {
-    app.set_about_app_name(APP_NAME.into());
-    app.set_about_version_label(about_version_label().into());
-    app.set_about_license_id(APP_LICENSE_ID.into());
-    app.set_about_license_summary(APP_LICENSE_SUMMARY.into());
-    app.set_about_pdfium_notice(PDFIUM_LICENSE_NOTICE.into());
+    let metadata = about_metadata();
+
+    app.set_about_app_name(metadata.app_name.into());
+    app.set_about_version_label(metadata.app_version_label.into());
+    app.set_about_license_id(metadata.app_license_id.into());
+    app.set_about_license_summary(metadata.app_license_summary.into());
+    app.set_about_pdfium_version_label(metadata.pdfium_version_label.into());
+    app.set_about_pdfium_license_summary(metadata.pdfium_license_summary.into());
 }
 
 fn wire_recent_file_callbacks(
