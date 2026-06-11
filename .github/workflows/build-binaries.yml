@@ -124,6 +124,53 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$plist")" = "APPL"
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSPrincipalClass' "$plist")" = "NSApplication"
 
+      - name: Create macOS DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          artifact_dir="artifacts/${{ matrix.artifact-name }}"
+          scripts/create_macos_dmg.sh \
+            "$artifact_dir/Quick Presenter.app" \
+            "$artifact_dir/Quick Presenter.dmg"
+
+      - name: Verify macOS DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          artifact_dir="$GITHUB_WORKSPACE/artifacts/${{ matrix.artifact-name }}"
+          dmg="$artifact_dir/Quick Presenter.dmg"
+          pdf="$GITHUB_WORKSPACE/tests/fixtures/marp-speaker-notes.pdf"
+          mount_dir="$(mktemp -d "$RUNNER_TEMP/quick-presenter-dmg.XXXXXX")"
+
+          cleanup() {
+            hdiutil detach "$mount_dir" -quiet || true
+            rmdir "$mount_dir" || true
+          }
+          trap cleanup EXIT
+
+          test -s "$dmg"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount_dir"
+
+          app="$mount_dir/Quick Presenter.app"
+          resources="$app/Contents/Resources"
+
+          test -d "$app"
+          test -L "$mount_dir/Applications"
+          test -x "$app/Contents/MacOS/qp"
+          test -s "$app/Contents/Info.plist"
+          test -s "$resources/QuickPresenter.icns"
+          test -s "$resources/pdfium/LICENSE"
+          test -d "$resources/pdfium/licenses"
+          test -s "$resources/licenses/QuickPresenter-LICENSE.txt"
+          test -s "$resources/licenses/PDFium-LICENSE.txt"
+
+          env -u PDFIUM_DYNAMIC_LIB_PATH "$app/Contents/MacOS/qp" \
+            --smoke-open-pdf "$pdf"
+
       - name: Verify Linux desktop metadata
         if: runner.os == 'Linux'
         shell: bash
