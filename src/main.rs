@@ -10,6 +10,7 @@ pub mod pdf;
 pub mod presentation;
 pub mod recent;
 pub mod timer;
+pub mod window_menu;
 
 use std::{
     cell::RefCell,
@@ -37,6 +38,7 @@ use slint::{
 use timer::{leaves_first_page, PresentationTimer};
 use tracing::{error, warn};
 use tracing_subscriber::EnvFilter;
+use window_menu::WindowMenuState;
 
 slint::include_modules!();
 
@@ -47,6 +49,9 @@ const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0
 const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
 const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
 const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
+const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
+const PRESENTER_WINDOW_TITLE: &str = "Quick Presenter";
+const SLIDE_WINDOW_TITLE: &str = "Quick Presenter - Slide";
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -195,6 +200,7 @@ struct AppState {
     notes: SpeakerNotes,
     presentation: PresentationState,
     timer: PresentationTimer,
+    window_menu: WindowMenuState,
     recent_files: RecentFiles,
     recent_store: Option<RecentFileStore>,
     status_text: String,
@@ -237,6 +243,22 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let state_for_next = state.clone();
     app.on_next_page(move || {
         handle_presentation_command(&window_refs, &state_for_next, PresentationCommand::NextPage);
+    });
+
+    let window_refs = refs.clone();
+    let state_for_first = state.clone();
+    app.on_first_page(move || {
+        handle_presentation_command(
+            &window_refs,
+            &state_for_first,
+            PresentationCommand::FirstPage,
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_last = state.clone();
+    app.on_last_page(move || {
+        handle_presentation_command(&window_refs, &state_for_last, PresentationCommand::LastPage);
     });
 
     let window_refs = refs.clone();
@@ -286,6 +308,8 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
         let fullscreen = state.fullscreen.toggle_slide_fullscreen();
         set_slide_fullscreen(&window_refs, fullscreen);
     });
+
+    wire_window_menu_callbacks(app, &windows.slide, refs.clone(), state.clone());
 
     let window_refs = refs.clone();
     let state_for_presenter_exit = state.clone();
@@ -367,6 +391,165 @@ fn apply_app_metadata(app: &PresenterWindow) {
     app.set_about_pdfium_license_summary(metadata.pdfium_license_summary.into());
 }
 
+fn wire_window_menu_callbacks(
+    presenter: &PresenterWindow,
+    slide: &SlideWindow,
+    refs: AppWindowRefs,
+    state: Rc<RefCell<AppState>>,
+) {
+    let window_refs = refs.clone();
+    let state_for_presenter_toggle = state.clone();
+    presenter.on_show_presenter_window(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_presenter_toggle.clone(),
+            |windows, state| {
+                show_presenter_window_from_menu(&windows, &state);
+            },
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_slide_toggle = state.clone();
+    presenter.on_hide_presenter_window(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_slide_toggle.clone(),
+            |windows, state| {
+                hide_presenter_window_from_menu(&windows, &state);
+            },
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_presenter_front = state.clone();
+    presenter.on_show_slide_window(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_presenter_front.clone(),
+            |windows, state| {
+                show_slide_window_from_menu(&windows, &state);
+            },
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_slide_front = state.clone();
+    presenter.on_hide_slide_window(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_slide_front.clone(),
+            |windows, state| {
+                hide_slide_window_from_menu(&windows, &state);
+            },
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_presenter_front = state.clone();
+    presenter.on_bring_presenter_window_to_front(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_presenter_front.clone(),
+            |windows, state| {
+                bring_presenter_window_to_front(&windows, &state);
+            },
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_slide_front = state.clone();
+    presenter.on_bring_slide_window_to_front(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_slide_front.clone(),
+            |windows, state| {
+                bring_slide_window_to_front(&windows, &state);
+            },
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_presenter_toggle = state.clone();
+    slide.on_show_presenter_window(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_presenter_toggle.clone(),
+            |windows, state| {
+                show_presenter_window_from_menu(&windows, &state);
+            },
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_slide_toggle = state.clone();
+    slide.on_hide_presenter_window(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_slide_toggle.clone(),
+            |windows, state| {
+                hide_presenter_window_from_menu(&windows, &state);
+            },
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_presenter_front = state.clone();
+    slide.on_show_slide_window(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_presenter_front.clone(),
+            |windows, state| {
+                show_slide_window_from_menu(&windows, &state);
+            },
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_slide_front = state.clone();
+    slide.on_hide_slide_window(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_slide_front.clone(),
+            |windows, state| {
+                hide_slide_window_from_menu(&windows, &state);
+            },
+        );
+    });
+
+    let window_refs = refs.clone();
+    let state_for_presenter_front = state.clone();
+    slide.on_bring_presenter_window_to_front(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_presenter_front.clone(),
+            |windows, state| {
+                bring_presenter_window_to_front(&windows, &state);
+            },
+        );
+    });
+
+    let window_refs = refs;
+    let state_for_slide_front = state;
+    slide.on_bring_slide_window_to_front(move || {
+        schedule_window_menu_action(
+            window_refs.clone(),
+            state_for_slide_front.clone(),
+            |windows, state| {
+                bring_slide_window_to_front(&windows, &state);
+            },
+        );
+    });
+}
+
+fn schedule_window_menu_action(
+    windows: AppWindowRefs,
+    state: Rc<RefCell<AppState>>,
+    action: impl FnOnce(AppWindowRefs, Rc<RefCell<AppState>>) + 'static,
+) {
+    Timer::single_shot(WINDOW_MENU_ACTION_DELAY, move || action(windows, state));
+}
+
 fn wire_recent_file_callbacks(
     app: &PresenterWindow,
     refs: AppWindowRefs,
@@ -434,6 +617,159 @@ fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
     if let Some(presenter) = windows.presenter.upgrade() {
         presenter.set_slide_fullscreen(fullscreen);
     }
+}
+
+fn show_presenter_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+    state.borrow_mut().window_menu.set_presenter_visible(true);
+    show_presenter_window(windows);
+}
+
+fn hide_presenter_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+    let show_slide_first = {
+        let mut state = state.borrow_mut();
+        let show_slide_first = !state.window_menu.slide_visible();
+        if show_slide_first {
+            state.window_menu.set_slide_visible(true);
+        }
+        state.window_menu.set_presenter_visible(false);
+        show_slide_first
+    };
+
+    if show_slide_first {
+        show_slide_window(windows);
+    }
+    hide_presenter_window(windows);
+}
+
+fn show_slide_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+    state.borrow_mut().window_menu.set_slide_visible(true);
+    show_slide_window(windows);
+}
+
+fn hide_slide_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+    let show_presenter_first = {
+        let mut state = state.borrow_mut();
+        let show_presenter_first = !state.window_menu.presenter_visible();
+        if show_presenter_first {
+            state.window_menu.set_presenter_visible(true);
+        }
+        state.window_menu.set_slide_visible(false);
+        show_presenter_first
+    };
+
+    if show_presenter_first {
+        show_presenter_window(windows);
+    }
+    hide_slide_window(windows);
+}
+
+fn bring_presenter_window_to_front(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+    {
+        let mut state = state.borrow_mut();
+        state.window_menu.set_presenter_visible(true);
+    }
+    show_presenter_window(windows);
+}
+
+fn bring_slide_window_to_front(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+    {
+        let mut state = state.borrow_mut();
+        state.window_menu.set_slide_visible(true);
+    }
+    show_slide_window(windows);
+}
+
+fn show_presenter_window(windows: &AppWindowRefs) {
+    #[cfg(target_os = "macos")]
+    if show_macos_window(PRESENTER_WINDOW_TITLE) {
+        return;
+    }
+
+    if let Some(presenter) = windows.presenter.upgrade() {
+        if let Err(err) = presenter.show() {
+            warn!(error = ?err, "failed to show presenter window");
+        }
+    }
+}
+
+fn show_slide_window(windows: &AppWindowRefs) {
+    #[cfg(target_os = "macos")]
+    if show_macos_window(SLIDE_WINDOW_TITLE) {
+        return;
+    }
+
+    if let Some(slide) = windows.slide.upgrade() {
+        if let Err(err) = slide.show() {
+            warn!(error = ?err, "failed to show slide window");
+        }
+    }
+}
+
+fn hide_presenter_window(windows: &AppWindowRefs) {
+    #[cfg(target_os = "macos")]
+    if hide_macos_window(PRESENTER_WINDOW_TITLE) {
+        return;
+    }
+
+    if let Some(presenter) = windows.presenter.upgrade() {
+        if let Err(err) = presenter.hide() {
+            warn!(error = ?err, "failed to hide presenter window");
+        }
+    }
+}
+
+fn hide_slide_window(windows: &AppWindowRefs) {
+    #[cfg(target_os = "macos")]
+    if hide_macos_window(SLIDE_WINDOW_TITLE) {
+        return;
+    }
+
+    if let Some(slide) = windows.slide.upgrade() {
+        if let Err(err) = slide.hide() {
+            warn!(error = ?err, "failed to hide slide window");
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn show_macos_window(title: &str) -> bool {
+    with_macos_window(title, |app, window| {
+        app.activate();
+        window.deminiaturize(None);
+        window.makeKeyAndOrderFront(None);
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn hide_macos_window(title: &str) -> bool {
+    with_macos_window(title, |_, window| {
+        window.orderOut(None);
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn with_macos_window(
+    title: &str,
+    action: impl FnOnce(&objc2_app_kit::NSApplication, &objc2_app_kit::NSWindow),
+) -> bool {
+    use objc2_app_kit::NSApplication;
+    use objc2_foundation::MainThreadMarker;
+
+    let Some(main_thread) = MainThreadMarker::new() else {
+        return false;
+    };
+
+    let app = NSApplication::sharedApplication(main_thread);
+    let windows = app.windows();
+
+    for window in windows.iter() {
+        if window.title().to_string() == title {
+            action(&app, &window);
+            return true;
+        }
+    }
+
+    false
 }
 
 fn pick_pdf_file() -> Option<PathBuf> {

@@ -77,8 +77,16 @@ export component PresenterWindow inherits Window {
     callback clear-recent-files();
     callback previous-page();
     callback next-page();
+    callback first-page();
+    callback last-page();
     callback toggle-slide-fullscreen();
     callback exit-slide-fullscreen();
+    callback show-presenter-window();
+    callback hide-presenter-window();
+    callback show-slide-window();
+    callback hide-slide-window();
+    callback bring-presenter-window-to-front();
+    callback bring-slide-window-to-front();
     callback keyboard-previous-page();
     callback keyboard-next-page();
     callback keyboard-first-page();
@@ -121,6 +129,99 @@ export component PresenterWindow inherits Window {
                     activated => {
                         root.clear-recent-files();
                     }
+                }
+            }
+        }
+
+        Menu {
+            title: "Navigate";
+
+            MenuItem {
+                title: "Previous Page";
+                activated => {
+                    root.previous-page();
+                }
+            }
+
+            MenuItem {
+                title: "Next Page";
+                activated => {
+                    root.next-page();
+                }
+            }
+
+            MenuSeparator { }
+
+            MenuItem {
+                title: "First Page";
+                activated => {
+                    root.first-page();
+                }
+            }
+
+            MenuItem {
+                title: "Last Page";
+                activated => {
+                    root.last-page();
+                }
+            }
+        }
+
+        Menu {
+            title: "View";
+
+            MenuItem {
+                title: root.slide-fullscreen ? "Exit Slide Fullscreen" : "Enter Slide Fullscreen";
+                activated => {
+                    root.toggle-slide-fullscreen();
+                }
+            }
+        }
+
+        Menu {
+            title: "Window";
+
+            MenuItem {
+                title: "Show Presenter Window";
+                activated => {
+                    root.show-presenter-window();
+                }
+            }
+
+            MenuItem {
+                title: "Hide Presenter Window";
+                activated => {
+                    root.hide-presenter-window();
+                }
+            }
+
+            MenuItem {
+                title: "Show Slide Window";
+                activated => {
+                    root.show-slide-window();
+                }
+            }
+
+            MenuItem {
+                title: "Hide Slide Window";
+                activated => {
+                    root.hide-slide-window();
+                }
+            }
+
+            MenuSeparator { }
+
+            MenuItem {
+                title: "Bring Presenter Window to Front";
+                activated => {
+                    root.bring-presenter-window-to-front();
+                }
+            }
+
+            MenuItem {
+                title: "Bring Slide Window to Front";
+                activated => {
+                    root.bring-slide-window-to-front();
                 }
             }
         }
@@ -487,6 +588,12 @@ export component SlideWindow inherits Window {
 
     callback exit-fullscreen();
     callback toggle-slide-fullscreen();
+    callback show-presenter-window();
+    callback hide-presenter-window();
+    callback show-slide-window();
+    callback hide-slide-window();
+    callback bring-presenter-window-to-front();
+    callback bring-slide-window-to-front();
     callback keyboard-previous-page();
     callback keyboard-next-page();
     callback keyboard-first-page();
@@ -499,6 +606,56 @@ export component SlideWindow inherits Window {
     min-height: 360px;
     background: #111315;
     forward-focus: slide-focus;
+
+    MenuBar {
+        Menu {
+            title: "Window";
+
+            MenuItem {
+                title: "Show Presenter Window";
+                activated => {
+                    root.show-presenter-window();
+                }
+            }
+
+            MenuItem {
+                title: "Hide Presenter Window";
+                activated => {
+                    root.hide-presenter-window();
+                }
+            }
+
+            MenuItem {
+                title: "Show Slide Window";
+                activated => {
+                    root.show-slide-window();
+                }
+            }
+
+            MenuItem {
+                title: "Hide Slide Window";
+                activated => {
+                    root.hide-slide-window();
+                }
+            }
+
+            MenuSeparator { }
+
+            MenuItem {
+                title: "Bring Presenter Window to Front";
+                activated => {
+                    root.bring-presenter-window-to-front();
+                }
+            }
+
+            MenuItem {
+                title: "Bring Slide Window to Front";
+                activated => {
+                    root.bring-slide-window-to-front();
+                }
+            }
+        }
+    }
 
     slide-focus := FocusScope {
         width: parent.width;
