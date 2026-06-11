@@ -10,6 +10,7 @@ pub mod notes;
 pub mod pdf;
 pub mod presentation;
 pub mod recent;
+pub mod rendering;
 pub mod timer;
 pub mod window_menu;
 
@@ -33,6 +34,9 @@ use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
 use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
+use rendering::{
+    presentation_preload_order, RenderCache, RenderPurpose, RenderRequest, RenderedPage,
+};
 use slint::{
     ComponentHandle, LogicalPosition, LogicalSize, ModelRc, Rgba8Pixel, SharedPixelBuffer,
     SharedString, Timer, TimerMode, VecModel, Weak,
@@ -46,6 +50,7 @@ slint::include_modules!();
 
 const CURRENT_RENDER_WIDTH: i32 = 1600;
 const PREVIEW_RENDER_WIDTH: i32 = 600;
+const PRESENTATION_CACHE_RADIUS: u32 = 2;
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
 const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
 const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
@@ -239,6 +244,8 @@ struct AppState {
     black_screen: BlackScreenState,
     fullscreen: FullscreenState,
     pdf: Option<PdfDocumentState>,
+    render_cache: RenderCache,
+    render_generation: u64,
     notes: SpeakerNotes,
     presentation: PresentationState,
     timer: PresentationTimer,
@@ -249,10 +256,8 @@ struct AppState {
 }
 
 struct RenderedPages {
-    current: slint::Image,
-    current_aspect_ratio: f32,
-    next: Option<slint::Image>,
-    next_aspect_ratio: Option<f32>,
+    current: RenderedPage,
+    next: Option<RenderedPage>,
 }
 
 fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<AppState>>) {
@@ -583,28 +588,53 @@ fn handle_presentation_command(
         return;
     }
 
-    let mut state = state.borrow_mut();
-    let before = state.presentation.snapshot();
-    apply_presentation_command(&mut state.presentation, command);
-    let after = state.presentation.snapshot();
-    maybe_start_elapsed_timer(command, before.as_ref(), after.as_ref(), &mut state.timer);
-    if let Some(snapshot) = after {
-        if let Err(err) = render_into_windows(windows, &state, &snapshot) {
-            error!(error = ?err, "failed to render presentation page");
-            set_presenter_message(&windows.presenter, presenter_error_message(&err));
+    let preload_snapshot = {
+        let mut state = state.borrow_mut();
+        let before = state.presentation.snapshot();
+        apply_presentation_command(&mut state.presentation, command);
+        let after = state.presentation.snapshot();
+        maybe_start_elapsed_timer(command, before.as_ref(), after.as_ref(), &mut state.timer);
+
+        if let Some(snapshot) = after {
+            match render_into_windows(windows, &mut state, &snapshot) {
+                Ok(()) => Some(snapshot),
+                Err(err) => {
+                    error!(error = ?err, "failed to render presentation page");
+                    set_presenter_message(&windows.presenter, presenter_error_message(&err));
+                    None
+                }
+            }
+        } else {
+            None
         }
+    };
+
+    if let Some(snapshot) = preload_snapshot {
+        schedule_presentation_preload(state.clone(), snapshot);
     }
 }
 
 fn toggle_black_screen(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
-    let mut state = state.borrow_mut();
-    state.black_screen.toggle();
+    let preload_snapshot = {
+        let mut state = state.borrow_mut();
+        state.black_screen.toggle();
 
-    if let Some(snapshot) = state.presentation.snapshot() {
-        if let Err(err) = render_into_windows(windows, &state, &snapshot) {
-            error!(error = ?err, "failed to render presentation page");
-            set_presenter_message(&windows.presenter, presenter_error_message(&err));
+        if let Some(snapshot) = state.presentation.snapshot() {
+            match render_into_windows(windows, &mut state, &snapshot) {
+                Ok(()) => Some(snapshot),
+                Err(err) => {
+                    error!(error = ?err, "failed to render presentation page");
+                    set_presenter_message(&windows.presenter, presenter_error_message(&err));
+                    None
+                }
+            }
+        } else {
+            None
         }
+    };
+
+    if let Some(snapshot) = preload_snapshot {
+        schedule_presentation_preload(state.clone(), snapshot);
     }
 }
 
@@ -835,6 +865,8 @@ fn open_and_render(
     {
         let mut state = state.borrow_mut();
         state.pdf = Some(doc);
+        state.render_cache.clear();
+        state.render_generation = state.render_generation.wrapping_add(1);
         state.notes = notes;
         state.presentation = presentation;
         state.black_screen.set_active(false);
@@ -847,7 +879,11 @@ fn open_and_render(
     }
 
     if let Some(snapshot) = snapshot {
-        render_into_windows(windows, &state.borrow(), &snapshot)?;
+        {
+            let mut state = state.borrow_mut();
+            render_into_windows(windows, &mut state, &snapshot)?;
+        }
+        schedule_presentation_preload(state.clone(), snapshot);
     }
 
     record_recent_pdf(&windows.presenter, state, loaded_path);
@@ -965,23 +1001,26 @@ fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) 
 
 fn render_into_windows(
     windows: &AppWindowRefs,
-    state: &AppState,
+    state: &mut AppState,
     snapshot: &PageSnapshot,
 ) -> Result<()> {
     let Some(doc) = state.pdf.as_ref() else {
         bail!("missing open PDF for current presentation");
     };
-    let rendered = render_pages(doc, snapshot)?;
+    let rendered = render_pages(doc, &mut state.render_cache, snapshot)?;
+    state.render_cache.retain_presentation_window(
+        snapshot.current_index,
+        snapshot.total_pages,
+        PRESENTATION_CACHE_RADIUS,
+    );
 
     if let Some(presenter) = windows.presenter.upgrade() {
-        presenter.set_current_page_image(rendered.current.clone());
-        presenter.set_current_page_aspect_ratio(rendered.current_aspect_ratio);
+        presenter.set_current_page_image(rendered.current.image.clone());
+        presenter.set_current_page_aspect_ratio(rendered.current.aspect_ratio);
         presenter.set_has_next_page(rendered.next.is_some());
         if let Some(next) = rendered.next.as_ref() {
-            presenter.set_next_page_image(next.clone());
-        }
-        if let Some(next_aspect_ratio) = rendered.next_aspect_ratio {
-            presenter.set_next_page_aspect_ratio(next_aspect_ratio);
+            presenter.set_next_page_image(next.image.clone());
+            presenter.set_next_page_aspect_ratio(next.aspect_ratio);
         }
         presenter.set_document_title(snapshot.title.clone().into());
         presenter.set_page_label(snapshot.page_label.clone().into());
@@ -995,11 +1034,11 @@ fn render_into_windows(
     }
 
     if let Some(slide) = windows.slide.upgrade() {
-        slide.set_page_aspect_ratio(rendered.current_aspect_ratio);
+        slide.set_page_aspect_ratio(rendered.current.aspect_ratio);
         slide.set_page_image(if state.black_screen.is_active() {
             black_slide_image()
         } else {
-            rendered.current
+            rendered.current.image
         });
     }
 
@@ -1026,19 +1065,101 @@ fn black_slide_image() -> slint::Image {
     slint::Image::from_rgba8(buffer)
 }
 
-fn render_pages(doc: &PdfDocumentState, snapshot: &PageSnapshot) -> Result<RenderedPages> {
+fn render_pages(
+    doc: &PdfDocumentState,
+    cache: &mut RenderCache,
+    snapshot: &PageSnapshot,
+) -> Result<RenderedPages> {
     Ok(RenderedPages {
-        current: doc.render_page(snapshot.current_index, CURRENT_RENDER_WIDTH)?,
-        current_aspect_ratio: doc.page_aspect_ratio(snapshot.current_index)?,
+        current: render_pdf_page_cached(
+            doc,
+            cache,
+            RenderRequest {
+                page_index: snapshot.current_index,
+                width: CURRENT_RENDER_WIDTH,
+                purpose: RenderPurpose::CurrentSlide,
+            },
+        )?,
         next: snapshot
             .next_index
-            .map(|index| doc.render_page(index, PREVIEW_RENDER_WIDTH))
-            .transpose()?,
-        next_aspect_ratio: snapshot
-            .next_index
-            .map(|index| doc.page_aspect_ratio(index))
+            .map(|page_index| {
+                render_pdf_page_cached(
+                    doc,
+                    cache,
+                    RenderRequest {
+                        page_index,
+                        width: PREVIEW_RENDER_WIDTH,
+                        purpose: RenderPurpose::NextPreview,
+                    },
+                )
+            })
             .transpose()?,
     })
+}
+
+fn render_pdf_page_cached(
+    doc: &PdfDocumentState,
+    cache: &mut RenderCache,
+    request: RenderRequest,
+) -> Result<RenderedPage> {
+    cache.get_or_render(request, |request| {
+        Ok(RenderedPage {
+            image: doc.render_page(request.page_index, request.width)?,
+            aspect_ratio: doc.page_aspect_ratio(request.page_index)?,
+        })
+    })
+}
+
+fn schedule_presentation_preload(state: Rc<RefCell<AppState>>, snapshot: PageSnapshot) {
+    let generation = state.borrow().render_generation;
+
+    Timer::single_shot(Duration::from_millis(0), move || {
+        let mut state = state.borrow_mut();
+        if state.render_generation != generation {
+            return;
+        }
+
+        let Some(current_snapshot) = state.presentation.snapshot() else {
+            return;
+        };
+        if current_snapshot.current_index != snapshot.current_index {
+            return;
+        }
+
+        if let Err(err) = preload_presentation_window(&mut state, &snapshot) {
+            warn!(error = ?err, "failed to preload nearby presentation pages");
+        }
+    });
+}
+
+fn preload_presentation_window(state: &mut AppState, snapshot: &PageSnapshot) -> Result<()> {
+    let Some(doc) = state.pdf.as_ref() else {
+        return Ok(());
+    };
+
+    for page_index in presentation_preload_order(
+        snapshot.current_index,
+        snapshot.total_pages,
+        PRESENTATION_CACHE_RADIUS,
+    ) {
+        render_pdf_page_cached(
+            doc,
+            &mut state.render_cache,
+            RenderRequest {
+                page_index,
+                width: CURRENT_RENDER_WIDTH,
+                purpose: RenderPurpose::CurrentSlide,
+            },
+        )?;
+    }
+
+    state.render_cache.retain_presentation_window(
+        snapshot.current_index,
+        snapshot.total_pages,
+        PRESENTATION_CACHE_RADIUS,
+    );
+
+    Ok(())
 }
 
 fn set_presenter_message(weak: &Weak<PresenterWindow>, message: PresenterMessage) {
