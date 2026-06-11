@@ -179,6 +179,11 @@ After the MVP, larger product directions include:
 The roadmap is intentionally directional. Features should stay aligned with the
 core product scope: stable PDF presentation playback.
 
+## Related Projects
+
+- [Présentation.app](https://iihm.imag.fr/blanch/software/osx-presentation/) is
+  a similar PDF presentation tool for macOS.
+
 ## Contributing
 
 Contributions are welcome as the project moves toward OSS publication.
