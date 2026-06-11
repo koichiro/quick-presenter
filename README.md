@@ -22,11 +22,18 @@ document management app.
 
 ### Presenter Window
 
-![Presenter window](docs/assets/presenter-window.png)
+![Presenter window with an English sample slide and speaker notes](docs/assets/presenter-window-en.png)
 
 ### Slide Window
 
-![Slide window](docs/assets/slide-window.png)
+![Slide window with an English title slide](docs/assets/slide-window-title-en.png)
+
+![Slide window with an English sample workflow slide](docs/assets/slide-window-en.png)
+
+![Slide window with a Japanese sample slide](docs/assets/slide-window-ja.png)
+
+The screenshots use the repository-owned sample deck in
+[docs/samples/quick-presenter-demo.md](docs/samples/quick-presenter-demo.md).
 
 ## What Quick Presenter Solves
 
@@ -83,6 +90,12 @@ For development verification, this repository includes a small fixture PDF:
 cargo run --bin qp -- --pdf tests/fixtures/marp-speaker-notes.pdf
 ```
 
+The README screenshot deck can also be opened directly:
+
+```sh
+cargo run --bin qp -- --pdf docs/samples/quick-presenter-demo.pdf
+```
+
 The Cargo package remains `quick-presenter`, while the development executable is
 named `qp`.
 
@@ -109,6 +122,12 @@ Run the standard checks:
 cargo fmt --check
 cargo check
 cargo test
+```
+
+Regenerate the README screenshot sample PDF from Marp Markdown:
+
+```sh
+marp docs/samples/quick-presenter-demo.md --pdf --pdf-notes --allow-local-files -o docs/samples/quick-presenter-demo.pdf
 ```
 
 Coverage is measured with:
@@ -159,6 +178,11 @@ After the MVP, larger product directions include:
 
 The roadmap is intentionally directional. Features should stay aligned with the
 core product scope: stable PDF presentation playback.
+
+## Related Projects
+
+- [Présentation.app](https://iihm.imag.fr/blanch/software/osx-presentation/) is
+  a similar PDF presentation tool for macOS.
 
 ## Contributing
 
