@@ -1,5 +1,13 @@
 # Quick Presenter
 
+[![CI](https://github.com/koichiro/quick-presenter/actions/workflows/ci.yml/badge.svg)](https://github.com/koichiro/quick-presenter/actions/workflows/ci.yml)
+[![Build Binaries](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml/badge.svg)](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml)
+![Rust](https://img.shields.io/badge/language-Rust-b7410e)
+![Coverage target](https://img.shields.io/badge/coverage%20target-80%25-brightgreen)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
+![Input](https://img.shields.io/badge/input-PDF-orange)
+
 ![Quick Presenter icon](assets/icons/png/quick-presenter-icon-128.png)
 
 Quick Presenter is a lightweight cross-platform presenter tool for PDF slide
