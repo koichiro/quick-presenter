@@ -1091,6 +1091,7 @@ fn render_into_windows(
         presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
         presenter.set_status_text(presenter_status_text(state).into());
+        presenter.set_current_page_index(presenter_page_index(snapshot.current_index));
         presenter.set_thumbnails(thumbnail_model(
             &state.thumbnail_pages,
             snapshot.current_index,
@@ -1193,6 +1194,10 @@ fn thumbnail_model(thumbnails: &[RenderedPage], current_index: u32) -> ModelRc<T
     ModelRc::new(Rc::new(VecModel::from(items)))
 }
 
+fn presenter_page_index(page_index: u32) -> i32 {
+    i32::try_from(page_index).unwrap_or(i32::MAX)
+}
+
 fn schedule_thumbnail_render(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
     let generation = state.borrow().render_generation;
 
@@ -1210,6 +1215,7 @@ fn schedule_thumbnail_render(windows: AppWindowRefs, state: Rc<RefCell<AppState>
             Ok(thumbnails) => {
                 state.thumbnail_pages = thumbnails;
                 if let Some(presenter) = windows.presenter.upgrade() {
+                    presenter.set_current_page_index(presenter_page_index(snapshot.current_index));
                     presenter.set_thumbnails(thumbnail_model(
                         &state.thumbnail_pages,
                         snapshot.current_index,

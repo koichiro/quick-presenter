@@ -247,11 +247,36 @@ component ThumbnailTile inherits Rectangle {
 
 component ThumbnailPane inherits Rectangle {
     in property <[ThumbnailItem]> thumbnails;
+    in property <int> current-page-index: 0;
     callback jump-to-page(int);
 
     background: transparent;
+    private property <length> tile-height: 98px;
+    private property <length> current-item-y: scroll-view.viewport-y + root.current-page-index * root.tile-height;
 
-    ScrollView {
+    function bring-current-into-view() {
+        if root.current-page-index < 0 || root.current-page-index >= root.thumbnails.length {
+            return;
+        }
+
+        if current-item-y < 0px {
+            scroll-view.viewport-y += 0px - current-item-y;
+        }
+
+        if current-item-y + tile-height > scroll-view.visible-height {
+            scroll-view.viewport-y -= current-item-y + tile-height - scroll-view.visible-height;
+        }
+    }
+
+    changed current-page-index => {
+        root.bring-current-into-view();
+    }
+
+    changed thumbnails => {
+        root.bring-current-into-view();
+    }
+
+    scroll-view := ScrollView {
         width: parent.width;
         height: parent.height;
         viewport-width: parent.width;
@@ -294,6 +319,7 @@ export component PresenterWindow inherits Window {
     in property <string> about-pdfium-version-label: "";
     in property <string> about-pdfium-license-summary: "";
     in property <[ThumbnailItem]> thumbnails: [];
+    in property <int> current-page-index: 0;
     property <bool> about-visible: false;
     property <float> safe-next-page-aspect-ratio: root.next-page-aspect-ratio > 0 ? root.next-page-aspect-ratio : 16.0 / 9.0;
     property <length> next-preview-natural-height: 260px / root.safe-next-page-aspect-ratio;
@@ -752,6 +778,7 @@ export component PresenterWindow inherits Window {
 
                     ThumbnailPane {
                         thumbnails: root.thumbnails;
+                        current-page-index: root.current-page-index;
                         horizontal-stretch: 1;
                         vertical-stretch: 1;
                         jump-to-page(page-index) => {
