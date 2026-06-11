@@ -26,7 +26,9 @@ document management app.
 
 ### Slide Window
 
-![Slide window with an English sample slide](docs/assets/slide-window-en.png)
+![Slide window with an English title slide](docs/assets/slide-window-title-en.png)
+
+![Slide window with an English sample workflow slide](docs/assets/slide-window-en.png)
 
 ![Slide window with a Japanese sample slide](docs/assets/slide-window-ja.png)
 
