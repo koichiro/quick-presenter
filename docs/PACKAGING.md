@@ -57,24 +57,69 @@ embedding.
 
 ### Linux
 
-Linux desktop packaging should install PNG icons from `assets/icons/png/` into
-the hicolor icon theme and reference the icon from a desktop entry.
+Linux binary artifacts stage desktop metadata with
+`scripts/stage_linux_desktop_assets.sh`. The staged layout includes a desktop
+entry and PNG icons from `assets/icons/png/` installed under the hicolor icon
+theme with the icon name `quick-presenter`.
 
-Expected install layout examples:
+The desktop entry is:
+
+- `share/applications/quick-presenter.desktop`
+
+It uses:
+
+```ini
+Name=Quick Presenter
+Exec=qp %f
+Icon=quick-presenter
+```
+
+The staged hicolor icon paths are:
 
 - `share/icons/hicolor/16x16/apps/quick-presenter.png`
+- `share/icons/hicolor/24x24/apps/quick-presenter.png`
 - `share/icons/hicolor/32x32/apps/quick-presenter.png`
 - `share/icons/hicolor/48x48/apps/quick-presenter.png`
 - `share/icons/hicolor/64x64/apps/quick-presenter.png`
 - `share/icons/hicolor/128x128/apps/quick-presenter.png`
 - `share/icons/hicolor/256x256/apps/quick-presenter.png`
 - `share/icons/hicolor/512x512/apps/quick-presenter.png`
+- `share/icons/hicolor/1024x1024/apps/quick-presenter.png`
 
-The desktop entry should use:
+To stage the Linux desktop metadata locally:
 
-```ini
-Icon=quick-presenter
+```sh
+scripts/stage_linux_desktop_assets.sh /tmp/quick-presenter-linux-stage
 ```
 
-Manual verification depends on the desktop environment, but should include the
-launcher, app switcher, and taskbar or dock equivalent.
+The `build-binaries.yml` workflow runs the staging script for the Linux artifact
+and validates:
+
+- the desktop entry exists and contains the expected `Name`, `Exec`, and `Icon`,
+- the desktop entry passes `desktop-file-validate`,
+- each expected hicolor icon file exists and is non-empty,
+- `gtk-update-icon-cache` can process the staged hicolor tree.
+
+CI cannot fully verify launcher, app switcher, dock, or taskbar rendering because
+those require an interactive Linux desktop session. Use a real desktop
+environment for final acceptance.
+
+Manual verification:
+
+- Download the `quick-presenter-ubuntu-x64` artifact or build and stage locally.
+- Copy the staged metadata into a test prefix:
+
+```sh
+cp -r share/applications ~/.local/share/
+cp -r share/icons ~/.local/share/
+update-desktop-database ~/.local/share/applications || true
+gtk-update-icon-cache ~/.local/share/icons/hicolor || true
+```
+
+- Confirm `Quick Presenter` appears in the launcher.
+- Launch the app through the desktop entry.
+- Confirm the icon appears in launcher search, app switcher, and the desktop
+  environment's dock, taskbar, or panel.
+
+Full `.deb`, `.rpm`, AppImage, Flatpak, or distro package creation is tracked
+separately from desktop metadata staging.

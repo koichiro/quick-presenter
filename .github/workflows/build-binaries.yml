@@ -34,6 +34,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            desktop-file-utils \
+            libgtk-3-bin \
             libegl1-mesa-dev \
             libfontconfig1-dev \
             libgl1-mesa-dev \
@@ -83,6 +85,34 @@ jobs:
           Full installer packaging is intentionally out of scope for this
           workflow.
           README
+
+      - name: Stage Linux desktop metadata
+        if: runner.os == 'Linux'
+        run: scripts/stage_linux_desktop_assets.sh "artifacts/${{ matrix.artifact-name }}"
+
+      - name: Verify Linux desktop metadata
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          artifact_dir="artifacts/${{ matrix.artifact-name }}"
+          desktop_file="$artifact_dir/share/applications/quick-presenter.desktop"
+
+          test -s "$desktop_file"
+          grep -Fx "Type=Application" "$desktop_file"
+          grep -Fx "Name=Quick Presenter" "$desktop_file"
+          grep -Fx "Exec=qp %f" "$desktop_file"
+          grep -Fx "Icon=quick-presenter" "$desktop_file"
+
+          desktop-file-validate "$desktop_file"
+
+          for size in 16 24 32 48 64 128 256 512 1024; do
+            icon="$artifact_dir/share/icons/hicolor/${size}x${size}/apps/quick-presenter.png"
+            test -s "$icon"
+          done
+
+          gtk-update-icon-cache --ignore-theme-index --force "$artifact_dir/share/icons/hicolor"
 
       - name: Verify Windows executable icon
         if: runner.os == 'Windows'

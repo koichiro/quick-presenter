@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Quick Presenter
+Comment=Present PDF slide decks with a presenter view
+Exec=qp %f
+Icon=quick-presenter
+Terminal=false
+Categories=Office;Presentation;
+MimeType=application/pdf;
+StartupNotify=true
