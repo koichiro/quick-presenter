@@ -213,6 +213,34 @@ mod tests {
         );
     }
 
+    #[test]
+    fn pdf_document_state_extracts_readme_sample_speaker_notes() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+
+        if !local_pdfium_available() {
+            return;
+        }
+
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("docs/samples/quick-presenter-demo.pdf");
+        let document = PdfDocumentState::open(path).expect("README sample PDF should open");
+        let notes = document
+            .speaker_notes()
+            .expect("README sample PDF speaker notes should be readable");
+
+        assert_eq!(
+            notes.note_for_page_number(1),
+            Some(
+                "Open with the product promise: Quick Presenter does one thing well by playing prepared PDF slide decks with presenter-focused controls."
+            )
+        );
+        let japanese_note = notes
+            .note_for_page_number(5)
+            .expect("Japanese sample slide should have speaker notes");
+        assert!(japanese_note.contains("README"));
+        assert!(japanese_note.contains("UI"));
+    }
+
     fn pdfium_test_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
