@@ -26,6 +26,8 @@ document management app.
 
 ### Slide Window
 
+![Slide window with an English sample slide](docs/assets/slide-window-en.png)
+
 ![Slide window with a Japanese sample slide](docs/assets/slide-window-ja.png)
 
 The screenshots use the repository-owned sample deck in
