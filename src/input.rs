@@ -7,6 +7,7 @@ pub enum PresentationCommand {
     FirstPage,
     LastPage,
     ExitSlideFullscreen,
+    ToggleBlackScreen,
 }
 
 pub fn apply_presentation_command(
@@ -18,7 +19,7 @@ pub fn apply_presentation_command(
         PresentationCommand::PreviousPage => presentation.previous_page(),
         PresentationCommand::FirstPage => presentation.first_page(),
         PresentationCommand::LastPage => presentation.last_page(),
-        PresentationCommand::ExitSlideFullscreen => {}
+        PresentationCommand::ExitSlideFullscreen | PresentationCommand::ToggleBlackScreen => {}
     }
 }
 
@@ -78,6 +79,7 @@ mod tests {
         apply_presentation_command(&mut presentation, PresentationCommand::FirstPage);
         apply_presentation_command(&mut presentation, PresentationCommand::LastPage);
         apply_presentation_command(&mut presentation, PresentationCommand::ExitSlideFullscreen);
+        apply_presentation_command(&mut presentation, PresentationCommand::ToggleBlackScreen);
 
         assert_eq!(presentation.snapshot(), None);
     }
@@ -88,6 +90,16 @@ mod tests {
         apply_presentation_command(&mut presentation, PresentationCommand::NextPage);
 
         apply_presentation_command(&mut presentation, PresentationCommand::ExitSlideFullscreen);
+
+        assert_eq!(presentation.snapshot().unwrap().page_label, "2 / 2");
+    }
+
+    #[test]
+    fn toggle_black_screen_command_does_not_change_pages() {
+        let mut presentation = PresentationState::open_document("Deck", 2);
+        apply_presentation_command(&mut presentation, PresentationCommand::NextPage);
+
+        apply_presentation_command(&mut presentation, PresentationCommand::ToggleBlackScreen);
 
         assert_eq!(presentation.snapshot().unwrap().page_label, "2 / 2");
     }

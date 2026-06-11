@@ -27,5 +27,14 @@ Fullscreen shortcuts are handled through the same shared fullscreen state as the
 presenter fullscreen button. `Escape` exits slide fullscreen without toggling it
 back on.
 
-Future presentation controls such as black screen, go-to-page, and timer actions
-should be added as new Rust presentation commands before adding UI key bindings.
+## Black Screen
+
+- Toggle black screen mode: `B`
+
+Black screen mode blanks only the audience-facing slide window. The presenter
+window remains usable, and page navigation continues while the audience screen
+is black. Pressing `B` again reveals the current page, including any page
+changes made while the slide window was blanked.
+
+Future presentation controls such as go-to-page and timer actions should be
+added as new Rust presentation commands before adding UI key bindings.
