@@ -31,6 +31,25 @@ with the installed application. This applies to the macOS app bundle, Windows
 installer, Linux package artifacts, and packaged artifact smoke tests tracked by
 #87, #94, #96, and #88.
 
+## Packaged Artifact Smoke Tests
+
+Quick Presenter provides a non-interactive smoke mode for packaged artifact
+validation:
+
+```sh
+qp --smoke-open-pdf tests/fixtures/marp-speaker-notes.pdf
+```
+
+This mode does not create Slint windows. It opens the PDF through the same
+PDFium lookup path as normal startup, renders the first page at a small size, and
+exits with status `0` on success. It is intended for CI and package validation,
+not for end-user presentation playback.
+
+The `build-binaries.yml` workflow runs this smoke mode from outside the
+repository working directory against the staged artifacts with
+`PDFIUM_DYNAMIC_LIB_PATH` unset. This catches missing executables, missing
+bundled PDFium files, and broken relative PDFium lookup.
+
 ## Application Icons
 
 The source icon assets are documented in `docs/ICONS.md`.
@@ -87,6 +106,8 @@ and validates:
 - `Contents/MacOS/qp` is executable,
 - `QuickPresenter.icns` exists in `Contents/Resources/`,
 - bundled PDFium and license files are present.
+- the bundled app executable can run `--smoke-open-pdf` without
+  `PDFIUM_DYNAMIC_LIB_PATH`.
 
 Manual verification:
 
@@ -109,6 +130,9 @@ The `build-binaries.yml` workflow runs on `windows-latest`, builds `qp.exe`, and
 extracts the associated executable icon into `qp-associated-icon.png` inside the
 uploaded Windows artifact. That preview is a CI smoke test that the executable
 has an associated icon resource.
+
+The workflow also runs `qp.exe --smoke-open-pdf` from the staged artifact with
+`PDFIUM_DYNAMIC_LIB_PATH` unset.
 
 CI cannot fully verify final Windows shell behavior because Explorer, Alt+Tab,
 and taskbar rendering depend on an interactive Windows session and icon cache
@@ -170,6 +194,8 @@ and validates:
 - the desktop entry passes `desktop-file-validate`,
 - each expected hicolor icon file exists and is non-empty,
 - `gtk-update-icon-cache` can process the staged hicolor tree.
+- the staged `qp` binary can run `--smoke-open-pdf` without
+  `PDFIUM_DYNAMIC_LIB_PATH`.
 
 CI cannot fully verify launcher, app switcher, dock, or taskbar rendering because
 those require an interactive Linux desktop session. Use a real desktop

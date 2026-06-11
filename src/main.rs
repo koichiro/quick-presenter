@@ -67,6 +67,10 @@ fn main() -> Result<()> {
         .init();
 
     let startup_options = parse_startup_options(std::env::args_os().skip(1))?;
+    if let Some(path) = startup_options.smoke_open_pdf_path {
+        return smoke_open_pdf(path);
+    }
+
     let windows = AppWindows::new()?;
     let recent_store = default_recent_file_store();
     let recent_files = load_recent_files(recent_store.as_ref());
@@ -92,6 +96,27 @@ fn main() -> Result<()> {
     }
 
     slint::run_event_loop()?;
+    Ok(())
+}
+
+fn smoke_open_pdf(path: PathBuf) -> Result<()> {
+    const SMOKE_RENDER_WIDTH: i32 = 320;
+
+    let doc = PdfDocumentState::open(path)?;
+    let page_count = doc.page_count();
+    if page_count == 0 {
+        bail!("smoke-open-pdf requires a PDF with at least one page");
+    }
+
+    let image = doc.render_page(0, SMOKE_RENDER_WIDTH)?;
+    println!(
+        "Smoke open PDF succeeded: title=\"{}\" pages={} first_page={}x{}",
+        doc.title(),
+        page_count,
+        image.size().width,
+        image.size().height
+    );
+
     Ok(())
 }
 
