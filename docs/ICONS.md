@@ -6,7 +6,7 @@ Quick Presenter uses a single high-resolution source icon and generated platform
 
 - `assets/icons/source/quick-presenter-icon-1024.png`
 - Size: 1024x1024 px
-- Design: approved B-1 concept with a bright blue gradient background, a white presentation screen, a play symbol, and a small note marker.
+- Design: approved B-1 concept with a transparent canvas, a bright blue rounded gradient background, a white presentation screen, a play symbol, and a small note marker.
 
 Keep this file as the source of truth. Do not hand-edit generated size variants.
 

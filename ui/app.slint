@@ -512,20 +512,37 @@ export component PresenterWindow inherits Window {
                 padding: 24px;
                 spacing: 12px;
 
-                Text {
-                    text: root.about-app-name;
-                    color: #f1f3f4;
-                    font-size: 28px;
-                    font-weight: 700;
-                    height: 36px;
-                    vertical-alignment: center;
-                }
+                HorizontalBox {
+                    height: 96px;
+                    spacing: 16px;
 
-                Text {
-                    text: root.about-version-label;
-                    color: #d9dce0;
-                    height: 24px;
-                    vertical-alignment: center;
+                    Image {
+                        source: @image-url("../assets/icons/png/quick-presenter-icon-128.png");
+                        image-fit: contain;
+                        width: 88px;
+                        height: 88px;
+                    }
+
+                    VerticalBox {
+                        spacing: 4px;
+                        vertical-stretch: 1;
+
+                        Text {
+                            text: root.about-app-name;
+                            color: #f1f3f4;
+                            font-size: 28px;
+                            font-weight: 700;
+                            height: 36px;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: root.about-version-label;
+                            color: #d9dce0;
+                            height: 24px;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
 
                 Rectangle {
