@@ -29,7 +29,14 @@ MACOS_ICONSET_ENTRIES = (
 
 
 def resized(source: Image.Image, size: int) -> Image.Image:
-    return source.resize((size, size), Image.Resampling.LANCZOS)
+    image = source.resize((size, size), Image.Resampling.LANCZOS)
+    pixels = image.load()
+    for y in range(size):
+        for x in range(size):
+            *_, a = pixels[x, y]
+            if a <= 2:
+                pixels[x, y] = (0, 0, 0, 0)
+    return image
 
 
 def generate_pngs(source: Image.Image, output_dir: Path) -> None:
@@ -40,7 +47,8 @@ def generate_pngs(source: Image.Image, output_dir: Path) -> None:
 
 def generate_windows_ico(source: Image.Image, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    source.save(output_path, sizes=[(size, size) for size in WINDOWS_ICO_SIZES])
+    images = [resized(source, size) for size in WINDOWS_ICO_SIZES]
+    images[-1].save(output_path, append_images=images[:-1])
 
 
 def generate_macos_icns(source: Image.Image, output_path: Path) -> None:
