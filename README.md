@@ -153,7 +153,7 @@ completed.
 Current distribution work focuses on:
 
 - including PDFium in packaged builds so the app works without first-launch downloads,
-- macOS app bundle packaging,
+- macOS app bundle and unsigned disk image packaging,
 - Windows executable icon and packaging metadata,
 - Linux desktop entry and hicolor icon installation,
 - smoke tests for staged release artifacts.

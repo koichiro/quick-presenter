@@ -97,6 +97,14 @@ cargo build --release --bin qp
 scripts/stage_macos_app_bundle.sh /tmp/quick-presenter-macos
 ```
 
+To create an unsigned disk image from the staged app bundle:
+
+```sh
+scripts/create_macos_dmg.sh \
+  "/tmp/quick-presenter-macos/Quick Presenter.app" \
+  "/tmp/quick-presenter-macos/Quick Presenter.dmg"
+```
+
 The `build-binaries.yml` workflow stages the `.app` inside the macOS artifact
 and validates:
 
@@ -109,15 +117,31 @@ and validates:
 - the bundled app executable can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`.
 
+The same workflow also creates an unsigned `Quick Presenter.dmg`, mounts it,
+and validates:
+
+- the disk image contains `Quick Presenter.app`,
+- the disk image contains an `Applications` symlink,
+- the app bundle inside the mounted disk image still contains the icon, PDFium,
+  and license files,
+- the mounted app executable can run `--smoke-open-pdf` without
+  `PDFIUM_DYNAMIC_LIB_PATH`.
+
 Manual verification:
 
 - Stage the app bundle locally.
+- Create the unsigned disk image locally.
+- Mount `/tmp/quick-presenter-macos/Quick Presenter.dmg`.
+- Confirm the mounted volume contains `Quick Presenter.app` and an
+  `Applications` symlink.
 - Run `open "/tmp/quick-presenter-macos/Quick Presenter.app"`.
 - Open `tests/fixtures/marp-speaker-notes.pdf` without `PDFIUM_DYNAMIC_LIB_PATH`.
 - Press Cmd+Tab and confirm the Quick Presenter icon is shown.
 
-Developer ID signing, notarization, `.dmg` creation, and universal binary
-packaging are tracked separately from the first `.app` bundle staging flow.
+The current disk image is unsigned. Developer ID signing, notarization, and
+stapling are intentionally left as a later release step so they can be inserted
+between app bundle staging and final release verification. Universal binary
+packaging is also tracked separately from the first disk image packaging flow.
 
 ### Windows
 
