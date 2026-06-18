@@ -131,6 +131,33 @@ scripts/sign_macos_app.sh \
   "Developer ID Application: Example Name (TEAMID)"
 ```
 
+To create a signed, notarized, and stapled distribution disk image, first store
+notarytool credentials in the local Keychain. The profile name is local machine
+state and should not be committed to the repository:
+
+```sh
+xcrun notarytool store-credentials quick-presenter-notary \
+  --key /path/to/AuthKey_XXXXXXXXXX.p8 \
+  --key-id YOUR_KEY_ID \
+  --issuer YOUR_ISSUER_ID
+```
+
+Then create, sign, notarize, staple, and validate the DMG:
+
+```sh
+export MACOS_SIGNING_IDENTITY="Developer ID Application: Example Name (TEAMID)"
+export NOTARYTOOL_KEYCHAIN_PROFILE="quick-presenter-notary"
+
+scripts/notarize_macos_dmg.sh \
+  "/tmp/quick-presenter-macos/Quick Presenter.app" \
+  "/tmp/quick-presenter-macos/Quick Presenter.dmg"
+```
+
+`scripts/notarize_macos_dmg.sh` expects the app bundle to already be signed by
+`scripts/sign_macos_app.sh`. It creates the DMG, signs the DMG, submits it with
+`xcrun notarytool submit --wait`, staples the notarization ticket, validates the
+ticket, and runs a Gatekeeper assessment on the DMG.
+
 The `build-binaries.yml` workflow stages the `.app` inside the macOS artifact
 and validates:
 
