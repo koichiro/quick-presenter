@@ -1,7 +1,8 @@
 pub const APP_NAME: &str = "Quick Presenter";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const APP_LICENSE_ID: &str = "Apache-2.0";
-pub const APP_LICENSE_SUMMARY: &str = "Quick Presenter is licensed under Apache License 2.0.";
+pub const APP_LICENSE_ID: &str = "GPL-3.0-or-later";
+pub const APP_LICENSE_SUMMARY: &str =
+    "Quick Presenter is licensed under the GNU General Public License v3.0 or later.";
 pub const PDFIUM_VERSION_UNKNOWN_LABEL: &str = "PDFium version: unknown";
 pub const PDFIUM_VERSION_FILE: &str = "pdfium/VERSION";
 
@@ -76,11 +77,13 @@ mod tests {
     }
 
     #[test]
-    fn about_metadata_uses_apache_license() {
+    fn about_metadata_uses_gplv3_or_later_license() {
         let metadata = about_metadata();
 
-        assert_eq!(metadata.app_license_id, "Apache-2.0");
-        assert!(metadata.app_license_summary.contains("Apache License 2.0"));
+        assert_eq!(metadata.app_license_id, "GPL-3.0-or-later");
+        assert!(metadata
+            .app_license_summary
+            .contains("GNU General Public License v3.0 or later"));
         assert!(!metadata.app_license_summary.contains("MIT"));
     }
 

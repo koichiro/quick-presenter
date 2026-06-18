@@ -48,6 +48,11 @@ if [[ ! -s "pdfium/LICENSE" ]]; then
   exit 1
 fi
 
+if [[ ! -s "packaging/SOURCE-OFFER.txt" ]]; then
+  echo "Missing source offer file: packaging/SOURCE-OFFER.txt" >&2
+  exit 1
+fi
+
 rm -rf "$bundle"
 mkdir -p "$macos_dir" "$resources_dir" "$license_dir"
 
@@ -60,6 +65,7 @@ sed "s/@APP_VERSION@/$version/g" \
 cp "assets/icons/macos/QuickPresenter.icns" "$resources_dir/QuickPresenter.icns"
 cp -R "pdfium" "$resources_dir/pdfium"
 cp "LICENSE" "$license_dir/QuickPresenter-LICENSE.txt"
+cp "packaging/SOURCE-OFFER.txt" "$license_dir/QuickPresenter-SOURCE-OFFER.txt"
 cp "pdfium/LICENSE" "$license_dir/PDFium-LICENSE.txt"
 
 echo "Staged $bundle"

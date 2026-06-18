@@ -4,7 +4,7 @@
 [![Build Binaries](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml/badge.svg)](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml)
 ![Rust](https://img.shields.io/badge/language-Rust-b7410e)
 ![Coverage target](https://img.shields.io/badge/coverage%20target-80%25-brightgreen)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 ![Input](https://img.shields.io/badge/input-PDF-orange)
 
@@ -211,8 +211,12 @@ Useful starting points:
 
 ## License
 
-Quick Presenter is licensed under the Apache License 2.0. See
-[LICENSE](LICENSE).
+Quick Presenter is licensed under the GNU General Public License v3.0 or later.
+See [LICENSE](LICENSE).
+
+Paid distribution is allowed under the GPL, but every binary distribution must
+preserve the recipient's GPL freedoms and provide the corresponding source code
+for that exact build.
 
 Quick Presenter uses PDFium through `pdfium-render`. Packaged builds that bundle
 PDFium must include PDFium and third-party component license files. See

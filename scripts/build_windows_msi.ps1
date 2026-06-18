@@ -142,6 +142,7 @@ $artifactDirPath = Resolve-RepoPath $ArtifactDir
 $binaryPath = Resolve-RepoPath $Binary
 $pdfiumPath = Resolve-RepoPath "pdfium"
 $licensePath = Resolve-RepoPath "LICENSE"
+$sourceOfferPath = Resolve-RepoPath "packaging/SOURCE-OFFER.txt"
 $pdfiumLicensePath = Resolve-RepoPath "pdfium/LICENSE"
 $iconPath = Resolve-RepoPath "assets/icons/windows/quick-presenter.ico"
 $productWxs = Resolve-RepoPath "packaging/windows/Product.wxs"
@@ -160,6 +161,9 @@ if (-not (Test-Path $pdfiumPath -PathType Container)) {
 }
 if (-not (Test-Path $licensePath -PathType Leaf)) {
     throw "Missing Quick Presenter license file: $licensePath"
+}
+if (-not (Test-Path $sourceOfferPath -PathType Leaf)) {
+    throw "Missing Quick Presenter source offer file: $sourceOfferPath"
 }
 if (-not (Test-Path $pdfiumLicensePath -PathType Leaf)) {
     throw "Missing PDFium license file: $pdfiumLicensePath"
@@ -181,6 +185,7 @@ New-Item -ItemType Directory -Force -Path $stageDir, $licenseDir, $wixWorkDir | 
 Copy-Item $binaryPath (Join-Path $stageDir "qp.exe")
 Copy-Item -Recurse $pdfiumPath (Join-Path $stageDir "pdfium")
 Copy-Item $licensePath (Join-Path $licenseDir "QuickPresenter-LICENSE.txt")
+Copy-Item $sourceOfferPath (Join-Path $licenseDir "QuickPresenter-SOURCE-OFFER.txt")
 Copy-Item $pdfiumLicensePath (Join-Path $licenseDir "PDFium-LICENSE.txt")
 
 New-WixFilesFragment -StageDir $stageDir -OutputPath $generatedWxs
