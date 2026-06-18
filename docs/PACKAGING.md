@@ -31,6 +31,35 @@ with the installed application. This applies to the macOS app bundle, Windows
 installer, Linux package artifacts, and packaged artifact smoke tests tracked by
 #87, #94, #96, and #88.
 
+## Source Code for Binary Releases
+
+Quick Presenter is licensed under `GPL-3.0-or-later`. Paid distribution is
+allowed, including paid store distribution, but every binary distribution must
+preserve the recipient's GPL freedoms and provide the corresponding source code
+for that exact build.
+
+Official release binaries must be built from a tagged Git revision. The release
+page must include or link to the source archive for the same tag as the binary
+artifact. Store listings should include the project/source URL, and store
+submission notes should identify how recipients can obtain the corresponding
+source for the submitted binary.
+
+The source archive must include `Cargo.lock` so recipients can identify the
+exact Rust dependency sources used for the build. If a release ever vendors,
+patches, or otherwise modifies dependency source, those modified sources must be
+included or linked as part of the corresponding source for that binary.
+
+Packaged artifacts should include `packaging/SOURCE-OFFER.txt` in their
+installed `licenses/` directory as `QuickPresenter-SOURCE-OFFER.txt`. This
+notice is included by the current macOS app bundle and Windows MSI staging
+flows. Future Linux package formats tracked by #96 must include the same notice
+next to the Quick Presenter and PDFium license files.
+
+Before submitting App Store or Microsoft Store builds, re-check the current
+store terms against GPLv3 requirements, including source availability and any
+installation-information obligations for the target package type. This document
+is release engineering guidance, not legal advice.
+
 ## Packaged Artifact Smoke Tests
 
 Quick Presenter provides a non-interactive smoke mode for packaged artifact
@@ -75,6 +104,7 @@ Quick Presenter.app/
       pdfium/
       licenses/
         QuickPresenter-LICENSE.txt
+        QuickPresenter-SOURCE-OFFER.txt
         PDFium-LICENSE.txt
 ```
 
@@ -166,7 +196,7 @@ and validates:
   are set,
 - `Contents/MacOS/qp` is executable,
 - `QuickPresenter.icns` exists in `Contents/Resources/`,
-- bundled PDFium and license files are present.
+- bundled PDFium, license files, and source offer are present.
 - the bundled app executable can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`.
 
@@ -176,7 +206,7 @@ and validates:
 - the disk image contains `Quick Presenter.app`,
 - the disk image contains an `Applications` symlink,
 - the app bundle inside the mounted disk image still contains the icon, PDFium,
-  and license files,
+  license files, and source offer,
 - the mounted app executable can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`.
 
@@ -224,6 +254,7 @@ Quick Presenter/
   pdfium/
   licenses/
     QuickPresenter-LICENSE.txt
+    QuickPresenter-SOURCE-OFFER.txt
     PDFium-LICENSE.txt
 ```
 
@@ -250,7 +281,8 @@ validates:
 
 - the MSI artifact exists,
 - administrative extraction with `msiexec /a` succeeds,
-- the extracted layout contains `qp.exe`, bundled PDFium, and license files,
+- the extracted layout contains `qp.exe`, bundled PDFium, license files, and the
+  source offer,
 - the extracted `qp.exe` can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`.
 
