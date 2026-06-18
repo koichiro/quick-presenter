@@ -91,6 +91,6 @@ echo "Stapling notarization ticket to $output_dmg"
 xcrun stapler staple "$output_dmg"
 xcrun stapler validate "$output_dmg"
 
-spctl --assess --type open --verbose=4 "$output_dmg"
+spctl --assess --type open --context context:primary-signature --verbose=4 "$output_dmg"
 
 echo "Created signed, notarized, and stapled DMG: $output_dmg"
