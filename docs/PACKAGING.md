@@ -105,6 +105,32 @@ scripts/create_macos_dmg.sh \
   "/tmp/quick-presenter-macos/Quick Presenter.dmg"
 ```
 
+To sign the staged app bundle before creating a distribution disk image:
+
+```sh
+export MACOS_SIGNING_IDENTITY="Developer ID Application: Example Name (TEAMID)"
+
+scripts/sign_macos_app.sh \
+  "/tmp/quick-presenter-macos/Quick Presenter.app"
+
+scripts/create_macos_dmg.sh \
+  "/tmp/quick-presenter-macos/Quick Presenter.app" \
+  "/tmp/quick-presenter-macos/Quick Presenter.dmg"
+```
+
+`scripts/sign_macos_app.sh` does not contain certificate names, passwords, or
+notarization credentials. It signs the Mach-O files inside the app bundle first,
+including the bundled PDFium dynamic library, then signs `Quick Presenter.app`
+with hardened runtime and a timestamp.
+
+The signing identity can also be passed as the second argument:
+
+```sh
+scripts/sign_macos_app.sh \
+  "/tmp/quick-presenter-macos/Quick Presenter.app" \
+  "Developer ID Application: Example Name (TEAMID)"
+```
+
 The `build-binaries.yml` workflow stages the `.app` inside the macOS artifact
 and validates:
 
@@ -138,10 +164,10 @@ Manual verification:
 - Open `tests/fixtures/marp-speaker-notes.pdf` without `PDFIUM_DYNAMIC_LIB_PATH`.
 - Press Cmd+Tab and confirm the Quick Presenter icon is shown.
 
-The current disk image is unsigned. Developer ID signing, notarization, and
-stapling are intentionally left as a later release step so they can be inserted
-between app bundle staging and final release verification. Universal binary
-packaging is also tracked separately from the first disk image packaging flow.
+The current CI disk image is unsigned unless release signing credentials are
+configured. Developer ID notarization and stapling are tracked as release-only
+steps that come after app bundle signing. Universal binary packaging is also
+tracked separately from the first disk image packaging flow.
 
 ### Windows
 
