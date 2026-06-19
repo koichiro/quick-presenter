@@ -256,9 +256,21 @@ jobs:
           Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $extractDir | Out-Null
 
-          & msiexec.exe /a $msi /qn "TARGETDIR=$extractDir"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Administrative MSI extraction failed with exit code $LASTEXITCODE"
+          $msiLog = Join-Path $env:RUNNER_TEMP 'quick-presenter-msi-extract.log'
+          $msiArgs = @(
+            '/a',
+            "`"$msi`"",
+            '/qn',
+            "TARGETDIR=`"$extractDir`"",
+            '/l*v',
+            "`"$msiLog`""
+          )
+          $msiProcess = Start-Process -FilePath 'msiexec.exe' -ArgumentList $msiArgs -Wait -PassThru
+          if ($msiProcess.ExitCode -ne 0) {
+            if (Test-Path $msiLog -PathType Leaf) {
+              Get-Content $msiLog -Tail 120
+            }
+            throw "Administrative MSI extraction failed with exit code $($msiProcess.ExitCode)"
           }
 
           $exe = Get-ChildItem $extractDir -Recurse -Filter 'qp.exe' | Select-Object -First 1
@@ -288,6 +300,114 @@ jobs:
             & $exe.FullName --smoke-open-pdf $pdf
             if ($LASTEXITCODE -ne 0) {
               throw "Extracted MSI smoke test failed with exit code $LASTEXITCODE"
+            }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Build Windows MSIX
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          scripts/build_windows_msix.ps1 `
+            -ArtifactDir 'artifacts/${{ matrix.artifact-name }}' `
+            -Binary 'target/release/${{ matrix.binary-name }}'
+
+      - name: Verify Windows MSIX
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Remove-Item Env:PDFIUM_DYNAMIC_LIB_PATH -ErrorAction SilentlyContinue
+
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}'
+          $msix = Join-Path $artifactDir 'Quick Presenter.msix'
+          $extractDir = Join-Path $env:RUNNER_TEMP 'quick-presenter-msix-extract'
+          $pdf = Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/marp-speaker-notes.pdf'
+
+          if (-not (Test-Path $msix -PathType Leaf)) {
+            throw "Missing MSIX artifact: $msix"
+          }
+          if ((Get-Item $msix).Length -le 0) {
+            throw "MSIX artifact is empty: $msix"
+          }
+
+          $makeAppxCommand = Get-Command 'makeappx.exe' -ErrorAction SilentlyContinue
+          $makeAppxPath = if ($null -eq $makeAppxCommand) { "" } else { $makeAppxCommand.Source }
+          if ([string]::IsNullOrWhiteSpace($makeAppxPath)) {
+            $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+            $makeAppxPath = Get-ChildItem $sdkRoot -Recurse -Filter 'makeappx.exe' |
+              Where-Object { $_.FullName -match '\\x64\\makeappx\.exe$' } |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1 -ExpandProperty FullName
+          }
+          if ([string]::IsNullOrWhiteSpace($makeAppxPath)) {
+            throw "Could not find makeappx.exe for MSIX verification"
+          }
+
+          Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $extractDir | Out-Null
+
+          & $makeAppxPath unpack /p $msix /d $extractDir /o
+          if ($LASTEXITCODE -ne 0) {
+            throw "MSIX unpack failed with exit code $LASTEXITCODE"
+          }
+
+          $manifest = Join-Path $extractDir 'AppxManifest.xml'
+          $exe = Join-Path $extractDir 'qp.exe'
+          $pdfiumDir = Join-Path $extractDir 'pdfium'
+          $licenseDir = Join-Path $extractDir 'licenses'
+          $assetsDir = Join-Path $extractDir 'Assets'
+
+          if (-not (Test-Path $manifest -PathType Leaf)) {
+            throw "Unpacked MSIX layout is missing AppxManifest.xml"
+          }
+          if (-not (Test-Path $exe -PathType Leaf)) {
+            throw "Unpacked MSIX layout is missing qp.exe"
+          }
+          if (-not (Test-Path (Join-Path $pdfiumDir 'LICENSE') -PathType Leaf)) {
+            throw "Unpacked MSIX layout is missing bundled PDFium license"
+          }
+          if (-not (Test-Path (Join-Path $pdfiumDir 'licenses') -PathType Container)) {
+            throw "Unpacked MSIX layout is missing PDFium component licenses"
+          }
+          if (-not (Test-Path (Join-Path $licenseDir 'QuickPresenter-LICENSE.txt') -PathType Leaf)) {
+            throw "Unpacked MSIX layout is missing Quick Presenter license"
+          }
+          if (-not (Test-Path (Join-Path $licenseDir 'PDFium-LICENSE.txt') -PathType Leaf)) {
+            throw "Unpacked MSIX layout is missing PDFium license copy"
+          }
+          if (-not (Test-Path (Join-Path $assetsDir 'Square44x44Logo.png') -PathType Leaf)) {
+            throw "Unpacked MSIX layout is missing Square44x44Logo.png"
+          }
+          if (-not (Test-Path (Join-Path $assetsDir 'Square150x150Logo.png') -PathType Leaf)) {
+            throw "Unpacked MSIX layout is missing Square150x150Logo.png"
+          }
+
+          $manifestText = Get-Content $manifest -Raw
+          if ($manifestText -notmatch 'Name="QuickPresenter\.QuickPresenter"') {
+            throw "MSIX manifest has unexpected identity name"
+          }
+          if ($manifestText -notmatch 'ProcessorArchitecture="x64"') {
+            throw "MSIX manifest has unexpected processor architecture"
+          }
+          if ($manifestText -notmatch 'Name="Windows\.Desktop"') {
+            throw "MSIX manifest is missing Windows.Desktop target family"
+          }
+          if ($manifestText -notmatch 'Executable="qp\.exe"') {
+            throw "MSIX manifest is missing qp.exe application entry"
+          }
+          if ($manifestText -notmatch 'Name="runFullTrust"') {
+            throw "MSIX manifest is missing runFullTrust capability"
+          }
+
+          Push-Location $env:TEMP
+          try {
+            & $exe --smoke-open-pdf $pdf
+            if ($LASTEXITCODE -ne 0) {
+              throw "Unpacked MSIX smoke test failed with exit code $LASTEXITCODE"
             }
           } finally {
             Pop-Location

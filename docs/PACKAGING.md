@@ -307,9 +307,61 @@ Manual verification:
   retry before treating it as a failure.
 
 The current MSI is unsigned. Authenticode signing is tracked separately in #109.
-MSIX packaging, Microsoft Store distribution, PDF file associations, and
-auto-update infrastructure are tracked separately from the first MSI packaging
-flow.
+Microsoft Store distribution, PDF file associations, and auto-update
+infrastructure are tracked separately from the first MSI packaging flow.
+
+#### Unsigned MSIX validation
+
+Quick Presenter also has an unsigned MSIX packaging path for CI layout
+validation. This package is not a user-installable distribution artifact.
+Windows requires installable MSIX packages to be signed by a trusted
+certificate, and production signing is tracked separately in #109.
+
+The MSIX payload intentionally mirrors the MSI payload where practical:
+
+```text
+Quick Presenter.msix
+  AppxManifest.xml
+  qp.exe
+  pdfium/
+  licenses/
+    QuickPresenter-LICENSE.txt
+    QuickPresenter-SOURCE-OFFER.txt
+    PDFium-LICENSE.txt
+  Assets/
+    Square44x44Logo.png
+    Square150x150Logo.png
+```
+
+To build the unsigned MSIX locally on Windows:
+
+```powershell
+python scripts/fetch_pdfium.py
+cargo build --release --bin qp
+scripts/build_windows_msix.ps1
+```
+
+The MSIX is written to:
+
+```text
+artifacts/quick-presenter-windows-x64/Quick Presenter.msix
+```
+
+The `build-binaries.yml` workflow builds this unsigned MSIX on
+`windows-latest` and validates:
+
+- the MSIX artifact exists,
+- `MakeAppx.exe unpack` succeeds,
+- the unpacked layout contains `AppxManifest.xml`, `qp.exe`, bundled PDFium,
+  icon assets, license files, and the source offer,
+- the manifest contains the expected desktop identity, `qp.exe` application
+  entry, and `runFullTrust` capability,
+- the unpacked `qp.exe` can run `--smoke-open-pdf` without
+  `PDFIUM_DYNAMIC_LIB_PATH`.
+
+The CI workflow intentionally does not run `Add-AppxPackage` for the unsigned
+MSIX. Signed, installable MSIX packages and signature verification belong to the
+Windows signing work in #109.
 
 ### Linux
 
