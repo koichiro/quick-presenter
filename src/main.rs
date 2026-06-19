@@ -59,6 +59,7 @@ const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
 const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 const FILE_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
+const SLIDE_TITLEBAR_COMPENSATION_HEIGHT: f32 = 28.0;
 const PRESENTER_WINDOW_TITLE: &str = "Quick Presenter";
 const SLIDE_WINDOW_TITLE: &str = "Quick Presenter - Slide";
 
@@ -88,9 +89,13 @@ fn main() -> Result<()> {
 
     windows.apply_initial_positions();
     windows.slide.show()?;
+    apply_macos_slide_window_chrome();
+    let window_refs = windows.refs();
+    sync_slide_chrome(&window_refs);
     windows.presenter.show()?;
     set_application_icon();
     remove_macos_native_about_menu_item();
+    let _slide_chrome_sync_timer = start_slide_chrome_sync(window_refs);
 
     if let Some(path) = startup_options.pdf_path {
         load_startup_pdf(&windows.refs(), &state, path);
@@ -252,6 +257,70 @@ fn running_from_macos_app_bundle() -> bool {
 
 #[cfg(not(target_os = "macos"))]
 fn remove_macos_native_about_menu_item() {}
+
+#[cfg(target_os = "macos")]
+fn apply_macos_slide_window_chrome() {
+    apply_macos_slide_window_chrome_now();
+    Timer::single_shot(
+        Duration::from_millis(0),
+        apply_macos_slide_window_chrome_now,
+    );
+    Timer::single_shot(
+        Duration::from_millis(250),
+        apply_macos_slide_window_chrome_now,
+    );
+    Timer::single_shot(
+        Duration::from_millis(1000),
+        apply_macos_slide_window_chrome_now,
+    );
+}
+
+#[cfg(target_os = "macos")]
+fn apply_macos_slide_window_chrome_now() {
+    use objc2_app_kit::{NSWindowStyleMask, NSWindowTitleVisibility};
+
+    with_macos_window(SLIDE_WINDOW_TITLE, |_, window| {
+        window.setStyleMask(window.styleMask() | NSWindowStyleMask::FullSizeContentView);
+        window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+        window.setTitlebarAppearsTransparent(true);
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_macos_slide_window_chrome() {}
+
+fn start_slide_chrome_sync(windows: AppWindowRefs) -> Timer {
+    let timer = Timer::default();
+    #[cfg(target_os = "macos")]
+    {
+        timer.start(TimerMode::Repeated, Duration::from_millis(250), move || {
+            sync_slide_chrome(&windows);
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = windows;
+
+    timer
+}
+
+fn sync_slide_chrome(windows: &AppWindowRefs) {
+    #[cfg(target_os = "macos")]
+    apply_macos_slide_window_chrome();
+
+    if let Some(slide) = windows.slide.upgrade() {
+        let compensation_height =
+            slide_titlebar_compensation_height(slide.window().is_fullscreen());
+        slide.set_titlebar_compensation_height(compensation_height);
+    }
+}
+
+fn slide_titlebar_compensation_height(fullscreen: bool) -> f32 {
+    if cfg!(target_os = "macos") && !fullscreen {
+        SLIDE_TITLEBAR_COMPENSATION_HEIGHT
+    } else {
+        0.0
+    }
+}
 
 struct AppWindows {
     presenter: PresenterWindow,
@@ -751,6 +820,7 @@ fn exit_slide_fullscreen(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>)
 fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
     if let Some(slide) = windows.slide.upgrade() {
         slide.window().set_fullscreen(fullscreen);
+        slide.set_titlebar_compensation_height(slide_titlebar_compensation_height(fullscreen));
     }
 
     if let Some(presenter) = windows.presenter.upgrade() {
@@ -834,12 +904,15 @@ fn show_presenter_window(windows: &AppWindowRefs) {
 fn show_slide_window(windows: &AppWindowRefs) {
     #[cfg(target_os = "macos")]
     if show_macos_window(SLIDE_WINDOW_TITLE) {
+        apply_macos_slide_window_chrome();
         return;
     }
 
     if let Some(slide) = windows.slide.upgrade() {
         if let Err(err) = slide.show() {
             warn!(error = ?err, "failed to show slide window");
+        } else {
+            apply_macos_slide_window_chrome();
         }
     }
 }
@@ -1075,17 +1148,28 @@ fn update_recent_file_menu_labels(presenter: &Weak<PresenterWindow>, labels: Vec
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
     if let Some(slide) = windows.slide.upgrade() {
-        let size = fitted_logical_size_within(
-            SLIDE_WINDOW_MAX_WIDTH,
-            SLIDE_WINDOW_MAX_HEIGHT,
-            aspect_ratio,
-        );
-        let width = size.width.round();
-        let height = size.height.round();
+        let compensation_height =
+            slide_titlebar_compensation_height(slide.window().is_fullscreen());
+        let (width, height) = fitted_slide_window_content_size(aspect_ratio, compensation_height);
         slide.set_slide_window_width(width);
         slide.set_slide_window_height(height);
         slide.window().set_size(LogicalSize::new(width, height));
     }
+}
+
+fn fitted_slide_window_content_size(
+    aspect_ratio: f32,
+    titlebar_compensation_height: f32,
+) -> (f32, f32) {
+    let size = fitted_logical_size_within(
+        SLIDE_WINDOW_MAX_WIDTH,
+        SLIDE_WINDOW_MAX_HEIGHT,
+        aspect_ratio,
+    );
+    let width = size.width.round();
+    let height = (size.height.round() - titlebar_compensation_height).max(1.0);
+
+    (width, height)
 }
 
 fn render_into_windows(
@@ -1356,5 +1440,24 @@ fn update_presenter_time_labels(presenter: &Weak<PresenterWindow>, timer: &Prese
     if let Some(presenter) = presenter.upgrade() {
         presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(timer.elapsed_label_at(Instant::now()).into());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fitted_slide_window_content_size_subtracts_titlebar_compensation_from_height() {
+        let (_, height) = fitted_slide_window_content_size(16.0 / 9.0, 28.0);
+
+        assert_eq!(height, 548.0);
+    }
+
+    #[test]
+    fn fitted_slide_window_content_size_keeps_full_height_without_titlebar_compensation() {
+        let (_, height) = fitted_slide_window_content_size(16.0 / 9.0, 0.0);
+
+        assert_eq!(height, 576.0);
     }
 }
