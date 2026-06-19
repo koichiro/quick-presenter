@@ -365,7 +365,41 @@ Windows signing work in #109.
 
 ### Linux
 
-Linux binary artifacts stage desktop metadata with
+Linux packaging starts with an Ubuntu-oriented Debian package (`.deb`). Ubuntu
+is the first Linux package target because the existing Linux CI job runs on
+`ubuntu-latest`, and Debian package artifacts can be built, inspected,
+extracted, installed, and removed with standard `dpkg` and `apt` tooling in CI.
+RPM, AppImage, and Flatpak remain future package format candidates after the
+Debian package layout and bundled PDFium behavior are stable.
+
+The raw Linux binary artifact remains available. The same artifact directory
+also includes the Debian package.
+
+The installed Debian package layout is:
+
+```text
+/usr/bin/qp -> ../lib/quick-presenter/qp
+/usr/lib/quick-presenter/
+  qp
+  pdfium/
+  licenses/
+    QuickPresenter-LICENSE.txt
+    QuickPresenter-SOURCE-OFFER.txt
+    PDFium-LICENSE.txt
+/usr/share/applications/quick-presenter.desktop
+/usr/share/icons/hicolor/.../apps/quick-presenter.png
+/usr/share/doc/quick-presenter/
+  QuickPresenter-LICENSE.txt
+  QuickPresenter-SOURCE-OFFER.txt
+  PDFium-LICENSE.txt
+```
+
+The bundled PDFium directory is installed next to the real application
+executable at `/usr/lib/quick-presenter/qp`, which is covered by the runtime
+lookup order documented above. The `/usr/bin/qp` entry is a symlink so shell
+launches and the desktop entry can keep using the short executable name.
+
+Linux binary artifacts also stage desktop metadata with
 `scripts/stage_linux_desktop_assets.sh`. The staged layout includes a desktop
 entry and PNG icons from `assets/icons/png/` installed under the hicolor icon
 theme with the icon name `quick-presenter`.
@@ -400,13 +434,35 @@ To stage the Linux desktop metadata locally:
 scripts/stage_linux_desktop_assets.sh /tmp/quick-presenter-linux-stage
 ```
 
+To build the Debian package locally on Ubuntu:
+
+```sh
+python3 scripts/fetch_pdfium.py
+cargo build --release --bin qp
+scripts/build_linux_deb.sh
+```
+
+The Debian package is written to:
+
+```text
+artifacts/quick-presenter-ubuntu-x64/quick-presenter_<version>_amd64.deb
+```
+
 The `build-binaries.yml` workflow runs the staging script for the Linux artifact
-and validates:
+and builds the Debian package. It validates:
 
 - the desktop entry exists and contains the expected `Name`, `Exec`, and `Icon`,
 - the desktop entry passes `desktop-file-validate`,
 - each expected hicolor icon file exists and is non-empty,
-- `gtk-update-icon-cache` can process the staged hicolor tree.
+- `gtk-update-icon-cache` can process the staged hicolor tree,
+- the Debian package exists and exposes expected package metadata,
+- the extracted Debian package contains `qp`, the bundled `pdfium/` directory,
+  license files, the source offer, the desktop entry, and hicolor icons,
+- the extracted `qp` binary can run `--smoke-open-pdf` without
+  `PDFIUM_DYNAMIC_LIB_PATH`,
+- the extracted `/usr/bin/qp` symlink can run `--smoke-open-pdf` without
+  `PDFIUM_DYNAMIC_LIB_PATH`,
+- the Debian package can be installed with `apt`, smoke-tested, and removed.
 - the staged `qp` binary can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`.
 
@@ -416,20 +472,30 @@ environment for final acceptance.
 
 Manual verification:
 
-- Download the `quick-presenter-ubuntu-x64` artifact or build and stage locally.
-- Copy the staged metadata into a test prefix:
+- Download the `quick-presenter-ubuntu-x64` artifact or build locally.
+- Install the Debian package on an Ubuntu desktop:
 
 ```sh
-cp -r share/applications ~/.local/share/
-cp -r share/icons ~/.local/share/
-update-desktop-database ~/.local/share/applications || true
-gtk-update-icon-cache ~/.local/share/icons/hicolor || true
+sudo apt-get install ./quick-presenter_<version>_amd64.deb
 ```
 
+- Confirm the installed command can open the smoke-test PDF without a manual
+  PDFium path:
+
+```sh
+env -u PDFIUM_DYNAMIC_LIB_PATH qp --smoke-open-pdf tests/fixtures/marp-speaker-notes.pdf
+```
+
+- Confirm the package can be removed cleanly:
+
+```sh
+sudo apt-get remove quick-presenter
+```
+
+- Install the package again for desktop-session checks.
 - Confirm `Quick Presenter` appears in the launcher.
 - Launch the app through the desktop entry.
+- Open `tests/fixtures/marp-speaker-notes.pdf` without
+  `PDFIUM_DYNAMIC_LIB_PATH`.
 - Confirm the icon appears in launcher search, app switcher, and the desktop
   environment's dock, taskbar, or panel.
-
-Full `.deb`, `.rpm`, AppImage, Flatpak, or distro package creation is tracked
-separately from desktop metadata staging.

@@ -155,7 +155,7 @@ Current distribution work focuses on:
 - including PDFium in packaged builds so the app works without first-launch downloads,
 - macOS app bundle and unsigned disk image packaging,
 - Windows executable icon and MSI installer packaging,
-- Linux desktop entry and hicolor icon installation,
+- Ubuntu Debian package artifacts with Linux desktop entry and hicolor icon installation,
 - smoke tests for staged release artifacts.
 
 Development runs use the repository-local `pdfium/` directory fetched by

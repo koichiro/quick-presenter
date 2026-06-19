@@ -35,6 +35,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             desktop-file-utils \
+            dpkg-dev \
             libgtk-3-bin \
             libegl1-mesa-dev \
             libfontconfig1-dev \
@@ -202,6 +203,73 @@ jobs:
           done
 
           gtk-update-icon-cache --ignore-theme-index --force "$artifact_dir/share/icons/hicolor"
+
+      - name: Build Linux Debian package
+        if: runner.os == 'Linux'
+        run: |
+          scripts/build_linux_deb.sh \
+            --artifact-dir "artifacts/${{ matrix.artifact-name }}" \
+            --binary "target/release/${{ matrix.binary-name }}"
+
+      - name: Verify Linux Debian package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          artifact_dir="$GITHUB_WORKSPACE/artifacts/${{ matrix.artifact-name }}"
+          deb="$(find "$artifact_dir" -maxdepth 1 -name 'quick-presenter_*_*.deb' -print -quit)"
+          extract_dir="$RUNNER_TEMP/quick-presenter-deb-extract"
+          pdf="$GITHUB_WORKSPACE/tests/fixtures/marp-speaker-notes.pdf"
+
+          test -s "$deb"
+          dpkg-deb --info "$deb"
+          dpkg-deb --contents "$deb" | tee "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+
+          grep -F "./usr/bin/qp" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+          grep -F "./usr/lib/quick-presenter/qp" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+          grep -F "./usr/lib/quick-presenter/pdfium/LICENSE" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+          grep -F "./usr/lib/quick-presenter/pdfium/licenses/" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+          grep -F "./usr/lib/quick-presenter/licenses/QuickPresenter-LICENSE.txt" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+          grep -F "./usr/lib/quick-presenter/licenses/QuickPresenter-SOURCE-OFFER.txt" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+          grep -F "./usr/lib/quick-presenter/licenses/PDFium-LICENSE.txt" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+          grep -F "./usr/share/applications/quick-presenter.desktop" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+          grep -F "./usr/share/icons/hicolor/256x256/apps/quick-presenter.png" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+
+          rm -rf "$extract_dir"
+          mkdir -p "$extract_dir"
+          dpkg-deb -x "$deb" "$extract_dir"
+
+          test -x "$extract_dir/usr/lib/quick-presenter/qp"
+          test -L "$extract_dir/usr/bin/qp"
+          test -s "$extract_dir/usr/lib/quick-presenter/pdfium/LICENSE"
+          test -d "$extract_dir/usr/lib/quick-presenter/pdfium/licenses"
+          test -s "$extract_dir/usr/lib/quick-presenter/licenses/QuickPresenter-LICENSE.txt"
+          test -s "$extract_dir/usr/lib/quick-presenter/licenses/QuickPresenter-SOURCE-OFFER.txt"
+          test -s "$extract_dir/usr/lib/quick-presenter/licenses/PDFium-LICENSE.txt"
+          test -s "$extract_dir/usr/share/doc/quick-presenter/QuickPresenter-SOURCE-OFFER.txt"
+
+          desktop-file-validate "$extract_dir/usr/share/applications/quick-presenter.desktop"
+          gtk-update-icon-cache --ignore-theme-index --force "$extract_dir/usr/share/icons/hicolor"
+
+          (
+            cd /tmp
+            env -u PDFIUM_DYNAMIC_LIB_PATH "$extract_dir/usr/lib/quick-presenter/qp" \
+              --smoke-open-pdf "$pdf"
+          )
+
+          (
+            cd /tmp
+            PATH="$extract_dir/usr/bin:$PATH" env -u PDFIUM_DYNAMIC_LIB_PATH qp \
+              --smoke-open-pdf "$pdf"
+          )
+
+          sudo apt-get install -y "$deb"
+          (
+            cd /tmp
+            env -u PDFIUM_DYNAMIC_LIB_PATH qp --smoke-open-pdf "$pdf"
+          )
+          sudo apt-get remove -y quick-presenter
 
       - name: Verify Windows executable icon
         if: runner.os == 'Windows'
