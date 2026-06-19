@@ -256,9 +256,21 @@ jobs:
           Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $extractDir | Out-Null
 
-          & msiexec.exe /a $msi /qn "TARGETDIR=$extractDir"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Administrative MSI extraction failed with exit code $LASTEXITCODE"
+          $msiLog = Join-Path $env:RUNNER_TEMP 'quick-presenter-msi-extract.log'
+          $msiArgs = @(
+            '/a',
+            "`"$msi`"",
+            '/qn',
+            "TARGETDIR=`"$extractDir`"",
+            '/l*v',
+            "`"$msiLog`""
+          )
+          $msiProcess = Start-Process -FilePath 'msiexec.exe' -ArgumentList $msiArgs -Wait -PassThru
+          if ($msiProcess.ExitCode -ne 0) {
+            if (Test-Path $msiLog -PathType Leaf) {
+              Get-Content $msiLog -Tail 120
+            }
+            throw "Administrative MSI extraction failed with exit code $($msiProcess.ExitCode)"
           }
 
           $exe = Get-ChildItem $extractDir -Recurse -Filter 'qp.exe' | Select-Object -First 1
