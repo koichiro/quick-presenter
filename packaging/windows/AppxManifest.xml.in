@@ -6,7 +6,7 @@
   IgnorableNamespaces="uap rescap">
   <Identity
     Name="QuickPresenter.QuickPresenter"
-    Publisher="CN=Quick Presenter"
+    Publisher="{{PUBLISHER}}"
     Version="{{PACKAGE_VERSION}}"
     ProcessorArchitecture="x64" />
 

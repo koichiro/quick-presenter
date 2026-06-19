@@ -2,6 +2,7 @@ param(
     [string]$ArtifactDir = "artifacts/quick-presenter-windows-x64",
     [string]$Binary = "target/release/qp.exe",
     [string]$OutputMsix = "",
+    [string]$Publisher = "CN=Quick Presenter",
     [string]$MakeAppxCommand = "",
     [switch]$KeepWorkDir
 )
@@ -154,6 +155,9 @@ if (-not (Test-Path $sourceIconPath -PathType Leaf)) {
 if (-not (Test-Path $manifestTemplatePath -PathType Leaf)) {
     throw "Missing MSIX manifest template: $manifestTemplatePath"
 }
+if ([string]::IsNullOrWhiteSpace($Publisher)) {
+    throw "MSIX publisher must not be empty"
+}
 
 $makeAppx = Resolve-MakeAppx $MakeAppxCommand
 $version = Convert-ToMsixVersion (Read-CargoVersion)
@@ -176,6 +180,7 @@ Copy-ResizedPng -Source $sourceIconPath -Output (Join-Path $assetDir "Square150x
 
 $manifest = Get-Content $manifestTemplatePath -Raw
 $manifest = $manifest.Replace("{{PACKAGE_VERSION}}", $version)
+$manifest = $manifest.Replace("{{PUBLISHER}}", [System.Security.SecurityElement]::Escape($Publisher))
 Set-Content -Path $manifestPath -Value $manifest -Encoding UTF8
 
 Remove-Item -Force $OutputMsix -ErrorAction SilentlyContinue
