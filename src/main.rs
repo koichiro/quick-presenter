@@ -38,8 +38,8 @@ use rendering::{
     presentation_preload_order, RenderCache, RenderPurpose, RenderRequest, RenderedPage,
 };
 use slint::{
-    ComponentHandle, LogicalPosition, LogicalSize, ModelRc, Rgba8Pixel, SharedPixelBuffer,
-    SharedString, Timer, TimerMode, VecModel, Weak,
+    CloseRequestResponse, ComponentHandle, LogicalPosition, LogicalSize, ModelRc, Rgba8Pixel,
+    SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel, Weak,
 };
 use timer::{timer_transition_for_page_change, PresentationTimer, TimerTransition};
 use tracing::{error, warn};
@@ -312,6 +312,8 @@ struct RenderedPages {
 fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<AppState>>) {
     let app = &windows.presenter;
 
+    wire_presenter_close_request(windows, refs.clone(), state.clone());
+
     let window_refs = refs.clone();
     let state_for_open = state.clone();
     app.on_open_pdf(move || {
@@ -509,6 +511,31 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
             PresentationCommand::ExitSlideFullscreen,
         );
     });
+}
+
+fn wire_presenter_close_request(
+    windows: &AppWindows,
+    refs: AppWindowRefs,
+    state: Rc<RefCell<AppState>>,
+) {
+    windows.presenter.window().on_close_requested(move || {
+        close_presentation_session_from_presenter(&refs, &state);
+        CloseRequestResponse::HideWindow
+    });
+}
+
+fn close_presentation_session_from_presenter(
+    windows: &AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+) {
+    {
+        let mut state = state.borrow_mut();
+        state.window_menu.close_presentation_session();
+        state.fullscreen.exit_slide_fullscreen();
+    }
+
+    set_slide_fullscreen(windows, false);
+    hide_slide_window(windows);
 }
 
 fn apply_app_metadata(app: &PresenterWindow) {
