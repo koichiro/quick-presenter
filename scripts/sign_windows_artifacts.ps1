@@ -119,6 +119,7 @@ function Verify-Artifact {
         throw "Signed artifact thumbprint '$($signature.SignerCertificate.Thumbprint)' does not match expected thumbprint '$ExpectedThumbprint'"
     }
 
+    $global:LASTEXITCODE = 0
     Write-Host "Accepted untrusted self-signed test signature for $Path"
 }
 
@@ -187,3 +188,4 @@ if ($VerifyOnly) {
 } else {
     Write-Host "Signed and verified Windows artifacts"
 }
+$global:LASTEXITCODE = 0
