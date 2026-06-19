@@ -114,15 +114,18 @@ jobs:
             $pfxPath,
             $env:WINDOWS_SIGNING_CERT_PASSWORD
           )
-          $trustedPeopleStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
-            [System.Security.Cryptography.X509Certificates.StoreName]::TrustedPeople,
+          $publicCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
+          )
+          $trustedRootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+            [System.Security.Cryptography.X509Certificates.StoreName]::Root,
             [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
           )
-          $trustedPeopleStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+          $trustedRootStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
           try {
-            $trustedPeopleStore.Add($certificate)
+            $trustedRootStore.Add($publicCertificate)
           } finally {
-            $trustedPeopleStore.Close()
+            $trustedRootStore.Close()
           }
 
           "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
@@ -582,7 +585,7 @@ jobs:
           Remove-Item -Force $pfxPath -ErrorAction SilentlyContinue
           $thumbprint = '${{ steps.windows-signing.outputs.thumbprint }}'
           if (-not [string]::IsNullOrWhiteSpace($thumbprint)) {
-            Get-ChildItem Cert:\CurrentUser\TrustedPeople |
+            Get-ChildItem Cert:\CurrentUser\Root |
               Where-Object Thumbprint -eq $thumbprint |
               Remove-Item -Force -ErrorAction SilentlyContinue
           }
