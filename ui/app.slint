@@ -133,7 +133,7 @@ component KeyboardBindingsPanel inherits Rectangle {
     }
 
     Text {
-        text: "First/Last";
+        text: "First";
         x: 8px;
         y: 88px;
         width: 70px;
@@ -145,9 +145,33 @@ component KeyboardBindingsPanel inherits Rectangle {
     }
 
     Text {
-        text: "Home End";
+        text: "Home";
         x: 83px;
         y: 88px;
+        width: parent.width - 91px;
+        height: 17px;
+        color: #f1f3f4;
+        font-size: 12px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    Text {
+        text: "End";
+        x: 8px;
+        y: 108px;
+        width: 70px;
+        height: 17px;
+        color: #9aa0a6;
+        font-size: 12px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    Text {
+        text: "End";
+        x: 83px;
+        y: 108px;
         width: parent.width - 91px;
         height: 17px;
         color: #f1f3f4;
@@ -159,7 +183,7 @@ component KeyboardBindingsPanel inherits Rectangle {
     Text {
         text: "Black";
         x: 8px;
-        y: 108px;
+        y: 128px;
         width: 70px;
         height: 17px;
         color: #9aa0a6;
@@ -171,7 +195,7 @@ component KeyboardBindingsPanel inherits Rectangle {
     Text {
         text: "B";
         x: 83px;
-        y: 108px;
+        y: 128px;
         width: parent.width - 91px;
         height: 17px;
         color: #f1f3f4;
@@ -183,7 +207,7 @@ component KeyboardBindingsPanel inherits Rectangle {
     Text {
         text: "Full";
         x: 8px;
-        y: 128px;
+        y: 148px;
         width: 70px;
         height: 17px;
         color: #9aa0a6;
@@ -195,7 +219,7 @@ component KeyboardBindingsPanel inherits Rectangle {
     Text {
         text: "F F5 Esc";
         x: 83px;
-        y: 128px;
+        y: 148px;
         width: parent.width - 91px;
         height: 17px;
         color: #f1f3f4;
@@ -759,7 +783,7 @@ export component PresenterWindow inherits Window {
                     }
 
                     KeyboardBindingsPanel {
-                        height: 146px;
+                        height: 166px;
                         horizontal-stretch: 1;
                     }
                 }

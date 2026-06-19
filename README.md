@@ -1,7 +1,7 @@
 # Quick Presenter
 
-[![CI](https://github.com/koichiro/quick-presenter/actions/workflows/ci.yml/badge.svg)](https://github.com/koichiro/quick-presenter/actions/workflows/ci.yml)
-[![Build Binaries](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml/badge.svg)](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml)
+[![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/ci.yml)
+[![Build Binaries](https://img.shields.io/badge/builds-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml)
 ![Rust](https://img.shields.io/badge/language-Rust-b7410e)
 ![Coverage target](https://img.shields.io/badge/coverage%20target-80%25-brightgreen)
 [![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
@@ -17,6 +17,10 @@ and online presentations over tools such as Zoom and Google Meet.
 Quick Presenter focuses on one job: open a PDF slide deck and help the speaker
 present it reliably. It is not a slide editor, a deck authoring tool, or a
 document management app.
+
+## Demo
+
+![Quick Presenter demo showing PDF navigation in the presenter window](docs/assets/quick-presenter-demo.gif)
 
 ## Screenshots
 
