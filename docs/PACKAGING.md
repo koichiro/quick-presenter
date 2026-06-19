@@ -306,9 +306,68 @@ Manual verification:
 - If Explorer shows a stale generic icon, copy the artifact to a fresh path and
   retry before treating it as a failure.
 
-The current MSI is unsigned. Authenticode signing is tracked separately in #109.
-Microsoft Store distribution, PDF file associations, and auto-update
-infrastructure are tracked separately from the first MSI packaging flow.
+The current pull request MSI is unsigned. Trusted non-PR builds can
+optionally sign Windows artifacts when signing credentials are configured, as
+described below. Microsoft Store distribution, PDF file associations, and
+auto-update infrastructure are tracked separately from the first MSI packaging
+flow.
+
+#### Optional Authenticode signing
+
+Windows Authenticode signing is optional in CI. Pull request and contributor
+builds remain unsigned so they can run without signing credentials. On trusted
+repository events, such as `workflow_dispatch` or pushes to `main`, the
+`build-binaries.yml` workflow signs Windows artifacts when these secrets are
+available:
+
+- `WINDOWS_SIGNING_CERT_PFX_BASE64`: base64-encoded `.pfx` code signing
+  certificate.
+- `WINDOWS_SIGNING_CERT_PASSWORD`: password for the `.pfx`.
+
+These repository variables are optional:
+
+- `WINDOWS_SIGNING_TIMESTAMP_URL`: RFC 3161 timestamp server URL. If omitted,
+  the workflow uses `http://timestamp.digicert.com`.
+- `WINDOWS_SIGNING_PUBLISHER`: expected certificate subject and MSIX manifest
+  publisher. If omitted, the workflow uses `CN=Quick Presenter`.
+
+When signing is enabled, CI signs `target/release/qp.exe` before staging and
+packaging so both MSI and MSIX payloads contain the signed executable. After the
+MSI and MSIX are built and layout-validated, CI signs the `Quick Presenter.msi`
+and `Quick Presenter.msix` containers and verifies signatures for:
+
+- `qp.exe`
+- `Quick Presenter.msi`
+- `Quick Presenter.msix`
+
+The decoded PFX is written only to the Windows runner's temporary directory and
+removed before artifact upload. The workflow skips signing, rather than failing,
+when the signing secrets are absent.
+
+To sign locally on Windows after building all Windows artifacts:
+
+```powershell
+scripts/sign_windows_artifacts.ps1 `
+  -ArtifactDir "artifacts/quick-presenter-windows-x64" `
+  -PfxPath "C:\path\to\certificate.pfx" `
+  -PfxPassword "<pfx-password>" `
+  -TimestampUrl "http://timestamp.digicert.com" `
+  -ExpectedPublisher "CN=Quick Presenter"
+```
+
+To verify signatures locally:
+
+```powershell
+signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/qp.exe"
+signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/Quick Presenter.msi"
+signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/Quick Presenter.msix"
+```
+
+MSIX signing requires the manifest `Identity Publisher` to match the signing
+certificate subject. Pass the same publisher value to
+`scripts/build_windows_msix.ps1 -Publisher` when creating a signed MSIX locally.
+SmartScreen reputation is not a CI gate; a technically valid signature may still
+show warnings until the publisher or app has sufficient reputation.
 
 #### Unsigned MSIX validation
 
