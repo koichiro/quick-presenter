@@ -342,10 +342,11 @@ and `Quick Presenter.msix` containers and verifies signatures for:
 
 The decoded PFX is written only to the Windows runner's temporary directory and
 removed before artifact upload. For self-signed test certificates, the workflow
-temporarily imports the public certificate into the runner user's `Root` store
-so `signtool verify /pa` can validate the test signature chain, then removes it
-before artifact upload. The workflow skips signing, rather than failing, when
-the signing secrets are absent.
+allows `signtool verify /pa` to fail with an untrusted chain, then validates
+that Authenticode metadata exists and that the signer thumbprint matches the
+configured PFX. This fallback is only for self-signed test certificates; normal
+CA-issued certificates must pass `signtool verify /pa`. The workflow skips
+signing, rather than failing, when the signing secrets are absent.
 
 To sign locally on Windows after building all Windows artifacts:
 

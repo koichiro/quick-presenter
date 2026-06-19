@@ -114,25 +114,14 @@ jobs:
             $pfxPath,
             $env:WINDOWS_SIGNING_CERT_PASSWORD
           )
-          $publicCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-            $certificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert)
-          )
-          $trustedRootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
-            [System.Security.Cryptography.X509Certificates.StoreName]::Root,
-            [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
-          )
-          $trustedRootStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-          try {
-            $trustedRootStore.Add($publicCertificate)
-          } finally {
-            $trustedRootStore.Close()
-          }
+          $allowUntrustedSelfSigned = ($certificate.Subject -eq $certificate.Issuer).ToString().ToLowerInvariant()
 
           "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "pfx_path=$pfxPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "timestamp_url=$timestampUrl" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "publisher=$publisher" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "thumbprint=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "allow_untrusted_self_signed=$allowUntrustedSelfSigned" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Sign Windows release binary
         if: runner.os == 'Windows' && steps.windows-signing.outputs.enabled == 'true'
@@ -146,7 +135,9 @@ jobs:
             -PfxPath '${{ steps.windows-signing.outputs.pfx_path }}' `
             -PfxPassword $env:WINDOWS_SIGNING_CERT_PASSWORD `
             -TimestampUrl '${{ steps.windows-signing.outputs.timestamp_url }}' `
-            -ExpectedPublisher '${{ steps.windows-signing.outputs.publisher }}'
+            -ExpectedPublisher '${{ steps.windows-signing.outputs.publisher }}' `
+            -ExpectedThumbprint '${{ steps.windows-signing.outputs.thumbprint }}' `
+            -AllowUntrustedSelfSigned:([System.Convert]::ToBoolean('${{ steps.windows-signing.outputs.allow_untrusted_self_signed }}'))
 
       - name: Stage artifact
         shell: bash
@@ -515,7 +506,9 @@ jobs:
             -PfxPath '${{ steps.windows-signing.outputs.pfx_path }}' `
             -PfxPassword $env:WINDOWS_SIGNING_CERT_PASSWORD `
             -TimestampUrl '${{ steps.windows-signing.outputs.timestamp_url }}' `
-            -ExpectedPublisher '${{ steps.windows-signing.outputs.publisher }}'
+            -ExpectedPublisher '${{ steps.windows-signing.outputs.publisher }}' `
+            -ExpectedThumbprint '${{ steps.windows-signing.outputs.thumbprint }}' `
+            -AllowUntrustedSelfSigned:([System.Convert]::ToBoolean('${{ steps.windows-signing.outputs.allow_untrusted_self_signed }}'))
 
       - name: Verify Windows signed artifacts
         if: runner.os == 'Windows' && steps.windows-signing.outputs.enabled == 'true'
@@ -530,6 +523,8 @@ jobs:
             -PfxPassword $env:WINDOWS_SIGNING_CERT_PASSWORD `
             -TimestampUrl '${{ steps.windows-signing.outputs.timestamp_url }}' `
             -ExpectedPublisher '${{ steps.windows-signing.outputs.publisher }}' `
+            -ExpectedThumbprint '${{ steps.windows-signing.outputs.thumbprint }}' `
+            -AllowUntrustedSelfSigned:([System.Convert]::ToBoolean('${{ steps.windows-signing.outputs.allow_untrusted_self_signed }}')) `
             -VerifyOnly
 
       - name: Smoke test staged artifact
@@ -583,12 +578,6 @@ jobs:
         run: |
           $pfxPath = Join-Path $env:RUNNER_TEMP 'quick-presenter-signing.pfx'
           Remove-Item -Force $pfxPath -ErrorAction SilentlyContinue
-          $thumbprint = '${{ steps.windows-signing.outputs.thumbprint }}'
-          if (-not [string]::IsNullOrWhiteSpace($thumbprint)) {
-            Get-ChildItem Cert:\CurrentUser\Root |
-              Where-Object Thumbprint -eq $thumbprint |
-              Remove-Item -Force -ErrorAction SilentlyContinue
-          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6

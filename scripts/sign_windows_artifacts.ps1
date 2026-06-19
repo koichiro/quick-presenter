@@ -5,7 +5,9 @@ param(
     [string]$PfxPassword = "",
     [string]$TimestampUrl = "",
     [string]$ExpectedPublisher = "",
+    [string]$ExpectedThumbprint = "",
     [string]$SignToolCommand = "",
+    [switch]$AllowUntrustedSelfSigned,
     [switch]$VerifyOnly
 )
 
@@ -91,7 +93,33 @@ function Verify-Artifact {
 
     Write-Host "Verifying $Path"
     $args = @("verify", "/pa", "/v", $Path)
-    Invoke-Checked -FilePath $SignTool -Arguments $args -FailureMessage "SignTool verify failed for $Path"
+    & $SignTool @args
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    $verifyExitCode = $LASTEXITCODE
+    if (-not $AllowUntrustedSelfSigned) {
+        throw "SignTool verify failed for $Path with exit code $verifyExitCode"
+    }
+
+    $signature = Get-AuthenticodeSignature -FilePath $Path
+    if ($null -eq $signature.SignerCertificate) {
+        throw "SignTool verify failed for $Path with exit code $verifyExitCode and no signer certificate was found"
+    }
+    $signatureStatus = $signature.Status.ToString()
+    if ($signatureStatus -eq "NotSigned") {
+        throw "SignTool verify failed for $Path with exit code $verifyExitCode and the artifact is not signed"
+    }
+    if ($signatureStatus -eq "HashMismatch") {
+        throw "SignTool verify failed for $Path with exit code $verifyExitCode and the signature hash does not match"
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedThumbprint) -and
+        $signature.SignerCertificate.Thumbprint -ne $ExpectedThumbprint) {
+        throw "Signed artifact thumbprint '$($signature.SignerCertificate.Thumbprint)' does not match expected thumbprint '$ExpectedThumbprint'"
+    }
+
+    Write-Host "Accepted untrusted self-signed test signature for $Path"
 }
 
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
@@ -138,6 +166,12 @@ if (-not [string]::IsNullOrWhiteSpace($ExpectedPublisher)) {
     $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($PfxPath, $PfxPassword)
     if ($certificate.Subject -ne $ExpectedPublisher) {
         throw "Signing certificate subject '$($certificate.Subject)' does not match expected publisher '$ExpectedPublisher'"
+    }
+}
+if (-not [string]::IsNullOrWhiteSpace($ExpectedThumbprint)) {
+    $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($PfxPath, $PfxPassword)
+    if ($certificate.Thumbprint -ne $ExpectedThumbprint) {
+        throw "Signing certificate thumbprint '$($certificate.Thumbprint)' does not match expected thumbprint '$ExpectedThumbprint'"
     }
 }
 
