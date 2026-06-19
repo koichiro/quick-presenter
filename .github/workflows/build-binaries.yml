@@ -110,11 +110,26 @@ jobs:
             $pfxPath,
             [System.Convert]::FromBase64String(($env:WINDOWS_SIGNING_CERT_PFX_BASE64 -replace '\s', ''))
           )
+          $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $pfxPath,
+            $env:WINDOWS_SIGNING_CERT_PASSWORD
+          )
+          $trustedPeopleStore = [System.Security.Cryptography.X509Certificates.X509Store]::new(
+            [System.Security.Cryptography.X509Certificates.StoreName]::TrustedPeople,
+            [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser
+          )
+          $trustedPeopleStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+          try {
+            $trustedPeopleStore.Add($certificate)
+          } finally {
+            $trustedPeopleStore.Close()
+          }
 
           "enabled=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "pfx_path=$pfxPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "timestamp_url=$timestampUrl" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "publisher=$publisher" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "thumbprint=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Sign Windows release binary
         if: runner.os == 'Windows' && steps.windows-signing.outputs.enabled == 'true'
@@ -565,6 +580,12 @@ jobs:
         run: |
           $pfxPath = Join-Path $env:RUNNER_TEMP 'quick-presenter-signing.pfx'
           Remove-Item -Force $pfxPath -ErrorAction SilentlyContinue
+          $thumbprint = '${{ steps.windows-signing.outputs.thumbprint }}'
+          if (-not [string]::IsNullOrWhiteSpace($thumbprint)) {
+            Get-ChildItem Cert:\CurrentUser\TrustedPeople |
+              Where-Object Thumbprint -eq $thumbprint |
+              Remove-Item -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6

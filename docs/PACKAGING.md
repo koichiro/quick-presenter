@@ -341,8 +341,11 @@ and `Quick Presenter.msix` containers and verifies signatures for:
 - `Quick Presenter.msix`
 
 The decoded PFX is written only to the Windows runner's temporary directory and
-removed before artifact upload. The workflow skips signing, rather than failing,
-when the signing secrets are absent.
+removed before artifact upload. For self-signed test certificates, the workflow
+temporarily imports the public certificate into the runner user's
+`TrustedPeople` store so `signtool verify /pa` can validate the test signature,
+then removes it before artifact upload. The workflow skips signing, rather than
+failing, when the signing secrets are absent.
 
 To sign locally on Windows after building all Windows artifacts:
 
