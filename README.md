@@ -55,20 +55,12 @@ switching between in-person talks, conference rooms, and online meetings.
 
 ## Current Capabilities
 
-- Open a PDF from the app UI.
-- Open a PDF at startup with `--pdf`.
-- Show a presenter window and a separate slide window.
-- Show the current page, next-page preview, page count, document title, timer,
-  and current clock.
-- Extract and display speaker notes from supported PDF speaker-note annotations.
-- Navigate with buttons, menus, keyboard shortcuts, and common presenter remote
-  keys.
-- Jump to the first and last page.
-- Toggle fullscreen for the audience-facing slide window.
-- Reopen recently used PDF files.
-- Show application, version, Quick Presenter license, and PDFium license
-  information in the About dialog.
-- Provide cross-platform icon assets and macOS application icon wiring.
+- Open prepared PDF slide decks from the UI or at startup.
+- Present with separate speaker-facing and audience-facing windows.
+- Keep presenter context visible through page status, next-slide preview,
+  speaker notes, timer, and clock.
+- Support keyboard-first navigation, including common presenter remote keys.
+- Bundle the PDF runtime in packaged builds for predictable playback.
 
 ## Basic Usage
 
@@ -124,67 +116,30 @@ cargo check
 cargo test
 ```
 
-Run the packaged-artifact smoke path without opening UI windows:
-
-```sh
-cargo run --bin qp -- --smoke-open-pdf tests/fixtures/marp-speaker-notes.pdf
-```
-
-Regenerate the README screenshot sample PDF from Marp Markdown:
-
-```sh
-marp docs/samples/quick-presenter-demo.md --pdf --pdf-notes --allow-local-files -o docs/samples/quick-presenter-demo.pdf
-```
-
 Coverage is measured with:
 
 ```sh
 scripts/coverage.sh
 ```
 
-Platform packaging notes are in [docs/PACKAGING.md](docs/PACKAGING.md).
+Detailed packaging, release, keyboard, and speaker-note behavior is documented
+under [docs/](docs/).
 
-## Release Status
+## Releases
 
-Quick Presenter is moving toward an MVP-quality OSS release. The repository can
-build development binaries in CI, but full end-user packaging is still being
-completed.
+Quick Presenter is an OSS project focused on reliable PDF presentation
+playback. Download and launch steps for packaged artifacts are documented in
+[docs/RELEASE.md](docs/RELEASE.md).
 
-Current distribution work focuses on:
-
-- including PDFium in packaged builds so the app works without first-launch downloads,
-- macOS app bundle and unsigned disk image packaging,
-- Windows executable icon and MSI installer packaging,
-- Ubuntu Debian package artifacts with Linux desktop entry and hicolor icon installation,
-- smoke tests for staged release artifacts.
-
-Development runs use the repository-local `pdfium/` directory fetched by
-`scripts/fetch_pdfium.py`. `PDFIUM_DYNAMIC_LIB_PATH` remains available as an
-override for development and troubleshooting.
+Packaging and signing details for maintainers are documented in
+[docs/PACKAGING.md](docs/PACKAGING.md).
 
 ## Roadmap
 
-Near-term work is focused on making live presentation playback reliable enough
-for MVP use:
-
-- Smoother page transitions through render caching and lightweight preloading.
-- Presentation controls such as black screen mode for breaks, Q&A, and setup.
-- Reliable packaging for macOS, Windows, and Linux.
-- Clear release documentation for users who download packaged builds.
-
-After the MVP, larger product directions include:
-
-- Better workflows for online meetings and screen sharing.
-- Tablet-friendly presenter controls and remote-control surfaces.
-- App Store and Microsoft Store packaging, including donation-oriented
-  distribution if appropriate.
-- Slide annotation tools, such as laser-pointer-style marking or temporary
-  drawing during a talk.
-- Faster navigation for large decks, including thumbnail-based page jumping.
-- More advanced display and projector management.
-
-The roadmap is intentionally directional. Features should stay aligned with the
-core product scope: stable PDF presentation playback.
+The roadmap is intentionally guided by the core product scope: stable PDF
+presentation playback. Future work should make live talks more predictable,
+reduce setup risk, and improve presenter confidence without turning Quick
+Presenter into a slide editor or document management system.
 
 ## Related Projects
 
@@ -193,7 +148,7 @@ core product scope: stable PDF presentation playback.
 
 ## Contributing
 
-Contributions are welcome as the project moves toward OSS publication.
+Contributions are welcome.
 
 Before starting broad changes, please open or join an issue so the scope can
 stay clear. Quick Presenter prioritizes predictable live presentation behavior,
