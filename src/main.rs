@@ -60,7 +60,9 @@ const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 const FILE_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const SLIDE_TITLEBAR_COMPENSATION_HEIGHT: f32 = 28.0;
+#[cfg(target_os = "macos")]
 const PRESENTER_WINDOW_TITLE: &str = "Quick Presenter";
+#[cfg(target_os = "macos")]
 const SLIDE_WINDOW_TITLE: &str = "Quick Presenter - Slide";
 
 fn main() -> Result<()> {
