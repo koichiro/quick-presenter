@@ -41,7 +41,7 @@ use slint::{
     ComponentHandle, LogicalPosition, LogicalSize, ModelRc, Rgba8Pixel, SharedPixelBuffer,
     SharedString, Timer, TimerMode, VecModel, Weak,
 };
-use timer::{leaves_first_page, PresentationTimer};
+use timer::{timer_transition_for_page_change, PresentationTimer, TimerTransition};
 use tracing::{error, warn};
 use tracing_subscriber::EnvFilter;
 use window_menu::WindowMenuState;
@@ -655,7 +655,7 @@ fn handle_presentation_command(
         let before = state.presentation.snapshot();
         apply_presentation_command(&mut state.presentation, command);
         let after = state.presentation.snapshot();
-        maybe_start_elapsed_timer(command, before.as_ref(), after.as_ref(), &mut state.timer);
+        update_elapsed_timer_for_page_change(before.as_ref(), after.as_ref(), &mut state.timer);
 
         if let Some(snapshot) = after {
             match render_into_windows(windows, &mut state, &snapshot) {
@@ -700,20 +700,18 @@ fn toggle_black_screen(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
     }
 }
 
-fn maybe_start_elapsed_timer(
-    command: PresentationCommand,
+fn update_elapsed_timer_for_page_change(
     before: Option<&PageSnapshot>,
     after: Option<&PageSnapshot>,
     timer: &mut PresentationTimer,
 ) {
-    if command != PresentationCommand::ExitSlideFullscreen
-        && !timer.is_running()
-        && leaves_first_page(
-            before.map(|snapshot| snapshot.current_index),
-            after.map(|snapshot| snapshot.current_index),
-        )
-    {
-        timer.start(Instant::now());
+    match timer_transition_for_page_change(
+        before.map(|snapshot| snapshot.current_index),
+        after.map(|snapshot| snapshot.current_index),
+    ) {
+        TimerTransition::Start => timer.start(Instant::now()),
+        TimerTransition::Reset => timer.reset(),
+        TimerTransition::None => {}
     }
 }
 

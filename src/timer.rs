@@ -31,6 +31,13 @@ impl PresentationTimer {
     }
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum TimerTransition {
+    None,
+    Start,
+    Reset,
+}
+
 pub fn format_elapsed(elapsed: Duration) -> String {
     let total_seconds = elapsed.as_secs();
     let hours = total_seconds / 3600;
@@ -44,8 +51,17 @@ pub fn format_elapsed(elapsed: Duration) -> String {
     }
 }
 
-pub fn leaves_first_page(before_index: Option<u32>, after_index: Option<u32>) -> bool {
-    before_index == Some(0) && after_index.is_some_and(|index| index > 0)
+pub fn timer_transition_for_page_change(
+    before_index: Option<u32>,
+    after_index: Option<u32>,
+) -> TimerTransition {
+    if before_index == Some(0) && after_index.is_some_and(|index| index > 0) {
+        TimerTransition::Start
+    } else if before_index.is_some_and(|index| index > 0) && after_index == Some(0) {
+        TimerTransition::Reset
+    } else {
+        TimerTransition::None
+    }
 }
 
 #[cfg(test)]
@@ -107,17 +123,54 @@ mod tests {
     }
 
     #[test]
-    fn leaving_first_page_is_detected() {
-        assert!(leaves_first_page(Some(0), Some(1)));
-        assert!(leaves_first_page(Some(0), Some(4)));
+    fn leaving_first_page_starts_timer() {
+        assert_eq!(
+            timer_transition_for_page_change(Some(0), Some(1)),
+            TimerTransition::Start
+        );
+        assert_eq!(
+            timer_transition_for_page_change(Some(0), Some(4)),
+            TimerTransition::Start
+        );
     }
 
     #[test]
-    fn other_page_transitions_do_not_count_as_leaving_first_page() {
-        assert!(!leaves_first_page(None, Some(1)));
-        assert!(!leaves_first_page(Some(0), Some(0)));
-        assert!(!leaves_first_page(Some(0), None));
-        assert!(!leaves_first_page(Some(1), Some(2)));
-        assert!(!leaves_first_page(Some(1), Some(0)));
+    fn returning_to_first_page_resets_timer() {
+        assert_eq!(
+            timer_transition_for_page_change(Some(1), Some(0)),
+            TimerTransition::Reset
+        );
+        assert_eq!(
+            timer_transition_for_page_change(Some(4), Some(0)),
+            TimerTransition::Reset
+        );
+    }
+
+    #[test]
+    fn other_page_transitions_do_not_change_timer() {
+        assert_eq!(
+            timer_transition_for_page_change(None, Some(0)),
+            TimerTransition::None
+        );
+        assert_eq!(
+            timer_transition_for_page_change(None, Some(1)),
+            TimerTransition::None
+        );
+        assert_eq!(
+            timer_transition_for_page_change(Some(0), Some(0)),
+            TimerTransition::None
+        );
+        assert_eq!(
+            timer_transition_for_page_change(Some(0), None),
+            TimerTransition::None
+        );
+        assert_eq!(
+            timer_transition_for_page_change(Some(1), Some(2)),
+            TimerTransition::None
+        );
+        assert_eq!(
+            timer_transition_for_page_change(Some(2), Some(1)),
+            TimerTransition::None
+        );
     }
 }
