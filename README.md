@@ -41,10 +41,9 @@ The screenshots use the repository-owned sample deck in
 
 ## What Quick Presenter Solves
 
-Many speakers create slides in tools such as Keynote, PowerPoint, Google
-Slides, Marp, or LaTeX Beamer, then export the final deck to PDF. PDF is stable
-and portable, but ordinary PDF viewers are not designed around live
-presentation workflows.
+Many speakers create slides in a separate authoring tool, then export the final
+deck to PDF. PDF is stable and portable, but ordinary PDF viewers are not
+designed around live presentation workflows.
 
 Quick Presenter provides a focused playback experience:
 
@@ -56,6 +55,22 @@ Quick Presenter provides a focused playback experience:
 
 The goal is to make presenting a prepared PDF feel predictable, especially when
 switching between in-person talks, conference rooms, and online meetings.
+
+## PDF Authoring Tools
+
+Quick Presenter does not create or edit slide decks. It presents PDF files
+exported from authoring tools such as:
+
+| Tool | Notes |
+| --- | --- |
+| Keynote | Export the finished deck to PDF before presenting. |
+| PowerPoint | Export the finished deck to PDF before presenting. |
+| Google Slides | Export the finished deck to PDF before presenting. |
+| [Marp](https://marp.app/) | OSS Markdown-based slide authoring; exported PDF speaker notes are supported in the presenter window. |
+| [LaTeX Beamer](https://ctan.org/pkg/beamer) | OSS LaTeX class for PDF-first slide decks. |
+
+The supported input remains the exported PDF, not the source project from any
+authoring tool.
 
 ## Current Capabilities
 
