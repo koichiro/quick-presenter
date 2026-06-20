@@ -1,7 +1,7 @@
 use crate::{
     app_state::AppState,
     presentation::PageSnapshot,
-    render_scheduler::RenderPriority,
+    render_scheduler::{RenderPriority, RenderSessionId},
     rendering::{
         presentation_preload_order, thumbnail_window_indices, RenderPurpose, RenderRequest,
     },
@@ -93,18 +93,29 @@ pub fn enqueue_render_plan_if_missing(
 }
 
 fn enqueue_render_if_missing(state: &AppState, request: RenderRequest, priority: RenderPriority) {
-    if state.render_cache.peek(request).is_some() {
+    let Some(session_id) = render_enqueue_session(
+        state.render_cache.peek(request).is_some(),
+        state.render_sessions.current_session(),
+        state.render_scheduler.is_some(),
+    ) else {
         return;
+    };
+
+    if let Some(scheduler) = state.render_scheduler.as_ref() {
+        scheduler.render_page(session_id, request, priority);
+    }
+}
+
+fn render_enqueue_session(
+    cache_hit: bool,
+    current_session: Option<RenderSessionId>,
+    has_scheduler: bool,
+) -> Option<RenderSessionId> {
+    if cache_hit || !has_scheduler {
+        return None;
     }
 
-    let Some(session_id) = state.render_sessions.current_session() else {
-        return;
-    };
-    let Some(scheduler) = state.render_scheduler.as_ref() else {
-        return;
-    };
-
-    scheduler.render_page(session_id, request, priority);
+    current_session
 }
 
 #[cfg(test)]
@@ -187,5 +198,34 @@ mod tests {
         assert!(plan
             .iter()
             .all(|item| item.request.purpose == RenderPurpose::Thumbnail));
+    }
+
+    #[test]
+    fn enqueue_decision_skips_cache_hits() {
+        assert_eq!(
+            render_enqueue_session(true, Some(RenderSessionId(7)), true),
+            None
+        );
+    }
+
+    #[test]
+    fn enqueue_decision_skips_missing_session() {
+        assert_eq!(render_enqueue_session(false, None, true), None);
+    }
+
+    #[test]
+    fn enqueue_decision_skips_missing_scheduler() {
+        assert_eq!(
+            render_enqueue_session(false, Some(RenderSessionId(7)), false),
+            None
+        );
+    }
+
+    #[test]
+    fn enqueue_decision_returns_active_session_for_cache_miss() {
+        assert_eq!(
+            render_enqueue_session(false, Some(RenderSessionId(7)), true),
+            Some(RenderSessionId(7))
+        );
     }
 }

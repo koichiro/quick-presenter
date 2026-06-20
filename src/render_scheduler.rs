@@ -653,6 +653,55 @@ impl RenderCancellation {
     }
 }
 
+trait RenderWorkerDocument {
+    fn title(&self) -> String;
+    fn page_count(&self) -> u32;
+    fn render_page_pixels(&self, request: RenderRequest) -> anyhow::Result<RenderedPagePixels>;
+    fn speaker_notes_cancellable(
+        &self,
+        is_cancelled: &dyn Fn() -> bool,
+    ) -> anyhow::Result<Option<SpeakerNotes>>;
+}
+
+impl RenderWorkerDocument for PdfDocumentState {
+    fn title(&self) -> String {
+        self.title()
+    }
+
+    fn page_count(&self) -> u32 {
+        self.page_count()
+    }
+
+    fn render_page_pixels(&self, request: RenderRequest) -> anyhow::Result<RenderedPagePixels> {
+        render_page_pixels(self, request)
+    }
+
+    fn speaker_notes_cancellable(
+        &self,
+        is_cancelled: &dyn Fn() -> bool,
+    ) -> anyhow::Result<Option<SpeakerNotes>> {
+        self.speaker_notes_cancellable(is_cancelled)
+    }
+}
+
+struct RenderWorkerState<D> {
+    document: Option<D>,
+    active_session: Option<RenderSessionId>,
+    queue: RenderQueue,
+    shutdown: bool,
+}
+
+impl<D> Default for RenderWorkerState<D> {
+    fn default() -> Self {
+        Self {
+            document: None,
+            active_session: None,
+            queue: RenderQueue::default(),
+            shutdown: false,
+        }
+    }
+}
+
 /// Serializes PDFium document access through one render worker.
 ///
 /// The UI thread owns this scheduler handle and communicates through command and
@@ -734,152 +783,150 @@ fn render_worker(
 ) {
     // Keep the PDF document worker-local. Render events carry only metadata,
     // pixels, and errors back to the UI thread.
-    let mut document: Option<PdfDocumentState> = None;
-    let mut active_session: Option<RenderSessionId> = None;
-    let mut queue = RenderQueue::default();
-    let mut shutdown = false;
+    let mut state = RenderWorkerState::<PdfDocumentState>::default();
 
-    while !shutdown {
+    while !state.shutdown {
         if let Some(command) = command_mailbox.recv() {
             handle_command(
                 command,
-                &mut document,
-                &mut active_session,
-                &mut queue,
+                &mut state,
                 &event_mailbox,
                 &cancellation,
-                &mut shutdown,
+                PdfDocumentState::open,
             );
         }
 
         drain_pending_commands(
             &command_mailbox,
-            &mut document,
-            &mut active_session,
-            &mut queue,
+            &mut state,
             &event_mailbox,
             &cancellation,
-            &mut shutdown,
+            PdfDocumentState::open,
         );
 
-        while !shutdown {
-            let Some((job_id, session_id, work)) = queue.pop() else {
+        while !state.shutdown {
+            if !process_next_work(&mut state, &event_mailbox, &cancellation) {
                 break;
-            };
-
-            if active_session != Some(session_id) || cancellation.is_cancelled(session_id) {
-                continue;
-            }
-
-            match work {
-                RenderWork::Page(request) => {
-                    render_page_on_worker(
-                        document.as_ref(),
-                        session_id,
-                        job_id,
-                        request,
-                        &event_mailbox,
-                        &cancellation,
-                    );
-                }
-                RenderWork::SpeakerNotes => {
-                    extract_speaker_notes_on_worker(
-                        document.as_ref(),
-                        session_id,
-                        &event_mailbox,
-                        &cancellation,
-                    );
-                }
             }
 
             drain_pending_commands(
                 &command_mailbox,
-                &mut document,
-                &mut active_session,
-                &mut queue,
+                &mut state,
                 &event_mailbox,
                 &cancellation,
-                &mut shutdown,
+                PdfDocumentState::open,
             );
         }
     }
 }
 
-fn drain_pending_commands(
-    command_mailbox: &RenderCommandMailbox,
-    document: &mut Option<PdfDocumentState>,
-    active_session: &mut Option<RenderSessionId>,
-    queue: &mut RenderQueue,
+fn process_next_work<D: RenderWorkerDocument>(
+    state: &mut RenderWorkerState<D>,
     event_mailbox: &RenderEventMailbox,
     cancellation: &Arc<RenderCancellation>,
-    shutdown: &mut bool,
+) -> bool {
+    let Some((job_id, session_id, work)) = state.queue.pop() else {
+        return false;
+    };
+
+    if state.active_session != Some(session_id) || cancellation.is_cancelled(session_id) {
+        return true;
+    }
+
+    match work {
+        RenderWork::Page(request) => {
+            render_page_on_worker(
+                state.document.as_ref(),
+                session_id,
+                job_id,
+                request,
+                event_mailbox,
+                cancellation,
+            );
+        }
+        RenderWork::SpeakerNotes => {
+            extract_speaker_notes_on_worker(
+                state.document.as_ref(),
+                session_id,
+                event_mailbox,
+                cancellation,
+            );
+        }
+    }
+
+    true
+}
+
+fn drain_pending_commands<D: RenderWorkerDocument>(
+    command_mailbox: &RenderCommandMailbox,
+    state: &mut RenderWorkerState<D>,
+    event_mailbox: &RenderEventMailbox,
+    cancellation: &Arc<RenderCancellation>,
+    open_document: fn(PathBuf) -> anyhow::Result<D>,
 ) {
     while let Some(command) = command_mailbox.try_recv() {
-        handle_command(
-            command,
-            document,
-            active_session,
-            queue,
-            event_mailbox,
-            cancellation,
-            shutdown,
-        );
-        if *shutdown {
+        handle_command(command, state, event_mailbox, cancellation, open_document);
+        if state.shutdown {
             break;
         }
     }
 }
 
-fn handle_command(
+fn handle_command<D: RenderWorkerDocument>(
     command: RenderCommand,
-    document: &mut Option<PdfDocumentState>,
-    active_session: &mut Option<RenderSessionId>,
-    queue: &mut RenderQueue,
+    state: &mut RenderWorkerState<D>,
     event_mailbox: &RenderEventMailbox,
     cancellation: &Arc<RenderCancellation>,
-    shutdown: &mut bool,
+    open_document: fn(PathBuf) -> anyhow::Result<D>,
 ) {
     match command {
         RenderCommand::Open { session_id, path } => {
             cancellation.activate(session_id);
-            queue.clear();
-            *active_session = Some(session_id);
-            *document = None;
-            open_document_on_worker(session_id, path, document, event_mailbox);
+            state.queue.clear();
+            state.active_session = Some(session_id);
+            state.document = None;
+            open_document_on_worker(
+                session_id,
+                path,
+                &mut state.document,
+                event_mailbox,
+                open_document,
+            );
         }
         RenderCommand::RenderPage {
             session_id,
             request,
             priority,
         } => {
-            queue.push(session_id, request, priority);
+            state.queue.push(session_id, request, priority);
         }
         RenderCommand::ExtractSpeakerNotes { session_id } => {
-            queue.push_speaker_notes(session_id);
+            state.queue.push_speaker_notes(session_id);
         }
         RenderCommand::Close { session_id } => {
             cancellation.close(session_id);
-            queue.clear_session(session_id);
-            if *active_session == Some(session_id) {
-                *document = None;
-                *active_session = None;
+            state.queue.clear_session(session_id);
+            if state.active_session == Some(session_id) {
+                state.document = None;
+                state.active_session = None;
             }
         }
         RenderCommand::Shutdown => {
             cancellation.shutdown();
-            *shutdown = true;
-            queue.clear();
+            state.shutdown = true;
+            state.queue.clear();
         }
     }
 }
 
-fn open_document_on_worker(
+fn open_document_on_worker<D: RenderWorkerDocument>(
     session_id: RenderSessionId,
     path: PathBuf,
-    document: &mut Option<PdfDocumentState>,
+    document: &mut Option<D>,
     event_mailbox: &RenderEventMailbox,
+    open_document: fn(PathBuf) -> anyhow::Result<D>,
 ) {
-    match PdfDocumentState::open(path) {
+    match open_document(path) {
         Ok(doc) => {
             let title = doc.title();
             let page_count = doc.page_count();
@@ -900,8 +947,8 @@ fn open_document_on_worker(
     }
 }
 
-fn render_page_on_worker(
-    document: Option<&PdfDocumentState>,
+fn render_page_on_worker<D: RenderWorkerDocument>(
+    document: Option<&D>,
     session_id: RenderSessionId,
     job_id: RenderJobId,
     request: RenderRequest,
@@ -909,7 +956,7 @@ fn render_page_on_worker(
     cancellation: &RenderCancellation,
 ) {
     let event = match document {
-        Some(document) => match render_page_pixels(document, request) {
+        Some(document) => match document.render_page_pixels(request) {
             Ok(page) => RenderEvent::PageRendered {
                 session_id,
                 job_id,
@@ -936,8 +983,8 @@ fn render_page_on_worker(
     }
 }
 
-fn extract_speaker_notes_on_worker(
-    document: Option<&PdfDocumentState>,
+fn extract_speaker_notes_on_worker<D: RenderWorkerDocument>(
+    document: Option<&D>,
     session_id: RenderSessionId,
     event_mailbox: &RenderEventMailbox,
     cancellation: &RenderCancellation,
@@ -946,7 +993,8 @@ fn extract_speaker_notes_on_worker(
         return;
     };
 
-    let notes = match document.speaker_notes_cancellable(|| cancellation.is_cancelled(session_id)) {
+    let notes = match document.speaker_notes_cancellable(&|| cancellation.is_cancelled(session_id))
+    {
         Ok(Some(notes)) => notes,
         Ok(None) => return,
         Err(err) => {
@@ -988,6 +1036,121 @@ fn render_page_pixels(
 mod tests {
     use super::*;
     use crate::rendering::RenderPurpose;
+    use anyhow::{bail, Result};
+    use slint::{Rgba8Pixel, SharedPixelBuffer};
+
+    #[derive(Debug)]
+    struct FakeDocument {
+        title: String,
+        page_count: u32,
+        render_fails: bool,
+        notes: FakeNotes,
+    }
+
+    #[derive(Debug)]
+    enum FakeNotes {
+        Loaded(SpeakerNotes),
+        Empty,
+        Fails,
+    }
+
+    impl RenderWorkerDocument for FakeDocument {
+        fn title(&self) -> String {
+            self.title.clone()
+        }
+
+        fn page_count(&self) -> u32 {
+            self.page_count
+        }
+
+        fn render_page_pixels(&self, request: RenderRequest) -> Result<RenderedPagePixels> {
+            if self.render_fails {
+                bail!("fake render failed");
+            }
+
+            let pixels = SharedPixelBuffer::<Rgba8Pixel>::new(request.width as u32, 1);
+            Ok(RenderedPagePixels {
+                estimated_bytes: actual_render_bytes(&pixels),
+                pixels,
+                aspect_ratio: request.width as f32,
+            })
+        }
+
+        fn speaker_notes_cancellable(
+            &self,
+            is_cancelled: &dyn Fn() -> bool,
+        ) -> Result<Option<SpeakerNotes>> {
+            if is_cancelled() {
+                return Ok(None);
+            }
+
+            match &self.notes {
+                FakeNotes::Loaded(notes) => Ok(Some(notes.clone())),
+                FakeNotes::Empty => Ok(None),
+                FakeNotes::Fails => bail!("fake notes failed"),
+            }
+        }
+    }
+
+    fn open_fake_document(path: PathBuf) -> Result<FakeDocument> {
+        match path.to_string_lossy().as_ref() {
+            "fail.pdf" => bail!("fake open failed"),
+            "render-fail.pdf" => Ok(FakeDocument {
+                title: "render-fail.pdf".to_owned(),
+                page_count: 3,
+                render_fails: true,
+                notes: FakeNotes::Empty,
+            }),
+            "notes.pdf" => Ok(FakeDocument {
+                title: "notes.pdf".to_owned(),
+                page_count: 3,
+                render_fails: false,
+                notes: FakeNotes::Loaded(SpeakerNotes::from_page_notes([(
+                    2,
+                    "Presenter note".to_owned(),
+                )])),
+            }),
+            "notes-fail.pdf" => Ok(FakeDocument {
+                title: "notes-fail.pdf".to_owned(),
+                page_count: 3,
+                render_fails: false,
+                notes: FakeNotes::Fails,
+            }),
+            _ => Ok(FakeDocument {
+                title: "deck.pdf".to_owned(),
+                page_count: 3,
+                render_fails: false,
+                notes: FakeNotes::Empty,
+            }),
+        }
+    }
+
+    fn fake_worker_parts() -> (
+        RenderWorkerState<FakeDocument>,
+        RenderEventMailbox,
+        Arc<RenderCancellation>,
+    ) {
+        (
+            RenderWorkerState::default(),
+            RenderEventMailbox::default(),
+            Arc::new(RenderCancellation::default()),
+        )
+    }
+
+    fn handle_fake_command(
+        command: RenderCommand,
+        state: &mut RenderWorkerState<FakeDocument>,
+        event_mailbox: &RenderEventMailbox,
+        cancellation: &Arc<RenderCancellation>,
+    ) {
+        handle_command(
+            command,
+            state,
+            event_mailbox,
+            cancellation,
+            open_fake_document,
+        );
+    }
 
     fn request(page_index: u32, purpose: RenderPurpose) -> RenderRequest {
         RenderRequest {
@@ -1008,6 +1171,12 @@ mod tests {
             } => (session_id, request, priority),
             other => panic!("expected render page command, got {other:?}"),
         }
+    }
+
+    fn drain_single_event(event_mailbox: &RenderEventMailbox) -> RenderEvent {
+        let events = event_mailbox.drain();
+        assert_eq!(events.len(), 1);
+        events.into_iter().next().unwrap()
     }
 
     #[test]
@@ -1277,69 +1446,292 @@ mod tests {
     }
 
     #[test]
+    fn open_command_emits_opened_event_and_sets_active_document() {
+        let session = RenderSessionId(1);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: session,
+                path: PathBuf::from("deck.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert_eq!(state.active_session, Some(session));
+        assert!(state.document.is_some());
+        match drain_single_event(&event_mailbox) {
+            RenderEvent::Opened {
+                session_id,
+                title,
+                page_count,
+                status_text,
+            } => {
+                assert_eq!(session_id, session);
+                assert_eq!(title, "deck.pdf");
+                assert_eq!(page_count, 3);
+                assert_eq!(status_text, "Ready");
+            }
+            other => panic!("expected opened event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn open_command_emits_open_failed_event() {
+        let session = RenderSessionId(1);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: session,
+                path: PathBuf::from("fail.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert_eq!(state.active_session, Some(session));
+        assert!(state.document.is_none());
+        match drain_single_event(&event_mailbox) {
+            RenderEvent::OpenFailed {
+                session_id,
+                message,
+            } => {
+                assert_eq!(session_id, session);
+                assert!(message.contains("fake open failed"));
+            }
+            other => panic!("expected open failed event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn render_work_emits_page_rendered_event() {
+        let session = RenderSessionId(1);
+        let current = request(1, RenderPurpose::CurrentSlide);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: session,
+                path: PathBuf::from("deck.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        event_mailbox.drain();
+        handle_fake_command(
+            RenderCommand::RenderPage {
+                session_id: session,
+                request: current,
+                priority: RenderPriority::BlockingVisible,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert!(process_next_work(&mut state, &event_mailbox, &cancellation));
+        match drain_single_event(&event_mailbox) {
+            RenderEvent::PageRendered {
+                session_id,
+                request,
+                page,
+                ..
+            } => {
+                assert_eq!(session_id, session);
+                assert_eq!(request, current);
+                assert_eq!(page.aspect_ratio, 100.0);
+            }
+            other => panic!("expected page rendered event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn render_work_without_document_emits_page_failed_event() {
+        let session = RenderSessionId(1);
+        let current = request(1, RenderPurpose::CurrentSlide);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+        state.active_session = Some(session);
+        cancellation.activate(session);
+
+        handle_fake_command(
+            RenderCommand::RenderPage {
+                session_id: session,
+                request: current,
+                priority: RenderPriority::BlockingVisible,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert!(process_next_work(&mut state, &event_mailbox, &cancellation));
+        match drain_single_event(&event_mailbox) {
+            RenderEvent::PageFailed {
+                session_id,
+                request,
+                message,
+                ..
+            } => {
+                assert_eq!(session_id, session);
+                assert_eq!(request, current);
+                assert!(message.contains("missing open PDF"));
+            }
+            other => panic!("expected page failed event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stale_render_work_is_dropped_without_event() {
+        let first_session = RenderSessionId(1);
+        let second_session = RenderSessionId(2);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+        state.active_session = Some(second_session);
+        cancellation.activate(second_session);
+
+        state.queue.push(
+            first_session,
+            request(1, RenderPurpose::CurrentSlide),
+            RenderPriority::BlockingVisible,
+        );
+
+        assert!(process_next_work(&mut state, &event_mailbox, &cancellation));
+        assert!(event_mailbox.drain().is_empty());
+    }
+
+    #[test]
+    fn speaker_notes_work_emits_loaded_notes_event() {
+        let session = RenderSessionId(1);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: session,
+                path: PathBuf::from("notes.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        event_mailbox.drain();
+        handle_fake_command(
+            RenderCommand::ExtractSpeakerNotes {
+                session_id: session,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert!(process_next_work(&mut state, &event_mailbox, &cancellation));
+        match drain_single_event(&event_mailbox) {
+            RenderEvent::SpeakerNotesLoaded {
+                session_id,
+                notes,
+                status_text,
+            } => {
+                assert_eq!(session_id, session);
+                assert_eq!(notes.note_for_page_number(2), Some("Presenter note"));
+                assert_eq!(status_text, "Ready");
+            }
+            other => panic!("expected speaker notes event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn speaker_notes_failure_emits_warning_event() {
+        let session = RenderSessionId(1);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: session,
+                path: PathBuf::from("notes-fail.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        event_mailbox.drain();
+        handle_fake_command(
+            RenderCommand::ExtractSpeakerNotes {
+                session_id: session,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert!(process_next_work(&mut state, &event_mailbox, &cancellation));
+        match drain_single_event(&event_mailbox) {
+            RenderEvent::SpeakerNotesLoaded {
+                session_id,
+                notes,
+                status_text,
+            } => {
+                assert_eq!(session_id, session);
+                assert!(notes.is_empty());
+                assert_ne!(status_text, "Ready");
+            }
+            other => panic!("expected speaker notes warning event, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn close_command_clears_active_session_and_matching_jobs() {
         let session = RenderSessionId(1);
-        let mut document = None;
-        let mut active_session = Some(session);
-        let mut queue = RenderQueue::default();
-        let event_mailbox = RenderEventMailbox::default();
-        let cancellation = Arc::new(RenderCancellation::default());
-        let mut shutdown = false;
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+        state.document = Some(open_fake_document(PathBuf::from("deck.pdf")).unwrap());
+        state.active_session = Some(session);
         cancellation.activate(session);
-        queue.push(
+        state.queue.push(
             session,
             request(1, RenderPurpose::CurrentSlide),
             RenderPriority::Warm,
         );
 
-        handle_command(
+        handle_fake_command(
             RenderCommand::Close {
                 session_id: session,
             },
-            &mut document,
-            &mut active_session,
-            &mut queue,
+            &mut state,
             &event_mailbox,
             &cancellation,
-            &mut shutdown,
         );
 
-        assert_eq!(active_session, None);
-        assert!(document.is_none());
-        assert!(queue.is_empty());
+        assert_eq!(state.active_session, None);
+        assert!(state.document.is_none());
+        assert!(state.queue.is_empty());
         assert!(cancellation.is_cancelled(session));
-        assert!(!shutdown);
+        assert!(!state.shutdown);
     }
 
     #[test]
     fn shutdown_command_sets_shutdown_and_clears_queue() {
         let session = RenderSessionId(1);
-        let mut document = None;
-        let mut active_session = Some(session);
-        let mut queue = RenderQueue::default();
-        let event_mailbox = RenderEventMailbox::default();
-        let cancellation = Arc::new(RenderCancellation::default());
-        let mut shutdown = false;
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+        state.active_session = Some(session);
         cancellation.activate(session);
-        queue.push(
+        state.queue.push(
             session,
             request(1, RenderPurpose::CurrentSlide),
             RenderPriority::Warm,
         );
 
-        handle_command(
+        handle_fake_command(
             RenderCommand::Shutdown,
-            &mut document,
-            &mut active_session,
-            &mut queue,
+            &mut state,
             &event_mailbox,
             &cancellation,
-            &mut shutdown,
         );
 
-        assert!(shutdown);
-        assert!(queue.is_empty());
-        assert_eq!(active_session, Some(session));
+        assert!(state.shutdown);
+        assert!(state.queue.is_empty());
+        assert_eq!(state.active_session, Some(session));
         assert!(cancellation.is_cancelled(session));
     }
 }
