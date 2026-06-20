@@ -653,6 +653,12 @@ impl RenderCancellation {
     }
 }
 
+/// Serializes PDFium document access through one render worker.
+///
+/// The UI thread owns this scheduler handle and communicates through command and
+/// event mailboxes. The loaded `PdfDocumentState` remains worker-local so current
+/// slide rendering, next-page previews, thumbnails, preloading, and speaker-note
+/// extraction do not access PDFium concurrently.
 pub struct RenderScheduler {
     command_mailbox: Arc<RenderCommandMailbox>,
     event_mailbox: Arc<RenderEventMailbox>,
@@ -660,6 +666,7 @@ pub struct RenderScheduler {
 }
 
 impl RenderScheduler {
+    /// Starts the single render worker that owns PDFium document access.
     pub fn start() -> Self {
         let command_mailbox = Arc::new(RenderCommandMailbox::default());
         let event_mailbox = Arc::new(RenderEventMailbox::default());
@@ -725,6 +732,8 @@ fn render_worker(
     event_mailbox: Arc<RenderEventMailbox>,
     cancellation: Arc<RenderCancellation>,
 ) {
+    // Keep the PDF document worker-local. Render events carry only metadata,
+    // pixels, and errors back to the UI thread.
     let mut document: Option<PdfDocumentState> = None;
     let mut active_session: Option<RenderSessionId> = None;
     let mut queue = RenderQueue::default();
