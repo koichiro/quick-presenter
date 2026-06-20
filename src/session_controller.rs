@@ -49,6 +49,8 @@ pub fn apply_session_command(
 pub fn begin_open_pdf_state(state: &mut AppState, path: PathBuf) -> RenderSessionId {
     let session_id = state.render_sessions.begin_session();
     state.render_generation = state.render_generation.wrapping_add(1);
+    state.audience_slide.last_good_current = None;
+    state.audience_slide.failed_current_page = None;
     state.pdf = None;
     state.pending_open_path = Some(path);
     state.render_cache.clear();
@@ -74,6 +76,8 @@ pub fn commit_render_opened_state(
     }
 
     state.render_generation = state.render_generation.wrapping_add(1);
+    state.audience_slide.last_good_current = None;
+    state.audience_slide.failed_current_page = None;
     state.render_cache.clear();
     state.presentation = PresentationState::open_document(title, page_count);
     state.notes = notes;
@@ -127,13 +131,16 @@ pub fn commit_page_rendered_state(
         );
     }
 
-    let fit_aspect_ratio = snapshot
-        .as_ref()
-        .filter(|snapshot| {
-            request.purpose == RenderPurpose::CurrentSlide
-                && request.page_index == snapshot.current_index
-        })
-        .map(|_| page.aspect_ratio);
+    let is_visible_current_slide = snapshot.as_ref().filter(|snapshot| {
+        request.purpose == RenderPurpose::CurrentSlide
+            && request.page_index == snapshot.current_index
+    });
+
+    let fit_aspect_ratio = is_visible_current_slide.map(|_| page.aspect_ratio);
+    if is_visible_current_slide.is_some() {
+        state.audience_slide.last_good_current = Some(page);
+        state.audience_slide.failed_current_page = None;
+    }
 
     Some(PageRenderedOutcome {
         snapshot,
@@ -155,7 +162,13 @@ pub fn commit_page_render_failed_state(
         return false;
     }
 
-    if request.purpose == RenderPurpose::CurrentSlide {
+    let is_visible_current_slide = state.presentation.snapshot().is_some_and(|snapshot| {
+        request.purpose == RenderPurpose::CurrentSlide
+            && request.page_index == snapshot.current_index
+    });
+
+    if is_visible_current_slide {
+        state.audience_slide.failed_current_page = Some(request.page_index);
         state.status_text = "Could not render this page. Try another PDF or page.".to_owned();
         true
     } else {
@@ -412,6 +425,103 @@ mod tests {
     }
 
     #[test]
+    fn visible_current_page_render_updates_audience_last_good_slide() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            session_id,
+            "Deck".to_owned(),
+            2,
+            SpeakerNotes::empty(),
+            "Ready".to_owned(),
+        );
+
+        commit_page_rendered_state(
+            &mut state,
+            session_id,
+            current_slide_request(0),
+            rendered_page(4.0 / 3.0),
+            2,
+        )
+        .expect("current session should accept rendered page");
+
+        assert_eq!(
+            state
+                .audience_slide
+                .last_good_current
+                .as_ref()
+                .map(|page| page.aspect_ratio),
+            Some(4.0 / 3.0)
+        );
+        assert_eq!(state.audience_slide.failed_current_page, None);
+    }
+
+    #[test]
+    fn non_visible_current_render_does_not_replace_audience_last_good_slide() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            session_id,
+            "Deck".to_owned(),
+            2,
+            SpeakerNotes::empty(),
+            "Ready".to_owned(),
+        );
+        state.audience_slide.last_good_current = Some(rendered_page(16.0 / 9.0));
+
+        commit_page_rendered_state(
+            &mut state,
+            session_id,
+            current_slide_request(1),
+            rendered_page(4.0 / 3.0),
+            2,
+        )
+        .expect("current session should accept rendered page");
+
+        assert_eq!(
+            state
+                .audience_slide
+                .last_good_current
+                .as_ref()
+                .map(|page| page.aspect_ratio),
+            Some(16.0 / 9.0)
+        );
+    }
+
+    #[test]
+    fn current_page_render_failure_keeps_audience_last_good_slide() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            session_id,
+            "Deck".to_owned(),
+            2,
+            SpeakerNotes::empty(),
+            "Ready".to_owned(),
+        );
+        state.audience_slide.last_good_current = Some(rendered_page(16.0 / 9.0));
+
+        assert!(commit_page_render_failed_state(
+            &mut state,
+            session_id,
+            current_slide_request(0),
+        ));
+
+        assert_eq!(
+            state
+                .audience_slide
+                .last_good_current
+                .as_ref()
+                .map(|page| page.aspect_ratio),
+            Some(16.0 / 9.0)
+        );
+        assert_eq!(state.audience_slide.failed_current_page, Some(0));
+    }
+
+    #[test]
     fn stale_page_render_is_ignored() {
         let mut state = AppState::default();
         let stale_session = begin_open_pdf_state(&mut state, PathBuf::from("old.pdf"));
@@ -432,6 +542,14 @@ mod tests {
     fn current_page_render_failure_updates_status() {
         let mut state = AppState::default();
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            session_id,
+            "Deck".to_owned(),
+            2,
+            SpeakerNotes::empty(),
+            "Ready".to_owned(),
+        );
 
         assert!(commit_page_render_failed_state(
             &mut state,
@@ -443,6 +561,29 @@ mod tests {
             state.status_text,
             "Could not render this page. Try another PDF or page."
         );
+    }
+
+    #[test]
+    fn non_visible_current_page_render_failure_does_not_replace_status() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            session_id,
+            "Deck".to_owned(),
+            2,
+            SpeakerNotes::empty(),
+            "Ready".to_owned(),
+        );
+
+        assert!(!commit_page_render_failed_state(
+            &mut state,
+            session_id,
+            current_slide_request(1),
+        ));
+
+        assert_eq!(state.status_text, "Ready");
+        assert_eq!(state.audience_slide.failed_current_page, None);
     }
 
     #[test]
