@@ -96,6 +96,8 @@ The Cargo package remains `quick-presenter`, while the development executable is
 named `qp`.
 
 Keyboard controls are documented in [docs/KEYBOARD.md](docs/KEYBOARD.md).
+Recent-file privacy behavior is documented in
+[docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Build and Development
 

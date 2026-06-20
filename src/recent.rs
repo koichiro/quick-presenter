@@ -1,4 +1,10 @@
-use std::{env, fs, path::PathBuf};
+use std::{
+    env, fs,
+    fs::OpenOptions,
+    io::Write,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use anyhow::{Context, Result};
 
@@ -59,14 +65,13 @@ impl RecentFileStore {
             return Ok(RecentFiles::new());
         }
 
-        let contents = fs::read_to_string(&self.path)
+        let contents = fs::read(&self.path)
             .with_context(|| format!("failed to read recent files: {}", self.path.display()))?;
-        Ok(RecentFiles::from_paths(
-            contents
-                .lines()
-                .filter(|line| !line.trim().is_empty())
-                .map(PathBuf::from),
-        ))
+        let Ok(contents) = String::from_utf8(contents) else {
+            return Ok(RecentFiles::new());
+        };
+
+        Ok(parse_recent_files(&contents))
     }
 
     pub fn save(&self, recent_files: &RecentFiles) -> Result<()> {
@@ -79,14 +84,110 @@ impl RecentFileStore {
             })?;
         }
 
-        let mut contents = String::new();
-        for path in recent_files.paths() {
-            contents.push_str(&path.to_string_lossy());
-            contents.push('\n');
-        }
-
-        fs::write(&self.path, contents)
+        write_atomic(&self.path, serialize_recent_files(recent_files).as_bytes())
             .with_context(|| format!("failed to write recent files: {}", self.path.display()))
+    }
+}
+
+fn parse_recent_files(contents: &str) -> RecentFiles {
+    RecentFiles::from_paths(
+        contents
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .filter(|line| !line.contains('\0'))
+            .map(PathBuf::from),
+    )
+}
+
+fn serialize_recent_files(recent_files: &RecentFiles) -> String {
+    let mut contents = String::new();
+    for path in recent_files.paths() {
+        contents.push_str(&path.to_string_lossy());
+        contents.push('\n');
+    }
+    contents
+}
+
+fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let temp_path = temporary_sibling_path(path);
+
+    let write_result = (|| -> Result<()> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .with_context(|| format!("failed to create temporary file: {}", temp_path.display()))?;
+        file.write_all(contents)
+            .with_context(|| format!("failed to write temporary file: {}", temp_path.display()))?;
+        file.sync_all()
+            .with_context(|| format!("failed to sync temporary file: {}", temp_path.display()))?;
+        drop(file);
+
+        replace_file(&temp_path, path).with_context(|| {
+            format!(
+                "failed to replace {} with {}",
+                path.display(),
+                temp_path.display()
+            )
+        })?;
+        sync_directory(parent);
+        Ok(())
+    })();
+
+    if write_result.is_err() {
+        let _ = fs::remove_file(&temp_path);
+    }
+
+    write_result
+}
+
+fn temporary_sibling_path(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("recent-files");
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    let temp_name = format!(".{file_name}.{}.{}.tmp", std::process::id(), unique);
+
+    path.with_file_name(temp_name)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::rename(source, destination)
+}
+
+#[cfg(target_os = "windows")]
+fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+    };
+
+    let source: Vec<u16> = source.as_os_str().encode_wide().chain([0]).collect();
+    let destination: Vec<u16> = destination.as_os_str().encode_wide().chain([0]).collect();
+    let result = unsafe {
+        MoveFileExW(
+            source.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+fn sync_directory(path: &Path) {
+    if let Ok(directory) = fs::File::open(path) {
+        let _ = directory.sync_all();
     }
 }
 
@@ -191,11 +292,33 @@ mod tests {
     }
 
     #[test]
+    fn parser_ignores_empty_duplicate_extra_and_corrupt_lines() {
+        let recent = parse_recent_files(
+            "a.pdf\n\nb.pdf\na.pdf\nbad\0path.pdf\nc.pdf\nd.pdf\ne.pdf\nf.pdf\n",
+        );
+
+        assert_eq!(
+            recent.paths(),
+            &[
+                PathBuf::from("a.pdf"),
+                PathBuf::from("b.pdf"),
+                PathBuf::from("c.pdf"),
+                PathBuf::from("d.pdf"),
+                PathBuf::from("e.pdf")
+            ]
+        );
+    }
+
+    #[test]
+    fn serializer_writes_only_paths() {
+        let recent = RecentFiles::from_paths([PathBuf::from("a.pdf"), PathBuf::from("b.pdf")]);
+
+        assert_eq!(serialize_recent_files(&recent), "a.pdf\nb.pdf\n");
+    }
+
+    #[test]
     fn store_round_trips_recent_files() {
-        let path = env::temp_dir().join(format!(
-            "quick-presenter-recent-test-{}.txt",
-            std::process::id()
-        ));
+        let path = temp_recent_path("round-trip");
         let _ = fs::remove_file(&path);
         let store = RecentFileStore::new(path.clone());
         let recent = RecentFiles::from_paths([PathBuf::from("a.pdf"), PathBuf::from("b.pdf")]);
@@ -209,13 +332,69 @@ mod tests {
 
     #[test]
     fn missing_store_file_loads_empty_recent_files() {
-        let path = env::temp_dir().join(format!(
-            "quick-presenter-missing-recent-test-{}.txt",
-            std::process::id()
-        ));
+        let path = temp_recent_path("missing");
         let _ = fs::remove_file(&path);
         let store = RecentFileStore::new(path);
 
         assert!(store.load().unwrap().is_empty());
+    }
+
+    #[test]
+    fn invalid_utf8_store_file_loads_empty_recent_files() {
+        let path = temp_recent_path("invalid-utf8");
+        fs::write(&path, [0xff, 0xfe, b'\n']).unwrap();
+        let store = RecentFileStore::new(path.clone());
+
+        assert!(store.load().unwrap().is_empty());
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn saving_overwrites_existing_file_without_temp_file() {
+        let path = temp_recent_path("overwrite");
+        fs::write(&path, "old.pdf\n").unwrap();
+        let store = RecentFileStore::new(path.clone());
+        let recent = RecentFiles::from_paths([PathBuf::from("new.pdf")]);
+
+        store.save(&recent).unwrap();
+
+        assert_eq!(store.load().unwrap(), recent);
+        assert!(temporary_files_for(&path).is_empty());
+
+        let _ = fs::remove_file(path);
+    }
+
+    fn temp_recent_path(label: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        env::temp_dir().join(format!(
+            "quick-presenter-{label}-{}-{unique}.txt",
+            std::process::id()
+        ))
+    }
+
+    fn temporary_files_for(path: &Path) -> Vec<PathBuf> {
+        let Some(parent) = path.parent() else {
+            return Vec::new();
+        };
+        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+            return Vec::new();
+        };
+        let prefix = format!(".{file_name}.");
+
+        fs::read_dir(parent)
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .map(|name| name.starts_with(&prefix) && name.ends_with(".tmp"))
+                    .unwrap_or(false)
+            })
+            .collect()
     }
 }
