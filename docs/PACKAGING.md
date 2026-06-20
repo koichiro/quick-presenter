@@ -191,7 +191,10 @@ scripts/create_macos_dmg.sh \
 `scripts/sign_macos_app.sh` does not contain certificate names, passwords, or
 notarization credentials. It signs the Mach-O files inside the app bundle first,
 including the bundled PDFium dynamic library, then signs `Quick Presenter.app`
-with hardened runtime and a timestamp.
+with hardened runtime and a timestamp. Signature verification must run in a
+normal macOS user session that can access the relevant Keychain and trust
+settings; restricted sandboxes can report false negatives even when Gatekeeper
+accepts the notarized app.
 
 The signing identity can also be passed as the second argument:
 
@@ -217,6 +220,7 @@ Then create, sign, notarize, staple, and validate the DMG:
 ```sh
 export MACOS_SIGNING_IDENTITY="Developer ID Application: Example Name (TEAMID)"
 export NOTARYTOOL_KEYCHAIN_PROFILE="quick-presenter-notary"
+export QUICK_PRESENTER_DMG_SMOKE_PDF="$PWD/tests/fixtures/marp-speaker-notes.pdf"
 
 scripts/notarize_macos_dmg.sh \
   "/tmp/quick-presenter-macos/Quick Presenter.app" \
@@ -227,6 +231,17 @@ scripts/notarize_macos_dmg.sh \
 `scripts/sign_macos_app.sh`. It creates the DMG, signs the DMG, submits it with
 `xcrun notarytool submit --wait`, staples the notarization ticket, validates the
 ticket, and runs a Gatekeeper assessment on the DMG.
+
+After stapling, the script also mounts the final DMG and validates the packaged
+payload. It verifies `Quick Presenter.app`, `Contents/MacOS/qp`, and the bundled
+PDFium dylib with `codesign --verify`, runs a Gatekeeper execution assessment on
+the mounted app, and runs a smoke-open check when `QUICK_PRESENTER_DMG_SMOKE_PDF`
+points to a local PDF. This catches cases where the DMG itself is notarized but
+the app payload was damaged during staging.
+
+The DMG staging path uses `ditto` rather than `cp -R` so signed app bundle
+metadata, extended attributes, and resource forks are preserved while the
+distribution image is assembled.
 
 The `build-binaries.yml` workflow stages the `.app` inside the macOS artifact
 and validates:

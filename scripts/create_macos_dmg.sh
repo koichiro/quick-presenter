@@ -15,10 +15,12 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-if ! command -v hdiutil >/dev/null 2>&1; then
-  echo "Missing required macOS tool: hdiutil" >&2
-  exit 1
-fi
+for tool in ditto hdiutil; do
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    echo "Missing required macOS tool: $tool" >&2
+    exit 1
+  fi
+done
 
 if [[ ! -d "$app_bundle" ]]; then
   echo "Missing app bundle: $app_bundle" >&2
@@ -49,7 +51,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cp -R "$app_bundle" "$staging_dir/"
+ditto "$app_bundle" "$staging_dir/$(basename "$app_bundle")"
 ln -s /Applications "$staging_dir/Applications"
 
 rm -f "$output_dmg"
