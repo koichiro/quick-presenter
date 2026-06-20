@@ -145,7 +145,7 @@ component KeyboardBindingsPanel inherits Rectangle {
     }
 
     Text {
-        text: "Home";
+        text: "Home Ctrl+A";
         x: 83px;
         y: 88px;
         width: parent.width - 91px;
@@ -169,7 +169,7 @@ component KeyboardBindingsPanel inherits Rectangle {
     }
 
     Text {
-        text: "End";
+        text: "End Ctrl+E";
         x: 83px;
         y: 108px;
         width: parent.width - 91px;
@@ -599,7 +599,21 @@ export component PresenterWindow inherits Window {
         }
 
         KeyBinding {
+            keys: @keys(Control + A);
+            activated => {
+                root.keyboard-first-page();
+            }
+        }
+
+        KeyBinding {
             keys: @keys(End);
+            activated => {
+                root.keyboard-last-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(Control + E);
             activated => {
                 root.keyboard-last-page();
             }
@@ -1039,7 +1053,21 @@ export component SlideWindow inherits Window {
         }
 
         KeyBinding {
+            keys: @keys(Control + A);
+            activated => {
+                root.keyboard-first-page();
+            }
+        }
+
+        KeyBinding {
             keys: @keys(End);
+            activated => {
+                root.keyboard-last-page();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(Control + E);
             activated => {
                 root.keyboard-last-page();
             }

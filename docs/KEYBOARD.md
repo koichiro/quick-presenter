@@ -9,14 +9,15 @@ the presenter and slide windows together.
 
 - Next page: `Space`, `Return`, `Right Arrow`, `Down Arrow`, `Page Down`
 - Previous page: `Left Arrow`, `Up Arrow`, `Page Up`, `Backspace`
-- First page: `Home`
-- Last page: `End`
+- First page: `Home`, `Ctrl+A`
+- Last page: `End`, `Ctrl+E`
 
 Navigation is clamped by the presentation state. Pressing a next key on the last
 page or a previous key on the first page leaves the current page unchanged.
 First-page and last-page jumps use the same shared presentation command path as
 normal next/previous navigation, so the presenter and slide windows stay
-synchronized.
+synchronized. `Ctrl+A` and `Ctrl+E` provide Emacs/readline-style alternatives
+for keyboards where `Home` and `End` are harder to reach.
 
 ## Fullscreen
 
