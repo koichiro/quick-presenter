@@ -9,7 +9,9 @@ use crate::{
     errors::PresenterMessage,
     presentation::PageSnapshot,
     render_controller::{CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH},
-    rendering::{RenderCache, RenderPurpose, RenderRequest, RenderedPage},
+    rendering::{
+        thumbnail_window_indices, RenderCache, RenderPurpose, RenderRequest, RenderedPage,
+    },
     window_controller::AppWindowRefs,
     PresenterWindow, ThumbnailItem,
 };
@@ -77,11 +79,16 @@ pub fn apply_snapshot_to_windows(
         presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
         presenter.set_status_text(presenter_status_text_for_snapshot(state, snapshot).into());
-        presenter.set_current_page_index(presenter_page_index(snapshot.current_index));
+        presenter.set_current_page_index(thumbnail_current_row_index(
+            snapshot.total_pages,
+            snapshot.current_index,
+            crate::THUMBNAIL_CACHE_RADIUS,
+        ));
         presenter.set_thumbnails(thumbnail_model(
             &state.thumbnails,
             &state.render_cache,
             snapshot.current_index,
+            crate::THUMBNAIL_CACHE_RADIUS,
         ));
 
         let current_note = state.notes.note_for_page_index(snapshot.current_index);
@@ -154,9 +161,11 @@ pub fn thumbnail_model(
     thumbnails: &ThumbnailState,
     cache: &RenderCache,
     current_index: u32,
+    radius: u32,
 ) -> ModelRc<ThumbnailItem> {
     let placeholder = thumbnail_placeholder_image();
-    let items = (0..thumbnails.total_pages)
+    let items = thumbnail_window_indices(current_index, thumbnails.total_pages, radius)
+        .into_iter()
         .map(|index| {
             let image = cache
                 .peek(RenderRequest {
@@ -178,8 +187,12 @@ pub fn thumbnail_model(
     ModelRc::new(Rc::new(VecModel::from(items)))
 }
 
-pub fn presenter_page_index(page_index: u32) -> i32 {
-    i32::try_from(page_index).unwrap_or(i32::MAX)
+pub fn thumbnail_current_row_index(total_pages: u32, current_index: u32, radius: u32) -> i32 {
+    thumbnail_window_indices(current_index, total_pages, radius)
+        .iter()
+        .position(|index| *index == current_index)
+        .and_then(|index| i32::try_from(index).ok())
+        .unwrap_or(0)
 }
 
 pub fn placeholder_slide() -> RenderedPage {
@@ -243,6 +256,7 @@ pub fn recent_file_menu_labels(labels: Vec<String>) -> ModelRc<SharedString> {
 mod tests {
     use super::*;
     use crate::presentation::PresentationState;
+    use slint::Model;
 
     fn rendered_page(aspect_ratio: f32) -> RenderedPage {
         RenderedPage {
@@ -250,6 +264,19 @@ mod tests {
             aspect_ratio,
             estimated_bytes: 64,
         }
+    }
+
+    fn thumbnail_items(total_pages: u32, current_index: u32, radius: u32) -> Vec<ThumbnailItem> {
+        let model = thumbnail_model(
+            &ThumbnailState { total_pages },
+            &RenderCache::default(),
+            current_index,
+            radius,
+        );
+
+        (0..model.row_count())
+            .map(|row| model.row_data(row).expect("thumbnail row should exist"))
+            .collect()
     }
 
     #[test]
@@ -298,5 +325,55 @@ mod tests {
             presenter_status_text_for_snapshot(&state, &snapshot),
             "Could not render this page. Try another PDF or page."
         );
+    }
+
+    #[test]
+    fn thumbnail_model_uses_nearby_window_for_large_documents() {
+        let items = thumbnail_items(10_000, 5_000, 8);
+
+        assert_eq!(items.len(), 17);
+        assert_eq!(items.first().unwrap().page_index, 4_992);
+        assert_eq!(items.last().unwrap().page_index, 5_008);
+    }
+
+    #[test]
+    fn thumbnail_model_clamps_window_at_document_edges() {
+        let first_page_items = thumbnail_items(10, 0, 3);
+        let last_page_items = thumbnail_items(10, 9, 3);
+
+        assert_eq!(
+            first_page_items
+                .iter()
+                .map(|item| item.page_index)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2, 3]
+        );
+        assert_eq!(
+            last_page_items
+                .iter()
+                .map(|item| item.page_index)
+                .collect::<Vec<_>>(),
+            vec![6, 7, 8, 9]
+        );
+    }
+
+    #[test]
+    fn thumbnail_model_marks_only_current_page() {
+        let items = thumbnail_items(10_000, 5_000, 8);
+
+        let current_items = items
+            .iter()
+            .filter(|item| item.is_current)
+            .map(|item| (item.page_index, item.page_label.to_string()))
+            .collect::<Vec<_>>();
+
+        assert_eq!(current_items, vec![(5_000, "5001".to_owned())]);
+    }
+
+    #[test]
+    fn thumbnail_current_row_index_uses_window_relative_position() {
+        assert_eq!(thumbnail_current_row_index(10_000, 5_000, 8), 8);
+        assert_eq!(thumbnail_current_row_index(10, 0, 3), 0);
+        assert_eq!(thumbnail_current_row_index(10, 9, 3), 3);
     }
 }
