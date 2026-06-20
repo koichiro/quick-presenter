@@ -45,6 +45,7 @@ Slint 側にビジネスロジックを寄せず、PDF の状態、ページ番�
 
 - 将来的な OSS 公開を前提に、GitHub リポジトリに残る文書、Issue、PR、コミットメッセージ、ソースコードコメント、UI 以外の開発者向け文字列は原則として英語で記述する。
 - GitHub への Issue、PR、コメントなどの投稿や編集では、基本的に本文を一時ファイルに作成してから `--body-file` や同等の方法で渡す。シェルの引用やコマンド置換による本文破損を避けるため、長文を直接コマンドライン引数に埋め込まない。
+- Pull requests created by Codex should use the `codex` label instead of adding `[codex]` to the PR title.
 - ユーザーとの対話は日本語で行う。
 - 既存の日本語ドキュメントは必要に応じて段階的に英語へ移行する。新規に追加するリポジトリ内のテキストは英語を優先する。
 - Rust 側は `cargo fmt` と `cargo check` が通る状態を保つ。
