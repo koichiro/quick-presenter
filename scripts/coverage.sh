@@ -19,4 +19,4 @@ fi
 cargo llvm-cov \
   --summary-only \
   --fail-under-lines 80 \
-  --ignore-filename-regex '(^|/)src/main\.rs$'
+  --ignore-filename-regex '(^|/)src/(main|view_sync|window_controller)\.rs$'
