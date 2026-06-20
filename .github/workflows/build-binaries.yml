@@ -3,9 +3,26 @@ name: Build Binaries
 on:
   workflow_dispatch:
   pull_request:
+    paths:
+      - '.github/workflows/build-binaries.yml'
+      - 'scripts/build_*'
+      - 'scripts/stage_*'
+      - 'scripts/sign_*'
+      - 'scripts/create_macos_dmg.sh'
+      - 'scripts/notarize_macos_dmg.sh'
+      - 'scripts/fetch_pdfium.py'
+      - 'scripts/generate_icons.py'
+      - 'packaging/**'
+      - 'assets/icons/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:

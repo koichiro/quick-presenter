@@ -8,6 +8,24 @@ Quick Presenter only opens PDF slide decks. It is not a slide editor and does
 not import Keynote, PowerPoint, Google Slides, Marp, or Beamer source files
 directly. Export the final deck to PDF before presenting.
 
+## Release Validation
+
+Routine pull requests are validated by the lightweight `CI` workflow. The full
+`Build Binaries` workflow is release/package validation and does not run for
+every source-only pull request.
+
+Before publishing a release:
+
+1. Confirm `CI` passes on the release branch.
+2. Run `Build Binaries` manually with `workflow_dispatch`, or push a release
+   tag matching `v*`.
+3. Confirm the Linux, macOS, and Windows artifacts are uploaded and their package
+   smoke tests pass.
+
+`Build Binaries` still runs automatically for pull requests that change
+packaging-sensitive files, such as packaging scripts, installer metadata,
+icons, or Cargo dependency metadata.
+
 ## Supported Release Artifacts
 
 Use the artifact that matches your operating system:
