@@ -21,6 +21,8 @@ Environment:
                                the DMG when IDENTITY is omitted.
   NOTARYTOOL_KEYCHAIN_PROFILE  notarytool keychain profile created with
                                xcrun notarytool store-credentials.
+  QUICK_PRESENTER_DMG_SMOKE_PDF
+                               Optional PDF used for a mounted-DMG smoke test.
 
 Example:
   export MACOS_SIGNING_IDENTITY="Developer ID Application: Example (TEAMID)"
@@ -57,7 +59,7 @@ if [[ -z "$keychain_profile" ]]; then
   exit 2
 fi
 
-for tool in codesign hdiutil spctl xcrun; do
+for tool in codesign hdiutil mktemp spctl xcrun; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "Missing required macOS tool: $tool" >&2
     exit 1
@@ -92,5 +94,49 @@ xcrun stapler staple "$output_dmg"
 xcrun stapler validate "$output_dmg"
 
 spctl --assess --type open --context context:primary-signature --verbose=4 "$output_dmg"
+
+mount_dir="$(mktemp -d "${TMPDIR:-/tmp}/quick-presenter-notarized-dmg.XXXXXX")"
+cleanup_mount() {
+  hdiutil detach "$mount_dir" -quiet >/dev/null 2>&1 || true
+  rmdir "$mount_dir" >/dev/null 2>&1 || true
+}
+trap cleanup_mount EXIT
+
+echo "Validating mounted DMG payload"
+hdiutil attach "$output_dmg" -nobrowse -readonly -mountpoint "$mount_dir" >/dev/null
+
+mounted_app="$mount_dir/Quick Presenter.app"
+mounted_executable="$mounted_app/Contents/MacOS/qp"
+mounted_pdfium="$mounted_app/Contents/Resources/pdfium/lib/libpdfium.dylib"
+
+if [[ ! -d "$mounted_app" ]]; then
+  echo "Missing app bundle in mounted DMG: $mounted_app" >&2
+  exit 1
+fi
+
+if [[ ! -x "$mounted_executable" ]]; then
+  echo "Missing executable in mounted DMG: $mounted_executable" >&2
+  exit 1
+fi
+
+if [[ ! -s "$mounted_pdfium" ]]; then
+  echo "Missing bundled PDFium dylib in mounted DMG: $mounted_pdfium" >&2
+  exit 1
+fi
+
+codesign --verify --deep --strict --verbose=4 "$mounted_app"
+codesign --verify --strict --verbose=4 "$mounted_executable"
+codesign --verify --strict --verbose=4 "$mounted_pdfium"
+spctl --assess --type execute --verbose=4 "$mounted_app"
+
+if [[ -n "${QUICK_PRESENTER_DMG_SMOKE_PDF:-}" ]]; then
+  if [[ ! -s "$QUICK_PRESENTER_DMG_SMOKE_PDF" ]]; then
+    echo "Missing smoke-test PDF: $QUICK_PRESENTER_DMG_SMOKE_PDF" >&2
+    exit 1
+  fi
+
+  env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE \
+    "$mounted_executable" --smoke-open-pdf "$QUICK_PRESENTER_DMG_SMOKE_PDF"
+fi
 
 echo "Created signed, notarized, and stapled DMG: $output_dmg"
