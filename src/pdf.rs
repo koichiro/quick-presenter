@@ -88,9 +88,21 @@ impl PdfDocumentState {
     }
 
     pub fn speaker_notes(&self) -> Result<SpeakerNotes> {
+        self.speaker_notes_cancellable(|| false)?
+            .context("speaker notes extraction was cancelled")
+    }
+
+    pub fn speaker_notes_cancellable(
+        &self,
+        is_cancelled: impl Fn() -> bool,
+    ) -> Result<Option<SpeakerNotes>> {
         let mut notes = Vec::new();
 
         for page_index in 0..self.page_count {
+            if is_cancelled() {
+                return Ok(None);
+            }
+
             let page = self
                 .document
                 .pages()
@@ -98,6 +110,10 @@ impl PdfDocumentState {
                 .with_context(|| format!("failed to load page {}", page_index + 1))?;
 
             for annotation in page.annotations().iter() {
+                if is_cancelled() {
+                    return Ok(None);
+                }
+
                 if annotation.annotation_type() != PdfPageAnnotationType::Text {
                     continue;
                 }
@@ -110,7 +126,7 @@ impl PdfDocumentState {
             }
         }
 
-        Ok(SpeakerNotes::from_page_notes(notes))
+        Ok(Some(SpeakerNotes::from_page_notes(notes)))
     }
 }
 
@@ -457,6 +473,24 @@ mod tests {
             notes.note_for_page_number(3),
             Some("\u{65e5}\u{672c}\u{8a9e}\u{306e}\u{30ce}\u{30fc}\u{30c8}")
         );
+    }
+
+    #[test]
+    fn pdf_document_state_can_cancel_speaker_notes_extraction() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+
+        if !local_pdfium_available() {
+            return;
+        }
+
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/marp-speaker-notes.pdf");
+        let document = PdfDocumentState::open(path).expect("sample PDF should open");
+        let notes = document
+            .speaker_notes_cancellable(|| true)
+            .expect("cancelled speaker notes extraction should not fail");
+
+        assert_eq!(notes, None);
     }
 
     #[test]

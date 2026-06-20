@@ -1,6 +1,10 @@
 use std::{collections::HashSet, path::PathBuf};
 use std::{
     sync::mpsc::{self, Receiver, Sender},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
     thread,
 };
 
@@ -36,6 +40,9 @@ pub enum RenderCommand {
         request: RenderRequest,
         priority: RenderPriority,
     },
+    ExtractSpeakerNotes {
+        session_id: RenderSessionId,
+    },
     Close {
         session_id: RenderSessionId,
     },
@@ -48,6 +55,10 @@ pub enum RenderEvent {
         session_id: RenderSessionId,
         title: String,
         page_count: u32,
+        status_text: String,
+    },
+    SpeakerNotesLoaded {
+        session_id: RenderSessionId,
         notes: SpeakerNotes,
         status_text: String,
     },
@@ -93,13 +104,24 @@ impl RenderSessionTracker {
 }
 
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
-struct QueueKey {
-    session_id: RenderSessionId,
-    request: RenderRequest,
+enum QueueKey {
+    Page {
+        session_id: RenderSessionId,
+        request: RenderRequest,
+    },
+    SpeakerNotes {
+        session_id: RenderSessionId,
+    },
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-struct QueuedRender {
+enum RenderWork {
+    Page(RenderRequest),
+    SpeakerNotes,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+struct QueuedWork {
     key: QueueKey,
     job_id: RenderJobId,
     priority: RenderPriority,
@@ -111,7 +133,7 @@ pub struct RenderQueue {
     next_job: u64,
     next_sequence: u64,
     queued_keys: HashSet<QueueKey>,
-    items: Vec<QueuedRender>,
+    items: Vec<QueuedWork>,
 }
 
 impl RenderQueue {
@@ -121,7 +143,7 @@ impl RenderQueue {
         request: RenderRequest,
         priority: RenderPriority,
     ) -> Option<RenderJobId> {
-        let key = QueueKey {
+        let key = QueueKey::Page {
             session_id,
             request,
         };
@@ -135,7 +157,7 @@ impl RenderQueue {
         self.next_sequence = self.next_sequence.wrapping_add(1);
         let job_id = RenderJobId(self.next_job);
         self.queued_keys.insert(key);
-        self.items.push(QueuedRender {
+        self.items.push(QueuedWork {
             key,
             job_id,
             priority,
@@ -145,16 +167,39 @@ impl RenderQueue {
         Some(job_id)
     }
 
-    pub fn pop(&mut self) -> Option<(RenderJobId, RenderSessionId, RenderRequest)> {
+    pub fn push_speaker_notes(&mut self, session_id: RenderSessionId) -> Option<RenderJobId> {
+        let key = QueueKey::SpeakerNotes { session_id };
+
+        if self.queued_keys.contains(&key) {
+            return None;
+        }
+
+        self.next_job = self.next_job.wrapping_add(1);
+        self.next_sequence = self.next_sequence.wrapping_add(1);
+        let job_id = RenderJobId(self.next_job);
+        self.queued_keys.insert(key);
+        self.items.push(QueuedWork {
+            key,
+            job_id,
+            priority: RenderPriority::Background,
+            sequence: self.next_sequence,
+        });
+
+        Some(job_id)
+    }
+
+    fn pop(&mut self) -> Option<(RenderJobId, RenderSessionId, RenderWork)> {
         let index = self.next_item_index()?;
         let item = self.items.swap_remove(index);
         self.queued_keys.remove(&item.key);
-        Some((item.job_id, item.key.session_id, item.key.request))
+        Some((item.job_id, item.key.session_id(), item.key.work()))
     }
 
     pub fn clear_session(&mut self, session_id: RenderSessionId) {
-        self.items.retain(|item| item.key.session_id != session_id);
-        self.queued_keys.retain(|key| key.session_id != session_id);
+        self.items
+            .retain(|item| item.key.session_id() != session_id);
+        self.queued_keys
+            .retain(|key| key.session_id() != session_id);
     }
 
     pub fn clear(&mut self) {
@@ -181,24 +226,75 @@ impl RenderQueue {
     }
 }
 
+impl QueueKey {
+    fn session_id(self) -> RenderSessionId {
+        match self {
+            Self::Page { session_id, .. } | Self::SpeakerNotes { session_id } => session_id,
+        }
+    }
+
+    fn work(self) -> RenderWork {
+        match self {
+            Self::Page { request, .. } => RenderWork::Page(request),
+            Self::SpeakerNotes { .. } => RenderWork::SpeakerNotes,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct RenderCancellation {
+    active_session: AtomicU64,
+    shutdown: AtomicBool,
+}
+
+impl RenderCancellation {
+    fn activate(&self, session_id: RenderSessionId) {
+        self.active_session.store(session_id.0, Ordering::Release);
+    }
+
+    fn close(&self, session_id: RenderSessionId) {
+        let _ = self.active_session.compare_exchange(
+            session_id.0,
+            0,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+
+    fn shutdown(&self) {
+        self.shutdown.store(true, Ordering::Release);
+        self.active_session.store(0, Ordering::Release);
+    }
+
+    fn is_cancelled(&self, session_id: RenderSessionId) -> bool {
+        self.shutdown.load(Ordering::Acquire)
+            || self.active_session.load(Ordering::Acquire) != session_id.0
+    }
+}
+
 pub struct RenderScheduler {
     command_sender: Sender<RenderCommand>,
     event_receiver: Receiver<RenderEvent>,
+    cancellation: Arc<RenderCancellation>,
 }
 
 impl RenderScheduler {
     pub fn start() -> Self {
         let (command_sender, command_receiver) = mpsc::channel();
         let (event_sender, event_receiver) = mpsc::channel();
-        thread::spawn(move || render_worker(command_receiver, event_sender));
+        let cancellation = Arc::new(RenderCancellation::default());
+        let worker_cancellation = Arc::clone(&cancellation);
+        thread::spawn(move || render_worker(command_receiver, event_sender, worker_cancellation));
 
         Self {
             command_sender,
             event_receiver,
+            cancellation,
         }
     }
 
     pub fn open(&self, session_id: RenderSessionId, path: PathBuf) {
+        self.cancellation.activate(session_id);
         self.send(RenderCommand::Open { session_id, path });
     }
 
@@ -213,6 +309,10 @@ impl RenderScheduler {
             request,
             priority,
         });
+    }
+
+    pub fn extract_speaker_notes(&self, session_id: RenderSessionId) {
+        self.send(RenderCommand::ExtractSpeakerNotes { session_id });
     }
 
     pub fn drain_events(&self) -> Vec<RenderEvent> {
@@ -230,11 +330,16 @@ impl RenderScheduler {
 
 impl Drop for RenderScheduler {
     fn drop(&mut self) {
+        self.cancellation.shutdown();
         let _ = self.command_sender.send(RenderCommand::Shutdown);
     }
 }
 
-fn render_worker(command_receiver: Receiver<RenderCommand>, event_sender: Sender<RenderEvent>) {
+fn render_worker(
+    command_receiver: Receiver<RenderCommand>,
+    event_sender: Sender<RenderEvent>,
+    cancellation: Arc<RenderCancellation>,
+) {
     let mut document: Option<PdfDocumentState> = None;
     let mut active_session: Option<RenderSessionId> = None;
     let mut queue = RenderQueue::default();
@@ -249,6 +354,7 @@ fn render_worker(command_receiver: Receiver<RenderCommand>, event_sender: Sender
                     &mut active_session,
                     &mut queue,
                     &event_sender,
+                    &cancellation,
                     &mut shutdown,
                 );
             }
@@ -261,43 +367,37 @@ fn render_worker(command_receiver: Receiver<RenderCommand>, event_sender: Sender
             &mut active_session,
             &mut queue,
             &event_sender,
+            &cancellation,
             &mut shutdown,
         );
 
         while !shutdown {
-            let Some((job_id, session_id, request)) = queue.pop() else {
+            let Some((job_id, session_id, work)) = queue.pop() else {
                 break;
             };
 
-            if active_session != Some(session_id) {
+            if active_session != Some(session_id) || cancellation.is_cancelled(session_id) {
                 continue;
             }
 
-            match document.as_ref() {
-                Some(document) => {
-                    let event = match render_page_pixels(document, request) {
-                        Ok(page) => RenderEvent::PageRendered {
-                            session_id,
-                            job_id,
-                            request,
-                            page,
-                        },
-                        Err(err) => RenderEvent::PageFailed {
-                            session_id,
-                            job_id,
-                            request,
-                            message: err.to_string(),
-                        },
-                    };
-                    let _ = event_sender.send(event);
-                }
-                None => {
-                    let _ = event_sender.send(RenderEvent::PageFailed {
+            match work {
+                RenderWork::Page(request) => {
+                    render_page_on_worker(
+                        document.as_ref(),
                         session_id,
                         job_id,
                         request,
-                        message: "missing open PDF for render request".to_owned(),
-                    });
+                        &event_sender,
+                        &cancellation,
+                    );
+                }
+                RenderWork::SpeakerNotes => {
+                    extract_speaker_notes_on_worker(
+                        document.as_ref(),
+                        session_id,
+                        &event_sender,
+                        &cancellation,
+                    );
                 }
             }
 
@@ -307,6 +407,7 @@ fn render_worker(command_receiver: Receiver<RenderCommand>, event_sender: Sender
                 &mut active_session,
                 &mut queue,
                 &event_sender,
+                &cancellation,
                 &mut shutdown,
             );
         }
@@ -319,6 +420,7 @@ fn drain_pending_commands(
     active_session: &mut Option<RenderSessionId>,
     queue: &mut RenderQueue,
     event_sender: &Sender<RenderEvent>,
+    cancellation: &Arc<RenderCancellation>,
     shutdown: &mut bool,
 ) {
     while let Ok(command) = command_receiver.try_recv() {
@@ -328,6 +430,7 @@ fn drain_pending_commands(
             active_session,
             queue,
             event_sender,
+            cancellation,
             shutdown,
         );
         if *shutdown {
@@ -342,10 +445,12 @@ fn handle_command(
     active_session: &mut Option<RenderSessionId>,
     queue: &mut RenderQueue,
     event_sender: &Sender<RenderEvent>,
+    cancellation: &Arc<RenderCancellation>,
     shutdown: &mut bool,
 ) {
     match command {
         RenderCommand::Open { session_id, path } => {
+            cancellation.activate(session_id);
             queue.clear();
             *active_session = Some(session_id);
             *document = None;
@@ -358,7 +463,11 @@ fn handle_command(
         } => {
             queue.push(session_id, request, priority);
         }
+        RenderCommand::ExtractSpeakerNotes { session_id } => {
+            queue.push_speaker_notes(session_id);
+        }
         RenderCommand::Close { session_id } => {
+            cancellation.close(session_id);
             queue.clear_session(session_id);
             if *active_session == Some(session_id) {
                 *document = None;
@@ -366,6 +475,7 @@ fn handle_command(
             }
         }
         RenderCommand::Shutdown => {
+            cancellation.shutdown();
             *shutdown = true;
             queue.clear();
         }
@@ -380,13 +490,6 @@ fn open_document_on_worker(
 ) {
     match PdfDocumentState::open(path) {
         Ok(doc) => {
-            let (notes, status_text) = match doc.speaker_notes() {
-                Ok(notes) => (notes, "Ready".to_owned()),
-                Err(err) => (
-                    SpeakerNotes::empty(),
-                    speaker_notes_warning(&err).text().to_owned(),
-                ),
-            };
             let title = doc.title();
             let page_count = doc.page_count();
             *document = Some(doc);
@@ -394,8 +497,7 @@ fn open_document_on_worker(
                 session_id,
                 title,
                 page_count,
-                notes,
-                status_text,
+                status_text: "Ready".to_owned(),
             });
         }
         Err(err) => {
@@ -404,6 +506,76 @@ fn open_document_on_worker(
                 message: err.to_string(),
             });
         }
+    }
+}
+
+fn render_page_on_worker(
+    document: Option<&PdfDocumentState>,
+    session_id: RenderSessionId,
+    job_id: RenderJobId,
+    request: RenderRequest,
+    event_sender: &Sender<RenderEvent>,
+    cancellation: &RenderCancellation,
+) {
+    let event = match document {
+        Some(document) => match render_page_pixels(document, request) {
+            Ok(page) => RenderEvent::PageRendered {
+                session_id,
+                job_id,
+                request,
+                page,
+            },
+            Err(err) => RenderEvent::PageFailed {
+                session_id,
+                job_id,
+                request,
+                message: err.to_string(),
+            },
+        },
+        None => RenderEvent::PageFailed {
+            session_id,
+            job_id,
+            request,
+            message: "missing open PDF for render request".to_owned(),
+        },
+    };
+
+    if !cancellation.is_cancelled(session_id) {
+        let _ = event_sender.send(event);
+    }
+}
+
+fn extract_speaker_notes_on_worker(
+    document: Option<&PdfDocumentState>,
+    session_id: RenderSessionId,
+    event_sender: &Sender<RenderEvent>,
+    cancellation: &RenderCancellation,
+) {
+    let Some(document) = document else {
+        return;
+    };
+
+    let notes = match document.speaker_notes_cancellable(|| cancellation.is_cancelled(session_id)) {
+        Ok(Some(notes)) => notes,
+        Ok(None) => return,
+        Err(err) => {
+            if !cancellation.is_cancelled(session_id) {
+                let _ = event_sender.send(RenderEvent::SpeakerNotesLoaded {
+                    session_id,
+                    notes: SpeakerNotes::empty(),
+                    status_text: speaker_notes_warning(&err).text().to_owned(),
+                });
+            }
+            return;
+        }
+    };
+
+    if !cancellation.is_cancelled(session_id) {
+        let _ = event_sender.send(RenderEvent::SpeakerNotesLoaded {
+            session_id,
+            notes,
+            status_text: "Ready".to_owned(),
+        });
     }
 }
 
@@ -457,9 +629,9 @@ mod tests {
         queue.push(session, current, RenderPriority::BlockingVisible);
         queue.push(session, preview, RenderPriority::VisibleAux);
 
-        assert_eq!(queue.pop().unwrap().2, current);
-        assert_eq!(queue.pop().unwrap().2, preview);
-        assert_eq!(queue.pop().unwrap().2, thumbnail);
+        assert_eq!(queue.pop().unwrap().2, RenderWork::Page(current));
+        assert_eq!(queue.pop().unwrap().2, RenderWork::Page(preview));
+        assert_eq!(queue.pop().unwrap().2, RenderWork::Page(thumbnail));
         assert!(queue.is_empty());
     }
 
@@ -473,8 +645,8 @@ mod tests {
         queue.push(session, first, RenderPriority::Background);
         queue.push(session, second, RenderPriority::Background);
 
-        assert_eq!(queue.pop().unwrap().2, first);
-        assert_eq!(queue.pop().unwrap().2, second);
+        assert_eq!(queue.pop().unwrap().2, RenderWork::Page(first));
+        assert_eq!(queue.pop().unwrap().2, RenderWork::Page(second));
     }
 
     #[test]
@@ -494,8 +666,23 @@ mod tests {
             .push(session, current, RenderPriority::BlockingVisible)
             .is_none());
 
-        assert_eq!(queue.pop().unwrap().2, current);
-        assert_eq!(queue.pop().unwrap().2, other);
+        assert_eq!(queue.pop().unwrap().2, RenderWork::Page(current));
+        assert_eq!(queue.pop().unwrap().2, RenderWork::Page(other));
+        assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn speaker_notes_job_runs_after_visible_render_work() {
+        let session = RenderSessionId(1);
+        let mut queue = RenderQueue::default();
+        let current = request(1, RenderPurpose::CurrentSlide);
+
+        queue.push_speaker_notes(session);
+        queue.push(session, current, RenderPriority::BlockingVisible);
+        queue.push_speaker_notes(session);
+
+        assert_eq!(queue.pop().unwrap().2, RenderWork::Page(current));
+        assert_eq!(queue.pop().unwrap().2, RenderWork::SpeakerNotes);
         assert!(queue.is_empty());
     }
 
@@ -511,10 +698,27 @@ mod tests {
         queue.push(second_session, second, RenderPriority::Background);
         queue.clear_session(first_session);
 
-        let (_, session_id, request) = queue.pop().unwrap();
+        let (_, session_id, work) = queue.pop().unwrap();
         assert_eq!(session_id, second_session);
-        assert_eq!(request, second);
+        assert_eq!(work, RenderWork::Page(second));
         assert!(queue.is_empty());
+    }
+
+    #[test]
+    fn cancellation_tracks_superseded_sessions() {
+        let cancellation = RenderCancellation::default();
+        let first = RenderSessionId(1);
+        let second = RenderSessionId(2);
+
+        cancellation.activate(first);
+        assert!(!cancellation.is_cancelled(first));
+
+        cancellation.activate(second);
+        assert!(cancellation.is_cancelled(first));
+        assert!(!cancellation.is_cancelled(second));
+
+        cancellation.shutdown();
+        assert!(cancellation.is_cancelled(second));
     }
 
     #[test]
@@ -524,7 +728,9 @@ mod tests {
         let mut active_session = Some(session);
         let mut queue = RenderQueue::default();
         let (event_sender, _event_receiver) = mpsc::channel();
+        let cancellation = Arc::new(RenderCancellation::default());
         let mut shutdown = false;
+        cancellation.activate(session);
         queue.push(
             session,
             request(1, RenderPurpose::CurrentSlide),
@@ -539,12 +745,14 @@ mod tests {
             &mut active_session,
             &mut queue,
             &event_sender,
+            &cancellation,
             &mut shutdown,
         );
 
         assert_eq!(active_session, None);
         assert!(document.is_none());
         assert!(queue.is_empty());
+        assert!(cancellation.is_cancelled(session));
         assert!(!shutdown);
     }
 
@@ -555,7 +763,9 @@ mod tests {
         let mut active_session = Some(session);
         let mut queue = RenderQueue::default();
         let (event_sender, _event_receiver) = mpsc::channel();
+        let cancellation = Arc::new(RenderCancellation::default());
         let mut shutdown = false;
+        cancellation.activate(session);
         queue.push(
             session,
             request(1, RenderPurpose::CurrentSlide),
@@ -568,11 +778,13 @@ mod tests {
             &mut active_session,
             &mut queue,
             &event_sender,
+            &cancellation,
             &mut shutdown,
         );
 
         assert!(shutdown);
         assert!(queue.is_empty());
         assert_eq!(active_session, Some(session));
+        assert!(cancellation.is_cancelled(session));
     }
 }
