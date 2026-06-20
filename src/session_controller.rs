@@ -6,7 +6,7 @@ use crate::{
     notes::SpeakerNotes,
     presentation::{PageSnapshot, PresentationState},
     render_scheduler::RenderSessionId,
-    rendering::{RenderPurpose, RenderRequest, RenderedPage},
+    rendering::{CacheContext, RenderPurpose, RenderRequest, RenderedPage},
     timer::{timer_transition_for_page_change, TimerTransition},
 };
 
@@ -133,9 +133,15 @@ pub fn commit_page_rendered_state(
         return None;
     }
 
-    state.render_cache.insert(request, page.clone());
-
     let snapshot = state.presentation.snapshot();
+    let cache_context = snapshot.as_ref().map(|snapshot| CacheContext {
+        current_index: snapshot.current_index,
+        total_pages: snapshot.total_pages,
+        presentation_radius: presentation_cache_radius,
+    });
+    state
+        .render_cache
+        .insert_with_context(request, page.clone(), cache_context);
     if let Some(snapshot) = snapshot.as_ref() {
         state.render_cache.retain_presentation_window(
             snapshot.current_index,

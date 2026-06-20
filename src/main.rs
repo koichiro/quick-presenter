@@ -1188,10 +1188,12 @@ fn render_pdf_page_cached(
 ) -> Result<RenderedPage> {
     cache.get_or_render(request, |request| {
         let aspect_ratio = doc.page_aspect_ratio(request.page_index)?;
+        let pixels = doc.render_page_pixels(request.page_index, request.width)?;
+        let estimated_bytes = rendering::actual_render_bytes(&pixels);
         Ok(RenderedPage {
-            image: doc.render_page(request.page_index, request.width)?,
+            image: slint::Image::from_rgba8(pixels),
             aspect_ratio,
-            estimated_bytes: rendering::estimated_render_bytes(request.width, aspect_ratio),
+            estimated_bytes,
         })
     })
 }
