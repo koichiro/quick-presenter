@@ -1,4 +1,5 @@
 pub mod app_metadata;
+pub mod app_state;
 pub mod aspect;
 pub mod black_screen;
 pub mod cli;
@@ -13,6 +14,8 @@ pub mod recent;
 pub mod render_scheduler;
 pub mod rendering;
 pub mod timer;
+pub mod view_sync;
+pub mod window_controller;
 pub mod window_menu;
 
 use std::{
@@ -24,51 +27,50 @@ use std::{
 
 use anyhow::{bail, Result};
 use app_metadata::about_metadata;
-use aspect::fitted_logical_size_within;
-use black_screen::BlackScreenState;
+use app_state::{AppState, ThumbnailState};
 use cli::parse_startup_options;
 use clock::current_clock_label;
 use errors::PresenterMessage;
-use fullscreen::FullscreenState;
 use input::{apply_presentation_command, PresentationCommand};
 use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
 use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
-use render_scheduler::{RenderEvent, RenderPriority, RenderScheduler, RenderSessionTracker};
+use render_scheduler::{RenderEvent, RenderPriority, RenderScheduler};
+#[cfg(test)]
+use rendering::RenderCache;
 use rendering::{
-    presentation_preload_order, thumbnail_window_indices, RenderCache, RenderPurpose,
-    RenderRequest, RenderedPage,
+    presentation_preload_order, thumbnail_window_indices, RenderPurpose, RenderRequest,
+    RenderedPage,
 };
-use slint::{
-    CloseRequestResponse, ComponentHandle, LogicalPosition, LogicalSize, ModelRc, Rgba8Pixel,
-    SharedPixelBuffer, SharedString, Timer, TimerMode, VecModel, Weak,
-};
+use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode, Weak};
 use timer::{timer_transition_for_page_change, PresentationTimer, TimerTransition};
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
-use window_menu::WindowMenuState;
+use view_sync::{
+    apply_opening_state_to_windows, apply_snapshot_to_windows, presenter_page_index,
+    recent_file_menu_labels, set_presenter_message, thumbnail_model, CURRENT_RENDER_WIDTH,
+    PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH,
+};
+#[cfg(test)]
+use view_sync::{black_slide_image, presenter_status_text};
+use window_controller::{
+    apply_macos_slide_window_chrome, fitted_slide_window_size, hide_presenter_window,
+    hide_slide_window, set_slide_fullscreen, show_presenter_window, show_slide_window,
+    slide_titlebar_compensation_height, start_slide_chrome_sync, sync_slide_chrome, AppWindowRefs,
+    AppWindows,
+};
 
 slint::include_modules!();
 
-const CURRENT_RENDER_WIDTH: i32 = 1600;
-const PREVIEW_RENDER_WIDTH: i32 = 600;
-const THUMBNAIL_RENDER_WIDTH: i32 = 180;
 const PRESENTATION_CACHE_RADIUS: u32 = 2;
 const THUMBNAIL_CACHE_RADIUS: u32 = 8;
 const RENDER_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(16);
-const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
-const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
 const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
 const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
 const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 const FILE_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
-const SLIDE_TITLEBAR_COMPENSATION_HEIGHT: f32 = 28.0;
-#[cfg(target_os = "macos")]
-const PRESENTER_WINDOW_TITLE: &str = "Quick Presenter";
-#[cfg(target_os = "macos")]
-const SLIDE_WINDOW_TITLE: &str = "Quick Presenter - Slide";
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -267,134 +269,11 @@ fn running_from_macos_app_bundle() -> bool {
 #[cfg(not(target_os = "macos"))]
 fn remove_macos_native_about_menu_item() {}
 
-#[cfg(target_os = "macos")]
-fn apply_macos_slide_window_chrome() {
-    apply_macos_slide_window_chrome_now();
-    Timer::single_shot(
-        Duration::from_millis(0),
-        apply_macos_slide_window_chrome_now,
-    );
-    Timer::single_shot(
-        Duration::from_millis(250),
-        apply_macos_slide_window_chrome_now,
-    );
-    Timer::single_shot(
-        Duration::from_millis(1000),
-        apply_macos_slide_window_chrome_now,
-    );
-}
-
-#[cfg(target_os = "macos")]
-fn apply_macos_slide_window_chrome_now() {
-    use objc2_app_kit::{NSWindowStyleMask, NSWindowTitleVisibility};
-
-    with_macos_window(SLIDE_WINDOW_TITLE, |_, window| {
-        window.setStyleMask(window.styleMask() | NSWindowStyleMask::FullSizeContentView);
-        window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
-        window.setTitlebarAppearsTransparent(true);
-    });
-}
-
-#[cfg(not(target_os = "macos"))]
-fn apply_macos_slide_window_chrome() {}
-
-fn start_slide_chrome_sync(windows: AppWindowRefs) -> Timer {
-    let timer = Timer::default();
-    #[cfg(target_os = "macos")]
-    {
-        timer.start(TimerMode::Repeated, Duration::from_millis(250), move || {
-            sync_slide_chrome(&windows);
-        });
-    }
-    #[cfg(not(target_os = "macos"))]
-    let _ = windows;
-
-    timer
-}
-
-fn sync_slide_chrome(windows: &AppWindowRefs) {
-    #[cfg(target_os = "macos")]
-    apply_macos_slide_window_chrome();
-
-    if let Some(slide) = windows.slide.upgrade() {
-        let compensation_height =
-            slide_titlebar_compensation_height(slide.window().is_fullscreen());
-        slide.set_titlebar_compensation_height(compensation_height);
-    }
-}
-
-fn slide_titlebar_compensation_height(fullscreen: bool) -> f32 {
-    if cfg!(target_os = "macos") && !fullscreen {
-        SLIDE_TITLEBAR_COMPENSATION_HEIGHT
-    } else {
-        0.0
-    }
-}
-
-struct AppWindows {
-    presenter: PresenterWindow,
-    slide: SlideWindow,
-}
-
-impl AppWindows {
-    fn new() -> Result<Self> {
-        Ok(Self {
-            presenter: PresenterWindow::new()?,
-            slide: SlideWindow::new()?,
-        })
-    }
-
-    fn refs(&self) -> AppWindowRefs {
-        AppWindowRefs {
-            presenter: self.presenter.as_weak(),
-            slide: self.slide.as_weak(),
-        }
-    }
-
-    fn apply_initial_positions(&self) {
-        self.presenter
-            .window()
-            .set_position(PRESENTER_WINDOW_POSITION);
-        self.slide.window().set_position(SLIDE_WINDOW_POSITION);
-    }
-}
-
-#[derive(Clone)]
-struct AppWindowRefs {
-    presenter: Weak<PresenterWindow>,
-    slide: Weak<SlideWindow>,
-}
-
-#[derive(Default)]
-struct AppState {
-    black_screen: BlackScreenState,
-    fullscreen: FullscreenState,
-    pdf: Option<PdfDocumentState>,
-    render_cache: RenderCache,
-    render_generation: u64,
-    render_sessions: RenderSessionTracker,
-    render_scheduler: Option<RenderScheduler>,
-    thumbnails: ThumbnailState,
-    pending_open_path: Option<PathBuf>,
-    notes: SpeakerNotes,
-    presentation: PresentationState,
-    timer: PresentationTimer,
-    window_menu: WindowMenuState,
-    recent_files: RecentFiles,
-    recent_store: Option<RecentFileStore>,
-    status_text: String,
-}
-
 #[cfg(test)]
 #[allow(dead_code)]
 struct RenderedPages {
     current: RenderedPage,
     next: Option<RenderedPage>,
-}
-
-#[derive(Default)]
-struct ThumbnailState {
-    total_pages: u32,
 }
 
 #[cfg(test)]
@@ -849,17 +728,6 @@ fn exit_slide_fullscreen(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>)
     set_slide_fullscreen(windows, fullscreen);
 }
 
-fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.window().set_fullscreen(fullscreen);
-        slide.set_titlebar_compensation_height(slide_titlebar_compensation_height(fullscreen));
-    }
-
-    if let Some(presenter) = windows.presenter.upgrade() {
-        presenter.set_slide_fullscreen(fullscreen);
-    }
-}
-
 fn show_presenter_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
     state.borrow_mut().window_menu.set_presenter_visible(true);
     show_presenter_window(windows);
@@ -918,102 +786,6 @@ fn bring_slide_window_to_front(windows: &AppWindowRefs, state: &Rc<RefCell<AppSt
         state.window_menu.set_slide_visible(true);
     }
     show_slide_window(windows);
-}
-
-fn show_presenter_window(windows: &AppWindowRefs) {
-    #[cfg(target_os = "macos")]
-    if show_macos_window(PRESENTER_WINDOW_TITLE) {
-        return;
-    }
-
-    if let Some(presenter) = windows.presenter.upgrade() {
-        if let Err(err) = presenter.show() {
-            warn!(error = ?err, "failed to show presenter window");
-        }
-    }
-}
-
-fn show_slide_window(windows: &AppWindowRefs) {
-    #[cfg(target_os = "macos")]
-    if show_macos_window(SLIDE_WINDOW_TITLE) {
-        apply_macos_slide_window_chrome();
-        return;
-    }
-
-    if let Some(slide) = windows.slide.upgrade() {
-        if let Err(err) = slide.show() {
-            warn!(error = ?err, "failed to show slide window");
-        } else {
-            apply_macos_slide_window_chrome();
-        }
-    }
-}
-
-fn hide_presenter_window(windows: &AppWindowRefs) {
-    #[cfg(target_os = "macos")]
-    if hide_macos_window(PRESENTER_WINDOW_TITLE) {
-        return;
-    }
-
-    if let Some(presenter) = windows.presenter.upgrade() {
-        if let Err(err) = presenter.hide() {
-            warn!(error = ?err, "failed to hide presenter window");
-        }
-    }
-}
-
-fn hide_slide_window(windows: &AppWindowRefs) {
-    #[cfg(target_os = "macos")]
-    if hide_macos_window(SLIDE_WINDOW_TITLE) {
-        return;
-    }
-
-    if let Some(slide) = windows.slide.upgrade() {
-        if let Err(err) = slide.hide() {
-            warn!(error = ?err, "failed to hide slide window");
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn show_macos_window(title: &str) -> bool {
-    with_macos_window(title, |app, window| {
-        app.activate();
-        window.deminiaturize(None);
-        window.makeKeyAndOrderFront(None);
-    })
-}
-
-#[cfg(target_os = "macos")]
-fn hide_macos_window(title: &str) -> bool {
-    with_macos_window(title, |_, window| {
-        window.orderOut(None);
-    })
-}
-
-#[cfg(target_os = "macos")]
-fn with_macos_window(
-    title: &str,
-    action: impl FnOnce(&objc2_app_kit::NSApplication, &objc2_app_kit::NSWindow),
-) -> bool {
-    use objc2_app_kit::NSApplication;
-    use objc2_foundation::MainThreadMarker;
-
-    let Some(main_thread) = MainThreadMarker::new() else {
-        return false;
-    };
-
-    let app = NSApplication::sharedApplication(main_thread);
-    let windows = app.windows();
-
-    for window in windows.iter() {
-        if window.title().to_string() == title {
-            action(&app, &window);
-            return true;
-        }
-    }
-
-    false
 }
 
 fn pick_pdf_file() -> Option<PathBuf> {
@@ -1288,144 +1060,39 @@ fn update_recent_file_menu_labels(presenter: &Weak<PresenterWindow>, labels: Vec
 
     let has_recent_files = !labels.is_empty();
 
-    let label_model = ModelRc::new(Rc::new(VecModel::from(
-        labels
-            .into_iter()
-            .map(SharedString::from)
-            .collect::<Vec<_>>(),
-    )));
-
     presenter.set_has_recent_files(has_recent_files);
-    presenter.set_recent_file_labels(label_model);
+    presenter.set_recent_file_labels(recent_file_menu_labels(labels));
 }
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
     if let Some(slide) = windows.slide.upgrade() {
         let compensation_height =
             slide_titlebar_compensation_height(slide.window().is_fullscreen());
-        let (width, height) = fitted_slide_window_content_size(aspect_ratio, compensation_height);
+        let size = fitted_slide_window_size(
+            SLIDE_WINDOW_MAX_WIDTH,
+            SLIDE_WINDOW_MAX_HEIGHT,
+            aspect_ratio,
+            compensation_height,
+        );
+        let (width, height) = (size.width, size.height);
         slide.set_slide_window_width(width);
         slide.set_slide_window_height(height);
-        slide.window().set_size(LogicalSize::new(width, height));
+        slide.window().set_size(size);
     }
 }
 
+#[cfg(test)]
 fn fitted_slide_window_content_size(
     aspect_ratio: f32,
     titlebar_compensation_height: f32,
 ) -> (f32, f32) {
-    let size = fitted_logical_size_within(
+    let size = fitted_slide_window_size(
         SLIDE_WINDOW_MAX_WIDTH,
         SLIDE_WINDOW_MAX_HEIGHT,
         aspect_ratio,
+        titlebar_compensation_height,
     );
-    let width = size.width.round();
-    let height = (size.height.round() - titlebar_compensation_height).max(1.0);
-
-    (width, height)
-}
-
-fn apply_opening_state_to_windows(windows: &AppWindowRefs, title: &str) {
-    let placeholder = placeholder_slide();
-
-    if let Some(presenter) = windows.presenter.upgrade() {
-        presenter.set_document_title(title.into());
-        presenter.set_page_label("".into());
-        presenter.set_current_page_image(placeholder.image.clone());
-        presenter.set_current_page_aspect_ratio(placeholder.aspect_ratio);
-        presenter.set_has_next_page(false);
-        presenter.set_next_page_image(placeholder.image.clone());
-        presenter.set_next_page_aspect_ratio(placeholder.aspect_ratio);
-        presenter.set_status_text("Opening PDF...".into());
-        presenter.set_current_page_index(0);
-        presenter.set_thumbnails(ModelRc::new(Rc::new(VecModel::from(
-            Vec::<ThumbnailItem>::new(),
-        ))));
-        presenter.set_has_notes(false);
-        presenter.set_notes_text("".into());
-    }
-
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.set_page_aspect_ratio(placeholder.aspect_ratio);
-        slide.set_page_image(placeholder.image);
-    }
-}
-
-fn apply_snapshot_to_windows(windows: &AppWindowRefs, state: &AppState, snapshot: &PageSnapshot) {
-    let current_request = RenderRequest {
-        page_index: snapshot.current_index,
-        width: CURRENT_RENDER_WIDTH,
-        purpose: RenderPurpose::CurrentSlide,
-    };
-    let current = state
-        .render_cache
-        .peek(current_request)
-        .unwrap_or_else(placeholder_slide);
-    let next = snapshot.next_index.and_then(|page_index| {
-        state.render_cache.peek(RenderRequest {
-            page_index,
-            width: PREVIEW_RENDER_WIDTH,
-            purpose: RenderPurpose::NextPreview,
-        })
-    });
-    let next_placeholder = placeholder_slide();
-
-    if let Some(presenter) = windows.presenter.upgrade() {
-        presenter.set_current_page_image(current.image.clone());
-        presenter.set_current_page_aspect_ratio(current.aspect_ratio);
-        presenter.set_has_next_page(snapshot.next_index.is_some());
-        if let Some(next) = next.as_ref() {
-            presenter.set_next_page_image(next.image.clone());
-            presenter.set_next_page_aspect_ratio(next.aspect_ratio);
-        } else {
-            presenter.set_next_page_image(next_placeholder.image.clone());
-            presenter.set_next_page_aspect_ratio(next_placeholder.aspect_ratio);
-        }
-        presenter.set_document_title(snapshot.title.clone().into());
-        presenter.set_page_label(snapshot.page_label.clone().into());
-        presenter.set_clock_time_label(current_clock_label().into());
-        presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
-        presenter.set_status_text(presenter_status_text(state).into());
-        presenter.set_current_page_index(presenter_page_index(snapshot.current_index));
-        presenter.set_thumbnails(thumbnail_model(
-            &state.thumbnails,
-            &state.render_cache,
-            snapshot.current_index,
-        ));
-
-        let current_note = state.notes.note_for_page_index(snapshot.current_index);
-        presenter.set_has_notes(current_note.is_some());
-        presenter.set_notes_text(current_note.unwrap_or_default().into());
-    }
-
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.set_page_aspect_ratio(current.aspect_ratio);
-        slide.set_page_image(if state.black_screen.is_active() {
-            black_slide_image()
-        } else {
-            current.image
-        });
-    }
-}
-
-fn placeholder_slide() -> RenderedPage {
-    const WIDTH: u32 = 16;
-    const HEIGHT: u32 = 9;
-
-    let mut pixels = Vec::with_capacity((WIDTH * HEIGHT * 4) as usize);
-    for y in 0..HEIGHT {
-        for x in 0..WIDTH {
-            let edge = x == 0 || y == 0 || x == WIDTH - 1 || y == HEIGHT - 1;
-            let value = if edge { 82 } else { 31 };
-            pixels.extend_from_slice(&[value, value, value, 255]);
-        }
-    }
-    let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, WIDTH, HEIGHT);
-    RenderedPage {
-        image: slint::Image::from_rgba8(buffer),
-        aspect_ratio: 16.0 / 9.0,
-        estimated_bytes: (WIDTH * HEIGHT * 4) as usize,
-    }
+    (size.width, size.height)
 }
 
 fn enqueue_visible_page_renders(state: &AppState, snapshot: &PageSnapshot) {
@@ -1532,26 +1199,6 @@ fn apply_rendered_pages_to_windows(
     }
 }
 
-fn presenter_status_text(state: &AppState) -> String {
-    if state.black_screen.is_active() {
-        "Black screen active. Audience slide is hidden.".to_owned()
-    } else {
-        state.status_text.clone()
-    }
-}
-
-fn black_slide_image() -> slint::Image {
-    const WIDTH: u32 = 16;
-    const HEIGHT: u32 = 9;
-
-    let mut pixels = vec![0; (WIDTH * HEIGHT * 4) as usize];
-    for alpha in pixels.iter_mut().skip(3).step_by(4) {
-        *alpha = 255;
-    }
-    let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, WIDTH, HEIGHT);
-    slint::Image::from_rgba8(buffer)
-}
-
 #[cfg(test)]
 #[allow(dead_code)]
 fn render_pages(
@@ -1601,54 +1248,6 @@ fn render_pdf_page_cached(
             estimated_bytes: rendering::estimated_render_bytes(request.width, aspect_ratio),
         })
     })
-}
-
-fn thumbnail_model(
-    thumbnails: &ThumbnailState,
-    cache: &RenderCache,
-    current_index: u32,
-) -> ModelRc<ThumbnailItem> {
-    let placeholder = thumbnail_placeholder_image();
-    let items = (0..thumbnails.total_pages)
-        .map(|index| {
-            let image = cache
-                .peek(RenderRequest {
-                    page_index: index,
-                    width: THUMBNAIL_RENDER_WIDTH,
-                    purpose: RenderPurpose::Thumbnail,
-                })
-                .map(|thumbnail| thumbnail.image)
-                .unwrap_or_else(|| placeholder.clone());
-            ThumbnailItem {
-                page_index: i32::try_from(index).unwrap_or(i32::MAX),
-                page_label: format!("{}", index + 1).into(),
-                image,
-                is_current: index == current_index,
-            }
-        })
-        .collect::<Vec<_>>();
-
-    ModelRc::new(Rc::new(VecModel::from(items)))
-}
-
-fn thumbnail_placeholder_image() -> slint::Image {
-    const WIDTH: u32 = 16;
-    const HEIGHT: u32 = 9;
-
-    let mut pixels = Vec::with_capacity((WIDTH * HEIGHT * 4) as usize);
-    for y in 0..HEIGHT {
-        for x in 0..WIDTH {
-            let edge = x == 0 || y == 0 || x == WIDTH - 1 || y == HEIGHT - 1;
-            let value = if edge { 82 } else { 31 };
-            pixels.extend_from_slice(&[value, value, value, 255]);
-        }
-    }
-    let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, WIDTH, HEIGHT);
-    slint::Image::from_rgba8(buffer)
-}
-
-fn presenter_page_index(page_index: u32) -> i32 {
-    i32::try_from(page_index).unwrap_or(i32::MAX)
 }
 
 fn schedule_thumbnail_render(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
@@ -1787,12 +1386,6 @@ fn preload_presentation_window(state: &mut AppState, snapshot: &PageSnapshot) ->
     );
 
     Ok(())
-}
-
-fn set_presenter_message(weak: &Weak<PresenterWindow>, message: PresenterMessage) {
-    if let Some(app) = weak.upgrade() {
-        app.set_status_text(message.text().into());
-    }
 }
 
 fn start_render_event_updates(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
