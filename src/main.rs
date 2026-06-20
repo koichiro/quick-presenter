@@ -61,6 +61,7 @@ use rendering::{RenderRequest, RenderedPage};
 use session_controller::{
     apply_session_command, begin_open_pdf_state, commit_page_render_failed_state,
     commit_page_rendered_state, commit_render_open_failed_state, commit_render_opened_state,
+    commit_speaker_notes_loaded_state,
 };
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode, Weak};
 use timer::PresentationTimer;
@@ -1338,17 +1339,13 @@ fn handle_render_event(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, e
             session_id,
             title,
             page_count,
-            notes,
             status_text,
-        } => handle_render_opened(
-            windows,
-            state,
+        } => handle_render_opened(windows, state, session_id, title, page_count, status_text),
+        RenderEvent::SpeakerNotesLoaded {
             session_id,
-            title,
-            page_count,
             notes,
             status_text,
-        ),
+        } => handle_speaker_notes_loaded(windows, state, session_id, notes, status_text),
         RenderEvent::OpenFailed {
             session_id,
             message,
@@ -1374,24 +1371,21 @@ fn handle_render_opened(
     session_id: render_scheduler::RenderSessionId,
     title: String,
     page_count: u32,
-    notes: SpeakerNotes,
     status_text: String,
 ) {
     let outcome = {
         let mut state = state.borrow_mut();
-        let Some(outcome) = commit_render_opened_state(
-            &mut state,
-            session_id,
-            title,
-            page_count,
-            notes,
-            status_text,
-        ) else {
+        let Some(outcome) =
+            commit_render_opened_state(&mut state, session_id, title, page_count, status_text)
+        else {
             return;
         };
         if let Some(snapshot) = outcome.snapshot.as_ref() {
             apply_snapshot_to_windows(windows, &state, snapshot);
             enqueue_visible_page_renders(&state, snapshot);
+        }
+        if let Some(scheduler) = state.render_scheduler.as_ref() {
+            scheduler.extract_speaker_notes(session_id);
         }
         outcome
     };
@@ -1403,6 +1397,23 @@ fn handle_render_opened(
     if let Some(snapshot) = outcome.snapshot {
         schedule_presentation_preload(state.clone(), snapshot.clone());
         schedule_thumbnail_render(windows.clone(), state.clone());
+    }
+}
+
+fn handle_speaker_notes_loaded(
+    windows: &AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+    session_id: render_scheduler::RenderSessionId,
+    notes: SpeakerNotes,
+    status_text: String,
+) {
+    let mut state = state.borrow_mut();
+    if !commit_speaker_notes_loaded_state(&mut state, session_id, notes, status_text) {
+        return;
+    }
+
+    if let Some(snapshot) = state.presentation.snapshot() {
+        apply_snapshot_to_windows(windows, &state, &snapshot);
     }
 }
 

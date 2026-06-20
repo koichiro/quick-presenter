@@ -68,7 +68,6 @@ pub fn commit_render_opened_state(
     session_id: RenderSessionId,
     title: String,
     page_count: u32,
-    notes: SpeakerNotes,
     status_text: String,
 ) -> Option<OpenedSessionOutcome> {
     if !state.render_sessions.accepts(session_id) {
@@ -80,7 +79,6 @@ pub fn commit_render_opened_state(
     state.audience_slide.failed_current_page = None;
     state.render_cache.clear();
     state.presentation = PresentationState::open_document(title, page_count);
-    state.notes = notes;
     state.thumbnails = ThumbnailState {
         total_pages: page_count,
     };
@@ -106,6 +104,21 @@ pub fn commit_render_open_failed_state(state: &mut AppState, session_id: RenderS
 
     state.status_text = "Could not open PDF. Choose another file.".to_owned();
     state.pending_open_path = None;
+    true
+}
+
+pub fn commit_speaker_notes_loaded_state(
+    state: &mut AppState,
+    session_id: RenderSessionId,
+    notes: SpeakerNotes,
+    status_text: String,
+) -> bool {
+    if !state.render_sessions.accepts(session_id) {
+        return false;
+    }
+
+    state.notes = notes;
+    state.status_text = status_text;
     true
 }
 
@@ -305,7 +318,6 @@ mod tests {
             stale_session,
             "Old".to_owned(),
             3,
-            SpeakerNotes::empty(),
             "Ready".to_owned(),
         );
 
@@ -322,13 +334,13 @@ mod tests {
     fn opened_event_commits_new_presentation_and_loaded_path() {
         let mut state = AppState::default();
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        state.notes = SpeakerNotes::from_page_notes([(1, "stale".to_owned())]);
 
         let outcome = commit_render_opened_state(
             &mut state,
             session_id,
             "Deck".to_owned(),
             3,
-            SpeakerNotes::empty(),
             "Ready".to_owned(),
         )
         .expect("current session should accept opened event");
@@ -340,8 +352,43 @@ mod tests {
         assert_eq!(snapshot.page_label, "1 / 3");
         assert_eq!(state.thumbnails.total_pages, 3);
         assert_eq!(state.status_text, "Ready");
+        assert_eq!(state.notes.note_for_page_number(1), Some("stale"));
         assert_eq!(outcome.loaded_path, Some(PathBuf::from("deck.pdf")));
         assert_eq!(state.pending_open_path, None);
+    }
+
+    #[test]
+    fn speaker_notes_loaded_event_commits_for_current_session() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        let notes = SpeakerNotes::from_page_notes([(2, "Presenter note".to_owned())]);
+
+        assert!(commit_speaker_notes_loaded_state(
+            &mut state,
+            session_id,
+            notes,
+            "Ready".to_owned(),
+        ));
+
+        assert_eq!(state.notes.note_for_page_number(2), Some("Presenter note"));
+        assert_eq!(state.status_text, "Ready");
+    }
+
+    #[test]
+    fn stale_speaker_notes_loaded_event_is_ignored() {
+        let mut state = AppState::default();
+        let stale_session = begin_open_pdf_state(&mut state, PathBuf::from("old.pdf"));
+        begin_open_pdf_state(&mut state, PathBuf::from("new.pdf"));
+
+        assert!(!commit_speaker_notes_loaded_state(
+            &mut state,
+            stale_session,
+            SpeakerNotes::from_page_notes([(1, "Old note".to_owned())]),
+            "Ready".to_owned(),
+        ));
+
+        assert!(state.notes.is_empty());
+        assert_eq!(state.status_text, "Opening PDF...");
     }
 
     #[test]
@@ -379,7 +426,6 @@ mod tests {
             session_id,
             "Deck".to_owned(),
             2,
-            SpeakerNotes::empty(),
             "Ready".to_owned(),
         );
         let request = current_slide_request(0);
@@ -407,7 +453,6 @@ mod tests {
             session_id,
             "Deck".to_owned(),
             2,
-            SpeakerNotes::empty(),
             "Ready".to_owned(),
         );
 
@@ -433,7 +478,6 @@ mod tests {
             session_id,
             "Deck".to_owned(),
             2,
-            SpeakerNotes::empty(),
             "Ready".to_owned(),
         );
 
@@ -466,7 +510,6 @@ mod tests {
             session_id,
             "Deck".to_owned(),
             2,
-            SpeakerNotes::empty(),
             "Ready".to_owned(),
         );
         state.audience_slide.last_good_current = Some(rendered_page(16.0 / 9.0));
@@ -499,7 +542,6 @@ mod tests {
             session_id,
             "Deck".to_owned(),
             2,
-            SpeakerNotes::empty(),
             "Ready".to_owned(),
         );
         state.audience_slide.last_good_current = Some(rendered_page(16.0 / 9.0));
@@ -547,7 +589,6 @@ mod tests {
             session_id,
             "Deck".to_owned(),
             2,
-            SpeakerNotes::empty(),
             "Ready".to_owned(),
         );
 
@@ -572,7 +613,6 @@ mod tests {
             session_id,
             "Deck".to_owned(),
             2,
-            SpeakerNotes::empty(),
             "Ready".to_owned(),
         );
 
