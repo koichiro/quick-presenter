@@ -380,6 +380,25 @@ struct RenderedPages {
     next: Option<RenderedPage>,
 }
 
+struct PreparedPdfSession {
+    loaded_path: PathBuf,
+    doc: PdfDocumentState,
+    notes: SpeakerNotes,
+    presentation: PresentationState,
+    snapshot: Option<PageSnapshot>,
+    initial_slide_aspect_ratio: Option<f32>,
+    initial_pages: Option<RenderedPages>,
+    render_cache: RenderCache,
+    status_text: String,
+}
+
+struct CommittedPdfSession {
+    loaded_path: PathBuf,
+    snapshot: Option<PageSnapshot>,
+    initial_slide_aspect_ratio: Option<f32>,
+    initial_pages: Option<RenderedPages>,
+}
+
 fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<AppState>>) {
     let app = &windows.presenter;
 
@@ -1005,6 +1024,42 @@ fn open_and_render(
     state: &Rc<RefCell<AppState>>,
     path: PathBuf,
 ) -> Result<()> {
+    let prepared = prepare_pdf_session(path);
+    let committed = {
+        let mut state = state.borrow_mut();
+        commit_prepared_pdf_session(&mut state, prepared)?
+    };
+
+    if let Some(aspect_ratio) = committed.initial_slide_aspect_ratio {
+        fit_slide_window_to_aspect_ratio(windows, aspect_ratio);
+    }
+
+    if let (Some(snapshot), Some(rendered)) = (&committed.snapshot, committed.initial_pages) {
+        {
+            let state = state.borrow();
+            apply_rendered_pages_to_windows(windows, &state, snapshot, rendered);
+        }
+        schedule_presentation_preload(state.clone(), snapshot.clone());
+        schedule_thumbnail_render(windows.clone(), state.clone());
+    }
+
+    record_recent_pdf(&windows.presenter, state, committed.loaded_path);
+
+    Ok(())
+}
+
+fn prepare_pdf_session(path: PathBuf) -> Result<PreparedPdfSession> {
+    prepare_pdf_session_with_initial_render(path, render_pages)
+}
+
+fn prepare_pdf_session_with_initial_render(
+    path: PathBuf,
+    render_initial_pages: impl FnOnce(
+        &PdfDocumentState,
+        &mut RenderCache,
+        &PageSnapshot,
+    ) -> Result<RenderedPages>,
+) -> Result<PreparedPdfSession> {
     let loaded_path = path.clone();
     let doc = PdfDocumentState::open(path)?;
     let (notes, status_text) = match doc.speaker_notes() {
@@ -1019,40 +1074,84 @@ fn open_and_render(
     };
     let presentation = PresentationState::open_document(doc.title(), doc.page_count());
     let snapshot = presentation.snapshot();
-    let initial_slide_aspect_ratio = snapshot
+    let mut render_cache = RenderCache::default();
+    let initial_pages = snapshot
         .as_ref()
-        .map(|snapshot| doc.page_aspect_ratio(snapshot.current_index))
+        .map(|snapshot| render_initial_pages(&doc, &mut render_cache, snapshot))
         .transpose()?;
-
-    {
-        let mut state = state.borrow_mut();
-        state.pdf = Some(doc);
-        state.render_cache.clear();
-        state.render_generation = state.render_generation.wrapping_add(1);
-        state.thumbnail_pages.clear();
-        state.notes = notes;
-        state.presentation = presentation;
-        state.black_screen.set_active(false);
-        state.timer.reset();
-        state.status_text = status_text;
+    if let Some(snapshot) = snapshot.as_ref() {
+        render_cache.retain_presentation_window(
+            snapshot.current_index,
+            snapshot.total_pages,
+            PRESENTATION_CACHE_RADIUS,
+        );
     }
+    let initial_slide_aspect_ratio = initial_pages
+        .as_ref()
+        .map(|rendered| rendered.current.aspect_ratio);
 
-    if let Some(aspect_ratio) = initial_slide_aspect_ratio {
-        fit_slide_window_to_aspect_ratio(windows, aspect_ratio);
+    Ok(PreparedPdfSession {
+        loaded_path,
+        doc,
+        notes,
+        presentation,
+        snapshot,
+        initial_slide_aspect_ratio,
+        initial_pages,
+        render_cache,
+        status_text,
+    })
+}
+
+fn commit_prepared_pdf_session(
+    state: &mut AppState,
+    prepared: Result<PreparedPdfSession>,
+) -> Result<CommittedPdfSession> {
+    let prepared = prepared?;
+    Ok(commit_prepared_pdf_session_state(state, prepared))
+}
+
+fn commit_prepared_pdf_session_state(
+    state: &mut AppState,
+    prepared: PreparedPdfSession,
+) -> CommittedPdfSession {
+    let PreparedPdfSession {
+        loaded_path,
+        doc,
+        notes,
+        presentation,
+        snapshot,
+        initial_slide_aspect_ratio,
+        initial_pages,
+        render_cache,
+        status_text,
+    } = prepared;
+
+    state.pdf = Some(doc);
+    state.render_cache = render_cache;
+    commit_prepared_pdf_session_metadata(state, notes, presentation, status_text);
+
+    CommittedPdfSession {
+        loaded_path,
+        snapshot,
+        initial_slide_aspect_ratio,
+        initial_pages,
     }
+}
 
-    if let Some(snapshot) = snapshot {
-        {
-            let mut state = state.borrow_mut();
-            render_into_windows(windows, &mut state, &snapshot)?;
-        }
-        schedule_presentation_preload(state.clone(), snapshot);
-        schedule_thumbnail_render(windows.clone(), state.clone());
-    }
-
-    record_recent_pdf(&windows.presenter, state, loaded_path);
-
-    Ok(())
+fn commit_prepared_pdf_session_metadata(
+    state: &mut AppState,
+    notes: SpeakerNotes,
+    presentation: PresentationState,
+    status_text: String,
+) {
+    state.render_generation = state.render_generation.wrapping_add(1);
+    state.thumbnail_pages.clear();
+    state.notes = notes;
+    state.presentation = presentation;
+    state.black_screen.set_active(false);
+    state.timer.reset();
+    state.status_text = status_text;
 }
 
 fn open_recent_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, index: i32) {
@@ -1189,6 +1288,17 @@ fn render_into_windows(
         PRESENTATION_CACHE_RADIUS,
     );
 
+    apply_rendered_pages_to_windows(windows, state, snapshot, rendered);
+
+    Ok(())
+}
+
+fn apply_rendered_pages_to_windows(
+    windows: &AppWindowRefs,
+    state: &AppState,
+    snapshot: &PageSnapshot,
+    rendered: RenderedPages,
+) {
     if let Some(presenter) = windows.presenter.upgrade() {
         presenter.set_current_page_image(rendered.current.image.clone());
         presenter.set_current_page_aspect_ratio(rendered.current.aspect_ratio);
@@ -1221,8 +1331,6 @@ fn render_into_windows(
             rendered.current.image
         });
     }
-
-    Ok(())
 }
 
 fn presenter_status_text(state: &AppState) -> String {
@@ -1448,6 +1556,7 @@ fn update_presenter_time_labels(presenter: &Weak<PresenterWindow>, timer: &Prese
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::anyhow;
 
     #[test]
     fn fitted_slide_window_content_size_subtracts_titlebar_compensation_from_height() {
@@ -1461,5 +1570,62 @@ mod tests {
         let (_, height) = fitted_slide_window_content_size(16.0 / 9.0, 0.0);
 
         assert_eq!(height, 576.0);
+    }
+
+    #[test]
+    fn failed_prepared_session_does_not_replace_current_session() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Existing deck", 3),
+            status_text: "Existing status".to_owned(),
+            ..AppState::default()
+        };
+        state.presentation.next_page();
+        state.black_screen.set_active(true);
+        let original_snapshot = state.presentation.snapshot();
+        let original_status = state.status_text.clone();
+        let original_generation = state.render_generation;
+
+        let result = commit_prepared_pdf_session(
+            &mut state,
+            Err(anyhow!("failed to render page 1: bitmap failure")),
+        );
+
+        assert!(result.is_err());
+        assert_eq!(state.presentation.snapshot(), original_snapshot);
+        assert_eq!(state.status_text, original_status);
+        assert_eq!(state.render_generation, original_generation);
+        assert!(state.black_screen.is_active());
+        assert!(state.pdf.is_none());
+    }
+
+    #[test]
+    fn successful_prepared_session_metadata_replaces_current_session() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Existing deck", 3),
+            status_text: "Existing status".to_owned(),
+            render_generation: 41,
+            ..AppState::default()
+        };
+        state.presentation.next_page();
+        state.black_screen.set_active(true);
+
+        commit_prepared_pdf_session_metadata(
+            &mut state,
+            SpeakerNotes::empty(),
+            PresentationState::open_document("New deck", 2),
+            "Ready".to_owned(),
+        );
+
+        assert_eq!(state.render_generation, 42);
+        assert!(!state.black_screen.is_active());
+        assert_eq!(state.status_text, "Ready");
+
+        let snapshot = state
+            .presentation
+            .snapshot()
+            .expect("committed presentation should have a first page");
+        assert_eq!(snapshot.current_index, 0);
+        assert_eq!(snapshot.page_label, "1 / 2");
+        assert_eq!(snapshot.title, "New deck");
     }
 }
