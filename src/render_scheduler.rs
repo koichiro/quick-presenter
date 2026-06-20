@@ -1,6 +1,15 @@
 use std::{collections::HashSet, path::PathBuf};
+use std::{
+    sync::mpsc::{self, Receiver, Sender},
+    thread,
+};
 
-use crate::rendering::RenderRequest;
+use crate::{
+    errors::speaker_notes_warning,
+    notes::SpeakerNotes,
+    pdf::PdfDocumentState,
+    rendering::{estimated_render_bytes, RenderRequest, RenderedPagePixels},
+};
 
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct RenderSessionId(pub u64);
@@ -24,8 +33,8 @@ pub enum RenderCommand {
     },
     RenderPage {
         session_id: RenderSessionId,
-        job_id: RenderJobId,
         request: RenderRequest,
+        priority: RenderPriority,
     },
     Close {
         session_id: RenderSessionId,
@@ -39,6 +48,7 @@ pub enum RenderEvent {
         session_id: RenderSessionId,
         title: String,
         page_count: u32,
+        notes: SpeakerNotes,
         status_text: String,
     },
     OpenFailed {
@@ -49,6 +59,7 @@ pub enum RenderEvent {
         session_id: RenderSessionId,
         job_id: RenderJobId,
         request: RenderRequest,
+        page: RenderedPagePixels,
     },
     PageFailed {
         session_id: RenderSessionId,
@@ -146,6 +157,11 @@ impl RenderQueue {
         self.queued_keys.retain(|key| key.session_id != session_id);
     }
 
+    pub fn clear(&mut self) {
+        self.items.clear();
+        self.queued_keys.clear();
+    }
+
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
@@ -163,6 +179,246 @@ impl RenderQueue {
             .max_by_key(|(_, item)| (item.priority, u64::MAX.saturating_sub(item.sequence)))
             .map(|(index, _)| index)
     }
+}
+
+pub struct RenderScheduler {
+    command_sender: Sender<RenderCommand>,
+    event_receiver: Receiver<RenderEvent>,
+}
+
+impl RenderScheduler {
+    pub fn start() -> Self {
+        let (command_sender, command_receiver) = mpsc::channel();
+        let (event_sender, event_receiver) = mpsc::channel();
+        thread::spawn(move || render_worker(command_receiver, event_sender));
+
+        Self {
+            command_sender,
+            event_receiver,
+        }
+    }
+
+    pub fn open(&self, session_id: RenderSessionId, path: PathBuf) {
+        self.send(RenderCommand::Open { session_id, path });
+    }
+
+    pub fn render_page(
+        &self,
+        session_id: RenderSessionId,
+        request: RenderRequest,
+        priority: RenderPriority,
+    ) {
+        self.send(RenderCommand::RenderPage {
+            session_id,
+            request,
+            priority,
+        });
+    }
+
+    pub fn drain_events(&self) -> Vec<RenderEvent> {
+        let mut events = Vec::new();
+        while let Ok(event) = self.event_receiver.try_recv() {
+            events.push(event);
+        }
+        events
+    }
+
+    fn send(&self, command: RenderCommand) {
+        let _ = self.command_sender.send(command);
+    }
+}
+
+impl Drop for RenderScheduler {
+    fn drop(&mut self) {
+        let _ = self.command_sender.send(RenderCommand::Shutdown);
+    }
+}
+
+fn render_worker(command_receiver: Receiver<RenderCommand>, event_sender: Sender<RenderEvent>) {
+    let mut document: Option<PdfDocumentState> = None;
+    let mut active_session: Option<RenderSessionId> = None;
+    let mut queue = RenderQueue::default();
+    let mut shutdown = false;
+
+    while !shutdown {
+        match command_receiver.recv() {
+            Ok(command) => {
+                handle_command(
+                    command,
+                    &mut document,
+                    &mut active_session,
+                    &mut queue,
+                    &event_sender,
+                    &mut shutdown,
+                );
+            }
+            Err(_) => break,
+        }
+
+        drain_pending_commands(
+            &command_receiver,
+            &mut document,
+            &mut active_session,
+            &mut queue,
+            &event_sender,
+            &mut shutdown,
+        );
+
+        while !shutdown {
+            let Some((job_id, session_id, request)) = queue.pop() else {
+                break;
+            };
+
+            if active_session != Some(session_id) {
+                continue;
+            }
+
+            match document.as_ref() {
+                Some(document) => {
+                    let event = match render_page_pixels(document, request) {
+                        Ok(page) => RenderEvent::PageRendered {
+                            session_id,
+                            job_id,
+                            request,
+                            page,
+                        },
+                        Err(err) => RenderEvent::PageFailed {
+                            session_id,
+                            job_id,
+                            request,
+                            message: err.to_string(),
+                        },
+                    };
+                    let _ = event_sender.send(event);
+                }
+                None => {
+                    let _ = event_sender.send(RenderEvent::PageFailed {
+                        session_id,
+                        job_id,
+                        request,
+                        message: "missing open PDF for render request".to_owned(),
+                    });
+                }
+            }
+
+            drain_pending_commands(
+                &command_receiver,
+                &mut document,
+                &mut active_session,
+                &mut queue,
+                &event_sender,
+                &mut shutdown,
+            );
+        }
+    }
+}
+
+fn drain_pending_commands(
+    command_receiver: &Receiver<RenderCommand>,
+    document: &mut Option<PdfDocumentState>,
+    active_session: &mut Option<RenderSessionId>,
+    queue: &mut RenderQueue,
+    event_sender: &Sender<RenderEvent>,
+    shutdown: &mut bool,
+) {
+    while let Ok(command) = command_receiver.try_recv() {
+        handle_command(
+            command,
+            document,
+            active_session,
+            queue,
+            event_sender,
+            shutdown,
+        );
+        if *shutdown {
+            break;
+        }
+    }
+}
+
+fn handle_command(
+    command: RenderCommand,
+    document: &mut Option<PdfDocumentState>,
+    active_session: &mut Option<RenderSessionId>,
+    queue: &mut RenderQueue,
+    event_sender: &Sender<RenderEvent>,
+    shutdown: &mut bool,
+) {
+    match command {
+        RenderCommand::Open { session_id, path } => {
+            queue.clear();
+            *active_session = Some(session_id);
+            *document = None;
+            open_document_on_worker(session_id, path, document, event_sender);
+        }
+        RenderCommand::RenderPage {
+            session_id,
+            request,
+            priority,
+        } => {
+            queue.push(session_id, request, priority);
+        }
+        RenderCommand::Close { session_id } => {
+            queue.clear_session(session_id);
+            if *active_session == Some(session_id) {
+                *document = None;
+                *active_session = None;
+            }
+        }
+        RenderCommand::Shutdown => {
+            *shutdown = true;
+            queue.clear();
+        }
+    }
+}
+
+fn open_document_on_worker(
+    session_id: RenderSessionId,
+    path: PathBuf,
+    document: &mut Option<PdfDocumentState>,
+    event_sender: &Sender<RenderEvent>,
+) {
+    match PdfDocumentState::open(path) {
+        Ok(doc) => {
+            let (notes, status_text) = match doc.speaker_notes() {
+                Ok(notes) => (notes, "Ready".to_owned()),
+                Err(err) => (
+                    SpeakerNotes::empty(),
+                    speaker_notes_warning(&err).text().to_owned(),
+                ),
+            };
+            let title = doc.title();
+            let page_count = doc.page_count();
+            *document = Some(doc);
+            let _ = event_sender.send(RenderEvent::Opened {
+                session_id,
+                title,
+                page_count,
+                notes,
+                status_text,
+            });
+        }
+        Err(err) => {
+            let _ = event_sender.send(RenderEvent::OpenFailed {
+                session_id,
+                message: err.to_string(),
+            });
+        }
+    }
+}
+
+fn render_page_pixels(
+    document: &PdfDocumentState,
+    request: RenderRequest,
+) -> anyhow::Result<RenderedPagePixels> {
+    let aspect_ratio = document.page_aspect_ratio(request.page_index)?;
+    let pixels = document.render_page_pixels(request.page_index, request.width)?;
+
+    Ok(RenderedPagePixels {
+        pixels,
+        aspect_ratio,
+        estimated_bytes: estimated_render_bytes(request.width, aspect_ratio),
+    })
 }
 
 #[cfg(test)]

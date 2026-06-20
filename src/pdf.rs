@@ -35,6 +35,16 @@ impl PdfDocumentState {
     }
 
     pub fn render_page(&self, page_index: u32, target_width: i32) -> Result<Image> {
+        Ok(Image::from_rgba8(
+            self.render_page_pixels(page_index, target_width)?,
+        ))
+    }
+
+    pub fn render_page_pixels(
+        &self,
+        page_index: u32,
+        target_width: i32,
+    ) -> Result<SharedPixelBuffer<Rgba8Pixel>> {
         let page_number = page_index + 1;
         let page = self
             .document
@@ -54,7 +64,7 @@ impl PdfDocumentState {
         let buffer =
             SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(rgba.as_raw(), width, height);
 
-        Ok(Image::from_rgba8(buffer))
+        Ok(buffer)
     }
 
     pub fn page_aspect_ratio(&self, page_index: u32) -> Result<f32> {

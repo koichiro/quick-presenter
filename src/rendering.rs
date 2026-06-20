@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use slint::Image;
+use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum RenderPurpose {
@@ -44,6 +44,23 @@ pub struct CacheContext {
     pub current_index: u32,
     pub total_pages: u32,
     pub presentation_radius: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct RenderedPagePixels {
+    pub pixels: SharedPixelBuffer<Rgba8Pixel>,
+    pub aspect_ratio: f32,
+    pub estimated_bytes: usize,
+}
+
+impl From<RenderedPagePixels> for RenderedPage {
+    fn from(page: RenderedPagePixels) -> Self {
+        Self {
+            image: Image::from_rgba8(page.pixels),
+            aspect_ratio: page.aspect_ratio,
+            estimated_bytes: page.estimated_bytes,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -94,6 +111,28 @@ impl RenderCache {
         );
         self.enforce_budget(None);
         Ok(page)
+    }
+
+    pub fn insert(&mut self, request: RenderRequest, page: RenderedPage) {
+        self.access_counter = self.access_counter.wrapping_add(1);
+        if let Some(entry) = self.pages.insert(
+            request,
+            CacheEntry {
+                page,
+                last_access: self.access_counter,
+            },
+        ) {
+            self.estimated_bytes = self
+                .estimated_bytes
+                .saturating_sub(entry.page.estimated_bytes);
+        }
+
+        if let Some(entry) = self.pages.get(&request) {
+            self.estimated_bytes = self
+                .estimated_bytes
+                .saturating_add(entry.page.estimated_bytes);
+        }
+        self.enforce_budget(None);
     }
 
     pub fn peek(&self, request: RenderRequest) -> Option<RenderedPage> {
@@ -220,6 +259,14 @@ pub fn presentation_preload_order(current_index: u32, total_pages: u32, radius: 
         }
     }
     indices
+}
+
+pub fn estimated_render_bytes(width: i32, aspect_ratio: f32) -> usize {
+    let width = width.max(1) as f32;
+    let height = (width / aspect_ratio.max(0.01)).ceil().max(1.0);
+    (width as usize)
+        .saturating_mul(height as usize)
+        .saturating_mul(4)
 }
 
 fn page_is_within_radius(page_index: u32, current_index: u32, radius: u32) -> bool {
