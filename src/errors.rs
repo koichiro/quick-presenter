@@ -44,7 +44,7 @@ pub fn presenter_error_message(error: &Error) -> PresenterMessage {
         ],
     ) {
         return PresenterMessage::new(
-            "PDF engine unavailable. Reinstall Quick Presenter or set PDFIUM_DYNAMIC_LIB_PATH.",
+            "PDF engine unavailable. Reinstall Quick Presenter or use the documented PDFium override.",
             MessageSeverity::Error,
         );
     }
@@ -101,7 +101,7 @@ mod tests {
 
         assert_eq!(
             message.text(),
-            "PDF engine unavailable. Reinstall Quick Presenter or set PDFIUM_DYNAMIC_LIB_PATH."
+            "PDF engine unavailable. Reinstall Quick Presenter or use the documented PDFium override."
         );
         assert_eq!(message.severity(), MessageSeverity::Error);
     }

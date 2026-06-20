@@ -130,8 +130,9 @@ bundle resources.
 
 `PDFIUM_DYNAMIC_LIB_PATH` is still available as a troubleshooting and
 development override. You should not need it for correctly packaged artifacts.
-Set it only when running a raw binary without the bundled `pdfium/`
-directory, or when diagnosing a broken package layout.
+Packaged builds ignore it unless `QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE=1` is
+also set. Use that combination only when diagnosing a broken package layout or
+running a raw binary without the bundled `pdfium/` directory.
 
 ## Known Limitations
 

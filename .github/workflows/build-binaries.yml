@@ -11,7 +11,9 @@ on:
       - 'scripts/create_macos_dmg.sh'
       - 'scripts/notarize_macos_dmg.sh'
       - 'scripts/fetch_pdfium.py'
+      - 'scripts/pdfium_manifest.json'
       - 'scripts/generate_icons.py'
+      - 'tests/test_fetch_pdfium.py'
       - 'packaging/**'
       - 'assets/icons/**'
       - 'Cargo.toml'
@@ -81,6 +83,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           dotnet tool install --global wix --version 5.0.2
           "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Test PDFium fetch script
+        run: python -m unittest tests/test_fetch_pdfium.py
 
       - name: Fetch PDFium
         run: python scripts/fetch_pdfium.py
@@ -178,6 +183,8 @@ jobs:
           path. If you move the executable, keep the pdfium directory next to it.
 
           PDFIUM_DYNAMIC_LIB_PATH remains available as a development override.
+          Packaged builds require QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE=1
+          before honoring that override.
 
           Full installer or disk image packaging is intentionally out of scope
           for this workflow.
@@ -263,7 +270,7 @@ jobs:
           test -s "$resources/licenses/QuickPresenter-LICENSE.txt"
           test -s "$resources/licenses/PDFium-LICENSE.txt"
 
-          env -u PDFIUM_DYNAMIC_LIB_PATH "$app/Contents/MacOS/qp" \
+          env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$app/Contents/MacOS/qp" \
             --smoke-open-pdf "$pdf"
 
       - name: Verify Linux desktop metadata
@@ -340,20 +347,20 @@ jobs:
 
           (
             cd /tmp
-            env -u PDFIUM_DYNAMIC_LIB_PATH "$extract_dir/usr/lib/quick-presenter/qp" \
+            env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$extract_dir/usr/lib/quick-presenter/qp" \
               --smoke-open-pdf "$pdf"
           )
 
           (
             cd /tmp
-            PATH="$extract_dir/usr/bin:$PATH" env -u PDFIUM_DYNAMIC_LIB_PATH qp \
+            PATH="$extract_dir/usr/bin:$PATH" env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE qp \
               --smoke-open-pdf "$pdf"
           )
 
           sudo apt-get install -y "$deb"
           (
             cd /tmp
-            env -u PDFIUM_DYNAMIC_LIB_PATH qp --smoke-open-pdf "$pdf"
+            env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE qp --smoke-open-pdf "$pdf"
           )
           sudo apt-get remove -y quick-presenter
 
@@ -397,6 +404,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
 
           Remove-Item Env:PDFIUM_DYNAMIC_LIB_PATH -ErrorAction SilentlyContinue
+          Remove-Item Env:QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE -ErrorAction SilentlyContinue
 
           $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}'
           $msi = Join-Path $artifactDir 'Quick Presenter.msi'
@@ -482,6 +490,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
 
           Remove-Item Env:PDFIUM_DYNAMIC_LIB_PATH -ErrorAction SilentlyContinue
+          Remove-Item Env:QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE -ErrorAction SilentlyContinue
 
           $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}'
           $msix = Join-Path $artifactDir 'Quick Presenter.msix'
@@ -623,14 +632,14 @@ jobs:
 
           (
             cd /tmp
-            env -u PDFIUM_DYNAMIC_LIB_PATH "$artifact_dir/${{ matrix.binary-name }}" \
+            env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$artifact_dir/${{ matrix.binary-name }}" \
               --smoke-open-pdf "$pdf"
           )
 
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             (
               cd /tmp
-              env -u PDFIUM_DYNAMIC_LIB_PATH "$artifact_dir/Quick Presenter.app/Contents/MacOS/qp" \
+              env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$artifact_dir/Quick Presenter.app/Contents/MacOS/qp" \
                 --smoke-open-pdf "$pdf"
             )
           fi
@@ -642,6 +651,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
 
           Remove-Item Env:PDFIUM_DYNAMIC_LIB_PATH -ErrorAction SilentlyContinue
+          Remove-Item Env:QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE -ErrorAction SilentlyContinue
 
           $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}'
           $exe = Join-Path $artifactDir '${{ matrix.binary-name }}'
