@@ -63,9 +63,7 @@ use session_controller::{
     commit_page_rendered_state, commit_render_open_failed_state, commit_render_opened_state,
     commit_speaker_notes_loaded_state,
 };
-use slint::{
-    CloseRequestResponse, ComponentHandle, Model, SharedString, Timer, TimerMode, VecModel, Weak,
-};
+use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode, Weak};
 use timer::PresentationTimer;
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
@@ -114,9 +112,11 @@ fn main() -> Result<()> {
     let windows = AppWindows::new()?;
     let recent_store = default_recent_file_store();
     let recent_files = load_recent_files(recent_store.as_ref());
+    let recent_menu_paths = recent_files.paths().to_vec();
     let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState {
         render_scheduler: Some(RenderScheduler::start()),
         recent_files,
+        recent_menu_paths,
         recent_store,
         ..AppState::default()
     }));
@@ -966,8 +966,7 @@ fn open_recent_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, index
 
     let path = state
         .borrow()
-        .recent_files
-        .paths()
+        .recent_menu_paths
         .get(index)
         .map(PathBuf::from);
 
@@ -999,13 +998,12 @@ fn load_recent_files(store: Option<&RecentFileStore>) -> RecentFiles {
 }
 
 fn record_recent_pdf(
-    presenter: &Weak<PresenterWindow>,
+    _presenter: &Weak<PresenterWindow>,
     state: &Rc<RefCell<AppState>>,
     path: PathBuf,
 ) {
     let mut state = state.borrow_mut();
     state.recent_files.add(path);
-    update_recent_file_menu(presenter, &state.recent_files);
 
     if let Some(store) = state.recent_store.as_ref() {
         if let Err(err) = store.save(&state.recent_files) {
@@ -1014,10 +1012,10 @@ fn record_recent_pdf(
     }
 }
 
-fn clear_recent_files(presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppState>>) {
+fn clear_recent_files(_presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppState>>) {
     let mut state = state.borrow_mut();
     state.recent_files.clear();
-    update_recent_file_menu(presenter, &state.recent_files);
+    state.recent_menu_paths.clear();
 
     if let Some(store) = state.recent_store.as_ref() {
         if let Err(err) = store.save(&state.recent_files) {
@@ -1042,21 +1040,9 @@ fn update_recent_file_menu_labels(presenter: &Weak<PresenterWindow>, labels: Vec
     };
 
     let has_recent_files = !labels.is_empty();
-    let labels = labels
-        .into_iter()
-        .map(SharedString::from)
-        .collect::<Vec<_>>();
 
     presenter.set_has_recent_files(has_recent_files);
-    if let Some(model) = presenter
-        .get_recent_file_labels()
-        .as_any()
-        .downcast_ref::<VecModel<SharedString>>()
-    {
-        model.set_vec(labels);
-    } else {
-        presenter.set_recent_file_labels(recent_file_menu_labels(labels));
-    }
+    presenter.set_recent_file_labels(recent_file_menu_labels(labels));
 }
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {

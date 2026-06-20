@@ -32,6 +32,7 @@ pub struct AppState {
     pub timer: PresentationTimer,
     pub window_menu: WindowMenuState,
     pub recent_files: RecentFiles,
+    pub recent_menu_paths: Vec<PathBuf>,
     pub recent_store: Option<RecentFileStore>,
     pub status_text: String,
 }

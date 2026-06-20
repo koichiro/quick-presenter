@@ -230,8 +230,13 @@ pub fn black_slide_image() -> slint::Image {
     slint::Image::from_rgba8(buffer)
 }
 
-pub fn recent_file_menu_labels(labels: Vec<SharedString>) -> ModelRc<SharedString> {
-    ModelRc::new(Rc::new(VecModel::from(labels)))
+pub fn recent_file_menu_labels(labels: Vec<String>) -> ModelRc<SharedString> {
+    ModelRc::new(Rc::new(VecModel::from(
+        labels
+            .into_iter()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
+    )))
 }
 
 #[cfg(test)]
