@@ -11,25 +11,56 @@ must work without network access.
 
 Runtime PDFium lookup order:
 
-1. `PDFIUM_DYNAMIC_LIB_PATH`
+1. macOS app bundle locations:
+   - `Contents/Resources/pdfium/`
+   - `Contents/Frameworks/pdfium/`
 2. `pdfium/` next to the running executable
 3. `pdfium/` one directory above the running executable, for layouts such as
    `bin/qp` plus a sibling `pdfium/`
-4. macOS app bundle locations:
-   - `Contents/Resources/pdfium/`
-   - `Contents/Frameworks/pdfium/`
-   - `Contents/MacOS/pdfium/`
-5. repository-local `pdfium/` under the current working directory for
-   development runs
-6. system PDFium as a final fallback
+4. `Contents/MacOS/pdfium/` for raw macOS bundle development layouts
 
 For each `pdfium/` directory, the app checks `lib/`, `bin/`, then the directory
 itself for the platform PDFium library name.
+
+Debug builds also allow the repository-local `pdfium/` directory under the
+current working directory and system PDFium as development conveniences.
+Packaged builds do not use current-directory lookup or system PDFium fallback.
+
+`PDFIUM_DYNAMIC_LIB_PATH` is always available in debug builds. In packaged
+non-debug builds, it is ignored unless `QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE=1`
+is also set. This keeps release startup deterministic by default while
+preserving an explicit troubleshooting escape hatch.
 
 Package builders must keep the bundled `pdfium/` directory and its license files
 with the installed application. This applies to the macOS app bundle, Windows
 installer, Linux package artifacts, and packaged artifact smoke tests tracked by
 #87, #94, #96, and #88.
+
+## PDFium Version Updates
+
+PDFium downloads are pinned in
+[`scripts/pdfium_manifest.json`](../scripts/pdfium_manifest.json). The manifest
+stores the bblanchon/pdfium-binaries release tag and SHA256 for each supported
+asset.
+
+To update PDFium to the latest upstream release:
+
+```sh
+python3 scripts/fetch_pdfium.py --update-manifest
+python3 -m unittest tests/test_fetch_pdfium.py
+python3 scripts/fetch_pdfium.py
+```
+
+To pin a specific upstream release tag:
+
+```sh
+python3 scripts/fetch_pdfium.py --update-manifest --version chromium/7891
+python3 -m unittest tests/test_fetch_pdfium.py
+python3 scripts/fetch_pdfium.py
+```
+
+Review the manifest diff, confirm the fetched `pdfium/VERSION`, and run the
+normal Rust verification before opening the release-engineering pull request.
 
 ## Source Code for Binary Releases
 
@@ -76,8 +107,9 @@ not for end-user presentation playback.
 
 The `build-binaries.yml` workflow runs this smoke mode from outside the
 repository working directory against the staged artifacts with
-`PDFIUM_DYNAMIC_LIB_PATH` unset. This catches missing executables, missing
-bundled PDFium files, and broken relative PDFium lookup.
+`PDFIUM_DYNAMIC_LIB_PATH` and `QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE` unset.
+This catches missing executables, missing bundled PDFium files, and broken
+relative PDFium lookup.
 
 ## Application Icons
 

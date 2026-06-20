@@ -43,6 +43,9 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: Test PDFium fetch script
+        run: python -m unittest tests/test_fetch_pdfium.py
+
       - name: Fetch PDFium
         run: python scripts/fetch_pdfium.py
 

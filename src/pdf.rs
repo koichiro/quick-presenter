@@ -1,12 +1,15 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use pdfium_render::prelude::*;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 use tracing::debug;
 
 use crate::aspect::sanitize_aspect_ratio;
 use crate::notes::{is_pdf_speaker_note_annotation, SpeakerNotes};
+
+const PDFIUM_DYNAMIC_LIB_PATH_ENV: &str = "PDFIUM_DYNAMIC_LIB_PATH";
+const PDFIUM_OVERRIDE_GUARD_ENV: &str = "QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE";
 
 pub struct PdfDocumentState {
     document: PdfDocument<'static>,
@@ -134,42 +137,84 @@ fn document_title(path: &Path) -> String {
 }
 
 fn create_pdfium() -> Result<Pdfium> {
-    if let Ok(path) = std::env::var("PDFIUM_DYNAMIC_LIB_PATH") {
-        return new_or_reuse(Pdfium::bind_to_library(&path))
-            .context("failed to bind PDFium from PDFIUM_DYNAMIC_LIB_PATH");
+    let policy = default_pdfium_load_policy();
+
+    if let Ok(path) = std::env::var(PDFIUM_DYNAMIC_LIB_PATH_ENV) {
+        let guard = std::env::var(PDFIUM_OVERRIDE_GUARD_ENV).ok();
+        if !pdfium_dynamic_override_allowed(policy, guard.as_deref()) {
+            debug!(
+                env = PDFIUM_DYNAMIC_LIB_PATH_ENV,
+                guard = PDFIUM_OVERRIDE_GUARD_ENV,
+                "PDFium dynamic override ignored without explicit packaged-build guard"
+            );
+        } else {
+            return new_or_reuse(Pdfium::bind_to_library(&path))
+                .context("failed to bind PDFium from PDFIUM_DYNAMIC_LIB_PATH");
+        }
     }
 
-    for candidate in bundled_pdfium_library_candidates(
+    if let Some(pdfium) = bind_first_existing_pdfium_candidate(bundled_pdfium_library_candidates(
+        policy,
         std::env::current_exe().ok().as_deref(),
         std::env::current_dir().ok().as_deref(),
-    ) {
-        if !candidate.exists() {
-            debug!(
-                path = %candidate.display(),
-                "PDFium bundled candidate does not exist"
-            );
-            continue;
-        }
-
-        return new_or_reuse(Pdfium::bind_to_library(&candidate))
-            .with_context(|| format!("failed to bind bundled PDFium: {}", candidate.display()));
+    ))? {
+        return Ok(pdfium);
     }
 
-    new_or_reuse(Pdfium::bind_to_system_library()).context("failed to bind system PDFium")
+    if policy == PdfiumLoadPolicy::Development {
+        return new_or_reuse(Pdfium::bind_to_system_library())
+            .context("failed to bind system PDFium");
+    }
+
+    bail!("failed to bind bundled PDFium: no packaged PDFium library found")
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PdfiumLoadPolicy {
+    Packaged,
+    Development,
+}
+
+fn default_pdfium_load_policy() -> PdfiumLoadPolicy {
+    if cfg!(debug_assertions) {
+        PdfiumLoadPolicy::Development
+    } else {
+        PdfiumLoadPolicy::Packaged
+    }
+}
+
+fn pdfium_dynamic_override_allowed(policy: PdfiumLoadPolicy, guard: Option<&str>) -> bool {
+    policy == PdfiumLoadPolicy::Development || env_flag_enabled(guard)
+}
+
+fn env_flag_enabled(value: Option<&str>) -> bool {
+    matches!(
+        value.map(str::trim).map(str::to_ascii_lowercase).as_deref(),
+        Some("1" | "true" | "yes")
+    )
 }
 
 fn bundled_pdfium_library_candidates(
+    policy: PdfiumLoadPolicy,
     current_exe: Option<&Path>,
     current_dir: Option<&Path>,
 ) -> Vec<PathBuf> {
+    let mut candidates = packaged_pdfium_library_candidates(current_exe);
+
+    if policy == PdfiumLoadPolicy::Development {
+        if let Some(current_dir) = current_dir {
+            push_pdfium_layout_candidates(&mut candidates, &current_dir.join("pdfium"));
+        }
+    }
+
+    dedupe_paths(candidates)
+}
+
+fn packaged_pdfium_library_candidates(current_exe: Option<&Path>) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
 
     if let Some(exe_dir) = current_exe.and_then(Path::parent) {
-        push_pdfium_layout_candidates(&mut candidates, &exe_dir.join("pdfium"));
-
         if let Some(parent_dir) = exe_dir.parent() {
-            push_pdfium_layout_candidates(&mut candidates, &parent_dir.join("pdfium"));
-
             if exe_dir.file_name().and_then(|name| name.to_str()) == Some("MacOS") {
                 push_pdfium_layout_candidates(
                     &mut candidates,
@@ -181,13 +226,33 @@ fn bundled_pdfium_library_candidates(
                 );
             }
         }
+
+        push_pdfium_layout_candidates(&mut candidates, &exe_dir.join("pdfium"));
+
+        if let Some(parent_dir) = exe_dir.parent() {
+            push_pdfium_layout_candidates(&mut candidates, &parent_dir.join("pdfium"));
+        }
     }
 
-    if let Some(current_dir) = current_dir {
-        push_pdfium_layout_candidates(&mut candidates, &current_dir.join("pdfium"));
+    candidates
+}
+
+fn bind_first_existing_pdfium_candidate(candidates: Vec<PathBuf>) -> Result<Option<Pdfium>> {
+    for candidate in candidates {
+        if !candidate.exists() {
+            debug!(
+                path = %candidate.display(),
+                "PDFium bundled candidate does not exist"
+            );
+            continue;
+        }
+
+        return new_or_reuse(Pdfium::bind_to_library(&candidate))
+            .with_context(|| format!("failed to bind bundled PDFium: {}", candidate.display()))
+            .map(Some);
     }
 
-    dedupe_paths(candidates)
+    Ok(None)
 }
 
 fn push_pdfium_layout_candidates(candidates: &mut Vec<PathBuf>, pdfium_dir: &Path) {
@@ -246,7 +311,8 @@ mod tests {
     #[test]
     fn bundled_pdfium_candidates_include_raw_artifact_layout() {
         let exe = Path::new("/tmp/quick-presenter/qp");
-        let candidates = bundled_pdfium_library_candidates(Some(exe), None);
+        let candidates =
+            bundled_pdfium_library_candidates(PdfiumLoadPolicy::Packaged, Some(exe), None);
 
         assert!(candidates.contains(&platform_library_at("/tmp/quick-presenter/pdfium/lib")));
         assert!(candidates.contains(&platform_library_at("/tmp/quick-presenter/pdfium/bin")));
@@ -256,7 +322,8 @@ mod tests {
     #[test]
     fn bundled_pdfium_candidates_include_macos_app_layout() {
         let exe = Path::new("/Applications/Quick Presenter.app/Contents/MacOS/qp");
-        let candidates = bundled_pdfium_library_candidates(Some(exe), None);
+        let candidates =
+            bundled_pdfium_library_candidates(PdfiumLoadPolicy::Packaged, Some(exe), None);
 
         assert!(candidates.contains(&platform_library_at(
             "/Applications/Quick Presenter.app/Contents/Resources/pdfium/lib"
@@ -271,17 +338,32 @@ mod tests {
 
     #[test]
     fn bundled_pdfium_candidates_include_development_layout() {
-        let candidates =
-            bundled_pdfium_library_candidates(None, Some(Path::new("/work/quick-presenter")));
+        let candidates = bundled_pdfium_library_candidates(
+            PdfiumLoadPolicy::Development,
+            None,
+            Some(Path::new("/work/quick-presenter")),
+        );
 
         assert!(candidates.contains(&platform_library_at("/work/quick-presenter/pdfium/lib")));
+    }
+
+    #[test]
+    fn bundled_pdfium_candidates_exclude_development_layout_for_packaged_policy() {
+        let candidates = bundled_pdfium_library_candidates(
+            PdfiumLoadPolicy::Packaged,
+            None,
+            Some(Path::new("/work/quick-presenter")),
+        );
+
+        assert!(!candidates.contains(&platform_library_at("/work/quick-presenter/pdfium/lib")));
     }
 
     #[test]
     fn bundled_pdfium_candidates_are_deduplicated() {
         let exe = Path::new("/work/quick-presenter/qp");
         let cwd = Path::new("/work/quick-presenter");
-        let candidates = bundled_pdfium_library_candidates(Some(exe), Some(cwd));
+        let candidates =
+            bundled_pdfium_library_candidates(PdfiumLoadPolicy::Development, Some(exe), Some(cwd));
 
         let unique_count = candidates
             .iter()
@@ -291,6 +373,34 @@ mod tests {
             .count();
 
         assert_eq!(unique_count, 1);
+    }
+
+    #[test]
+    fn dynamic_override_is_allowed_for_development_policy() {
+        assert!(pdfium_dynamic_override_allowed(
+            PdfiumLoadPolicy::Development,
+            None
+        ));
+    }
+
+    #[test]
+    fn dynamic_override_requires_guard_for_packaged_policy() {
+        assert!(!pdfium_dynamic_override_allowed(
+            PdfiumLoadPolicy::Packaged,
+            None
+        ));
+        assert!(!pdfium_dynamic_override_allowed(
+            PdfiumLoadPolicy::Packaged,
+            Some("0")
+        ));
+        assert!(pdfium_dynamic_override_allowed(
+            PdfiumLoadPolicy::Packaged,
+            Some("1")
+        ));
+        assert!(pdfium_dynamic_override_allowed(
+            PdfiumLoadPolicy::Packaged,
+            Some("true")
+        ));
     }
 
     #[test]
