@@ -63,7 +63,9 @@ use session_controller::{
     commit_page_rendered_state, commit_render_open_failed_state, commit_render_opened_state,
     commit_speaker_notes_loaded_state,
 };
-use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode, Weak};
+use slint::{
+    CloseRequestResponse, ComponentHandle, Model, SharedString, Timer, TimerMode, VecModel, Weak,
+};
 use timer::PresentationTimer;
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
@@ -1040,9 +1042,21 @@ fn update_recent_file_menu_labels(presenter: &Weak<PresenterWindow>, labels: Vec
     };
 
     let has_recent_files = !labels.is_empty();
+    let labels = labels
+        .into_iter()
+        .map(SharedString::from)
+        .collect::<Vec<_>>();
 
     presenter.set_has_recent_files(has_recent_files);
-    presenter.set_recent_file_labels(recent_file_menu_labels(labels));
+    if let Some(model) = presenter
+        .get_recent_file_labels()
+        .as_any()
+        .downcast_ref::<VecModel<SharedString>>()
+    {
+        model.set_vec(labels);
+    } else {
+        presenter.set_recent_file_labels(recent_file_menu_labels(labels));
+    }
 }
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
