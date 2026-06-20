@@ -1,7 +1,8 @@
 # Packaging Notes
 
-Quick Presenter currently builds raw development binaries in CI. Full installer
-or app bundle packaging is intentionally separate from the binary build workflow.
+Quick Presenter builds release-oriented package artifacts in the `Build
+Binaries` workflow. The workflow stages bundled PDFium, platform metadata,
+licenses, and installer or app bundle layouts before uploading artifacts.
 
 ## Bundled PDFium
 
