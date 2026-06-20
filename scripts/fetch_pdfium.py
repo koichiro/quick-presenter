@@ -12,6 +12,7 @@ import json
 import os
 import platform
 import posixpath
+import shutil
 import stat
 import tarfile
 import tempfile
@@ -69,6 +70,11 @@ def main() -> None:
         default="latest",
         help="release tag for --update-manifest, or 'latest'",
     )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="remove and recreate the output directory before extraction",
+    )
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -86,7 +92,7 @@ def main() -> None:
     expected_sha256 = args.sha256 or asset_entry["sha256"]
     url = f"{manifest['base_url']}/{asset}"
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    prepare_output_dir(out, clean=args.clean)
 
     with tempfile.TemporaryDirectory() as td:
         archive = Path(td) / asset
@@ -182,6 +188,21 @@ def valid_sha256(value: object) -> bool:
         and len(value) == 64
         and all(ch in "0123456789abcdefABCDEF" for ch in value)
     )
+
+
+def prepare_output_dir(out: Path, clean: bool) -> None:
+    resolved = out.resolve(strict=False)
+    if resolved.parent == resolved:
+        raise SystemExit(f"Refusing to use filesystem root as output directory: {out}")
+    if out.is_symlink():
+        raise SystemExit(f"Refusing symlink output directory: {out}")
+    if out.exists() and not out.is_dir():
+        raise SystemExit(f"Output path exists and is not a directory: {out}")
+
+    if clean and out.exists():
+        shutil.rmtree(out)
+
+    out.mkdir(parents=True, exist_ok=True)
 
 
 def safe_extract(tf: tarfile.TarFile, out: Path) -> None:

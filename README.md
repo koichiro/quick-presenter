@@ -123,6 +123,10 @@ development:
 python3 scripts/fetch_pdfium.py
 ```
 
+CI and release packaging fetch PDFium with `--clean` so extraction starts from a
+clean output directory. See [docs/PACKAGING.md](docs/PACKAGING.md) for the
+release-oriented PDFium fetch requirements.
+
 Build the app:
 
 ```sh

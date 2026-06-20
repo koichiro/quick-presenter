@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import io
+import os
 import tarfile
 import tempfile
 import unittest
@@ -89,6 +90,67 @@ class FetchPdfiumTests(unittest.TestCase):
         self.assertIn('"version": "chromium/9999"', text)
         self.assertIn('"pdfium-linux-arm64.tgz"', text)
         self.assertLess(text.index("pdfium-linux-arm64.tgz"), text.index("pdfium-win-x86.tgz"))
+
+    def test_prepare_output_dir_keeps_existing_directory_without_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "pdfium"
+            marker = out / "marker.txt"
+            out.mkdir()
+            marker.write_text("keep", encoding="utf-8")
+
+            fetch_pdfium.prepare_output_dir(out, clean=False)
+
+            self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
+
+    def test_prepare_output_dir_removes_existing_directory_with_clean(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "pdfium"
+            stale = out / "stale.txt"
+            out.mkdir()
+            stale.write_text("remove", encoding="utf-8")
+
+            fetch_pdfium.prepare_output_dir(out, clean=True)
+
+            self.assertTrue(out.is_dir())
+            self.assertFalse(stale.exists())
+            self.assertEqual(list(out.iterdir()), [])
+
+    def test_prepare_output_dir_rejects_file_output_path(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "pdfium"
+            out.write_text("not a directory", encoding="utf-8")
+
+            with self.assertRaises(SystemExit):
+                fetch_pdfium.prepare_output_dir(out, clean=True)
+
+    def test_prepare_output_dir_rejects_symlink_output_path(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "target"
+            target.mkdir()
+            out = Path(td) / "pdfium"
+            try:
+                os.symlink(target, out)
+            except OSError as err:
+                raise unittest.SkipTest(f"symlink creation is unavailable: {err}") from err
+
+            with self.assertRaises(SystemExit):
+                fetch_pdfium.prepare_output_dir(out, clean=True)
+
+    def test_prepare_output_dir_clean_does_not_follow_nested_symlinks(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "pdfium"
+            out.mkdir()
+            external = Path(td) / "external.txt"
+            external.write_text("external", encoding="utf-8")
+            try:
+                os.symlink(external, out / "external-link")
+            except OSError as err:
+                raise unittest.SkipTest(f"symlink creation is unavailable: {err}") from err
+
+            fetch_pdfium.prepare_output_dir(out, clean=True)
+
+            self.assertEqual(external.read_text(encoding="utf-8"), "external")
+            self.assertEqual(list(out.iterdir()), [])
 
     def assert_unsafe(self, member: tuple[tarfile.TarInfo, bytes | None]) -> None:
         with tempfile.TemporaryDirectory() as td:
