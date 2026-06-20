@@ -43,12 +43,19 @@ PDFium downloads are pinned in
 stores the bblanchon/pdfium-binaries release tag and SHA256 for each supported
 asset.
 
+`scripts/fetch_pdfium.py` verifies the pinned archive checksum and rejects unsafe
+archive member paths before extraction. The extraction target must still be a
+clean or trusted directory, because pre-existing files or symlinks can affect the
+resulting filesystem state. CI and release packaging should fetch PDFium with
+`--clean`, which removes and recreates only the configured output directory
+before extraction.
+
 To update PDFium to the latest upstream release:
 
 ```sh
 python3 scripts/fetch_pdfium.py --update-manifest
 python3 -m unittest tests/test_fetch_pdfium.py
-python3 scripts/fetch_pdfium.py
+python3 scripts/fetch_pdfium.py --clean
 ```
 
 To pin a specific upstream release tag:
@@ -56,7 +63,7 @@ To pin a specific upstream release tag:
 ```sh
 python3 scripts/fetch_pdfium.py --update-manifest --version chromium/7891
 python3 -m unittest tests/test_fetch_pdfium.py
-python3 scripts/fetch_pdfium.py
+python3 scripts/fetch_pdfium.py --clean
 ```
 
 Review the manifest diff, confirm the fetched `pdfium/VERSION`, and run the
@@ -154,7 +161,7 @@ covered by the runtime lookup order documented above.
 To stage the app bundle locally:
 
 ```sh
-python3 scripts/fetch_pdfium.py
+python3 scripts/fetch_pdfium.py --clean
 cargo build --release --bin qp
 scripts/stage_macos_app_bundle.sh /tmp/quick-presenter-macos
 ```
@@ -296,7 +303,7 @@ the runtime lookup order documented above.
 To build the MSI locally on Windows:
 
 ```powershell
-python scripts/fetch_pdfium.py
+python scripts/fetch_pdfium.py --clean
 cargo build --release --bin qp
 dotnet tool install --global wix
 scripts/build_windows_msi.ps1
@@ -431,7 +438,7 @@ Quick Presenter.msix
 To build the unsigned MSIX locally on Windows:
 
 ```powershell
-python scripts/fetch_pdfium.py
+python scripts/fetch_pdfium.py --clean
 cargo build --release --bin qp
 scripts/build_windows_msix.ps1
 ```
@@ -532,7 +539,7 @@ scripts/stage_linux_desktop_assets.sh /tmp/quick-presenter-linux-stage
 To build the Debian package locally on Ubuntu:
 
 ```sh
-python3 scripts/fetch_pdfium.py
+python3 scripts/fetch_pdfium.py --clean
 cargo build --release --bin qp
 scripts/build_linux_deb.sh
 ```

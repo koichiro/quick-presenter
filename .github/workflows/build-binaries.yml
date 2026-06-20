@@ -88,7 +88,7 @@ jobs:
         run: python -m unittest tests/test_fetch_pdfium.py
 
       - name: Fetch PDFium
-        run: python scripts/fetch_pdfium.py
+        run: python scripts/fetch_pdfium.py --clean
 
       - name: Build release binary
         run: cargo build --release --bin qp
