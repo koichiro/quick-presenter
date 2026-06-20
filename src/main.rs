@@ -88,6 +88,7 @@ const RENDER_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(16);
 const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
 const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
 const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
+const FILE_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 
 fn main() -> Result<()> {
@@ -669,8 +670,10 @@ fn schedule_open_pdf(
     path: PathBuf,
     error_context: &'static str,
 ) {
-    let _ = error_context;
-    begin_open_pdf(&windows, &state, path);
+    Timer::single_shot(FILE_MENU_ACTION_DELAY, move || {
+        let _ = error_context;
+        begin_open_pdf(&windows, &state, path);
+    });
 }
 
 fn wire_recent_file_callbacks(
@@ -994,12 +997,13 @@ fn load_recent_files(store: Option<&RecentFileStore>) -> RecentFiles {
 }
 
 fn record_recent_pdf(
-    _presenter: &Weak<PresenterWindow>,
+    presenter: &Weak<PresenterWindow>,
     state: &Rc<RefCell<AppState>>,
     path: PathBuf,
 ) {
     let mut state = state.borrow_mut();
     state.recent_files.add(path);
+    update_recent_file_menu(presenter, &state.recent_files);
 
     if let Some(store) = state.recent_store.as_ref() {
         if let Err(err) = store.save(&state.recent_files) {
@@ -1008,9 +1012,10 @@ fn record_recent_pdf(
     }
 }
 
-fn clear_recent_files(_presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppState>>) {
+fn clear_recent_files(presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppState>>) {
     let mut state = state.borrow_mut();
     state.recent_files.clear();
+    update_recent_file_menu(presenter, &state.recent_files);
 
     if let Some(store) = state.recent_store.as_ref() {
         if let Err(err) = store.save(&state.recent_files) {
