@@ -7,6 +7,8 @@ pub mod clock;
 pub mod errors;
 pub mod fullscreen;
 pub mod input;
+#[cfg(target_os = "macos")]
+pub mod macos_window;
 pub mod notes;
 pub mod pdf;
 pub mod presentation;
@@ -124,8 +126,8 @@ fn main() -> Result<()> {
 
     windows.apply_initial_positions();
     windows.slide.show()?;
-    apply_macos_slide_window_chrome();
     let window_refs = windows.refs();
+    apply_macos_slide_window_chrome(&window_refs);
     sync_slide_chrome(&window_refs);
     windows.presenter.show()?;
     set_application_icon();
