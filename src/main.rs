@@ -112,9 +112,11 @@ fn main() -> Result<()> {
     let windows = AppWindows::new()?;
     let recent_store = default_recent_file_store();
     let recent_files = load_recent_files(recent_store.as_ref());
+    let recent_menu_paths = recent_files.paths().to_vec();
     let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState {
         render_scheduler: Some(RenderScheduler::start()),
         recent_files,
+        recent_menu_paths,
         recent_store,
         ..AppState::default()
     }));
@@ -964,8 +966,7 @@ fn open_recent_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, index
 
     let path = state
         .borrow()
-        .recent_files
-        .paths()
+        .recent_menu_paths
         .get(index)
         .map(PathBuf::from);
 
@@ -1014,6 +1015,7 @@ fn record_recent_pdf(
 fn clear_recent_files(_presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppState>>) {
     let mut state = state.borrow_mut();
     state.recent_files.clear();
+    state.recent_menu_paths.clear();
 
     if let Some(store) = state.recent_store.as_ref() {
         if let Err(err) = store.save(&state.recent_files) {
@@ -1590,5 +1592,42 @@ mod tests {
         assert_eq!(snapshot.current_index, 0);
         assert_eq!(snapshot.page_label, "1 / 2");
         assert_eq!(snapshot.title, "New deck");
+    }
+
+    #[test]
+    fn recording_recent_pdf_keeps_visible_recent_menu_snapshot_stable() {
+        let first = PathBuf::from("/tmp/first.pdf");
+        let second = PathBuf::from("/tmp/second.pdf");
+        let state = Rc::new(RefCell::new(AppState {
+            recent_files: RecentFiles::from_paths([first.clone(), second.clone()]),
+            recent_menu_paths: vec![first.clone(), second.clone()],
+            ..AppState::default()
+        }));
+        let presenter = Weak::<PresenterWindow>::default();
+
+        record_recent_pdf(&presenter, &state, second.clone());
+
+        let state = state.borrow();
+        assert_eq!(state.recent_files.paths(), &[second, first.clone()]);
+        assert_eq!(
+            state.recent_menu_paths,
+            vec![first, PathBuf::from("/tmp/second.pdf")]
+        );
+    }
+
+    #[test]
+    fn clearing_recent_files_clears_saved_paths_and_visible_recent_menu_snapshot() {
+        let state = Rc::new(RefCell::new(AppState {
+            recent_files: RecentFiles::from_paths([PathBuf::from("/tmp/first.pdf")]),
+            recent_menu_paths: vec![PathBuf::from("/tmp/first.pdf")],
+            ..AppState::default()
+        }));
+        let presenter = Weak::<PresenterWindow>::default();
+
+        clear_recent_files(&presenter, &state);
+
+        let state = state.borrow();
+        assert!(state.recent_files.is_empty());
+        assert!(state.recent_menu_paths.is_empty());
     }
 }

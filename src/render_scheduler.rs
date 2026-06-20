@@ -1,9 +1,9 @@
 use std::{collections::HashSet, path::PathBuf};
 use std::{
-    sync::mpsc::{self, Receiver, Sender},
+    collections::VecDeque,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc,
+        Arc, Condvar, Mutex,
     },
     thread,
 };
@@ -12,8 +12,11 @@ use crate::{
     errors::speaker_notes_warning,
     notes::SpeakerNotes,
     pdf::PdfDocumentState,
-    rendering::{estimated_render_bytes, RenderRequest, RenderedPagePixels},
+    rendering::{estimated_render_bytes, RenderPurpose, RenderRequest, RenderedPagePixels},
 };
+
+const MAX_PENDING_RENDER_COMMANDS: usize = 64;
+const MAX_PENDING_RENDER_EVENTS: usize = 64;
 
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct RenderSessionId(pub u64);
@@ -241,6 +244,384 @@ impl QueueKey {
     }
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+struct PendingWorkCommand {
+    key: QueueKey,
+    priority: RenderPriority,
+    sequence: u64,
+}
+
+#[derive(Debug)]
+struct PendingRenderCommands {
+    next_sequence: u64,
+    controls: VecDeque<RenderCommand>,
+    work_keys: HashSet<QueueKey>,
+    works: Vec<PendingWorkCommand>,
+    work_capacity: usize,
+}
+
+impl PendingRenderCommands {
+    fn new(work_capacity: usize) -> Self {
+        Self {
+            next_sequence: 0,
+            controls: VecDeque::new(),
+            work_keys: HashSet::new(),
+            works: Vec::new(),
+            work_capacity,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.controls.is_empty() && self.works.is_empty()
+    }
+
+    fn push(&mut self, command: RenderCommand) {
+        if self.has_shutdown() && !matches!(command, RenderCommand::Shutdown) {
+            return;
+        }
+
+        match command {
+            RenderCommand::Open { session_id, path } => {
+                self.clear_work();
+                self.controls
+                    .retain(|command| matches!(command, RenderCommand::Shutdown));
+                self.controls
+                    .push_back(RenderCommand::Open { session_id, path });
+            }
+            RenderCommand::RenderPage {
+                session_id,
+                request,
+                priority,
+            } => {
+                self.push_work(
+                    QueueKey::Page {
+                        session_id,
+                        request,
+                    },
+                    priority,
+                );
+            }
+            RenderCommand::ExtractSpeakerNotes { session_id } => {
+                self.push_work(
+                    QueueKey::SpeakerNotes { session_id },
+                    RenderPriority::Background,
+                );
+            }
+            RenderCommand::Close { session_id } => {
+                self.clear_session(session_id);
+                self.controls.push_back(RenderCommand::Close { session_id });
+            }
+            RenderCommand::Shutdown => {
+                self.controls.clear();
+                self.clear_work();
+                self.controls.push_back(RenderCommand::Shutdown);
+            }
+        }
+    }
+
+    fn pop(&mut self) -> Option<RenderCommand> {
+        if let Some(index) = self
+            .controls
+            .iter()
+            .position(|command| matches!(command, RenderCommand::Shutdown))
+        {
+            return self.controls.remove(index);
+        }
+
+        if let Some(index) = self
+            .controls
+            .iter()
+            .position(|command| matches!(command, RenderCommand::Open { .. }))
+        {
+            return self.controls.remove(index);
+        }
+
+        if let Some(command) = self.controls.pop_front() {
+            return Some(command);
+        }
+
+        let index = self.next_work_index()?;
+        let work = self.works.swap_remove(index);
+        self.work_keys.remove(&work.key);
+        Some(work.into_command())
+    }
+
+    fn push_work(&mut self, key: QueueKey, priority: RenderPriority) {
+        if self.work_keys.contains(&key) {
+            self.raise_work_priority(key, priority);
+            return;
+        }
+
+        self.next_sequence = self.next_sequence.wrapping_add(1);
+        self.work_keys.insert(key);
+        self.works.push(PendingWorkCommand {
+            key,
+            priority,
+            sequence: self.next_sequence,
+        });
+        self.enforce_work_capacity();
+    }
+
+    fn clear_session(&mut self, session_id: RenderSessionId) {
+        self.works
+            .retain(|work| work.key.session_id() != session_id);
+        self.work_keys.retain(|key| key.session_id() != session_id);
+        self.controls.retain(|command| match command {
+            RenderCommand::Open {
+                session_id: command_session,
+                ..
+            }
+            | RenderCommand::Close {
+                session_id: command_session,
+            } => *command_session != session_id,
+            RenderCommand::ExtractSpeakerNotes { .. } | RenderCommand::RenderPage { .. } => true,
+            RenderCommand::Shutdown => true,
+        });
+    }
+
+    fn clear_work(&mut self) {
+        self.works.clear();
+        self.work_keys.clear();
+    }
+
+    fn raise_work_priority(&mut self, key: QueueKey, priority: RenderPriority) {
+        if let Some(work) = self.works.iter_mut().find(|work| work.key == key) {
+            work.priority = work.priority.max(priority);
+        }
+    }
+
+    fn enforce_work_capacity(&mut self) {
+        while self.works.len() > self.work_capacity {
+            let Some(index) = self.work_drop_candidate_index() else {
+                break;
+            };
+            let removed = self.works.swap_remove(index);
+            self.work_keys.remove(&removed.key);
+        }
+    }
+
+    fn next_work_index(&self) -> Option<usize> {
+        self.works
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, work)| (work.priority, u64::MAX.saturating_sub(work.sequence)))
+            .map(|(index, _)| index)
+    }
+
+    fn work_drop_candidate_index(&self) -> Option<usize> {
+        self.works
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, work)| (work.priority, work.sequence))
+            .map(|(index, _)| index)
+    }
+
+    fn has_shutdown(&self) -> bool {
+        self.controls
+            .iter()
+            .any(|command| matches!(command, RenderCommand::Shutdown))
+    }
+}
+
+impl Default for PendingRenderCommands {
+    fn default() -> Self {
+        Self::new(MAX_PENDING_RENDER_COMMANDS)
+    }
+}
+
+impl PendingWorkCommand {
+    fn into_command(self) -> RenderCommand {
+        match self.key {
+            QueueKey::Page {
+                session_id,
+                request,
+            } => RenderCommand::RenderPage {
+                session_id,
+                request,
+                priority: self.priority,
+            },
+            QueueKey::SpeakerNotes { session_id } => {
+                RenderCommand::ExtractSpeakerNotes { session_id }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct RenderCommandMailbox {
+    pending: Mutex<PendingRenderCommands>,
+    available: Condvar,
+}
+
+impl RenderCommandMailbox {
+    fn send(&self, command: RenderCommand) {
+        let mut pending = self
+            .pending
+            .lock()
+            .expect("render command mailbox poisoned");
+        pending.push(command);
+        self.available.notify_one();
+    }
+
+    fn recv(&self) -> Option<RenderCommand> {
+        let mut pending = self
+            .pending
+            .lock()
+            .expect("render command mailbox poisoned");
+        while pending.is_empty() {
+            pending = self
+                .available
+                .wait(pending)
+                .expect("render command mailbox poisoned");
+        }
+        pending.pop()
+    }
+
+    fn try_recv(&self) -> Option<RenderCommand> {
+        self.pending
+            .lock()
+            .expect("render command mailbox poisoned")
+            .pop()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+enum RenderEventKey {
+    Open(RenderSessionId),
+    SpeakerNotes(RenderSessionId),
+    Page {
+        session_id: RenderSessionId,
+        request: RenderRequest,
+    },
+}
+
+#[derive(Debug)]
+struct PendingRenderEvents {
+    events: VecDeque<RenderEvent>,
+    capacity: usize,
+}
+
+impl PendingRenderEvents {
+    fn new(capacity: usize) -> Self {
+        Self {
+            events: VecDeque::new(),
+            capacity,
+        }
+    }
+
+    fn push(&mut self, event: RenderEvent) {
+        if self.capacity == 0 {
+            return;
+        }
+
+        if let Some(key) = render_event_key(&event) {
+            if let Some(existing) = self
+                .events
+                .iter()
+                .position(|queued| render_event_key(queued) == Some(key))
+            {
+                self.events[existing] = event;
+                return;
+            }
+        }
+
+        if self.events.len() >= self.capacity && !self.make_room_for(&event) {
+            return;
+        }
+
+        self.events.push_back(event);
+    }
+
+    fn drain(&mut self) -> Vec<RenderEvent> {
+        self.events.drain(..).collect()
+    }
+
+    fn make_room_for(&mut self, event: &RenderEvent) -> bool {
+        let incoming = event_drop_score(event);
+        let Some((index, score)) = self
+            .events
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, event)| event_drop_score(event))
+            .map(|(index, event)| (index, event_drop_score(event)))
+        else {
+            return true;
+        };
+
+        if score >= incoming {
+            self.events.remove(index);
+            true
+        } else {
+            false
+        }
+    }
+}
+
+impl Default for PendingRenderEvents {
+    fn default() -> Self {
+        Self::new(MAX_PENDING_RENDER_EVENTS)
+    }
+}
+
+#[derive(Debug, Default)]
+struct RenderEventMailbox {
+    pending: Mutex<PendingRenderEvents>,
+}
+
+impl RenderEventMailbox {
+    fn send(&self, event: RenderEvent) {
+        self.pending
+            .lock()
+            .expect("render event mailbox poisoned")
+            .push(event);
+    }
+
+    fn drain(&self) -> Vec<RenderEvent> {
+        self.pending
+            .lock()
+            .expect("render event mailbox poisoned")
+            .drain()
+    }
+}
+
+fn render_event_key(event: &RenderEvent) -> Option<RenderEventKey> {
+    match event {
+        RenderEvent::Opened { session_id, .. } | RenderEvent::OpenFailed { session_id, .. } => {
+            Some(RenderEventKey::Open(*session_id))
+        }
+        RenderEvent::SpeakerNotesLoaded { session_id, .. } => {
+            Some(RenderEventKey::SpeakerNotes(*session_id))
+        }
+        RenderEvent::PageRendered {
+            session_id,
+            request,
+            ..
+        }
+        | RenderEvent::PageFailed {
+            session_id,
+            request,
+            ..
+        } => Some(RenderEventKey::Page {
+            session_id: *session_id,
+            request: *request,
+        }),
+    }
+}
+
+fn event_drop_score(event: &RenderEvent) -> u8 {
+    match event {
+        RenderEvent::PageRendered { request, .. } | RenderEvent::PageFailed { request, .. } => {
+            match request.purpose {
+                RenderPurpose::Thumbnail => 5,
+                RenderPurpose::NextPreview => 4,
+                RenderPurpose::CurrentSlide => 3,
+            }
+        }
+        RenderEvent::SpeakerNotesLoaded { .. } => 2,
+        RenderEvent::Opened { .. } | RenderEvent::OpenFailed { .. } => 1,
+    }
+}
+
 #[derive(Debug, Default)]
 struct RenderCancellation {
     active_session: AtomicU64,
@@ -273,22 +654,30 @@ impl RenderCancellation {
 }
 
 pub struct RenderScheduler {
-    command_sender: Sender<RenderCommand>,
-    event_receiver: Receiver<RenderEvent>,
+    command_mailbox: Arc<RenderCommandMailbox>,
+    event_mailbox: Arc<RenderEventMailbox>,
     cancellation: Arc<RenderCancellation>,
 }
 
 impl RenderScheduler {
     pub fn start() -> Self {
-        let (command_sender, command_receiver) = mpsc::channel();
-        let (event_sender, event_receiver) = mpsc::channel();
+        let command_mailbox = Arc::new(RenderCommandMailbox::default());
+        let event_mailbox = Arc::new(RenderEventMailbox::default());
         let cancellation = Arc::new(RenderCancellation::default());
+        let worker_command_mailbox = Arc::clone(&command_mailbox);
+        let worker_event_mailbox = Arc::clone(&event_mailbox);
         let worker_cancellation = Arc::clone(&cancellation);
-        thread::spawn(move || render_worker(command_receiver, event_sender, worker_cancellation));
+        thread::spawn(move || {
+            render_worker(
+                worker_command_mailbox,
+                worker_event_mailbox,
+                worker_cancellation,
+            )
+        });
 
         Self {
-            command_sender,
-            event_receiver,
+            command_mailbox,
+            event_mailbox,
             cancellation,
         }
     }
@@ -316,28 +705,24 @@ impl RenderScheduler {
     }
 
     pub fn drain_events(&self) -> Vec<RenderEvent> {
-        let mut events = Vec::new();
-        while let Ok(event) = self.event_receiver.try_recv() {
-            events.push(event);
-        }
-        events
+        self.event_mailbox.drain()
     }
 
     fn send(&self, command: RenderCommand) {
-        let _ = self.command_sender.send(command);
+        self.command_mailbox.send(command);
     }
 }
 
 impl Drop for RenderScheduler {
     fn drop(&mut self) {
         self.cancellation.shutdown();
-        let _ = self.command_sender.send(RenderCommand::Shutdown);
+        self.command_mailbox.send(RenderCommand::Shutdown);
     }
 }
 
 fn render_worker(
-    command_receiver: Receiver<RenderCommand>,
-    event_sender: Sender<RenderEvent>,
+    command_mailbox: Arc<RenderCommandMailbox>,
+    event_mailbox: Arc<RenderEventMailbox>,
     cancellation: Arc<RenderCancellation>,
 ) {
     let mut document: Option<PdfDocumentState> = None;
@@ -346,27 +731,24 @@ fn render_worker(
     let mut shutdown = false;
 
     while !shutdown {
-        match command_receiver.recv() {
-            Ok(command) => {
-                handle_command(
-                    command,
-                    &mut document,
-                    &mut active_session,
-                    &mut queue,
-                    &event_sender,
-                    &cancellation,
-                    &mut shutdown,
-                );
-            }
-            Err(_) => break,
+        if let Some(command) = command_mailbox.recv() {
+            handle_command(
+                command,
+                &mut document,
+                &mut active_session,
+                &mut queue,
+                &event_mailbox,
+                &cancellation,
+                &mut shutdown,
+            );
         }
 
         drain_pending_commands(
-            &command_receiver,
+            &command_mailbox,
             &mut document,
             &mut active_session,
             &mut queue,
-            &event_sender,
+            &event_mailbox,
             &cancellation,
             &mut shutdown,
         );
@@ -387,7 +769,7 @@ fn render_worker(
                         session_id,
                         job_id,
                         request,
-                        &event_sender,
+                        &event_mailbox,
                         &cancellation,
                     );
                 }
@@ -395,18 +777,18 @@ fn render_worker(
                     extract_speaker_notes_on_worker(
                         document.as_ref(),
                         session_id,
-                        &event_sender,
+                        &event_mailbox,
                         &cancellation,
                     );
                 }
             }
 
             drain_pending_commands(
-                &command_receiver,
+                &command_mailbox,
                 &mut document,
                 &mut active_session,
                 &mut queue,
-                &event_sender,
+                &event_mailbox,
                 &cancellation,
                 &mut shutdown,
             );
@@ -415,21 +797,21 @@ fn render_worker(
 }
 
 fn drain_pending_commands(
-    command_receiver: &Receiver<RenderCommand>,
+    command_mailbox: &RenderCommandMailbox,
     document: &mut Option<PdfDocumentState>,
     active_session: &mut Option<RenderSessionId>,
     queue: &mut RenderQueue,
-    event_sender: &Sender<RenderEvent>,
+    event_mailbox: &RenderEventMailbox,
     cancellation: &Arc<RenderCancellation>,
     shutdown: &mut bool,
 ) {
-    while let Ok(command) = command_receiver.try_recv() {
+    while let Some(command) = command_mailbox.try_recv() {
         handle_command(
             command,
             document,
             active_session,
             queue,
-            event_sender,
+            event_mailbox,
             cancellation,
             shutdown,
         );
@@ -444,7 +826,7 @@ fn handle_command(
     document: &mut Option<PdfDocumentState>,
     active_session: &mut Option<RenderSessionId>,
     queue: &mut RenderQueue,
-    event_sender: &Sender<RenderEvent>,
+    event_mailbox: &RenderEventMailbox,
     cancellation: &Arc<RenderCancellation>,
     shutdown: &mut bool,
 ) {
@@ -454,7 +836,7 @@ fn handle_command(
             queue.clear();
             *active_session = Some(session_id);
             *document = None;
-            open_document_on_worker(session_id, path, document, event_sender);
+            open_document_on_worker(session_id, path, document, event_mailbox);
         }
         RenderCommand::RenderPage {
             session_id,
@@ -486,14 +868,14 @@ fn open_document_on_worker(
     session_id: RenderSessionId,
     path: PathBuf,
     document: &mut Option<PdfDocumentState>,
-    event_sender: &Sender<RenderEvent>,
+    event_mailbox: &RenderEventMailbox,
 ) {
     match PdfDocumentState::open(path) {
         Ok(doc) => {
             let title = doc.title();
             let page_count = doc.page_count();
             *document = Some(doc);
-            let _ = event_sender.send(RenderEvent::Opened {
+            event_mailbox.send(RenderEvent::Opened {
                 session_id,
                 title,
                 page_count,
@@ -501,7 +883,7 @@ fn open_document_on_worker(
             });
         }
         Err(err) => {
-            let _ = event_sender.send(RenderEvent::OpenFailed {
+            event_mailbox.send(RenderEvent::OpenFailed {
                 session_id,
                 message: err.to_string(),
             });
@@ -514,7 +896,7 @@ fn render_page_on_worker(
     session_id: RenderSessionId,
     job_id: RenderJobId,
     request: RenderRequest,
-    event_sender: &Sender<RenderEvent>,
+    event_mailbox: &RenderEventMailbox,
     cancellation: &RenderCancellation,
 ) {
     let event = match document {
@@ -541,14 +923,14 @@ fn render_page_on_worker(
     };
 
     if !cancellation.is_cancelled(session_id) {
-        let _ = event_sender.send(event);
+        event_mailbox.send(event);
     }
 }
 
 fn extract_speaker_notes_on_worker(
     document: Option<&PdfDocumentState>,
     session_id: RenderSessionId,
-    event_sender: &Sender<RenderEvent>,
+    event_mailbox: &RenderEventMailbox,
     cancellation: &RenderCancellation,
 ) {
     let Some(document) = document else {
@@ -560,7 +942,7 @@ fn extract_speaker_notes_on_worker(
         Ok(None) => return,
         Err(err) => {
             if !cancellation.is_cancelled(session_id) {
-                let _ = event_sender.send(RenderEvent::SpeakerNotesLoaded {
+                event_mailbox.send(RenderEvent::SpeakerNotesLoaded {
                     session_id,
                     notes: SpeakerNotes::empty(),
                     status_text: speaker_notes_warning(&err).text().to_owned(),
@@ -571,7 +953,7 @@ fn extract_speaker_notes_on_worker(
     };
 
     if !cancellation.is_cancelled(session_id) {
-        let _ = event_sender.send(RenderEvent::SpeakerNotesLoaded {
+        event_mailbox.send(RenderEvent::SpeakerNotesLoaded {
             session_id,
             notes,
             status_text: "Ready".to_owned(),
@@ -603,6 +985,19 @@ mod tests {
             page_index,
             width: 100,
             purpose,
+        }
+    }
+
+    fn pop_page_command(
+        command: RenderCommand,
+    ) -> (RenderSessionId, RenderRequest, RenderPriority) {
+        match command {
+            RenderCommand::RenderPage {
+                session_id,
+                request,
+                priority,
+            } => (session_id, request, priority),
+            other => panic!("expected render page command, got {other:?}"),
         }
     }
 
@@ -722,12 +1117,163 @@ mod tests {
     }
 
     #[test]
+    fn command_mailbox_coalesces_duplicate_render_work_and_raises_priority() {
+        let session = RenderSessionId(1);
+        let current = request(1, RenderPurpose::CurrentSlide);
+        let mut pending = PendingRenderCommands::new(8);
+
+        pending.push(RenderCommand::RenderPage {
+            session_id: session,
+            request: current,
+            priority: RenderPriority::Background,
+        });
+        pending.push(RenderCommand::RenderPage {
+            session_id: session,
+            request: current,
+            priority: RenderPriority::BlockingVisible,
+        });
+
+        assert_eq!(pending.works.len(), 1);
+        let (popped_session, popped_request, popped_priority) =
+            pop_page_command(pending.pop().unwrap());
+        assert_eq!(popped_session, session);
+        assert_eq!(popped_request, current);
+        assert_eq!(popped_priority, RenderPriority::BlockingVisible);
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn command_mailbox_drops_low_priority_work_when_capacity_is_reached() {
+        let session = RenderSessionId(1);
+        let mut pending = PendingRenderCommands::new(2);
+        let background = request(1, RenderPurpose::Thumbnail);
+        let warm = request(2, RenderPurpose::CurrentSlide);
+        let visible = request(3, RenderPurpose::CurrentSlide);
+
+        pending.push(RenderCommand::RenderPage {
+            session_id: session,
+            request: background,
+            priority: RenderPriority::Background,
+        });
+        pending.push(RenderCommand::RenderPage {
+            session_id: session,
+            request: warm,
+            priority: RenderPriority::Warm,
+        });
+        pending.push(RenderCommand::RenderPage {
+            session_id: session,
+            request: visible,
+            priority: RenderPriority::BlockingVisible,
+        });
+
+        assert_eq!(pending.works.len(), 2);
+        assert!(!pending.work_keys.contains(&QueueKey::Page {
+            session_id: session,
+            request: background,
+        }));
+
+        assert_eq!(pop_page_command(pending.pop().unwrap()).1, visible);
+        assert_eq!(pop_page_command(pending.pop().unwrap()).1, warm);
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn command_mailbox_open_replaces_stale_pending_work() {
+        let first_session = RenderSessionId(1);
+        let second_session = RenderSessionId(2);
+        let mut pending = PendingRenderCommands::new(8);
+
+        pending.push(RenderCommand::RenderPage {
+            session_id: first_session,
+            request: request(1, RenderPurpose::Thumbnail),
+            priority: RenderPriority::Background,
+        });
+        pending.push(RenderCommand::Open {
+            session_id: second_session,
+            path: PathBuf::from("new.pdf"),
+        });
+
+        assert!(pending.works.is_empty());
+        match pending.pop().unwrap() {
+            RenderCommand::Open { session_id, path } => {
+                assert_eq!(session_id, second_session);
+                assert_eq!(path, PathBuf::from("new.pdf"));
+            }
+            other => panic!("expected open command, got {other:?}"),
+        }
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn event_mailbox_coalesces_page_events_by_session_and_request() {
+        let session = RenderSessionId(1);
+        let current = request(1, RenderPurpose::CurrentSlide);
+        let mut pending = PendingRenderEvents::new(8);
+
+        pending.push(RenderEvent::PageFailed {
+            session_id: session,
+            job_id: RenderJobId(1),
+            request: current,
+            message: "first".to_owned(),
+        });
+        pending.push(RenderEvent::PageFailed {
+            session_id: session,
+            job_id: RenderJobId(2),
+            request: current,
+            message: "second".to_owned(),
+        });
+
+        let events = pending.drain();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            RenderEvent::PageFailed {
+                job_id, message, ..
+            } => {
+                assert_eq!(*job_id, RenderJobId(2));
+                assert_eq!(message, "second");
+            }
+            other => panic!("expected page failed event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn event_mailbox_preserves_visible_event_over_thumbnail_when_full() {
+        let session = RenderSessionId(1);
+        let mut pending = PendingRenderEvents::new(1);
+
+        pending.push(RenderEvent::PageFailed {
+            session_id: session,
+            job_id: RenderJobId(1),
+            request: request(1, RenderPurpose::Thumbnail),
+            message: "thumbnail".to_owned(),
+        });
+        pending.push(RenderEvent::PageFailed {
+            session_id: session,
+            job_id: RenderJobId(2),
+            request: request(2, RenderPurpose::CurrentSlide),
+            message: "current".to_owned(),
+        });
+
+        let events = pending.drain();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            RenderEvent::PageFailed {
+                job_id, request, ..
+            } => {
+                assert_eq!(*job_id, RenderJobId(2));
+                assert_eq!(request.purpose, RenderPurpose::CurrentSlide);
+            }
+            other => panic!("expected page failed event, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn close_command_clears_active_session_and_matching_jobs() {
         let session = RenderSessionId(1);
         let mut document = None;
         let mut active_session = Some(session);
         let mut queue = RenderQueue::default();
-        let (event_sender, _event_receiver) = mpsc::channel();
+        let event_mailbox = RenderEventMailbox::default();
         let cancellation = Arc::new(RenderCancellation::default());
         let mut shutdown = false;
         cancellation.activate(session);
@@ -744,7 +1290,7 @@ mod tests {
             &mut document,
             &mut active_session,
             &mut queue,
-            &event_sender,
+            &event_mailbox,
             &cancellation,
             &mut shutdown,
         );
@@ -762,7 +1308,7 @@ mod tests {
         let mut document = None;
         let mut active_session = Some(session);
         let mut queue = RenderQueue::default();
-        let (event_sender, _event_receiver) = mpsc::channel();
+        let event_mailbox = RenderEventMailbox::default();
         let cancellation = Arc::new(RenderCancellation::default());
         let mut shutdown = false;
         cancellation.activate(session);
@@ -777,7 +1323,7 @@ mod tests {
             &mut document,
             &mut active_session,
             &mut queue,
-            &event_sender,
+            &event_mailbox,
             &cancellation,
             &mut shutdown,
         );
