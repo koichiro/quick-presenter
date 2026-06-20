@@ -9,7 +9,6 @@ use crate::aspect::sanitize_aspect_ratio;
 use crate::notes::{is_pdf_speaker_note_annotation, SpeakerNotes};
 
 pub struct PdfDocumentState {
-    _pdfium: Pdfium,
     document: PdfDocument<'static>,
     path: PathBuf,
     page_count: u32,
@@ -17,17 +16,14 @@ pub struct PdfDocumentState {
 
 impl PdfDocumentState {
     pub fn open(path: PathBuf) -> Result<Self> {
-        let pdfium = create_pdfium()?;
+        let pdfium = shared_pdfium()?;
         let document = pdfium
             .load_pdf_from_file(&path, None)
             .with_context(|| format!("failed to open PDF: {}", path.display()))?;
-        let document =
-            unsafe { std::mem::transmute::<PdfDocument<'_>, PdfDocument<'static>>(document) };
 
         let page_count = document.pages().len();
 
         Ok(Self {
-            _pdfium: pdfium,
             document,
             path,
             page_count: page_count.max(0) as u32,
@@ -103,6 +99,21 @@ impl PdfDocumentState {
 
         Ok(SpeakerNotes::from_page_notes(notes))
     }
+}
+
+fn shared_pdfium() -> Result<&'static Pdfium> {
+    static PDFIUM: std::sync::OnceLock<Pdfium> = std::sync::OnceLock::new();
+
+    if let Some(pdfium) = PDFIUM.get() {
+        return Ok(pdfium);
+    }
+
+    let pdfium = create_pdfium()?;
+    let _ = PDFIUM.set(pdfium);
+
+    Ok(PDFIUM
+        .get()
+        .expect("PDFium should be initialized after successful binding"))
 }
 
 fn document_title(path: &Path) -> String {

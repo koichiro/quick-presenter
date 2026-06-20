@@ -113,6 +113,8 @@ python3 scripts/fetch_pdfium.py
 
 ## 設計上の注意
 
-`docs/ARCHITECTURE.md` にある通り、初期スキャフォールドには PDFium 関連のライフタイムを簡略化している箇所があります。本格的な開発に入る前に、`PdfDocumentState` が PDFium bindings の所有権を長く保持し、`PdfDocument` のライフタイムがその所有者に厳密に結びつく設計へ整理してください。もしくは、安全に再オープンできるローダー抽象を導入してください。
+`docs/ARCHITECTURE.md` にある通り、PDFium は `src/pdf.rs` の process-global な `OnceLock<Pdfium>` で初期化し、読み込んだ `PdfDocument<'static>` に実際の長寿命 owner を与えます。`PdfDocumentState` は読み込んだドキュメント、ファイルパス、ページ数などの表示・レンダリングに必要な状態を持ち、PDFium bindings 自体は直接所有しません。
+
+`PdfDocument` のライフタイムを `unsafe` な変換で延長してはいけません。PDFium の所有権境界を変更する場合は、`docs/ARCHITECTURE.md` の PDFium ownership 方針も合わせて更新してください。
 
 このプロジェクトでは、便利さよりもプレゼン本番での予測可能性を重視します。新機能を追加するときは、発表者が壇上で使う最短の操作経路と、失敗したときの回復しやすさを基準に判断してください。
