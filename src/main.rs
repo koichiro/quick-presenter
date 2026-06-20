@@ -32,7 +32,7 @@ use app_metadata::about_metadata;
 use app_state::AppState;
 #[cfg(test)]
 use app_state::ThumbnailState;
-use cli::parse_startup_options;
+use cli::{help_text, parse_startup_options, StartupRequest};
 use clock::current_clock_label;
 use errors::PresenterMessage;
 use input::PresentationCommand;
@@ -89,11 +89,19 @@ const FILE_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 
 fn main() -> Result<()> {
+    let startup_request = parse_startup_options(std::env::args_os().skip(1))?;
+    if startup_request == StartupRequest::Help {
+        print!("{}", help_text(&startup_program_name()));
+        return Ok(());
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
         .init();
 
-    let startup_options = parse_startup_options(std::env::args_os().skip(1))?;
+    let StartupRequest::Run(startup_options) = startup_request else {
+        unreachable!("help requests return before app startup");
+    };
     if let Some(path) = startup_options.smoke_open_pdf_path {
         return smoke_open_pdf(path);
     }
@@ -130,6 +138,18 @@ fn main() -> Result<()> {
 
     slint::run_event_loop()?;
     Ok(())
+}
+
+fn startup_program_name() -> String {
+    std::env::args_os()
+        .next()
+        .and_then(|arg| {
+            let path = PathBuf::from(arg);
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+        })
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "qp".to_string())
 }
 
 fn smoke_open_pdf(path: PathBuf) -> Result<()> {

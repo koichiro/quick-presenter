@@ -6,6 +6,12 @@ use std::{
 use anyhow::{bail, Result};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+pub enum StartupRequest {
+    Run(StartupOptions),
+    Help,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct StartupOptions {
     pub pdf_path: Option<PathBuf>,
     pub smoke_open_pdf_path: Option<PathBuf>,
@@ -20,7 +26,7 @@ impl StartupOptions {
     }
 }
 
-pub fn parse_startup_options<I, S>(args: I) -> Result<StartupOptions>
+pub fn parse_startup_options<I, S>(args: I) -> Result<StartupRequest>
 where
     I: IntoIterator<Item = S>,
     S: Into<OsString>,
@@ -29,6 +35,10 @@ where
     let mut args = args.into_iter().map(Into::into);
 
     while let Some(arg) = args.next() {
+        if arg == OsStr::new("--help") || arg == OsStr::new("-h") {
+            return Ok(StartupRequest::Help);
+        }
+
         if arg == OsStr::new("--pdf") {
             if options.smoke_open_pdf_path.is_some() {
                 bail!("--pdf cannot be combined with --smoke-open-pdf");
@@ -56,7 +66,22 @@ where
         bail!("unknown command-line option: {}", arg.to_string_lossy());
     }
 
-    Ok(options)
+    Ok(StartupRequest::Run(options))
+}
+
+pub fn help_text(program_name: &str) -> String {
+    format!(
+        "\
+Quick Presenter
+
+Usage: {program_name} [OPTIONS]
+
+Options:
+  --pdf <PATH>              Open a PDF at startup
+  --smoke-open-pdf <PATH>   Open and render the first page, then exit
+  -h, --help                Print help
+"
+    )
 }
 
 fn required_path_arg<I>(args: &mut I, option: &str) -> Result<PathBuf>
@@ -84,10 +109,10 @@ mod tests {
 
         assert_eq!(
             options,
-            StartupOptions {
+            StartupRequest::Run(StartupOptions {
                 pdf_path: None,
                 smoke_open_pdf_path: None,
-            }
+            })
         );
     }
 
@@ -97,10 +122,10 @@ mod tests {
 
         assert_eq!(
             options,
-            StartupOptions {
+            StartupRequest::Run(StartupOptions {
                 pdf_path: Some(PathBuf::from("deck.pdf")),
                 smoke_open_pdf_path: None,
-            }
+            })
         );
     }
 
@@ -110,11 +135,43 @@ mod tests {
 
         assert_eq!(
             options,
-            StartupOptions {
+            StartupRequest::Run(StartupOptions {
                 pdf_path: None,
                 smoke_open_pdf_path: Some(PathBuf::from("deck.pdf")),
-            }
+            })
         );
+    }
+
+    #[test]
+    fn long_help_option_requests_help() {
+        let request = parse_startup_options(["--help"]).unwrap();
+
+        assert_eq!(request, StartupRequest::Help);
+    }
+
+    #[test]
+    fn short_help_option_requests_help() {
+        let request = parse_startup_options(["-h"]).unwrap();
+
+        assert_eq!(request, StartupRequest::Help);
+    }
+
+    #[test]
+    fn help_option_takes_precedence_over_other_arguments() {
+        let request = parse_startup_options(["--help", "--pdf", "deck.pdf"]).unwrap();
+
+        assert_eq!(request, StartupRequest::Help);
+    }
+
+    #[test]
+    fn help_text_lists_supported_startup_arguments() {
+        let help = help_text("qp");
+
+        assert!(help.contains("Quick Presenter"));
+        assert!(help.contains("Usage: qp [OPTIONS]"));
+        assert!(help.contains("--pdf <PATH>"));
+        assert!(help.contains("--smoke-open-pdf <PATH>"));
+        assert!(help.contains("-h, --help"));
     }
 
     #[test]
