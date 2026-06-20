@@ -21,16 +21,55 @@ pub struct RenderRequest {
 pub struct RenderedPage {
     pub image: Image,
     pub aspect_ratio: f32,
+    pub estimated_bytes: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CacheBudget {
+    pub max_entries: usize,
+    pub max_estimated_bytes: usize,
+}
+
+impl Default for CacheBudget {
+    fn default() -> Self {
+        Self {
+            max_entries: 64,
+            max_estimated_bytes: 96 * 1024 * 1024,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CacheContext {
+    pub current_index: u32,
+    pub total_pages: u32,
+    pub presentation_radius: u32,
 }
 
 #[derive(Default)]
 pub struct RenderCache {
-    pages: HashMap<RenderRequest, RenderedPage>,
+    pages: HashMap<RenderRequest, CacheEntry>,
+    budget: CacheBudget,
+    access_counter: u64,
+    estimated_bytes: usize,
+}
+
+struct CacheEntry {
+    page: RenderedPage,
+    last_access: u64,
 }
 
 impl RenderCache {
+    pub fn with_budget(budget: CacheBudget) -> Self {
+        Self {
+            budget,
+            ..Self::default()
+        }
+    }
+
     pub fn clear(&mut self) {
         self.pages.clear();
+        self.estimated_bytes = 0;
     }
 
     pub fn get_or_render(
@@ -38,13 +77,27 @@ impl RenderCache {
         request: RenderRequest,
         render: impl FnOnce(RenderRequest) -> Result<RenderedPage>,
     ) -> Result<RenderedPage> {
-        if let Some(page) = self.pages.get(&request) {
-            return Ok(page.clone());
+        self.access_counter = self.access_counter.wrapping_add(1);
+        if let Some(entry) = self.pages.get_mut(&request) {
+            entry.last_access = self.access_counter;
+            return Ok(entry.page.clone());
         }
 
         let page = render(request)?;
-        self.pages.insert(request, page.clone());
+        self.estimated_bytes = self.estimated_bytes.saturating_add(page.estimated_bytes);
+        self.pages.insert(
+            request,
+            CacheEntry {
+                page: page.clone(),
+                last_access: self.access_counter,
+            },
+        );
+        self.enforce_budget(None);
         Ok(page)
+    }
+
+    pub fn peek(&self, request: RenderRequest) -> Option<RenderedPage> {
+        self.pages.get(&request).map(|entry| entry.page.clone())
     }
 
     pub fn retain_presentation_window(
@@ -53,14 +106,67 @@ impl RenderCache {
         total_pages: u32,
         radius: u32,
     ) {
-        self.pages.retain(|request, _| {
+        self.retain_requests(|request| {
             should_retain_presentation_request(request, current_index, total_pages, radius)
         });
+        self.enforce_budget(Some(CacheContext {
+            current_index,
+            total_pages,
+            presentation_radius: radius,
+        }));
     }
 
     #[cfg(test)]
     fn len(&self) -> usize {
         self.pages.len()
+    }
+
+    fn enforce_budget(&mut self, context: Option<CacheContext>) {
+        while self.is_over_budget() {
+            let Some(request) = self.eviction_candidate(context) else {
+                break;
+            };
+            self.remove(request);
+        }
+    }
+
+    fn is_over_budget(&self) -> bool {
+        self.pages.len() > self.budget.max_entries
+            || self.estimated_bytes > self.budget.max_estimated_bytes
+    }
+
+    fn eviction_candidate(&self, context: Option<CacheContext>) -> Option<RenderRequest> {
+        self.pages
+            .iter()
+            .filter(|(request, _)| !is_protected_request(request, context))
+            .max_by_key(|(request, entry)| {
+                (
+                    eviction_priority(request.purpose),
+                    u64::MAX.saturating_sub(entry.last_access),
+                )
+            })
+            .map(|(request, _)| *request)
+    }
+
+    fn retain_requests(&mut self, keep: impl Fn(&RenderRequest) -> bool) {
+        let retained = self
+            .pages
+            .drain()
+            .filter(|(request, _)| keep(request))
+            .collect::<HashMap<_, _>>();
+        self.estimated_bytes = retained
+            .values()
+            .map(|entry| entry.page.estimated_bytes)
+            .sum();
+        self.pages = retained;
+    }
+
+    fn remove(&mut self, request: RenderRequest) {
+        if let Some(entry) = self.pages.remove(&request) {
+            self.estimated_bytes = self
+                .estimated_bytes
+                .saturating_sub(entry.page.estimated_bytes);
+        }
     }
 }
 
@@ -81,6 +187,10 @@ fn should_retain_presentation_request(
         RenderPurpose::NextPreview => request.page_index == current_index.saturating_add(1),
         RenderPurpose::Thumbnail => true,
     }
+}
+
+pub fn thumbnail_window_indices(current_index: u32, total_pages: u32, radius: u32) -> Vec<u32> {
+    nearby_page_indices(current_index, total_pages, radius)
 }
 
 pub fn nearby_page_indices(current_index: u32, total_pages: u32, radius: u32) -> Vec<u32> {
@@ -118,11 +228,33 @@ fn page_is_within_radius(page_index: u32, current_index: u32, radius: u32) -> bo
     page_index >= lower && page_index <= upper
 }
 
+fn is_protected_request(request: &RenderRequest, context: Option<CacheContext>) -> bool {
+    let Some(context) = context else {
+        return false;
+    };
+
+    matches!(request.purpose, RenderPurpose::CurrentSlide)
+        && should_retain_presentation_request(
+            request,
+            context.current_index,
+            context.total_pages,
+            context.presentation_radius,
+        )
+}
+
+fn eviction_priority(purpose: RenderPurpose) -> u8 {
+    match purpose {
+        RenderPurpose::Thumbnail => 3,
+        RenderPurpose::NextPreview => 2,
+        RenderPurpose::CurrentSlide => 1,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use slint::{Rgba8Pixel, SharedPixelBuffer};
-    use std::{cell::Cell, rc::Rc};
+    use std::{cell::Cell, collections::HashSet, rc::Rc};
 
     fn request(page_index: u32, width: i32, purpose: RenderPurpose) -> RenderRequest {
         RenderRequest {
@@ -133,12 +265,34 @@ mod tests {
     }
 
     fn rendered_page(aspect_ratio: f32) -> RenderedPage {
+        rendered_page_with_bytes(aspect_ratio, 4)
+    }
+
+    fn rendered_page_with_bytes(aspect_ratio: f32, estimated_bytes: usize) -> RenderedPage {
         let pixels = [0, 0, 0, 255];
         let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, 1, 1);
         RenderedPage {
             image: Image::from_rgba8(buffer),
             aspect_ratio,
+            estimated_bytes,
         }
+    }
+
+    fn loaded_thumbnail_indices(
+        cache: &RenderCache,
+        total_pages: u32,
+        thumbnail_width: i32,
+    ) -> HashSet<u32> {
+        cache
+            .pages
+            .keys()
+            .filter(|request| {
+                request.purpose == RenderPurpose::Thumbnail
+                    && request.width == thumbnail_width
+                    && request.page_index < total_pages
+            })
+            .map(|request| request.page_index)
+            .collect()
     }
 
     #[test]
@@ -230,11 +384,119 @@ mod tests {
     }
 
     #[test]
+    fn cache_eviction_honors_entry_budget() {
+        let mut cache = RenderCache::with_budget(CacheBudget {
+            max_entries: 3,
+            max_estimated_bytes: usize::MAX,
+        });
+
+        for page_index in 0..4 {
+            cache
+                .get_or_render(request(page_index, 240, RenderPurpose::Thumbnail), |_| {
+                    Ok(rendered_page(1.0))
+                })
+                .unwrap();
+        }
+
+        assert_eq!(cache.len(), 3);
+        assert!(!cache
+            .pages
+            .contains_key(&request(0, 240, RenderPurpose::Thumbnail)));
+    }
+
+    #[test]
+    fn cache_eviction_honors_estimated_byte_budget() {
+        let mut cache = RenderCache::with_budget(CacheBudget {
+            max_entries: usize::MAX,
+            max_estimated_bytes: 12,
+        });
+
+        for page_index in 0..4 {
+            cache
+                .get_or_render(request(page_index, 240, RenderPurpose::Thumbnail), |_| {
+                    Ok(rendered_page_with_bytes(1.0, 4))
+                })
+                .unwrap();
+        }
+
+        assert_eq!(cache.len(), 3);
+        assert_eq!(cache.estimated_bytes, 12);
+    }
+
+    #[test]
+    fn cache_eviction_removes_thumbnails_before_presentation_pages() {
+        let mut cache = RenderCache::with_budget(CacheBudget {
+            max_entries: 3,
+            max_estimated_bytes: usize::MAX,
+        });
+
+        for request in [
+            request(0, 1600, RenderPurpose::CurrentSlide),
+            request(1, 1600, RenderPurpose::CurrentSlide),
+            request(2, 240, RenderPurpose::Thumbnail),
+            request(3, 240, RenderPurpose::Thumbnail),
+        ] {
+            cache
+                .get_or_render(request, |_| Ok(rendered_page(1.0)))
+                .unwrap();
+        }
+
+        assert_eq!(cache.len(), 3);
+        assert!(cache
+            .pages
+            .contains_key(&request(0, 1600, RenderPurpose::CurrentSlide)));
+        assert!(cache
+            .pages
+            .contains_key(&request(1, 1600, RenderPurpose::CurrentSlide)));
+        assert_eq!(
+            loaded_thumbnail_indices(&cache, 10, 240),
+            HashSet::from([3])
+        );
+    }
+
+    #[test]
+    fn protected_presentation_window_survives_budget_enforcement() {
+        let mut cache = RenderCache::with_budget(CacheBudget {
+            max_entries: 2,
+            max_estimated_bytes: usize::MAX,
+        });
+
+        for request in [
+            request(3, 1600, RenderPurpose::CurrentSlide),
+            request(4, 1600, RenderPurpose::CurrentSlide),
+            request(7, 240, RenderPurpose::Thumbnail),
+        ] {
+            cache
+                .get_or_render(request, |_| Ok(rendered_page(1.0)))
+                .unwrap();
+        }
+
+        cache.retain_presentation_window(3, 10, 1);
+
+        assert_eq!(cache.len(), 2);
+        assert!(cache
+            .pages
+            .contains_key(&request(3, 1600, RenderPurpose::CurrentSlide)));
+        assert!(cache
+            .pages
+            .contains_key(&request(4, 1600, RenderPurpose::CurrentSlide)));
+    }
+
+    #[test]
     fn nearby_page_indices_are_clamped_to_document_bounds() {
         assert_eq!(nearby_page_indices(0, 5, 2), vec![0, 1, 2]);
         assert_eq!(nearby_page_indices(2, 5, 2), vec![0, 1, 2, 3, 4]);
         assert_eq!(nearby_page_indices(4, 5, 2), vec![2, 3, 4]);
         assert!(nearby_page_indices(0, 0, 2).is_empty());
+    }
+
+    #[test]
+    fn thumbnail_window_indices_do_not_expand_to_large_document_size() {
+        let indices = thumbnail_window_indices(5_000, 10_000, 8);
+
+        assert_eq!(indices.len(), 17);
+        assert_eq!(indices.first(), Some(&4_992));
+        assert_eq!(indices.last(), Some(&5_008));
     }
 
     #[test]

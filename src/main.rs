@@ -35,7 +35,8 @@ use pdf::PdfDocumentState;
 use presentation::{PageSnapshot, PresentationState};
 use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
 use rendering::{
-    presentation_preload_order, RenderCache, RenderPurpose, RenderRequest, RenderedPage,
+    presentation_preload_order, thumbnail_window_indices, RenderCache, RenderPurpose,
+    RenderRequest, RenderedPage,
 };
 use slint::{
     CloseRequestResponse, ComponentHandle, LogicalPosition, LogicalSize, ModelRc, Rgba8Pixel,
@@ -52,6 +53,7 @@ const CURRENT_RENDER_WIDTH: i32 = 1600;
 const PREVIEW_RENDER_WIDTH: i32 = 600;
 const THUMBNAIL_RENDER_WIDTH: i32 = 180;
 const PRESENTATION_CACHE_RADIUS: u32 = 2;
+const THUMBNAIL_CACHE_RADIUS: u32 = 8;
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
 const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
 const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
@@ -365,7 +367,7 @@ struct AppState {
     pdf: Option<PdfDocumentState>,
     render_cache: RenderCache,
     render_generation: u64,
-    thumbnail_pages: Vec<RenderedPage>,
+    thumbnails: ThumbnailState,
     notes: SpeakerNotes,
     presentation: PresentationState,
     timer: PresentationTimer,
@@ -378,6 +380,11 @@ struct AppState {
 struct RenderedPages {
     current: RenderedPage,
     next: Option<RenderedPage>,
+}
+
+#[derive(Default)]
+struct ThumbnailState {
+    total_pages: u32,
 }
 
 struct PreparedPdfSession {
@@ -790,6 +797,7 @@ fn handle_presentation_command(
 
     if let Some(snapshot) = preload_snapshot {
         schedule_presentation_preload(state.clone(), snapshot);
+        schedule_thumbnail_render(windows.clone(), state.clone());
     }
 }
 
@@ -814,6 +822,7 @@ fn toggle_black_screen(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
 
     if let Some(snapshot) = preload_snapshot {
         schedule_presentation_preload(state.clone(), snapshot);
+        schedule_thumbnail_render(windows.clone(), state.clone());
     }
 }
 
@@ -1146,7 +1155,12 @@ fn commit_prepared_pdf_session_metadata(
     status_text: String,
 ) {
     state.render_generation = state.render_generation.wrapping_add(1);
-    state.thumbnail_pages.clear();
+    state.thumbnails = ThumbnailState {
+        total_pages: presentation
+            .snapshot()
+            .map(|snapshot| snapshot.total_pages)
+            .unwrap_or(0),
+    };
     state.notes = notes;
     state.presentation = presentation;
     state.black_screen.set_active(false);
@@ -1314,7 +1328,8 @@ fn apply_rendered_pages_to_windows(
         presenter.set_status_text(presenter_status_text(state).into());
         presenter.set_current_page_index(presenter_page_index(snapshot.current_index));
         presenter.set_thumbnails(thumbnail_model(
-            &state.thumbnail_pages,
+            &state.thumbnails,
+            &state.render_cache,
             snapshot.current_index,
         ));
 
@@ -1391,26 +1406,65 @@ fn render_pdf_page_cached(
     request: RenderRequest,
 ) -> Result<RenderedPage> {
     cache.get_or_render(request, |request| {
+        let aspect_ratio = doc.page_aspect_ratio(request.page_index)?;
         Ok(RenderedPage {
             image: doc.render_page(request.page_index, request.width)?,
-            aspect_ratio: doc.page_aspect_ratio(request.page_index)?,
+            aspect_ratio,
+            estimated_bytes: estimated_render_bytes(request.width, aspect_ratio),
         })
     })
 }
 
-fn thumbnail_model(thumbnails: &[RenderedPage], current_index: u32) -> ModelRc<ThumbnailItem> {
-    let items = thumbnails
-        .iter()
-        .enumerate()
-        .map(|(index, thumbnail)| ThumbnailItem {
-            page_index: i32::try_from(index).unwrap_or(i32::MAX),
-            page_label: format!("{}", index + 1).into(),
-            image: thumbnail.image.clone(),
-            is_current: u32::try_from(index) == Ok(current_index),
+fn estimated_render_bytes(width: i32, aspect_ratio: f32) -> usize {
+    let width = width.max(1) as f32;
+    let height = (width / aspect_ratio.max(0.01)).ceil().max(1.0);
+    (width as usize)
+        .saturating_mul(height as usize)
+        .saturating_mul(4)
+}
+
+fn thumbnail_model(
+    thumbnails: &ThumbnailState,
+    cache: &RenderCache,
+    current_index: u32,
+) -> ModelRc<ThumbnailItem> {
+    let placeholder = thumbnail_placeholder_image();
+    let items = (0..thumbnails.total_pages)
+        .map(|index| {
+            let image = cache
+                .peek(RenderRequest {
+                    page_index: index,
+                    width: THUMBNAIL_RENDER_WIDTH,
+                    purpose: RenderPurpose::Thumbnail,
+                })
+                .map(|thumbnail| thumbnail.image)
+                .unwrap_or_else(|| placeholder.clone());
+            ThumbnailItem {
+                page_index: i32::try_from(index).unwrap_or(i32::MAX),
+                page_label: format!("{}", index + 1).into(),
+                image,
+                is_current: index == current_index,
+            }
         })
         .collect::<Vec<_>>();
 
     ModelRc::new(Rc::new(VecModel::from(items)))
+}
+
+fn thumbnail_placeholder_image() -> slint::Image {
+    const WIDTH: u32 = 16;
+    const HEIGHT: u32 = 9;
+
+    let mut pixels = Vec::with_capacity((WIDTH * HEIGHT * 4) as usize);
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            let edge = x == 0 || y == 0 || x == WIDTH - 1 || y == HEIGHT - 1;
+            let value = if edge { 82 } else { 31 };
+            pixels.extend_from_slice(&[value, value, value, 255]);
+        }
+    }
+    let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, WIDTH, HEIGHT);
+    slint::Image::from_rgba8(buffer)
 }
 
 fn presenter_page_index(page_index: u32) -> i32 {
@@ -1430,13 +1484,13 @@ fn schedule_thumbnail_render(windows: AppWindowRefs, state: Rc<RefCell<AppState>
             return;
         };
 
-        match render_thumbnail_pages(&mut state, &snapshot) {
-            Ok(thumbnails) => {
-                state.thumbnail_pages = thumbnails;
+        match render_thumbnail_window(&mut state, &snapshot) {
+            Ok(()) => {
                 if let Some(presenter) = windows.presenter.upgrade() {
                     presenter.set_current_page_index(presenter_page_index(snapshot.current_index));
                     presenter.set_thumbnails(thumbnail_model(
-                        &state.thumbnail_pages,
+                        &state.thumbnails,
+                        &state.render_cache,
                         snapshot.current_index,
                     ));
                 }
@@ -1448,17 +1502,17 @@ fn schedule_thumbnail_render(windows: AppWindowRefs, state: Rc<RefCell<AppState>
     });
 }
 
-fn render_thumbnail_pages(
-    state: &mut AppState,
-    snapshot: &PageSnapshot,
-) -> Result<Vec<RenderedPage>> {
+fn render_thumbnail_window(state: &mut AppState, snapshot: &PageSnapshot) -> Result<()> {
     let Some(doc) = state.pdf.as_ref() else {
-        return Ok(Vec::new());
+        return Ok(());
     };
 
-    let mut thumbnails = Vec::with_capacity(snapshot.total_pages as usize);
-    for page_index in 0..snapshot.total_pages {
-        thumbnails.push(render_pdf_page_cached(
+    for page_index in thumbnail_window_indices(
+        snapshot.current_index,
+        snapshot.total_pages,
+        THUMBNAIL_CACHE_RADIUS,
+    ) {
+        render_pdf_page_cached(
             doc,
             &mut state.render_cache,
             RenderRequest {
@@ -1466,7 +1520,7 @@ fn render_thumbnail_pages(
                 width: THUMBNAIL_RENDER_WIDTH,
                 purpose: RenderPurpose::Thumbnail,
             },
-        )?);
+        )?;
     }
 
     state.render_cache.retain_presentation_window(
@@ -1475,7 +1529,7 @@ fn render_thumbnail_pages(
         PRESENTATION_CACHE_RADIUS,
     );
 
-    Ok(thumbnails)
+    Ok(())
 }
 
 fn schedule_presentation_preload(state: Rc<RefCell<AppState>>, snapshot: PageSnapshot) {
