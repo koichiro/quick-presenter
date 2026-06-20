@@ -8,14 +8,11 @@ use crate::{
     clock::current_clock_label,
     errors::PresenterMessage,
     presentation::PageSnapshot,
+    render_controller::{CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH},
     rendering::{RenderCache, RenderPurpose, RenderRequest, RenderedPage},
     window_controller::AppWindowRefs,
     PresenterWindow, ThumbnailItem,
 };
-
-pub const CURRENT_RENDER_WIDTH: i32 = 1600;
-pub const PREVIEW_RENDER_WIDTH: i32 = 600;
-pub const THUMBNAIL_RENDER_WIDTH: i32 = 180;
 
 pub fn apply_opening_state_to_windows(windows: &AppWindowRefs, title: &str) {
     let placeholder = placeholder_slide();

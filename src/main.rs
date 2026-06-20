@@ -11,8 +11,10 @@ pub mod notes;
 pub mod pdf;
 pub mod presentation;
 pub mod recent;
+pub mod render_controller;
 pub mod render_scheduler;
 pub mod rendering;
+pub mod session_controller;
 pub mod timer;
 pub mod view_sync;
 pub mod window_controller;
@@ -27,30 +29,44 @@ use std::{
 
 use anyhow::{bail, Result};
 use app_metadata::about_metadata;
-use app_state::{AppState, ThumbnailState};
+use app_state::AppState;
+#[cfg(test)]
+use app_state::ThumbnailState;
 use cli::parse_startup_options;
 use clock::current_clock_label;
 use errors::PresenterMessage;
-use input::{apply_presentation_command, PresentationCommand};
+use input::PresentationCommand;
 use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
-use presentation::{PageSnapshot, PresentationState};
+use presentation::PageSnapshot;
+#[cfg(test)]
+use presentation::PresentationState;
 use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
-use render_scheduler::{RenderEvent, RenderPriority, RenderScheduler};
+use render_controller::{
+    enqueue_render_plan_if_missing, presentation_preload_render_plan, thumbnail_render_plan,
+    visible_page_render_plan,
+};
+#[cfg(test)]
+use render_controller::{CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH};
+use render_scheduler::{RenderEvent, RenderScheduler};
 #[cfg(test)]
 use rendering::RenderCache;
-use rendering::{
-    presentation_preload_order, thumbnail_window_indices, RenderPurpose, RenderRequest,
-    RenderedPage,
+#[cfg(test)]
+use rendering::RenderPurpose;
+#[cfg(test)]
+use rendering::{presentation_preload_order, thumbnail_window_indices};
+use rendering::{RenderRequest, RenderedPage};
+use session_controller::{
+    apply_session_command, begin_open_pdf_state, commit_page_render_failed_state,
+    commit_page_rendered_state, commit_render_open_failed_state, commit_render_opened_state,
 };
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode, Weak};
-use timer::{timer_transition_for_page_change, PresentationTimer, TimerTransition};
+use timer::PresentationTimer;
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
 use view_sync::{
     apply_opening_state_to_windows, apply_snapshot_to_windows, presenter_page_index,
-    recent_file_menu_labels, set_presenter_message, thumbnail_model, CURRENT_RENDER_WIDTH,
-    PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH,
+    recent_file_menu_labels, set_presenter_message, thumbnail_model,
 };
 #[cfg(test)]
 use view_sync::{black_slide_image, presenter_status_text};
@@ -655,24 +671,15 @@ fn handle_presentation_command(
     state: &Rc<RefCell<AppState>>,
     command: PresentationCommand,
 ) {
-    if command == PresentationCommand::ExitSlideFullscreen {
-        exit_slide_fullscreen(windows, state);
-        return;
-    }
-
-    if command == PresentationCommand::ToggleBlackScreen {
-        toggle_black_screen(windows, state);
-        return;
-    }
-
     let preload_snapshot = {
         let mut state = state.borrow_mut();
-        let before = state.presentation.snapshot();
-        apply_presentation_command(&mut state.presentation, command);
-        let after = state.presentation.snapshot();
-        update_elapsed_timer_for_page_change(before.as_ref(), after.as_ref(), &mut state.timer);
+        let outcome = apply_session_command(&mut state, command, Instant::now());
 
-        if let Some(snapshot) = after {
+        if let Some(fullscreen) = outcome.slide_fullscreen {
+            set_slide_fullscreen(windows, fullscreen);
+        }
+
+        if let Some(snapshot) = outcome.snapshot {
             apply_snapshot_to_windows(windows, &state, &snapshot);
             enqueue_visible_page_renders(&state, &snapshot);
             Some(snapshot)
@@ -685,47 +692,6 @@ fn handle_presentation_command(
         schedule_presentation_preload(state.clone(), snapshot);
         schedule_thumbnail_render(windows.clone(), state.clone());
     }
-}
-
-fn toggle_black_screen(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
-    let preload_snapshot = {
-        let mut state = state.borrow_mut();
-        state.black_screen.toggle();
-
-        if let Some(snapshot) = state.presentation.snapshot() {
-            apply_snapshot_to_windows(windows, &state, &snapshot);
-            enqueue_visible_page_renders(&state, &snapshot);
-            Some(snapshot)
-        } else {
-            None
-        }
-    };
-
-    if let Some(snapshot) = preload_snapshot {
-        schedule_presentation_preload(state.clone(), snapshot);
-        schedule_thumbnail_render(windows.clone(), state.clone());
-    }
-}
-
-fn update_elapsed_timer_for_page_change(
-    before: Option<&PageSnapshot>,
-    after: Option<&PageSnapshot>,
-    timer: &mut PresentationTimer,
-) {
-    match timer_transition_for_page_change(
-        before.map(|snapshot| snapshot.current_index),
-        after.map(|snapshot| snapshot.current_index),
-    ) {
-        TimerTransition::Start => timer.start(Instant::now()),
-        TimerTransition::Reset => timer.reset(),
-        TimerTransition::None => {}
-    }
-}
-
-fn exit_slide_fullscreen(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
-    let mut state = state.borrow_mut();
-    let fullscreen = state.fullscreen.exit_slide_fullscreen();
-    set_slide_fullscreen(windows, fullscreen);
 }
 
 fn show_presenter_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
@@ -808,17 +774,7 @@ fn begin_open_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, path: 
 
     let session_id = {
         let mut state = state.borrow_mut();
-        let session_id = state.render_sessions.begin_session();
-        state.render_generation = state.render_generation.wrapping_add(1);
-        state.pdf = None;
-        state.pending_open_path = Some(path.clone());
-        state.render_cache.clear();
-        state.thumbnails = ThumbnailState::default();
-        state.notes = SpeakerNotes::empty();
-        state.presentation = PresentationState::empty();
-        state.black_screen.set_active(false);
-        state.timer.reset();
-        state.status_text = "Opening PDF...".to_owned();
+        let session_id = begin_open_pdf_state(&mut state, path.clone());
         if let Some(scheduler) = state.render_scheduler.as_ref() {
             scheduler.open(session_id, path);
         }
@@ -1096,42 +1052,7 @@ fn fitted_slide_window_content_size(
 }
 
 fn enqueue_visible_page_renders(state: &AppState, snapshot: &PageSnapshot) {
-    enqueue_render_if_missing(
-        state,
-        RenderRequest {
-            page_index: snapshot.current_index,
-            width: CURRENT_RENDER_WIDTH,
-            purpose: RenderPurpose::CurrentSlide,
-        },
-        RenderPriority::BlockingVisible,
-    );
-
-    if let Some(page_index) = snapshot.next_index {
-        enqueue_render_if_missing(
-            state,
-            RenderRequest {
-                page_index,
-                width: PREVIEW_RENDER_WIDTH,
-                purpose: RenderPurpose::NextPreview,
-            },
-            RenderPriority::VisibleAux,
-        );
-    }
-}
-
-fn enqueue_render_if_missing(state: &AppState, request: RenderRequest, priority: RenderPriority) {
-    if state.render_cache.peek(request).is_some() {
-        return;
-    }
-
-    let Some(session_id) = state.render_sessions.current_session() else {
-        return;
-    };
-    let Some(scheduler) = state.render_scheduler.as_ref() else {
-        return;
-    };
-
-    scheduler.render_page(session_id, request, priority);
+    enqueue_render_plan_if_missing(state, visible_page_render_plan(snapshot));
 }
 
 #[cfg(test)]
@@ -1263,21 +1184,10 @@ fn schedule_thumbnail_render(windows: AppWindowRefs, state: Rc<RefCell<AppState>
             return;
         };
 
-        for page_index in thumbnail_window_indices(
-            snapshot.current_index,
-            snapshot.total_pages,
-            THUMBNAIL_CACHE_RADIUS,
-        ) {
-            enqueue_render_if_missing(
-                &state,
-                RenderRequest {
-                    page_index,
-                    width: THUMBNAIL_RENDER_WIDTH,
-                    purpose: RenderPurpose::Thumbnail,
-                },
-                RenderPriority::Background,
-            );
-        }
+        enqueue_render_plan_if_missing(
+            &state,
+            thumbnail_render_plan(&snapshot, THUMBNAIL_CACHE_RADIUS),
+        );
 
         if let Some(presenter) = windows.presenter.upgrade() {
             presenter.set_current_page_index(presenter_page_index(snapshot.current_index));
@@ -1338,21 +1248,10 @@ fn schedule_presentation_preload(state: Rc<RefCell<AppState>>, snapshot: PageSna
             return;
         }
 
-        for page_index in presentation_preload_order(
-            snapshot.current_index,
-            snapshot.total_pages,
-            PRESENTATION_CACHE_RADIUS,
-        ) {
-            enqueue_render_if_missing(
-                &state,
-                RenderRequest {
-                    page_index,
-                    width: CURRENT_RENDER_WIDTH,
-                    purpose: RenderPurpose::CurrentSlide,
-                },
-                RenderPriority::Warm,
-            );
-        }
+        enqueue_render_plan_if_missing(
+            &state,
+            presentation_preload_render_plan(&snapshot, PRESENTATION_CACHE_RADIUS),
+        );
     });
 }
 
@@ -1456,37 +1355,30 @@ fn handle_render_opened(
     notes: SpeakerNotes,
     status_text: String,
 ) {
-    let (snapshot, loaded_path) = {
+    let outcome = {
         let mut state = state.borrow_mut();
-        if !state.render_sessions.accepts(session_id) {
+        let Some(outcome) = commit_render_opened_state(
+            &mut state,
+            session_id,
+            title,
+            page_count,
+            notes,
+            status_text,
+        ) else {
             return;
-        }
-
-        state.render_generation = state.render_generation.wrapping_add(1);
-        state.render_cache.clear();
-        state.presentation = PresentationState::open_document(title, page_count);
-        state.notes = notes;
-        state.thumbnails = ThumbnailState {
-            total_pages: page_count,
         };
-        state.black_screen.set_active(false);
-        state.timer.reset();
-        state.status_text = status_text;
-
-        let snapshot = state.presentation.snapshot();
-        if let Some(snapshot) = snapshot.as_ref() {
+        if let Some(snapshot) = outcome.snapshot.as_ref() {
             apply_snapshot_to_windows(windows, &state, snapshot);
             enqueue_visible_page_renders(&state, snapshot);
         }
-
-        (snapshot, state.pending_open_path.take())
+        outcome
     };
 
-    if let Some(path) = loaded_path {
+    if let Some(path) = outcome.loaded_path {
         record_recent_pdf(&windows.presenter, state, path);
     }
 
-    if let Some(snapshot) = snapshot {
+    if let Some(snapshot) = outcome.snapshot {
         schedule_presentation_preload(state.clone(), snapshot.clone());
         schedule_thumbnail_render(windows.clone(), state.clone());
     }
@@ -1499,13 +1391,12 @@ fn handle_render_open_failed(
     message: String,
 ) {
     warn!(error = %message, "failed to open PDF on render worker");
-    {
+    let accepted = {
         let mut state = state.borrow_mut();
-        if !state.render_sessions.accepts(session_id) {
-            return;
-        }
-        state.status_text = "Could not open PDF. Choose another file.".to_owned();
-        state.pending_open_path = None;
+        commit_render_open_failed_state(&mut state, session_id)
+    };
+    if !accepted {
+        return;
     }
     set_presenter_message(
         &windows.presenter,
@@ -1523,33 +1414,24 @@ fn handle_page_rendered(
     request: RenderRequest,
     page: RenderedPage,
 ) {
-    let fit_aspect_ratio = {
+    let outcome = {
         let mut state = state.borrow_mut();
-        if !state.render_sessions.accepts(session_id) {
+        let Some(outcome) = commit_page_rendered_state(
+            &mut state,
+            session_id,
+            request,
+            page,
+            PRESENTATION_CACHE_RADIUS,
+        ) else {
             return;
-        }
-
-        state.render_cache.insert(request, page.clone());
-
-        let snapshot = state.presentation.snapshot();
-        if let Some(snapshot) = snapshot.as_ref() {
-            state.render_cache.retain_presentation_window(
-                snapshot.current_index,
-                snapshot.total_pages,
-                PRESENTATION_CACHE_RADIUS,
-            );
+        };
+        if let Some(snapshot) = outcome.snapshot.as_ref() {
             apply_snapshot_to_windows(windows, &state, snapshot);
         }
-
-        snapshot
-            .filter(|snapshot| {
-                request.purpose == RenderPurpose::CurrentSlide
-                    && request.page_index == snapshot.current_index
-            })
-            .map(|_| page.aspect_ratio)
+        outcome
     };
 
-    if let Some(aspect_ratio) = fit_aspect_ratio {
+    if let Some(aspect_ratio) = outcome.fit_aspect_ratio {
         fit_slide_window_to_aspect_ratio(windows, aspect_ratio);
     }
 }
@@ -1568,20 +1450,20 @@ fn handle_page_render_failed(
         "failed to render page on render worker"
     );
 
-    let mut state = state.borrow_mut();
-    if !state.render_sessions.accepts(session_id) {
+    let should_show_message = {
+        let mut state = state.borrow_mut();
+        commit_page_render_failed_state(&mut state, session_id, request)
+    };
+    if !should_show_message {
         return;
     }
-    if request.purpose == RenderPurpose::CurrentSlide {
-        state.status_text = "Could not render this page. Try another PDF or page.".to_owned();
-        set_presenter_message(
-            &windows.presenter,
-            PresenterMessage::new(
-                "Could not render this page. Try another PDF or page.",
-                errors::MessageSeverity::Error,
-            ),
-        );
-    }
+    set_presenter_message(
+        &windows.presenter,
+        PresenterMessage::new(
+            "Could not render this page. Try another PDF or page.",
+            errors::MessageSeverity::Error,
+        ),
+    );
 }
 
 fn start_presenter_time_updates(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
