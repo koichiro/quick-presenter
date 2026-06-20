@@ -16,7 +16,10 @@ if [[ -z "${LLVM_PROFDATA:-}" ]] && command -v xcrun >/dev/null 2>&1; then
   export LLVM_PROFDATA
 fi
 
+# main and window bridge modules are thin UI/backend integration glue; their
+# behavior is covered through extracted state modules instead of unit-spawning
+# Slint or native macOS windows.
 cargo llvm-cov \
   --summary-only \
   --fail-under-lines 80 \
-  --ignore-filename-regex '(^|/)src/(main|view_sync|window_controller)\.rs$'
+  --ignore-filename-regex '(^|/)src/(main|macos_window|view_sync|window_controller)\.rs$'
