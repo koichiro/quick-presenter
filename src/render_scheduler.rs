@@ -516,4 +516,63 @@ mod tests {
         assert_eq!(request, second);
         assert!(queue.is_empty());
     }
+
+    #[test]
+    fn close_command_clears_active_session_and_matching_jobs() {
+        let session = RenderSessionId(1);
+        let mut document = None;
+        let mut active_session = Some(session);
+        let mut queue = RenderQueue::default();
+        let (event_sender, _event_receiver) = mpsc::channel();
+        let mut shutdown = false;
+        queue.push(
+            session,
+            request(1, RenderPurpose::CurrentSlide),
+            RenderPriority::Warm,
+        );
+
+        handle_command(
+            RenderCommand::Close {
+                session_id: session,
+            },
+            &mut document,
+            &mut active_session,
+            &mut queue,
+            &event_sender,
+            &mut shutdown,
+        );
+
+        assert_eq!(active_session, None);
+        assert!(document.is_none());
+        assert!(queue.is_empty());
+        assert!(!shutdown);
+    }
+
+    #[test]
+    fn shutdown_command_sets_shutdown_and_clears_queue() {
+        let session = RenderSessionId(1);
+        let mut document = None;
+        let mut active_session = Some(session);
+        let mut queue = RenderQueue::default();
+        let (event_sender, _event_receiver) = mpsc::channel();
+        let mut shutdown = false;
+        queue.push(
+            session,
+            request(1, RenderPurpose::CurrentSlide),
+            RenderPriority::Warm,
+        );
+
+        handle_command(
+            RenderCommand::Shutdown,
+            &mut document,
+            &mut active_session,
+            &mut queue,
+            &event_sender,
+            &mut shutdown,
+        );
+
+        assert!(shutdown);
+        assert!(queue.is_empty());
+        assert_eq!(active_session, Some(session));
+    }
 }

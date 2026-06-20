@@ -182,6 +182,31 @@ fn update_elapsed_timer_for_page_change(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rendering::RenderedPage;
+
+    fn rendered_page(aspect_ratio: f32) -> RenderedPage {
+        RenderedPage {
+            image: crate::view_sync::placeholder_slide().image,
+            aspect_ratio,
+            estimated_bytes: 64,
+        }
+    }
+
+    fn current_slide_request(page_index: u32) -> RenderRequest {
+        RenderRequest {
+            page_index,
+            width: crate::render_controller::CURRENT_RENDER_WIDTH,
+            purpose: RenderPurpose::CurrentSlide,
+        }
+    }
+
+    fn preview_request(page_index: u32) -> RenderRequest {
+        RenderRequest {
+            page_index,
+            width: crate::render_controller::PREVIEW_RENDER_WIDTH,
+            purpose: RenderPurpose::NextPreview,
+        }
+    }
 
     #[test]
     fn begin_open_pdf_state_resets_current_session_metadata() {
@@ -202,6 +227,24 @@ mod tests {
         assert!(!state.black_screen.is_active());
         assert_eq!(state.status_text, "Opening PDF...");
         assert_eq!(state.pending_open_path, Some(PathBuf::from("deck.pdf")));
+    }
+
+    #[test]
+    fn black_screen_command_toggles_without_changing_page() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 2),
+            ..AppState::default()
+        };
+
+        let outcome = apply_session_command(
+            &mut state,
+            PresentationCommand::ToggleBlackScreen,
+            Instant::now(),
+        );
+
+        assert!(state.black_screen.is_active());
+        assert_eq!(outcome.snapshot.unwrap().current_index, 0);
+        assert_eq!(outcome.slide_fullscreen, None);
     }
 
     #[test]
@@ -260,5 +303,159 @@ mod tests {
         );
         assert_eq!(state.presentation.snapshot(), None);
         assert_eq!(state.pending_open_path, Some(PathBuf::from("new.pdf")));
+    }
+
+    #[test]
+    fn opened_event_commits_new_presentation_and_loaded_path() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+
+        let outcome = commit_render_opened_state(
+            &mut state,
+            session_id,
+            "Deck".to_owned(),
+            3,
+            SpeakerNotes::empty(),
+            "Ready".to_owned(),
+        )
+        .expect("current session should accept opened event");
+
+        let snapshot = outcome
+            .snapshot
+            .expect("opened document should have a first page");
+        assert_eq!(snapshot.title, "Deck");
+        assert_eq!(snapshot.page_label, "1 / 3");
+        assert_eq!(state.thumbnails.total_pages, 3);
+        assert_eq!(state.status_text, "Ready");
+        assert_eq!(outcome.loaded_path, Some(PathBuf::from("deck.pdf")));
+        assert_eq!(state.pending_open_path, None);
+    }
+
+    #[test]
+    fn open_failed_event_clears_pending_path_for_current_session() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("broken.pdf"));
+
+        assert!(commit_render_open_failed_state(&mut state, session_id));
+
+        assert_eq!(state.pending_open_path, None);
+        assert_eq!(
+            state.status_text,
+            "Could not open PDF. Choose another file."
+        );
+    }
+
+    #[test]
+    fn stale_open_failed_event_is_ignored() {
+        let mut state = AppState::default();
+        let stale_session = begin_open_pdf_state(&mut state, PathBuf::from("old.pdf"));
+        begin_open_pdf_state(&mut state, PathBuf::from("new.pdf"));
+
+        assert!(!commit_render_open_failed_state(&mut state, stale_session));
+
+        assert_eq!(state.pending_open_path, Some(PathBuf::from("new.pdf")));
+        assert_eq!(state.status_text, "Opening PDF...");
+    }
+
+    #[test]
+    fn current_page_render_returns_snapshot_and_fit_aspect_ratio() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            session_id,
+            "Deck".to_owned(),
+            2,
+            SpeakerNotes::empty(),
+            "Ready".to_owned(),
+        );
+        let request = current_slide_request(0);
+
+        let outcome = commit_page_rendered_state(
+            &mut state,
+            session_id,
+            request,
+            rendered_page(4.0 / 3.0),
+            2,
+        )
+        .expect("current session should accept rendered page");
+
+        assert_eq!(outcome.snapshot.unwrap().current_index, 0);
+        assert_eq!(outcome.fit_aspect_ratio, Some(4.0 / 3.0));
+        assert!(state.render_cache.peek(request).is_some());
+    }
+
+    #[test]
+    fn preview_render_does_not_request_slide_window_fit() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            session_id,
+            "Deck".to_owned(),
+            2,
+            SpeakerNotes::empty(),
+            "Ready".to_owned(),
+        );
+
+        let outcome = commit_page_rendered_state(
+            &mut state,
+            session_id,
+            preview_request(1),
+            rendered_page(16.0 / 9.0),
+            2,
+        )
+        .expect("current session should accept preview render");
+
+        assert_eq!(outcome.snapshot.unwrap().current_index, 0);
+        assert_eq!(outcome.fit_aspect_ratio, None);
+    }
+
+    #[test]
+    fn stale_page_render_is_ignored() {
+        let mut state = AppState::default();
+        let stale_session = begin_open_pdf_state(&mut state, PathBuf::from("old.pdf"));
+        begin_open_pdf_state(&mut state, PathBuf::from("new.pdf"));
+
+        let outcome = commit_page_rendered_state(
+            &mut state,
+            stale_session,
+            current_slide_request(0),
+            rendered_page(1.0),
+            2,
+        );
+
+        assert!(outcome.is_none());
+    }
+
+    #[test]
+    fn current_page_render_failure_updates_status() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+
+        assert!(commit_page_render_failed_state(
+            &mut state,
+            session_id,
+            current_slide_request(0),
+        ));
+
+        assert_eq!(
+            state.status_text,
+            "Could not render this page. Try another PDF or page."
+        );
+    }
+
+    #[test]
+    fn preview_render_failure_does_not_replace_status() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+
+        assert!(!commit_page_render_failed_state(
+            &mut state,
+            session_id,
+            preview_request(1),
+        ));
+
+        assert_eq!(state.status_text, "Opening PDF...");
     }
 }
