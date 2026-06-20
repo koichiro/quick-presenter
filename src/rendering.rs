@@ -114,6 +114,15 @@ impl RenderCache {
     }
 
     pub fn insert(&mut self, request: RenderRequest, page: RenderedPage) {
+        self.insert_with_context(request, page, None);
+    }
+
+    pub fn insert_with_context(
+        &mut self,
+        request: RenderRequest,
+        page: RenderedPage,
+        context: Option<CacheContext>,
+    ) {
         self.access_counter = self.access_counter.wrapping_add(1);
         if let Some(entry) = self.pages.insert(
             request,
@@ -132,7 +141,7 @@ impl RenderCache {
                 .estimated_bytes
                 .saturating_add(entry.page.estimated_bytes);
         }
-        self.enforce_budget(None);
+        self.enforce_budget(context);
     }
 
     pub fn peek(&self, request: RenderRequest) -> Option<RenderedPage> {
@@ -162,7 +171,14 @@ impl RenderCache {
 
     fn enforce_budget(&mut self, context: Option<CacheContext>) {
         while self.is_over_budget() {
-            let Some(request) = self.eviction_candidate(context) else {
+            let Some(request) = self.unprotected_eviction_candidate(context) else {
+                break;
+            };
+            self.remove(request);
+        }
+
+        while self.is_over_budget() {
+            let Some(request) = self.protected_eviction_candidate(context) else {
                 break;
             };
             self.remove(request);
@@ -174,13 +190,34 @@ impl RenderCache {
             || self.estimated_bytes > self.budget.max_estimated_bytes
     }
 
-    fn eviction_candidate(&self, context: Option<CacheContext>) -> Option<RenderRequest> {
+    fn unprotected_eviction_candidate(
+        &self,
+        context: Option<CacheContext>,
+    ) -> Option<RenderRequest> {
         self.pages
             .iter()
             .filter(|(request, _)| !is_protected_request(request, context))
             .max_by_key(|(request, entry)| {
                 (
                     eviction_priority(request.purpose),
+                    u64::MAX.saturating_sub(entry.last_access),
+                )
+            })
+            .map(|(request, _)| *request)
+    }
+
+    fn protected_eviction_candidate(&self, context: Option<CacheContext>) -> Option<RenderRequest> {
+        let context = context?;
+
+        self.pages
+            .iter()
+            .filter(|(request, _)| {
+                is_protected_request(request, Some(context))
+                    && !is_visible_current_request(request, context)
+            })
+            .max_by_key(|(request, entry)| {
+                (
+                    page_distance(request.page_index, context.current_index),
                     u64::MAX.saturating_sub(entry.last_access),
                 )
             })
@@ -269,10 +306,20 @@ pub fn estimated_render_bytes(width: i32, aspect_ratio: f32) -> usize {
         .saturating_mul(4)
 }
 
+pub fn actual_render_bytes(pixels: &SharedPixelBuffer<Rgba8Pixel>) -> usize {
+    (pixels.width() as usize)
+        .saturating_mul(pixels.height() as usize)
+        .saturating_mul(std::mem::size_of::<Rgba8Pixel>())
+}
+
 fn page_is_within_radius(page_index: u32, current_index: u32, radius: u32) -> bool {
     let lower = current_index.saturating_sub(radius);
     let upper = current_index.saturating_add(radius);
     page_index >= lower && page_index <= upper
+}
+
+fn page_distance(page_index: u32, current_index: u32) -> u32 {
+    page_index.abs_diff(current_index)
 }
 
 fn is_protected_request(request: &RenderRequest, context: Option<CacheContext>) -> bool {
@@ -287,6 +334,10 @@ fn is_protected_request(request: &RenderRequest, context: Option<CacheContext>) 
             context.total_pages,
             context.presentation_radius,
         )
+}
+
+fn is_visible_current_request(request: &RenderRequest, context: CacheContext) -> bool {
+    request.purpose == RenderPurpose::CurrentSlide && request.page_index == context.current_index
 }
 
 fn eviction_priority(purpose: RenderPurpose) -> u8 {
@@ -340,6 +391,14 @@ mod tests {
             })
             .map(|request| request.page_index)
             .collect()
+    }
+
+    #[test]
+    fn actual_render_bytes_uses_real_pixel_buffer_dimensions() {
+        let pixels = vec![0; 11 * 7 * 4];
+        let buffer = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&pixels, 11, 7);
+
+        assert_eq!(actual_render_bytes(&buffer), 11 * 7 * 4);
     }
 
     #[test]
@@ -527,6 +586,80 @@ mod tests {
         assert!(cache
             .pages
             .contains_key(&request(4, 1600, RenderPurpose::CurrentSlide)));
+    }
+
+    #[test]
+    fn protected_window_shrinks_when_protected_entries_exceed_byte_budget() {
+        let mut cache = RenderCache::with_budget(CacheBudget {
+            max_entries: usize::MAX,
+            max_estimated_bytes: 10,
+        });
+        let context = CacheContext {
+            current_index: 3,
+            total_pages: 8,
+            presentation_radius: 2,
+        };
+
+        for page_index in [1, 2, 3, 4, 5] {
+            cache.insert_with_context(
+                request(page_index, 1600, RenderPurpose::CurrentSlide),
+                rendered_page_with_bytes(1.0, 4),
+                Some(context),
+            );
+        }
+
+        cache.retain_presentation_window(
+            context.current_index,
+            context.total_pages,
+            context.presentation_radius,
+        );
+
+        assert_eq!(cache.estimated_bytes, 8);
+        assert!(cache
+            .pages
+            .contains_key(&request(3, 1600, RenderPurpose::CurrentSlide)));
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn oversized_visible_current_slide_is_explicitly_kept_over_budget() {
+        let mut cache = RenderCache::with_budget(CacheBudget {
+            max_entries: usize::MAX,
+            max_estimated_bytes: 8,
+        });
+        let context = CacheContext {
+            current_index: 3,
+            total_pages: 8,
+            presentation_radius: 1,
+        };
+
+        cache.insert_with_context(
+            request(2, 1600, RenderPurpose::CurrentSlide),
+            rendered_page_with_bytes(1.0, 4),
+            Some(context),
+        );
+        cache.insert_with_context(
+            request(3, 1600, RenderPurpose::CurrentSlide),
+            rendered_page_with_bytes(1.0, 12),
+            Some(context),
+        );
+        cache.insert_with_context(
+            request(3, 240, RenderPurpose::Thumbnail),
+            rendered_page_with_bytes(1.0, 4),
+            Some(context),
+        );
+
+        cache.retain_presentation_window(
+            context.current_index,
+            context.total_pages,
+            context.presentation_radius,
+        );
+
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.estimated_bytes, 12);
+        assert!(cache
+            .pages
+            .contains_key(&request(3, 1600, RenderPurpose::CurrentSlide)));
     }
 
     #[test]

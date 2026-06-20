@@ -12,7 +12,7 @@ use crate::{
     errors::speaker_notes_warning,
     notes::SpeakerNotes,
     pdf::PdfDocumentState,
-    rendering::{estimated_render_bytes, RenderPurpose, RenderRequest, RenderedPagePixels},
+    rendering::{actual_render_bytes, RenderPurpose, RenderRequest, RenderedPagePixels},
 };
 
 const MAX_PENDING_RENDER_COMMANDS: usize = 64;
@@ -969,9 +969,9 @@ fn render_page_pixels(
     let pixels = document.render_page_pixels(request.page_index, request.width)?;
 
     Ok(RenderedPagePixels {
+        estimated_bytes: actual_render_bytes(&pixels),
         pixels,
         aspect_ratio,
-        estimated_bytes: estimated_render_bytes(request.width, aspect_ratio),
     })
 }
 
