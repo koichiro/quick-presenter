@@ -1593,4 +1593,41 @@ mod tests {
         assert_eq!(snapshot.page_label, "1 / 2");
         assert_eq!(snapshot.title, "New deck");
     }
+
+    #[test]
+    fn recording_recent_pdf_keeps_visible_recent_menu_snapshot_stable() {
+        let first = PathBuf::from("/tmp/first.pdf");
+        let second = PathBuf::from("/tmp/second.pdf");
+        let state = Rc::new(RefCell::new(AppState {
+            recent_files: RecentFiles::from_paths([first.clone(), second.clone()]),
+            recent_menu_paths: vec![first.clone(), second.clone()],
+            ..AppState::default()
+        }));
+        let presenter = Weak::<PresenterWindow>::default();
+
+        record_recent_pdf(&presenter, &state, second.clone());
+
+        let state = state.borrow();
+        assert_eq!(state.recent_files.paths(), &[second, first.clone()]);
+        assert_eq!(
+            state.recent_menu_paths,
+            vec![first, PathBuf::from("/tmp/second.pdf")]
+        );
+    }
+
+    #[test]
+    fn clearing_recent_files_clears_saved_paths_and_visible_recent_menu_snapshot() {
+        let state = Rc::new(RefCell::new(AppState {
+            recent_files: RecentFiles::from_paths([PathBuf::from("/tmp/first.pdf")]),
+            recent_menu_paths: vec![PathBuf::from("/tmp/first.pdf")],
+            ..AppState::default()
+        }));
+        let presenter = Weak::<PresenterWindow>::default();
+
+        clear_recent_files(&presenter, &state);
+
+        let state = state.borrow();
+        assert!(state.recent_files.is_empty());
+        assert!(state.recent_menu_paths.is_empty());
+    }
 }
