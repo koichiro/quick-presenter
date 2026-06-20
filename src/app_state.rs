@@ -1,14 +1,23 @@
 use std::path::PathBuf;
 
 use crate::{
-    black_screen::BlackScreenState, fullscreen::FullscreenState, notes::SpeakerNotes,
-    pdf::PdfDocumentState, presentation::PresentationState, recent::RecentFileStore,
-    recent::RecentFiles, render_scheduler::RenderScheduler, render_scheduler::RenderSessionTracker,
-    rendering::RenderCache, timer::PresentationTimer, window_menu::WindowMenuState,
+    black_screen::BlackScreenState,
+    fullscreen::FullscreenState,
+    notes::SpeakerNotes,
+    pdf::PdfDocumentState,
+    presentation::PresentationState,
+    recent::RecentFileStore,
+    recent::RecentFiles,
+    render_scheduler::RenderScheduler,
+    render_scheduler::RenderSessionTracker,
+    rendering::{RenderCache, RenderedPage},
+    timer::PresentationTimer,
+    window_menu::WindowMenuState,
 };
 
 #[derive(Default)]
 pub struct AppState {
+    pub audience_slide: AudienceSlideState,
     pub black_screen: BlackScreenState,
     pub fullscreen: FullscreenState,
     pub pdf: Option<PdfDocumentState>,
@@ -25,6 +34,12 @@ pub struct AppState {
     pub recent_files: RecentFiles,
     pub recent_store: Option<RecentFileStore>,
     pub status_text: String,
+}
+
+#[derive(Default)]
+pub struct AudienceSlideState {
+    pub last_good_current: Option<RenderedPage>,
+    pub failed_current_page: Option<u32>,
 }
 
 #[derive(Default)]

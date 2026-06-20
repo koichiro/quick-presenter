@@ -45,15 +45,13 @@ pub fn apply_snapshot_to_windows(
     state: &AppState,
     snapshot: &PageSnapshot,
 ) {
-    let current_request = RenderRequest {
-        page_index: snapshot.current_index,
-        width: CURRENT_RENDER_WIDTH,
-        purpose: RenderPurpose::CurrentSlide,
-    };
-    let current = state
-        .render_cache
-        .peek(current_request)
-        .unwrap_or_else(placeholder_slide);
+    let current_request = current_slide_request(snapshot.current_index);
+    let cached_current = state.render_cache.peek(current_request);
+    let presenter_current = cached_current.clone().unwrap_or_else(placeholder_slide);
+    let audience_current = audience_current_slide(
+        cached_current,
+        state.audience_slide.last_good_current.clone(),
+    );
     let next = snapshot.next_index.and_then(|page_index| {
         state.render_cache.peek(RenderRequest {
             page_index,
@@ -64,8 +62,8 @@ pub fn apply_snapshot_to_windows(
     let next_placeholder = placeholder_slide();
 
     if let Some(presenter) = windows.presenter.upgrade() {
-        presenter.set_current_page_image(current.image.clone());
-        presenter.set_current_page_aspect_ratio(current.aspect_ratio);
+        presenter.set_current_page_image(presenter_current.image.clone());
+        presenter.set_current_page_aspect_ratio(presenter_current.aspect_ratio);
         presenter.set_has_next_page(snapshot.next_index.is_some());
         if let Some(next) = next.as_ref() {
             presenter.set_next_page_image(next.image.clone());
@@ -78,7 +76,7 @@ pub fn apply_snapshot_to_windows(
         presenter.set_page_label(snapshot.page_label.clone().into());
         presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
-        presenter.set_status_text(presenter_status_text(state).into());
+        presenter.set_status_text(presenter_status_text_for_snapshot(state, snapshot).into());
         presenter.set_current_page_index(presenter_page_index(snapshot.current_index));
         presenter.set_thumbnails(thumbnail_model(
             &state.thumbnails,
@@ -92,11 +90,11 @@ pub fn apply_snapshot_to_windows(
     }
 
     if let Some(slide) = windows.slide.upgrade() {
-        slide.set_page_aspect_ratio(current.aspect_ratio);
+        slide.set_page_aspect_ratio(audience_current.aspect_ratio);
         slide.set_page_image(if state.black_screen.is_active() {
             black_slide_image()
         } else {
-            current.image
+            audience_current.image
         });
     }
 }
@@ -112,6 +110,43 @@ pub fn presenter_status_text(state: &AppState) -> String {
         "Black screen active. Audience slide is hidden.".to_owned()
     } else {
         state.status_text.clone()
+    }
+}
+
+fn presenter_status_text_for_snapshot(state: &AppState, snapshot: &PageSnapshot) -> String {
+    if state.black_screen.is_active() {
+        return "Black screen active. Audience slide is hidden.".to_owned();
+    }
+
+    if state.audience_slide.failed_current_page == Some(snapshot.current_index) {
+        return state.status_text.clone();
+    }
+
+    if state
+        .render_cache
+        .peek(current_slide_request(snapshot.current_index))
+        .is_none()
+    {
+        return "Rendering page...".to_owned();
+    }
+
+    state.status_text.clone()
+}
+
+fn audience_current_slide(
+    cached_current: Option<RenderedPage>,
+    last_good_current: Option<RenderedPage>,
+) -> RenderedPage {
+    cached_current
+        .or(last_good_current)
+        .unwrap_or_else(placeholder_slide)
+}
+
+fn current_slide_request(page_index: u32) -> RenderRequest {
+    RenderRequest {
+        page_index,
+        width: CURRENT_RENDER_WIDTH,
+        purpose: RenderPurpose::CurrentSlide,
     }
 }
 
@@ -202,4 +237,66 @@ pub fn recent_file_menu_labels(labels: Vec<String>) -> ModelRc<SharedString> {
             .map(SharedString::from)
             .collect::<Vec<_>>(),
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::presentation::PresentationState;
+
+    fn rendered_page(aspect_ratio: f32) -> RenderedPage {
+        RenderedPage {
+            image: placeholder_slide().image,
+            aspect_ratio,
+            estimated_bytes: 64,
+        }
+    }
+
+    #[test]
+    fn audience_current_slide_prefers_cached_current_page() {
+        let selected = audience_current_slide(
+            Some(rendered_page(4.0 / 3.0)),
+            Some(rendered_page(16.0 / 9.0)),
+        );
+
+        assert_eq!(selected.aspect_ratio, 4.0 / 3.0);
+    }
+
+    #[test]
+    fn audience_current_slide_keeps_last_good_when_current_cache_misses() {
+        let selected = audience_current_slide(None, Some(rendered_page(16.0 / 9.0)));
+
+        assert_eq!(selected.aspect_ratio, 16.0 / 9.0);
+    }
+
+    #[test]
+    fn presenter_status_reports_rendering_for_current_page_cache_miss() {
+        let state = AppState {
+            presentation: PresentationState::open_document("Deck", 2),
+            status_text: "Ready".to_owned(),
+            ..AppState::default()
+        };
+        let snapshot = state.presentation.snapshot().expect("presentation is open");
+
+        assert_eq!(
+            presenter_status_text_for_snapshot(&state, &snapshot),
+            "Rendering page..."
+        );
+    }
+
+    #[test]
+    fn presenter_status_keeps_current_page_render_failure_message() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 2),
+            status_text: "Could not render this page. Try another PDF or page.".to_owned(),
+            ..AppState::default()
+        };
+        let snapshot = state.presentation.snapshot().expect("presentation is open");
+        state.audience_slide.failed_current_page = Some(snapshot.current_index);
+
+        assert_eq!(
+            presenter_status_text_for_snapshot(&state, &snapshot),
+            "Could not render this page. Try another PDF or page."
+        );
+    }
 }
