@@ -88,7 +88,6 @@ const RENDER_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(16);
 const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
 const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
 const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
-const FILE_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 
 fn main() -> Result<()> {
@@ -670,10 +669,8 @@ fn schedule_open_pdf(
     path: PathBuf,
     error_context: &'static str,
 ) {
-    Timer::single_shot(FILE_MENU_ACTION_DELAY, move || {
-        let _ = error_context;
-        begin_open_pdf(&windows, &state, path);
-    });
+    let _ = error_context;
+    begin_open_pdf(&windows, &state, path);
 }
 
 fn wire_recent_file_callbacks(
