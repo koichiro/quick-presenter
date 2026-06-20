@@ -52,12 +52,10 @@ use render_controller::{
 use render_controller::{CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH};
 use render_scheduler::{RenderEvent, RenderScheduler};
 #[cfg(test)]
+use rendering::presentation_preload_order;
+#[cfg(test)]
 use rendering::RenderCache;
-#[cfg(test)]
-use rendering::RenderPurpose;
-#[cfg(test)]
-use rendering::{presentation_preload_order, thumbnail_window_indices};
-use rendering::{RenderRequest, RenderedPage};
+use rendering::{thumbnail_window_indices, RenderPurpose, RenderRequest, RenderedPage};
 use session_controller::{
     apply_session_command, begin_open_pdf_state, commit_page_render_failed_state,
     commit_page_rendered_state, commit_render_open_failed_state, commit_render_opened_state,
@@ -68,8 +66,8 @@ use timer::PresentationTimer;
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
 use view_sync::{
-    apply_opening_state_to_windows, apply_snapshot_to_windows, presenter_page_index,
-    recent_file_menu_labels, set_presenter_message, thumbnail_model,
+    apply_opening_state_to_windows, apply_snapshot_to_windows, recent_file_menu_labels,
+    set_presenter_message, thumbnail_current_row_index, thumbnail_model,
 };
 #[cfg(test)]
 use view_sync::{black_slide_image, presenter_status_text};
@@ -1123,11 +1121,16 @@ fn apply_rendered_pages_to_windows(
         presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
         presenter.set_status_text(presenter_status_text(state).into());
-        presenter.set_current_page_index(presenter_page_index(snapshot.current_index));
+        presenter.set_current_page_index(thumbnail_current_row_index(
+            snapshot.total_pages,
+            snapshot.current_index,
+            THUMBNAIL_CACHE_RADIUS,
+        ));
         presenter.set_thumbnails(thumbnail_model(
             &state.thumbnails,
             &state.render_cache,
             snapshot.current_index,
+            THUMBNAIL_CACHE_RADIUS,
         ));
 
         let current_note = state.notes.note_for_page_index(snapshot.current_index);
@@ -1217,14 +1220,23 @@ fn schedule_thumbnail_render(windows: AppWindowRefs, state: Rc<RefCell<AppState>
         );
 
         if let Some(presenter) = windows.presenter.upgrade() {
-            presenter.set_current_page_index(presenter_page_index(snapshot.current_index));
-            presenter.set_thumbnails(thumbnail_model(
-                &state.thumbnails,
-                &state.render_cache,
-                snapshot.current_index,
-            ));
+            sync_thumbnail_model(&presenter, &state, &snapshot);
         }
     });
+}
+
+fn sync_thumbnail_model(presenter: &PresenterWindow, state: &AppState, snapshot: &PageSnapshot) {
+    presenter.set_current_page_index(thumbnail_current_row_index(
+        snapshot.total_pages,
+        snapshot.current_index,
+        THUMBNAIL_CACHE_RADIUS,
+    ));
+    presenter.set_thumbnails(thumbnail_model(
+        &state.thumbnails,
+        &state.render_cache,
+        snapshot.current_index,
+        THUMBNAIL_CACHE_RADIUS,
+    ));
 }
 
 #[cfg(test)]
@@ -1463,7 +1475,21 @@ fn handle_page_rendered(
             return;
         };
         if let Some(snapshot) = outcome.snapshot.as_ref() {
-            apply_snapshot_to_windows(windows, &state, snapshot);
+            if request.purpose == RenderPurpose::Thumbnail {
+                if thumbnail_window_indices(
+                    snapshot.current_index,
+                    snapshot.total_pages,
+                    THUMBNAIL_CACHE_RADIUS,
+                )
+                .contains(&request.page_index)
+                {
+                    if let Some(presenter) = windows.presenter.upgrade() {
+                        sync_thumbnail_model(&presenter, &state, snapshot);
+                    }
+                }
+            } else {
+                apply_snapshot_to_windows(windows, &state, snapshot);
+            }
         }
         outcome
     };
