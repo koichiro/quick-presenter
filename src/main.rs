@@ -10,6 +10,7 @@ pub mod notes;
 pub mod pdf;
 pub mod presentation;
 pub mod recent;
+pub mod render_scheduler;
 pub mod rendering;
 pub mod timer;
 pub mod window_menu;
