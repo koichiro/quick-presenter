@@ -1,4 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::{
+    marker::PhantomData,
+    path::{Path, PathBuf},
+    rc::Rc,
+};
 
 use anyhow::{bail, Context, Result};
 use pdfium_render::prelude::*;
@@ -11,10 +15,18 @@ use crate::notes::{is_pdf_speaker_note_annotation, SpeakerNotes};
 const PDFIUM_DYNAMIC_LIB_PATH_ENV: &str = "PDFIUM_DYNAMIC_LIB_PATH";
 const PDFIUM_OVERRIDE_GUARD_ENV: &str = "QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE";
 
+/// Worker-local PDF document state.
+///
+/// In the production runtime, this type should stay on the render worker. The UI
+/// thread receives document metadata, rendered pixels, and errors through
+/// `RenderEvent` instead of accessing PDFium documents directly. The marker keeps
+/// accidental cross-thread moves from compiling while still allowing same-thread
+/// smoke and unit-test paths to exercise PDF loading directly.
 pub struct PdfDocumentState {
     document: PdfDocument<'static>,
     path: PathBuf,
     page_count: u32,
+    _worker_thread_only: PhantomData<Rc<()>>,
 }
 
 impl PdfDocumentState {
@@ -30,6 +42,7 @@ impl PdfDocumentState {
             document,
             path,
             page_count: page_count.max(0) as u32,
+            _worker_thread_only: PhantomData,
         })
     }
 
