@@ -161,10 +161,19 @@ Packaging and signing details for maintainers are documented in
 
 ## Roadmap
 
-The roadmap is intentionally guided by the core product scope: stable PDF
-presentation playback. Future work should make live talks more predictable,
-reduce setup risk, and improve presenter confidence without turning Quick
-Presenter into a slide editor or document management system.
+Quick Presenter is built around one core promise: dependable PDF playback for
+live talks. The roadmap keeps that promise first, then expands toward smoother
+delivery and AI-assisted presentation workflows.
+
+- **v1.0.0: Reliable desktop presentation playback.** Quick Presenter should
+  cover the essential presenter workflow and provide installable packages for
+  macOS, Windows, and Linux.
+- **v1.5.0: More polished live delivery.** Presenter-focused enhancements such
+  as pointer tools should make talks easier to run, with donation-friendly
+  distribution through desktop app stores.
+- **v2.0.0: AI-centric presentation operations.** Quick Presenter should grow a
+  CLI interface and AI-friendly workflows while continuing to treat PDF as the
+  presentation source of truth.
 
 ## Related Projects
 
