@@ -11,7 +11,6 @@ use crate::{PresenterWindow, SlideWindow};
 
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
 const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
-const SLIDE_TITLEBAR_COMPENSATION_HEIGHT: f32 = 28.0;
 #[cfg(target_os = "macos")]
 const SLIDE_WINDOW_TITLE: &str = "Quick Presenter - Slide";
 #[cfg(target_os = "macos")]
@@ -52,32 +51,7 @@ pub struct AppWindowRefs {
 }
 
 #[cfg(target_os = "macos")]
-pub fn apply_macos_slide_window_chrome(windows: &AppWindowRefs) {
-    apply_macos_slide_window_chrome_now(windows);
-    let windows_for_now = windows.clone();
-    Timer::single_shot(Duration::from_millis(0), move || {
-        apply_macos_slide_window_chrome_now(&windows_for_now)
-    });
-    let windows_for_later = windows.clone();
-    Timer::single_shot(Duration::from_millis(250), move || {
-        apply_macos_slide_window_chrome_now(&windows_for_later)
-    });
-    let windows_for_last = windows.clone();
-    Timer::single_shot(Duration::from_millis(1000), move || {
-        apply_macos_slide_window_chrome_now(&windows_for_last)
-    });
-}
-
-#[cfg(target_os = "macos")]
-fn apply_macos_slide_window_chrome_now(windows: &AppWindowRefs) {
-    if let Some(slide) = windows.slide.upgrade() {
-        if !should_apply_slide_chrome(slide.window().is_fullscreen()) {
-            return;
-        }
-
-        crate::macos_window::apply_slide_chrome(slide.window(), SLIDE_WINDOW_TITLE);
-    }
-}
+pub fn apply_macos_slide_window_chrome(_windows: &AppWindowRefs) {}
 
 #[cfg(not(target_os = "macos"))]
 pub fn apply_macos_slide_window_chrome(_windows: &AppWindowRefs) {}
@@ -108,15 +82,13 @@ pub fn sync_slide_chrome(windows: &AppWindowRefs) {
 }
 
 pub fn slide_titlebar_compensation_height(fullscreen: bool) -> f32 {
-    if cfg!(target_os = "macos") && !fullscreen {
-        SLIDE_TITLEBAR_COMPENSATION_HEIGHT
-    } else {
-        0.0
-    }
+    let _ = fullscreen;
+    0.0
 }
 
 pub fn should_apply_slide_chrome(fullscreen: bool) -> bool {
-    cfg!(target_os = "macos") && !fullscreen
+    let _ = fullscreen;
+    false
 }
 
 pub fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
@@ -211,8 +183,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn slide_chrome_is_applied_only_to_macos_windowed_slide_windows() {
-        assert_eq!(should_apply_slide_chrome(false), cfg!(target_os = "macos"));
+    fn slide_chrome_is_not_applied_with_native_appkit_style_changes() {
+        assert!(!should_apply_slide_chrome(false));
         assert!(!should_apply_slide_chrome(true));
+    }
+
+    #[test]
+    fn titlebar_compensation_is_disabled_without_native_slide_chrome() {
+        assert_eq!(slide_titlebar_compensation_height(false), 0.0);
+        assert_eq!(slide_titlebar_compensation_height(true), 0.0);
     }
 }
