@@ -113,6 +113,11 @@ PDFium lookup path as normal startup, renders the first page at a small size, an
 exits with status `0` on success. It is intended for CI and package validation,
 not for end-user presentation playback.
 
+On Windows release builds, `qp.exe` uses the Windows GUI subsystem so packaged
+MSI/MSIX launches do not create an extra console window. Smoke validation on
+Windows should rely on the process exit status; debug builds keep the console
+subsystem for local CLI diagnostics.
+
 The `build-binaries.yml` workflow runs this smoke mode from outside the
 repository working directory against the staged artifacts with
 `PDFIUM_DYNAMIC_LIB_PATH` and `QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE` unset.
@@ -287,6 +292,11 @@ Raw Windows `qp.exe` builds embed `assets/icons/windows/quick-presenter.ico`
 as an executable resource from `build.rs`. This keeps the development binary
 name as `qp.exe` while allowing Windows shell surfaces to discover the Quick
 Presenter icon.
+
+Release builds of `qp.exe` use the Windows GUI subsystem to avoid showing an
+extra console window when launched from the MSI or MSIX. Debug builds keep the
+console subsystem, so local development still shows command-line output for
+`--help`, `--smoke-open-pdf`, and startup errors.
 
 The `build-binaries.yml` workflow runs on `windows-latest`, builds `qp.exe`, and
 extracts the associated executable icon into `qp-associated-icon.png` inside the
