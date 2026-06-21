@@ -1,7 +1,10 @@
+#[cfg(target_os = "macos")]
 use std::time::Duration;
 
 use anyhow::Result;
-use slint::{ComponentHandle, LogicalPosition, LogicalSize, Timer, TimerMode, Weak};
+#[cfg(target_os = "macos")]
+use slint::TimerMode;
+use slint::{ComponentHandle, LogicalPosition, LogicalSize, Timer, Weak};
 use tracing::warn;
 
 use crate::{PresenterWindow, SlideWindow};
