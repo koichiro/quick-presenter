@@ -220,94 +220,9 @@ fn set_application_icon() {}
 
 #[cfg(target_os = "macos")]
 fn remove_macos_native_about_menu_item() {
-    if running_from_macos_app_bundle() {
-        return;
-    }
-
-    // Slint/muda always adds the native App > About item on macOS when a MenuBar exists.
-    // Quick Presenter uses its own Help > About dialog so PDFium licensing is visible.
-    remove_macos_native_about_menu_item_now();
-    Timer::single_shot(
-        Duration::from_millis(0),
-        remove_macos_native_about_menu_item_now,
-    );
-    Timer::single_shot(
-        Duration::from_millis(250),
-        remove_macos_native_about_menu_item_now,
-    );
-    Timer::single_shot(
-        Duration::from_millis(1000),
-        remove_macos_native_about_menu_item_now,
-    );
-}
-
-#[cfg(target_os = "macos")]
-fn remove_macos_native_about_menu_item_now() {
-    use objc2_app_kit::NSApplication;
-    use objc2_foundation::MainThreadMarker;
-
-    let Some(main_thread) = MainThreadMarker::new() else {
-        return;
-    };
-    let app = NSApplication::sharedApplication(main_thread);
-    let Some(main_menu) = app.mainMenu() else {
-        return;
-    };
-
-    for index in 0..main_menu.numberOfItems() {
-        let Some(menu_item) = main_menu.itemAtIndex(index) else {
-            continue;
-        };
-        let Some(submenu) = menu_item.submenu() else {
-            continue;
-        };
-        let Some(first_item) = submenu.itemAtIndex(0) else {
-            continue;
-        };
-
-        if first_item.title().to_string().starts_with("About ") && is_macos_app_menu(&submenu) {
-            submenu.removeItemAtIndex(0);
-            if submenu.numberOfItems() > 0 {
-                submenu.removeItemAtIndex(0);
-            }
-            return;
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn is_macos_app_menu(menu: &objc2_app_kit::NSMenu) -> bool {
-    let mut has_services = false;
-    let mut has_hide = false;
-
-    for index in 0..menu.numberOfItems() {
-        let Some(item) = menu.itemAtIndex(index) else {
-            continue;
-        };
-        let title = item.title().to_string();
-        has_services |= title == "Services";
-        has_hide |= title.starts_with("Hide ");
-    }
-
-    has_services && has_hide
-}
-
-#[cfg(target_os = "macos")]
-fn running_from_macos_app_bundle() -> bool {
-    let Ok(exe) = std::env::current_exe() else {
-        return false;
-    };
-
-    exe.parent()
-        .and_then(std::path::Path::file_name)
-        .and_then(|name| name.to_str())
-        == Some("MacOS")
-        && exe
-            .parent()
-            .and_then(std::path::Path::parent)
-            .and_then(std::path::Path::file_name)
-            .and_then(|name| name.to_str())
-            == Some("Contents")
+    // Avoid mutating the native App menu at runtime. On macOS this can raise
+    // Objective-C exceptions across the winit event loop boundary when the app
+    // later changes the slide window geometry.
 }
 
 #[cfg(not(target_os = "macos"))]
