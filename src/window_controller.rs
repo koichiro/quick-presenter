@@ -71,6 +71,10 @@ pub fn apply_macos_slide_window_chrome(windows: &AppWindowRefs) {
 #[cfg(target_os = "macos")]
 fn apply_macos_slide_window_chrome_now(windows: &AppWindowRefs) {
     if let Some(slide) = windows.slide.upgrade() {
+        if !should_apply_slide_chrome(slide.window().is_fullscreen()) {
+            return;
+        }
+
         crate::macos_window::apply_slide_chrome(slide.window(), SLIDE_WINDOW_TITLE);
     }
 }
@@ -109,6 +113,10 @@ pub fn slide_titlebar_compensation_height(fullscreen: bool) -> f32 {
     } else {
         0.0
     }
+}
+
+pub fn should_apply_slide_chrome(fullscreen: bool) -> bool {
+    cfg!(target_os = "macos") && !fullscreen
 }
 
 pub fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
@@ -196,4 +204,15 @@ pub fn fitted_slide_window_size(
     let height = (size.height.round() - titlebar_compensation_height).max(1.0);
 
     LogicalSize::new(width, height)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slide_chrome_is_applied_only_to_macos_windowed_slide_windows() {
+        assert_eq!(should_apply_slide_chrome(false), cfg!(target_os = "macos"));
+        assert!(!should_apply_slide_chrome(true));
+    }
 }
