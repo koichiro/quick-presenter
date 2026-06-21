@@ -1,4 +1,4 @@
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 use std::time::Duration;
 
 use anyhow::Result;
@@ -11,6 +11,7 @@ use crate::{PresenterWindow, SlideWindow};
 
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
 const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
+#[cfg(any(target_os = "macos", test))]
 const SLIDE_TITLEBAR_COMPENSATION_HEIGHT: f32 = 28.0;
 #[cfg(target_os = "macos")]
 const SLIDE_WINDOW_TITLE: &str = "Quick Presenter - Slide";
@@ -65,6 +66,18 @@ pub fn apply_macos_slide_window_chrome(windows: &AppWindowRefs) {
 #[cfg(not(target_os = "macos"))]
 pub fn apply_macos_slide_window_chrome(_windows: &AppWindowRefs) {}
 
+#[cfg(target_os = "windows")]
+pub fn apply_windows_slide_window_chrome(windows: &AppWindowRefs) {
+    let Some(slide) = windows.slide.upgrade() else {
+        return;
+    };
+
+    crate::windows_window::apply_slide_chrome(slide.window());
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn apply_windows_slide_window_chrome(_windows: &AppWindowRefs) {}
+
 pub fn start_slide_chrome_sync(windows: AppWindowRefs) -> Timer {
     let timer = Timer::default();
     #[cfg(target_os = "macos")]
@@ -73,7 +86,21 @@ pub fn start_slide_chrome_sync(windows: AppWindowRefs) -> Timer {
             sync_slide_chrome(&windows);
         });
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let first_retry = windows.clone();
+        let second_retry = windows.clone();
+        Timer::single_shot(Duration::from_millis(0), move || {
+            sync_slide_chrome(&first_retry);
+        });
+        Timer::single_shot(Duration::from_millis(250), move || {
+            sync_slide_chrome(&second_retry);
+        });
+        Timer::single_shot(Duration::from_millis(1000), move || {
+            sync_slide_chrome(&windows);
+        });
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let _ = windows;
 
     timer
@@ -82,6 +109,8 @@ pub fn start_slide_chrome_sync(windows: AppWindowRefs) -> Timer {
 pub fn sync_slide_chrome(windows: &AppWindowRefs) {
     #[cfg(target_os = "macos")]
     apply_macos_slide_window_chrome(windows);
+    #[cfg(target_os = "windows")]
+    apply_windows_slide_window_chrome(windows);
 
     if let Some(slide) = windows.slide.upgrade() {
         let compensation_height =
@@ -144,7 +173,7 @@ pub fn show_slide_window(windows: &AppWindowRefs) {
         if let Err(err) = slide.show() {
             warn!(error = ?err, "failed to show slide window");
         } else {
-            apply_macos_slide_window_chrome(windows);
+            sync_slide_chrome(windows);
         }
     }
 }
