@@ -185,21 +185,30 @@ jobs:
           cp "target/release/${{ matrix.binary-name }}" "$artifact_dir/"
           cp -R pdfium "$artifact_dir/pdfium"
 
-          cat > "$artifact_dir/README.txt" <<'README'
-          Quick Presenter development binary artifact.
+          cat > "$artifact_dir/README.txt" <<README
+          Quick Presenter packaged artifact.
 
-          This archive contains the qp executable and the PDFium files
-          downloaded by scripts/fetch_pdfium.py during the workflow run.
+          This archive contains the release package for this platform, plus
+          the raw qp executable and PDFium files used to build or validate it.
 
-          The executable locates the bundled PDFium files relative to its own
-          path. If you move the executable, keep the pdfium directory next to it.
+          Prefer the packaged file for normal installation:
+
+          - macOS: QuickPresenter-${PACKAGE_VERSION}.dmg
+          - Windows: QuickPresenter-${PACKAGE_VERSION}.msi
+          - Ubuntu: quick-presenter_${PACKAGE_VERSION}_amd64.deb
+
+          Windows artifacts may also include QuickPresenter-${PACKAGE_VERSION}.msix
+          for layout validation. Use the MSI unless a release explicitly
+          identifies a signed MSIX as supported.
+
+          Raw qp or qp.exe binaries are development and diagnostic artifacts.
+          If you run or move a raw executable directly, keep the pdfium directory
+          next to it because the executable locates bundled PDFium files relative
+          to its own path.
 
           PDFIUM_DYNAMIC_LIB_PATH remains available as a development override.
           Packaged builds require QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE=1
           before honoring that override.
-
-          Full installer or disk image packaging is intentionally out of scope
-          for this workflow.
           README
 
       - name: Stage Linux desktop metadata
