@@ -113,6 +113,7 @@ fn main() -> Result<()> {
     }
 
     let windows = AppWindows::new()?;
+    configure_shortcut_modifiers(&windows);
     let recent_store = default_recent_file_store();
     let recent_files = load_recent_files(recent_store.as_ref());
     let recent_menu_paths = recent_files.paths().to_vec();
@@ -146,6 +147,27 @@ fn main() -> Result<()> {
 
     slint::run_event_loop()?;
     Ok(())
+}
+
+fn configure_shortcut_modifiers(windows: &AppWindows) {
+    // Slint maps physical Control to Meta on macOS, while Control means Command.
+    let use_physical_control = use_physical_control_shortcuts();
+    windows
+        .presenter
+        .set_use_physical_control_shortcuts(use_physical_control);
+    windows
+        .slide
+        .set_use_physical_control_shortcuts(use_physical_control);
+}
+
+#[cfg(target_os = "macos")]
+fn use_physical_control_shortcuts() -> bool {
+    true
+}
+
+#[cfg(not(target_os = "macos"))]
+fn use_physical_control_shortcuts() -> bool {
+    false
 }
 
 fn startup_program_name() -> String {

@@ -331,6 +331,7 @@ export component PresenterWindow inherits Window {
     in property <string> page-label: "";
     in property <string> notes-text: "";
     in property <bool> slide-fullscreen: false;
+    in property <bool> use-physical-control-shortcuts: false;
     in property <string> clock-time-label: "--:--";
     in property <string> elapsed-time-label: "00:00";
     in property <string> status-text: "Open a PDF to start";
@@ -631,8 +632,15 @@ export component PresenterWindow inherits Window {
             }
         }
 
-        KeyBinding {
+        if !root.use-physical-control-shortcuts: KeyBinding {
             keys: @keys(Control + A);
+            activated => {
+                root.keyboard-first-page();
+            }
+        }
+
+        if root.use-physical-control-shortcuts: KeyBinding {
+            keys: @keys(Meta + A);
             activated => {
                 root.keyboard-first-page();
             }
@@ -645,8 +653,15 @@ export component PresenterWindow inherits Window {
             }
         }
 
-        KeyBinding {
+        if !root.use-physical-control-shortcuts: KeyBinding {
             keys: @keys(Control + E);
+            activated => {
+                root.keyboard-last-page();
+            }
+        }
+
+        if root.use-physical-control-shortcuts: KeyBinding {
+            keys: @keys(Meta + E);
             activated => {
                 root.keyboard-last-page();
             }
@@ -986,6 +1001,7 @@ export component SlideWindow inherits Window {
     in property <length> slide-window-width: 1024px;
     in property <length> slide-window-height: 720px;
     in property <length> titlebar-compensation-height: 0px;
+    in property <bool> use-physical-control-shortcuts: false;
 
     callback exit-fullscreen();
     callback toggle-black-screen();
@@ -1085,8 +1101,15 @@ export component SlideWindow inherits Window {
             }
         }
 
-        KeyBinding {
+        if !root.use-physical-control-shortcuts: KeyBinding {
             keys: @keys(Control + A);
+            activated => {
+                root.keyboard-first-page();
+            }
+        }
+
+        if root.use-physical-control-shortcuts: KeyBinding {
+            keys: @keys(Meta + A);
             activated => {
                 root.keyboard-first-page();
             }
@@ -1099,8 +1122,15 @@ export component SlideWindow inherits Window {
             }
         }
 
-        KeyBinding {
+        if !root.use-physical-control-shortcuts: KeyBinding {
             keys: @keys(Control + E);
+            activated => {
+                root.keyboard-last-page();
+            }
+        }
+
+        if root.use-physical-control-shortcuts: KeyBinding {
+            keys: @keys(Meta + E);
             activated => {
                 root.keyboard-last-page();
             }
