@@ -66,7 +66,10 @@ fn version_field(contents: &str, key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::{
+        io::{ErrorKind, Write},
+        path::PathBuf,
+    };
 
     #[test]
     fn about_metadata_uses_cargo_package_version() {
@@ -148,18 +151,32 @@ mod tests {
         assert!(metadata.pdfium_license_summary.contains("license files"));
     }
 
-    fn temp_version_file(contents: &str) -> std::path::PathBuf {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("system time should be after epoch")
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!(
-            "quick-presenter-pdfium-version-test-{}-{nonce}.txt",
-            std::process::id(),
-        ));
-        let mut file = std::fs::File::create(&path).expect("temp version file should be created");
-        file.write_all(contents.as_bytes())
-            .expect("temp version file should be writable");
-        path
+    fn temp_version_file(contents: &str) -> PathBuf {
+        for attempt in 0..100 {
+            let nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "quick-presenter-pdfium-version-test-{}-{nonce}-{attempt}.txt",
+                std::process::id(),
+            ));
+
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(mut file) => {
+                    file.write_all(contents.as_bytes())
+                        .expect("temp version file should be writable");
+                    return path;
+                }
+                Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("temp version file should be created: {error}"),
+            }
+        }
+
+        panic!("unique temp version file path should be available");
     }
 }
