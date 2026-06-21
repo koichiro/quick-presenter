@@ -71,8 +71,8 @@ use timer::PresentationTimer;
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
 use view_sync::{
-    apply_opening_state_to_windows, apply_snapshot_to_windows, recent_file_menu_labels,
-    set_presenter_message, thumbnail_current_row_index, thumbnail_model,
+    apply_opening_state_to_windows, apply_snapshot_to_windows, set_presenter_message,
+    thumbnail_current_row_index, thumbnail_model,
 };
 #[cfg(test)]
 use view_sync::{black_slide_image, presenter_status_text};
@@ -958,9 +958,27 @@ fn update_recent_file_menu_labels(presenter: &Weak<PresenterWindow>, labels: Vec
     };
 
     let has_recent_files = !labels.is_empty();
-
     presenter.set_has_recent_files(has_recent_files);
-    presenter.set_recent_file_labels(recent_file_menu_labels(labels));
+
+    let mut labels = labels.into_iter();
+    let label_0 = labels
+        .next()
+        .unwrap_or_else(|| "No Recent Files".to_owned());
+    let label_1 = labels.next().unwrap_or_default();
+    let label_2 = labels.next().unwrap_or_default();
+    let label_3 = labels.next().unwrap_or_default();
+    let label_4 = labels.next().unwrap_or_default();
+
+    presenter.set_recent_file_label_0(label_0.into());
+    presenter.set_recent_file_label_1(label_1.clone().into());
+    presenter.set_recent_file_label_2(label_2.clone().into());
+    presenter.set_recent_file_label_3(label_3.clone().into());
+    presenter.set_recent_file_label_4(label_4.clone().into());
+    presenter.set_recent_file_0_enabled(has_recent_files);
+    presenter.set_recent_file_1_enabled(!label_1.is_empty());
+    presenter.set_recent_file_2_enabled(!label_2.is_empty());
+    presenter.set_recent_file_3_enabled(!label_3.is_empty());
+    presenter.set_recent_file_4_enabled(!label_4.is_empty());
 }
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
