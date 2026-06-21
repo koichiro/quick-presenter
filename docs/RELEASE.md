@@ -21,10 +21,19 @@ Before publishing a release:
    tag matching `v*`.
 3. Confirm the Linux, macOS, and Windows artifacts are uploaded and their package
    smoke tests pass.
+4. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
+   macOS, Windows, and Ubuntu Linux artifacts before publishing.
 
 `Build Binaries` still runs automatically for pull requests that change
 packaging-sensitive files, such as packaging scripts, installer metadata,
 icons, or Cargo dependency metadata.
+
+The package smoke tests are intentionally non-interactive and do not create
+Slint windows. Run `qp --gui-smoke <PDF> --gui-smoke-report <PATH>` from each
+packaged artifact to cover app-observable presenter-window, slide-window,
+fullscreen, keyboard command, black-screen, and synchronization behavior. The
+GUI checklist remains the release gate for OS-owned title-bar, menu,
+keyboard-focus, shell integration, and readability behavior.
 
 ## Supported Release Artifacts
 

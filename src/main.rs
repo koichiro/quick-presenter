@@ -11,6 +11,7 @@ pub mod cli;
 pub mod clock;
 pub mod errors;
 pub mod fullscreen;
+pub mod gui_smoke;
 pub mod input;
 #[cfg(target_os = "macos")]
 pub mod macos_window;
@@ -39,28 +40,23 @@ use std::{
 use anyhow::{bail, Result};
 use app_metadata::about_metadata;
 use app_state::AppState;
-#[cfg(test)]
 use app_state::ThumbnailState;
-use cli::{help_text, parse_startup_options, StartupRequest};
+use cli::{help_text, parse_startup_options, GuiSmokeOptions, StartupRequest};
 use clock::current_clock_label;
 use errors::PresenterMessage;
 use input::PresentationCommand;
 use notes::SpeakerNotes;
 use pdf::PdfDocumentState;
 use presentation::PageSnapshot;
-#[cfg(test)]
 use presentation::PresentationState;
 use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
 use render_controller::{
     enqueue_render_plan_if_missing, presentation_preload_render_plan, thumbnail_render_plan,
     visible_page_render_plan,
 };
-#[cfg(test)]
 use render_controller::{CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH};
 use render_scheduler::{RenderEvent, RenderScheduler};
-#[cfg(test)]
 use rendering::presentation_preload_order;
-#[cfg(test)]
 use rendering::RenderCache;
 use rendering::{thumbnail_window_indices, RenderPurpose, RenderRequest, RenderedPage};
 use session_controller::{
@@ -76,7 +72,6 @@ use view_sync::{
     apply_opening_state_to_windows, apply_snapshot_to_windows, set_presenter_message,
     thumbnail_current_row_index, thumbnail_model,
 };
-#[cfg(test)]
 use view_sync::{black_slide_image, presenter_status_text};
 use window_controller::{
     apply_macos_slide_window_chrome, fitted_slide_window_size, hide_presenter_window,
@@ -112,6 +107,9 @@ fn main() -> Result<()> {
     };
     if let Some(path) = startup_options.smoke_open_pdf_path {
         return smoke_open_pdf(path);
+    }
+    if let Some(options) = startup_options.gui_smoke {
+        return run_gui_smoke(options);
     }
 
     let windows = AppWindows::new()?;
@@ -205,6 +203,10 @@ fn smoke_open_pdf(path: PathBuf) -> Result<()> {
     Ok(())
 }
 
+fn run_gui_smoke(options: GuiSmokeOptions) -> Result<()> {
+    gui_smoke::run(options)
+}
+
 #[cfg(target_os = "macos")]
 fn set_application_icon() {
     set_application_icon_now();
@@ -252,14 +254,12 @@ fn remove_macos_native_about_menu_item() {
 #[cfg(not(target_os = "macos"))]
 fn remove_macos_native_about_menu_item() {}
 
-#[cfg(test)]
 #[allow(dead_code)]
 struct RenderedPages {
     current: RenderedPage,
     next: Option<RenderedPage>,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 struct PreparedPdfSession {
     loaded_path: PathBuf,
@@ -273,7 +273,6 @@ struct PreparedPdfSession {
     status_text: String,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 struct CommittedPdfSession {
     loaded_path: PathBuf,
@@ -752,9 +751,8 @@ fn begin_open_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, path: 
     apply_opening_state_to_windows(windows, &title);
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
-fn open_and_render(
+pub(crate) fn open_and_render(
     windows: &AppWindowRefs,
     state: &Rc<RefCell<AppState>>,
     path: PathBuf,
@@ -783,13 +781,11 @@ fn open_and_render(
     Ok(())
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 fn prepare_pdf_session(path: PathBuf) -> Result<PreparedPdfSession> {
     prepare_pdf_session_with_initial_render(path, render_pages)
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 fn prepare_pdf_session_with_initial_render(
     path: PathBuf,
@@ -842,7 +838,6 @@ fn prepare_pdf_session_with_initial_render(
     })
 }
 
-#[cfg(test)]
 fn commit_prepared_pdf_session(
     state: &mut AppState,
     prepared: Result<PreparedPdfSession>,
@@ -851,7 +846,6 @@ fn commit_prepared_pdf_session(
     Ok(commit_prepared_pdf_session_state(state, prepared))
 }
 
-#[cfg(test)]
 fn commit_prepared_pdf_session_state(
     state: &mut AppState,
     prepared: PreparedPdfSession,
@@ -880,7 +874,6 @@ fn commit_prepared_pdf_session_state(
     }
 }
 
-#[cfg(test)]
 fn commit_prepared_pdf_session_metadata(
     state: &mut AppState,
     notes: SpeakerNotes,
@@ -1066,7 +1059,6 @@ fn render_into_windows(
     Ok(())
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 fn apply_rendered_pages_to_windows(
     windows: &AppWindowRefs,
@@ -1114,7 +1106,6 @@ fn apply_rendered_pages_to_windows(
     }
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 fn render_pages(
     doc: &PdfDocumentState,
@@ -1148,7 +1139,6 @@ fn render_pages(
     })
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 fn render_pdf_page_cached(
     doc: &PdfDocumentState,
@@ -1205,7 +1195,6 @@ fn sync_thumbnail_model(presenter: &PresenterWindow, state: &AppState, snapshot:
     ));
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 fn render_thumbnail_window(state: &mut AppState, snapshot: &PageSnapshot) -> Result<()> {
     let Some(doc) = state.pdf.as_ref() else {
@@ -1260,7 +1249,6 @@ fn schedule_presentation_preload(state: Rc<RefCell<AppState>>, snapshot: PageSna
     });
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 fn preload_presentation_window(state: &mut AppState, snapshot: &PageSnapshot) -> Result<()> {
     let Some(doc) = state.pdf.as_ref() else {

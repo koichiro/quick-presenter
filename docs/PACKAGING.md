@@ -124,6 +124,25 @@ repository working directory against the staged artifacts with
 This catches missing executables, missing bundled PDFium files, and broken
 relative PDFium lookup.
 
+This smoke mode is not a GUI validation path. Before publishing v1.0.0 or later
+release artifacts, run the interactive
+[GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on macOS, Windows, and
+Ubuntu Linux to validate presenter and slide windows, fullscreen transitions,
+menu actions, keyboard focus, black screen mode, and on-screen readability.
+
+Packaged builds also provide a semi-automated GUI smoke mode:
+
+```sh
+qp --gui-smoke tests/fixtures/marp-speaker-notes.pdf \
+  --gui-smoke-report /tmp/quick-presenter-gui-smoke.txt
+```
+
+This mode creates the Slint presenter and slide windows, opens and renders the
+PDF, drives shared Rust presentation commands, writes a text report, and exits
+non-zero on failed app-observable checks. It still does not replace the manual
+desktop-session checks for OS-owned shell, focus, and visual readability
+behavior.
+
 ## Application Icons
 
 The source icon assets are documented in `docs/ICONS.md`.

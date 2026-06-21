@@ -15,6 +15,13 @@ pub enum StartupRequest {
 pub struct StartupOptions {
     pub pdf_path: Option<PathBuf>,
     pub smoke_open_pdf_path: Option<PathBuf>,
+    pub gui_smoke: Option<GuiSmokeOptions>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct GuiSmokeOptions {
+    pub pdf_path: PathBuf,
+    pub report_path: Option<PathBuf>,
 }
 
 impl StartupOptions {
@@ -22,6 +29,7 @@ impl StartupOptions {
         Self {
             pdf_path: None,
             smoke_open_pdf_path: None,
+            gui_smoke: None,
         }
     }
 }
@@ -40,8 +48,8 @@ where
         }
 
         if arg == OsStr::new("--pdf") {
-            if options.smoke_open_pdf_path.is_some() {
-                bail!("--pdf cannot be combined with --smoke-open-pdf");
+            if options.smoke_open_pdf_path.is_some() || options.gui_smoke.is_some() {
+                bail!("--pdf cannot be combined with smoke modes");
             }
             if options.pdf_path.is_some() {
                 bail!("--pdf can only be provided once");
@@ -52,14 +60,42 @@ where
         }
 
         if arg == OsStr::new("--smoke-open-pdf") {
-            if options.pdf_path.is_some() {
-                bail!("--smoke-open-pdf cannot be combined with --pdf");
+            if options.pdf_path.is_some() || options.gui_smoke.is_some() {
+                bail!("--smoke-open-pdf cannot be combined with other PDF startup modes");
             }
             if options.smoke_open_pdf_path.is_some() {
                 bail!("--smoke-open-pdf can only be provided once");
             }
 
             options.smoke_open_pdf_path = Some(required_path_arg(&mut args, "--smoke-open-pdf")?);
+            continue;
+        }
+
+        if arg == OsStr::new("--gui-smoke") {
+            if options.pdf_path.is_some() || options.smoke_open_pdf_path.is_some() {
+                bail!("--gui-smoke cannot be combined with other PDF startup modes");
+            }
+            if options.gui_smoke.is_some() {
+                bail!("--gui-smoke can only be provided once");
+            }
+
+            options.gui_smoke = Some(GuiSmokeOptions {
+                pdf_path: required_path_arg(&mut args, "--gui-smoke")?,
+                report_path: None,
+            });
+            continue;
+        }
+
+        if arg == OsStr::new("--gui-smoke-report") {
+            let report_path = required_path_arg(&mut args, "--gui-smoke-report")?;
+            let Some(gui_smoke) = options.gui_smoke.as_mut() else {
+                bail!("--gui-smoke-report requires --gui-smoke");
+            };
+            if gui_smoke.report_path.is_some() {
+                bail!("--gui-smoke-report can only be provided once");
+            }
+
+            gui_smoke.report_path = Some(report_path);
             continue;
         }
 
@@ -79,6 +115,8 @@ Usage: {program_name} [OPTIONS]
 Options:
   --pdf <PATH>              Open a PDF at startup
   --smoke-open-pdf <PATH>   Open and render the first page, then exit
+  --gui-smoke <PATH>        Open a PDF in Slint windows and run GUI smoke checks
+  --gui-smoke-report <PATH> Write the GUI smoke report to a file
   -h, --help                Print help
 "
     )
@@ -112,6 +150,7 @@ mod tests {
             StartupRequest::Run(StartupOptions {
                 pdf_path: None,
                 smoke_open_pdf_path: None,
+                gui_smoke: None,
             })
         );
     }
@@ -125,6 +164,7 @@ mod tests {
             StartupRequest::Run(StartupOptions {
                 pdf_path: Some(PathBuf::from("deck.pdf")),
                 smoke_open_pdf_path: None,
+                gui_smoke: None,
             })
         );
     }
@@ -138,6 +178,43 @@ mod tests {
             StartupRequest::Run(StartupOptions {
                 pdf_path: None,
                 smoke_open_pdf_path: Some(PathBuf::from("deck.pdf")),
+                gui_smoke: None,
+            })
+        );
+    }
+
+    #[test]
+    fn gui_smoke_option_sets_gui_smoke_pdf_path() {
+        let options = parse_startup_options(["--gui-smoke", "deck.pdf"]).unwrap();
+
+        assert_eq!(
+            options,
+            StartupRequest::Run(StartupOptions {
+                pdf_path: None,
+                smoke_open_pdf_path: None,
+                gui_smoke: Some(GuiSmokeOptions {
+                    pdf_path: PathBuf::from("deck.pdf"),
+                    report_path: None,
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn gui_smoke_report_sets_report_path() {
+        let options =
+            parse_startup_options(["--gui-smoke", "deck.pdf", "--gui-smoke-report", "out.txt"])
+                .unwrap();
+
+        assert_eq!(
+            options,
+            StartupRequest::Run(StartupOptions {
+                pdf_path: None,
+                smoke_open_pdf_path: None,
+                gui_smoke: Some(GuiSmokeOptions {
+                    pdf_path: PathBuf::from("deck.pdf"),
+                    report_path: Some(PathBuf::from("out.txt")),
+                }),
             })
         );
     }
@@ -171,6 +248,8 @@ mod tests {
         assert!(help.contains("Usage: qp [OPTIONS]"));
         assert!(help.contains("--pdf <PATH>"));
         assert!(help.contains("--smoke-open-pdf <PATH>"));
+        assert!(help.contains("--gui-smoke <PATH>"));
+        assert!(help.contains("--gui-smoke-report <PATH>"));
         assert!(help.contains("-h, --help"));
     }
 
@@ -223,6 +302,36 @@ mod tests {
             parse_startup_options(["--pdf", "a.pdf", "--smoke-open-pdf", "b.pdf"]).unwrap_err();
 
         assert!(err.to_string().contains("cannot be combined"));
+    }
+
+    #[test]
+    fn gui_smoke_option_requires_value() {
+        let err = parse_startup_options(["--gui-smoke"]).unwrap_err();
+
+        assert!(err.to_string().contains("requires a PDF path"));
+    }
+
+    #[test]
+    fn gui_smoke_report_requires_gui_smoke() {
+        let err = parse_startup_options(["--gui-smoke-report", "out.txt"]).unwrap_err();
+
+        assert!(err.to_string().contains("requires --gui-smoke"));
+    }
+
+    #[test]
+    fn gui_smoke_report_rejects_empty_value() {
+        let err = parse_startup_options(["--gui-smoke", "deck.pdf", "--gui-smoke-report", ""])
+            .unwrap_err();
+
+        assert!(err.to_string().contains("non-empty"));
+    }
+
+    #[test]
+    fn duplicate_gui_smoke_option_is_rejected() {
+        let err =
+            parse_startup_options(["--gui-smoke", "a.pdf", "--gui-smoke", "b.pdf"]).unwrap_err();
+
+        assert!(err.to_string().contains("only be provided once"));
     }
 
     #[test]
