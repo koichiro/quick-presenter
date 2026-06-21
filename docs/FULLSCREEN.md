@@ -23,3 +23,20 @@ Platform notes:
   fullscreen without relying on slide-window focus.
 - Future monitor selection should be implemented behind the Rust fullscreen
   helper boundary instead of embedding platform-specific logic in Slint UI code.
+
+## Windows Slide Chrome
+
+On Windows, Quick Presenter keeps the audience-facing slide window as a standard
+decorated native window. The slide window title, window buttons, resizing,
+moving, snapping, task switching, and native fullscreen behavior remain owned by
+Windows.
+
+Windows 11 Build 22000 and newer can reduce title bar contrast through DWM
+window attributes. The Windows-specific boundary in `src/windows_window.rs`
+uses Slint's raw window handle to obtain the slide window `HWND`, then applies
+`DWMWA_CAPTION_COLOR`, `DWMWA_BORDER_COLOR`, and `DWMWA_TEXT_COLOR` with
+`DwmSetWindowAttribute`.
+
+Unsupported Windows versions should keep the normal native title bar. DWM
+attribute failures are logged for diagnostics and are not treated as presenter
+visible errors.

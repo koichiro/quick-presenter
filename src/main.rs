@@ -26,6 +26,8 @@ pub mod timer;
 pub mod view_sync;
 pub mod window_controller;
 pub mod window_menu;
+#[cfg(target_os = "windows")]
+pub mod windows_window;
 
 use std::{
     cell::RefCell,
