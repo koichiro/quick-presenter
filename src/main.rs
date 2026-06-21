@@ -71,8 +71,8 @@ use timer::PresentationTimer;
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
 use view_sync::{
-    apply_opening_state_to_windows, apply_snapshot_to_windows, recent_file_menu_labels,
-    set_presenter_message, thumbnail_current_row_index, thumbnail_model,
+    apply_opening_state_to_windows, apply_snapshot_to_windows, set_presenter_message,
+    thumbnail_current_row_index, thumbnail_model,
 };
 #[cfg(test)]
 use view_sync::{black_slide_image, presenter_status_text};
@@ -220,94 +220,9 @@ fn set_application_icon() {}
 
 #[cfg(target_os = "macos")]
 fn remove_macos_native_about_menu_item() {
-    if running_from_macos_app_bundle() {
-        return;
-    }
-
-    // Slint/muda always adds the native App > About item on macOS when a MenuBar exists.
-    // Quick Presenter uses its own Help > About dialog so PDFium licensing is visible.
-    remove_macos_native_about_menu_item_now();
-    Timer::single_shot(
-        Duration::from_millis(0),
-        remove_macos_native_about_menu_item_now,
-    );
-    Timer::single_shot(
-        Duration::from_millis(250),
-        remove_macos_native_about_menu_item_now,
-    );
-    Timer::single_shot(
-        Duration::from_millis(1000),
-        remove_macos_native_about_menu_item_now,
-    );
-}
-
-#[cfg(target_os = "macos")]
-fn remove_macos_native_about_menu_item_now() {
-    use objc2_app_kit::NSApplication;
-    use objc2_foundation::MainThreadMarker;
-
-    let Some(main_thread) = MainThreadMarker::new() else {
-        return;
-    };
-    let app = NSApplication::sharedApplication(main_thread);
-    let Some(main_menu) = app.mainMenu() else {
-        return;
-    };
-
-    for index in 0..main_menu.numberOfItems() {
-        let Some(menu_item) = main_menu.itemAtIndex(index) else {
-            continue;
-        };
-        let Some(submenu) = menu_item.submenu() else {
-            continue;
-        };
-        let Some(first_item) = submenu.itemAtIndex(0) else {
-            continue;
-        };
-
-        if first_item.title().to_string().starts_with("About ") && is_macos_app_menu(&submenu) {
-            submenu.removeItemAtIndex(0);
-            if submenu.numberOfItems() > 0 {
-                submenu.removeItemAtIndex(0);
-            }
-            return;
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn is_macos_app_menu(menu: &objc2_app_kit::NSMenu) -> bool {
-    let mut has_services = false;
-    let mut has_hide = false;
-
-    for index in 0..menu.numberOfItems() {
-        let Some(item) = menu.itemAtIndex(index) else {
-            continue;
-        };
-        let title = item.title().to_string();
-        has_services |= title == "Services";
-        has_hide |= title.starts_with("Hide ");
-    }
-
-    has_services && has_hide
-}
-
-#[cfg(target_os = "macos")]
-fn running_from_macos_app_bundle() -> bool {
-    let Ok(exe) = std::env::current_exe() else {
-        return false;
-    };
-
-    exe.parent()
-        .and_then(std::path::Path::file_name)
-        .and_then(|name| name.to_str())
-        == Some("MacOS")
-        && exe
-            .parent()
-            .and_then(std::path::Path::parent)
-            .and_then(std::path::Path::file_name)
-            .and_then(|name| name.to_str())
-            == Some("Contents")
+    // Avoid mutating the native App menu at runtime. On macOS this can raise
+    // Objective-C exceptions across the winit event loop boundary when the app
+    // later changes the slide window geometry.
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -1043,13 +958,35 @@ fn update_recent_file_menu_labels(presenter: &Weak<PresenterWindow>, labels: Vec
     };
 
     let has_recent_files = !labels.is_empty();
-
     presenter.set_has_recent_files(has_recent_files);
-    presenter.set_recent_file_labels(recent_file_menu_labels(labels));
+
+    let mut labels = labels.into_iter();
+    let label_0 = labels
+        .next()
+        .unwrap_or_else(|| "No Recent Files".to_owned());
+    let label_1 = labels.next().unwrap_or_default();
+    let label_2 = labels.next().unwrap_or_default();
+    let label_3 = labels.next().unwrap_or_default();
+    let label_4 = labels.next().unwrap_or_default();
+
+    presenter.set_recent_file_label_0(label_0.into());
+    presenter.set_recent_file_label_1(label_1.clone().into());
+    presenter.set_recent_file_label_2(label_2.clone().into());
+    presenter.set_recent_file_label_3(label_3.clone().into());
+    presenter.set_recent_file_label_4(label_4.clone().into());
+    presenter.set_recent_file_0_enabled(has_recent_files);
+    presenter.set_recent_file_1_enabled(!label_1.is_empty());
+    presenter.set_recent_file_2_enabled(!label_2.is_empty());
+    presenter.set_recent_file_3_enabled(!label_3.is_empty());
+    presenter.set_recent_file_4_enabled(!label_4.is_empty());
 }
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
     if let Some(slide) = windows.slide.upgrade() {
+        if slide.window().is_fullscreen() {
+            return;
+        }
+
         let compensation_height =
             slide_titlebar_compensation_height(slide.window().is_fullscreen());
         let size = fitted_slide_window_size(

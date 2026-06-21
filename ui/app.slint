@@ -334,8 +334,17 @@ export component PresenterWindow inherits Window {
     in property <string> clock-time-label: "--:--";
     in property <string> elapsed-time-label: "00:00";
     in property <string> status-text: "Open a PDF to start";
-    in property <[string]> recent-file-labels: [];
     in property <bool> has-recent-files: false;
+    in property <string> recent-file-label-0: "No Recent Files";
+    in property <string> recent-file-label-1: "";
+    in property <string> recent-file-label-2: "";
+    in property <string> recent-file-label-3: "";
+    in property <string> recent-file-label-4: "";
+    in property <bool> recent-file-0-enabled: false;
+    in property <bool> recent-file-1-enabled: false;
+    in property <bool> recent-file-2-enabled: false;
+    in property <bool> recent-file-3-enabled: false;
+    in property <bool> recent-file-4-enabled: false;
     in property <string> about-app-name: "Quick Presenter";
     in property <string> about-version-label: "";
     in property <string> about-license-id: "";
@@ -394,17 +403,41 @@ export component PresenterWindow inherits Window {
                 title: "Open Recent";
                 enabled: root.has-recent-files;
 
-                for label[index] in root.recent-file-labels: MenuItem {
-                    title: label;
-                    activated => {
-                        root.open-recent-file(index);
-                    }
+                MenuItem {
+                    title: root.recent-file-label-0;
+                    enabled: root.recent-file-0-enabled;
+                    activated => { root.open-recent-file(0); }
                 }
 
-                if root.has-recent-files : MenuSeparator { }
+                MenuItem {
+                    title: root.recent-file-label-1;
+                    enabled: root.recent-file-1-enabled;
+                    activated => { root.open-recent-file(1); }
+                }
 
-                if root.has-recent-files : MenuItem {
+                MenuItem {
+                    title: root.recent-file-label-2;
+                    enabled: root.recent-file-2-enabled;
+                    activated => { root.open-recent-file(2); }
+                }
+
+                MenuItem {
+                    title: root.recent-file-label-3;
+                    enabled: root.recent-file-3-enabled;
+                    activated => { root.open-recent-file(3); }
+                }
+
+                MenuItem {
+                    title: root.recent-file-label-4;
+                    enabled: root.recent-file-4-enabled;
+                    activated => { root.open-recent-file(4); }
+                }
+
+                MenuSeparator { }
+
+                MenuItem {
                     title: "Clear Recent Files";
+                    enabled: root.has-recent-files;
                     activated => {
                         root.clear-recent-files();
                     }
@@ -450,7 +483,7 @@ export component PresenterWindow inherits Window {
             title: "View";
 
             MenuItem {
-                title: root.slide-fullscreen ? "Exit Slide Fullscreen" : "Enter Slide Fullscreen";
+                title: "Toggle Slide Fullscreen";
                 activated => {
                     root.toggle-slide-fullscreen();
                 }

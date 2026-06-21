@@ -39,9 +39,10 @@ pub fn apply_session_command(
     apply_presentation_command(&mut state.presentation, command);
     let after = state.presentation.snapshot();
     update_elapsed_timer_for_page_change(before.as_ref(), after.as_ref(), state, now);
+    let snapshot = (before != after).then_some(after).flatten();
 
     SessionCommandOutcome {
-        snapshot: after,
+        snapshot,
         slide_fullscreen: None,
     }
 }
@@ -292,6 +293,37 @@ mod tests {
         assert_eq!(outcome.snapshot.unwrap().current_index, 1);
         assert_eq!(outcome.slide_fullscreen, None);
         assert!(state.timer.is_running());
+    }
+
+    #[test]
+    fn next_page_at_last_page_returns_no_snapshot_refresh() {
+        let now = Instant::now();
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 2),
+            ..AppState::default()
+        };
+        state.presentation.next_page();
+
+        let outcome = apply_session_command(&mut state, PresentationCommand::NextPage, now);
+
+        assert_eq!(state.presentation.snapshot().unwrap().current_index, 1);
+        assert_eq!(outcome.snapshot, None);
+        assert_eq!(outcome.slide_fullscreen, None);
+    }
+
+    #[test]
+    fn previous_page_at_first_page_returns_no_snapshot_refresh() {
+        let now = Instant::now();
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 2),
+            ..AppState::default()
+        };
+
+        let outcome = apply_session_command(&mut state, PresentationCommand::PreviousPage, now);
+
+        assert_eq!(state.presentation.snapshot().unwrap().current_index, 0);
+        assert_eq!(outcome.snapshot, None);
+        assert_eq!(outcome.slide_fullscreen, None);
     }
 
     #[test]

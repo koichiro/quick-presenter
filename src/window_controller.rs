@@ -53,24 +53,11 @@ pub struct AppWindowRefs {
 
 #[cfg(target_os = "macos")]
 pub fn apply_macos_slide_window_chrome(windows: &AppWindowRefs) {
-    apply_macos_slide_window_chrome_now(windows);
-    let windows_for_now = windows.clone();
-    Timer::single_shot(Duration::from_millis(0), move || {
-        apply_macos_slide_window_chrome_now(&windows_for_now)
-    });
-    let windows_for_later = windows.clone();
-    Timer::single_shot(Duration::from_millis(250), move || {
-        apply_macos_slide_window_chrome_now(&windows_for_later)
-    });
-    let windows_for_last = windows.clone();
-    Timer::single_shot(Duration::from_millis(1000), move || {
-        apply_macos_slide_window_chrome_now(&windows_for_last)
-    });
-}
+    let Some(slide) = windows.slide.upgrade() else {
+        return;
+    };
 
-#[cfg(target_os = "macos")]
-fn apply_macos_slide_window_chrome_now(windows: &AppWindowRefs) {
-    if let Some(slide) = windows.slide.upgrade() {
+    if should_apply_slide_chrome(slide.window().is_fullscreen()) {
         crate::macos_window::apply_slide_chrome(slide.window(), SLIDE_WINDOW_TITLE);
     }
 }
@@ -105,10 +92,17 @@ pub fn sync_slide_chrome(windows: &AppWindowRefs) {
 
 pub fn slide_titlebar_compensation_height(fullscreen: bool) -> f32 {
     if cfg!(target_os = "macos") && !fullscreen {
-        SLIDE_TITLEBAR_COMPENSATION_HEIGHT
-    } else {
-        0.0
+        #[cfg(target_os = "macos")]
+        {
+            return SLIDE_TITLEBAR_COMPENSATION_HEIGHT;
+        }
     }
+
+    0.0
+}
+
+pub fn should_apply_slide_chrome(fullscreen: bool) -> bool {
+    cfg!(target_os = "macos") && !fullscreen
 }
 
 pub fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
@@ -196,4 +190,28 @@ pub fn fitted_slide_window_size(
     let height = (size.height.round() - titlebar_compensation_height).max(1.0);
 
     LogicalSize::new(width, height)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slide_chrome_is_applied_only_while_windowed() {
+        assert_eq!(should_apply_slide_chrome(false), cfg!(target_os = "macos"));
+        assert!(!should_apply_slide_chrome(true));
+    }
+
+    #[test]
+    fn titlebar_compensation_matches_slide_chrome_state() {
+        assert_eq!(
+            slide_titlebar_compensation_height(false),
+            if cfg!(target_os = "macos") {
+                SLIDE_TITLEBAR_COMPENSATION_HEIGHT
+            } else {
+                0.0
+            }
+        );
+        assert_eq!(slide_titlebar_compensation_height(true), 0.0);
+    }
 }
