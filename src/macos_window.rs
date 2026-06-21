@@ -1,7 +1,9 @@
-use objc2_app_kit::{NSApplication, NSView, NSWindow, NSWindowStyleMask, NSWindowTitleVisibility};
+use objc2_app_kit::{
+    NSApplication, NSScreen, NSView, NSWindow, NSWindowStyleMask, NSWindowTitleVisibility,
+};
 use objc2_foundation::MainThreadMarker;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use slint::Window;
+use slint::{LogicalPosition, LogicalSize, Window};
 
 pub fn apply_slide_chrome(window: &Window, fallback_title: &str) {
     with_window(window, fallback_title, |_, window| {
@@ -23,6 +25,17 @@ pub fn hide_window(window: &Window, fallback_title: &str) -> bool {
     with_window(window, fallback_title, |_, window| {
         window.orderOut(None);
     })
+}
+
+pub fn main_screen_frame() -> Option<(LogicalPosition, LogicalSize)> {
+    let main_thread = MainThreadMarker::new()?;
+    let screen = NSScreen::mainScreen(main_thread)?;
+    let frame = screen.frame();
+
+    Some((
+        LogicalPosition::new(frame.origin.x as f32, frame.origin.y as f32),
+        LogicalSize::new(frame.size.width as f32, frame.size.height as f32),
+    ))
 }
 
 fn with_window(
