@@ -480,9 +480,13 @@ jobs:
 
           Push-Location $env:TEMP
           try {
-            & $exe.FullName --smoke-open-pdf $pdf
-            if ($LASTEXITCODE -ne 0) {
-              throw "Extracted MSI smoke test failed with exit code $LASTEXITCODE"
+            $smokeProcess = Start-Process `
+              -FilePath $exe.FullName `
+              -ArgumentList @('--smoke-open-pdf', $pdf) `
+              -Wait `
+              -PassThru
+            if ($smokeProcess.ExitCode -ne 0) {
+              throw "Extracted MSI smoke test failed with exit code $($smokeProcess.ExitCode)"
             }
           } finally {
             Pop-Location
@@ -596,9 +600,13 @@ jobs:
 
           Push-Location $env:TEMP
           try {
-            & $exe --smoke-open-pdf $pdf
-            if ($LASTEXITCODE -ne 0) {
-              throw "Unpacked MSIX smoke test failed with exit code $LASTEXITCODE"
+            $smokeProcess = Start-Process `
+              -FilePath $exe `
+              -ArgumentList @('--smoke-open-pdf', $pdf) `
+              -Wait `
+              -PassThru
+            if ($smokeProcess.ExitCode -ne 0) {
+              throw "Unpacked MSIX smoke test failed with exit code $($smokeProcess.ExitCode)"
             }
           } finally {
             Pop-Location
@@ -680,9 +688,13 @@ jobs:
 
           Push-Location $env:TEMP
           try {
-            & $exe --smoke-open-pdf $pdf
-            if ($LASTEXITCODE -ne 0) {
-              throw "Smoke test failed with exit code $LASTEXITCODE"
+            $smokeProcess = Start-Process `
+              -FilePath $exe `
+              -ArgumentList @('--smoke-open-pdf', $pdf) `
+              -Wait `
+              -PassThru
+            if ($smokeProcess.ExitCode -ne 0) {
+              throw "Smoke test failed with exit code $($smokeProcess.ExitCode)"
             }
           } finally {
             Pop-Location
