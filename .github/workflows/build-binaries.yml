@@ -93,6 +93,18 @@ jobs:
       - name: Build release binary
         run: cargo build --release --bin qp
 
+      - name: Read package version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package_version="$(awk -F '"' '/^version = / { print $2; exit }' Cargo.toml)"
+          if [[ -z "$package_version" ]]; then
+            echo "Could not read package version from Cargo.toml" >&2
+            exit 1
+          fi
+          echo "PACKAGE_VERSION=$package_version" >> "$GITHUB_ENV"
+
       - name: Prepare Windows signing certificate
         id: windows-signing
         if: runner.os == 'Windows'
@@ -235,7 +247,7 @@ jobs:
           artifact_dir="artifacts/${{ matrix.artifact-name }}"
           scripts/create_macos_dmg.sh \
             "$artifact_dir/Quick Presenter.app" \
-            "$artifact_dir/Quick Presenter.dmg"
+            "$artifact_dir/QuickPresenter-${PACKAGE_VERSION}.dmg"
 
       - name: Verify macOS DMG
         if: runner.os == 'macOS'
@@ -244,7 +256,7 @@ jobs:
           set -euo pipefail
 
           artifact_dir="$GITHUB_WORKSPACE/artifacts/${{ matrix.artifact-name }}"
-          dmg="$artifact_dir/Quick Presenter.dmg"
+          dmg="$artifact_dir/QuickPresenter-${PACKAGE_VERSION}.dmg"
           pdf="$GITHUB_WORKSPACE/tests/fixtures/marp-speaker-notes.pdf"
           mount_dir="$(mktemp -d "$RUNNER_TEMP/quick-presenter-dmg.XXXXXX")"
 
@@ -407,7 +419,7 @@ jobs:
           Remove-Item Env:QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE -ErrorAction SilentlyContinue
 
           $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}'
-          $msi = Join-Path $artifactDir 'Quick Presenter.msi'
+          $msi = Join-Path $artifactDir "QuickPresenter-$($env:PACKAGE_VERSION).msi"
           $extractDir = Join-Path $env:RUNNER_TEMP 'quick-presenter-msi-extract'
           $pdf = Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/marp-speaker-notes.pdf'
 
@@ -493,7 +505,7 @@ jobs:
           Remove-Item Env:QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE -ErrorAction SilentlyContinue
 
           $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}'
-          $msix = Join-Path $artifactDir 'Quick Presenter.msix'
+          $msix = Join-Path $artifactDir "QuickPresenter-$($env:PACKAGE_VERSION).msix"
           $extractDir = Join-Path $env:RUNNER_TEMP 'quick-presenter-msix-extract'
           $pdf = Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/marp-speaker-notes.pdf'
 
@@ -592,8 +604,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}'
           $packagePaths = @(
-            (Join-Path $artifactDir 'Quick Presenter.msi'),
-            (Join-Path $artifactDir 'Quick Presenter.msix')
+            (Join-Path $artifactDir "QuickPresenter-$($env:PACKAGE_VERSION).msi"),
+            (Join-Path $artifactDir "QuickPresenter-$($env:PACKAGE_VERSION).msix")
           )
           scripts/sign_windows_artifacts.ps1 `
             -Path $packagePaths `

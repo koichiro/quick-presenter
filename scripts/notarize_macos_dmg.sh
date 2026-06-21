@@ -30,7 +30,7 @@ Example:
 
   scripts/notarize_macos_dmg.sh \
     "/tmp/quick-presenter-macos/Quick Presenter.app" \
-    "/tmp/quick-presenter-macos/Quick Presenter.dmg"
+    "/tmp/quick-presenter-macos/QuickPresenter-<version>.dmg"
 USAGE
 }
 

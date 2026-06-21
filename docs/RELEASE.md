@@ -32,8 +32,8 @@ Use the artifact that matches your operating system:
 
 | Platform | Artifact | What to use |
 | --- | --- | --- |
-| macOS | `quick-presenter-macos` | `Quick Presenter.dmg` or `Quick Presenter.app` |
-| Windows x64 | `quick-presenter-windows-x64` | `Quick Presenter.msi` |
+| macOS | `quick-presenter-macos` | `QuickPresenter-<version>.dmg` or `Quick Presenter.app` |
+| Windows x64 | `quick-presenter-windows-x64` | `QuickPresenter-<version>.msi` |
 | Ubuntu x64 | `quick-presenter-ubuntu-x64` | `quick-presenter_<version>_amd64.deb` |
 
 The uploaded artifact directories may also include raw `qp` or `qp.exe`
@@ -41,13 +41,13 @@ development binaries. Prefer the packaged artifact for normal use because
 it keeps the executable, bundled PDFium files, desktop metadata, and license
 files in the expected layout.
 
-The Windows artifact may include `Quick Presenter.msix` for layout validation.
+The Windows artifact may include `QuickPresenter-<version>.msix` for layout validation.
 Unsigned MSIX packages are not a user-installable distribution artifact.
 Use the MSI unless a release explicitly identifies a signed MSIX as supported.
 
 ## macOS
 
-Download `quick-presenter-macos` and open `Quick Presenter.dmg`.
+Download `quick-presenter-macos` and open `QuickPresenter-<version>.dmg`.
 
 1. Drag `Quick Presenter.app` to `Applications`, or run the app from the mounted
    disk image for a quick check.
@@ -63,7 +63,7 @@ unsigned or unnotarized builds.
 
 ## Windows
 
-Download `quick-presenter-windows-x64` and run `Quick Presenter.msi`.
+Download `quick-presenter-windows-x64` and run `QuickPresenter-<version>.msi`.
 
 1. Install the MSI.
 2. Launch `Quick Presenter` from the Start Menu.
