@@ -172,7 +172,7 @@ To create an unsigned disk image from the staged app bundle:
 ```sh
 scripts/create_macos_dmg.sh \
   "/tmp/quick-presenter-macos/Quick Presenter.app" \
-  "/tmp/quick-presenter-macos/Quick Presenter.dmg"
+  "/tmp/quick-presenter-macos/QuickPresenter-<version>.dmg"
 ```
 
 To sign the staged app bundle before creating a distribution disk image:
@@ -185,7 +185,7 @@ scripts/sign_macos_app.sh \
 
 scripts/create_macos_dmg.sh \
   "/tmp/quick-presenter-macos/Quick Presenter.app" \
-  "/tmp/quick-presenter-macos/Quick Presenter.dmg"
+  "/tmp/quick-presenter-macos/QuickPresenter-<version>.dmg"
 ```
 
 `scripts/sign_macos_app.sh` does not contain certificate names, passwords, or
@@ -224,7 +224,7 @@ export QUICK_PRESENTER_DMG_SMOKE_PDF="$PWD/tests/fixtures/marp-speaker-notes.pdf
 
 scripts/notarize_macos_dmg.sh \
   "/tmp/quick-presenter-macos/Quick Presenter.app" \
-  "/tmp/quick-presenter-macos/Quick Presenter.dmg"
+  "/tmp/quick-presenter-macos/QuickPresenter-<version>.dmg"
 ```
 
 `scripts/notarize_macos_dmg.sh` expects the app bundle to already be signed by
@@ -255,7 +255,7 @@ and validates:
 - the bundled app executable can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`.
 
-The same workflow also creates an unsigned `Quick Presenter.dmg`, mounts it,
+The same workflow also creates an unsigned `QuickPresenter-<version>.dmg`, mounts it,
 and validates:
 
 - the disk image contains `Quick Presenter.app`,
@@ -269,7 +269,7 @@ Manual verification:
 
 - Stage the app bundle locally.
 - Create the unsigned disk image locally.
-- Mount `/tmp/quick-presenter-macos/Quick Presenter.dmg`.
+- Mount `/tmp/quick-presenter-macos/QuickPresenter-<version>.dmg`.
 - Confirm the mounted volume contains `Quick Presenter.app` and an
   `Applications` symlink.
 - Run `open "/tmp/quick-presenter-macos/Quick Presenter.app"`.
@@ -328,7 +328,7 @@ scripts/build_windows_msi.ps1
 The MSI is written to:
 
 ```text
-artifacts/quick-presenter-windows-x64/Quick Presenter.msi
+artifacts/quick-presenter-windows-x64/QuickPresenter-<version>.msi
 ```
 
 The `build-binaries.yml` workflow builds this MSI on `windows-latest` and
@@ -351,7 +351,7 @@ Manual verification:
   `cargo build --release --bin qp`.
 - Inspect `qp.exe` in Explorer.
 - Run `scripts/build_windows_msi.ps1` on Windows.
-- Install `artifacts/quick-presenter-windows-x64/Quick Presenter.msi`.
+- Install `artifacts/quick-presenter-windows-x64/QuickPresenter-<version>.msi`.
 - Confirm the Start Menu contains `Quick Presenter`.
 - Launch Quick Presenter from the Start Menu.
 - Open `tests/fixtures/marp-speaker-notes.pdf` without
@@ -388,12 +388,13 @@ These repository variables are optional:
 
 When signing is enabled, CI signs `target/release/qp.exe` before staging and
 packaging so both MSI and MSIX payloads contain the signed executable. After the
-MSI and MSIX are built and layout-validated, CI signs the `Quick Presenter.msi`
-and `Quick Presenter.msix` containers and verifies signatures for:
+MSI and MSIX are built and layout-validated, CI signs the
+`QuickPresenter-<version>.msi` and `QuickPresenter-<version>.msix`
+containers and verifies signatures for:
 
 - `qp.exe`
-- `Quick Presenter.msi`
-- `Quick Presenter.msix`
+- `QuickPresenter-<version>.msi`
+- `QuickPresenter-<version>.msix`
 
 The decoded PFX is written only to the Windows runner's temporary directory and
 removed before artifact upload. For self-signed test certificates, the workflow
@@ -418,8 +419,8 @@ To verify signatures locally:
 
 ```powershell
 signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/qp.exe"
-signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/Quick Presenter.msi"
-signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/Quick Presenter.msix"
+signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/QuickPresenter-<version>.msi"
+signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/QuickPresenter-<version>.msix"
 ```
 
 MSIX signing requires the manifest `Identity Publisher` to match the signing
@@ -438,7 +439,7 @@ certificate, and production signing is tracked separately in #109.
 The MSIX payload intentionally mirrors the MSI payload where practical:
 
 ```text
-Quick Presenter.msix
+QuickPresenter-<version>.msix
   AppxManifest.xml
   qp.exe
   pdfium/
@@ -462,7 +463,7 @@ scripts/build_windows_msix.ps1
 The MSIX is written to:
 
 ```text
-artifacts/quick-presenter-windows-x64/Quick Presenter.msix
+artifacts/quick-presenter-windows-x64/QuickPresenter-<version>.msix
 ```
 
 The `build-binaries.yml` workflow builds this unsigned MSIX on

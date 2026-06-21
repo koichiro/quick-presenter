@@ -123,6 +123,24 @@ function Verify-Artifact {
     Write-Host "Accepted untrusted self-signed test signature for $Path"
 }
 
+function Resolve-SingleArtifact {
+    param(
+        [string]$Directory,
+        [string]$Filter
+    )
+
+    $matches = @(Get-ChildItem -Path $Directory -File -Filter $Filter | Sort-Object Name)
+    if ($matches.Count -eq 0) {
+        throw "Missing Windows signing artifact matching '$Filter' in $Directory"
+    }
+    if ($matches.Count -gt 1) {
+        $names = ($matches | ForEach-Object { $_.Name }) -join ", "
+        throw "Expected exactly one Windows signing artifact matching '$Filter' in $Directory, found: $names"
+    }
+
+    return $matches[0].FullName
+}
+
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $artifactDirPath = Resolve-RepoPath $ArtifactDir
 
@@ -149,8 +167,8 @@ if ($Path.Count -gt 0) {
 
     $artifactPaths = @(
         (Join-Path $artifactDirPath "qp.exe"),
-        (Join-Path $artifactDirPath "Quick Presenter.msi"),
-        (Join-Path $artifactDirPath "Quick Presenter.msix")
+        (Resolve-SingleArtifact -Directory $artifactDirPath -Filter "QuickPresenter-*.msi"),
+        (Resolve-SingleArtifact -Directory $artifactDirPath -Filter "QuickPresenter-*.msix")
     )
 }
 

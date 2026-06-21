@@ -146,9 +146,10 @@ $sourceOfferPath = Resolve-RepoPath "packaging/SOURCE-OFFER.txt"
 $pdfiumLicensePath = Resolve-RepoPath "pdfium/LICENSE"
 $iconPath = Resolve-RepoPath "assets/icons/windows/quick-presenter.ico"
 $productWxs = Resolve-RepoPath "packaging/windows/Product.wxs"
+$cargoVersion = Read-CargoVersion
 
 if ([string]::IsNullOrWhiteSpace($OutputMsi)) {
-    $OutputMsi = Join-Path $artifactDirPath "Quick Presenter.msi"
+    $OutputMsi = Join-Path $artifactDirPath "QuickPresenter-$cargoVersion.msi"
 } else {
     $OutputMsi = Resolve-RepoPath $OutputMsi
 }
@@ -173,7 +174,7 @@ if (-not (Test-Path $iconPath -PathType Leaf)) {
 }
 
 $wix = Get-Command $WixCommand -ErrorAction Stop
-$version = Convert-ToMsiVersion (Read-CargoVersion)
+$version = Convert-ToMsiVersion $cargoVersion
 $stageDir = Join-Path $artifactDirPath "windows-installer-payload"
 $licenseDir = Join-Path $stageDir "licenses"
 $wixWorkDir = Join-Path $artifactDirPath "wix"

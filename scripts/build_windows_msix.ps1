@@ -127,9 +127,10 @@ $sourceOfferPath = Resolve-RepoPath "packaging/SOURCE-OFFER.txt"
 $pdfiumLicensePath = Resolve-RepoPath "pdfium/LICENSE"
 $sourceIconPath = Resolve-RepoPath "assets/icons/source/quick-presenter-icon-1024.png"
 $manifestTemplatePath = Resolve-RepoPath "packaging/windows/AppxManifest.xml.in"
+$cargoVersion = Read-CargoVersion
 
 if ([string]::IsNullOrWhiteSpace($OutputMsix)) {
-    $OutputMsix = Join-Path $artifactDirPath "Quick Presenter.msix"
+    $OutputMsix = Join-Path $artifactDirPath "QuickPresenter-$cargoVersion.msix"
 } else {
     $OutputMsix = Resolve-RepoPath $OutputMsix
 }
@@ -160,7 +161,7 @@ if ([string]::IsNullOrWhiteSpace($Publisher)) {
 }
 
 $makeAppx = Resolve-MakeAppx $MakeAppxCommand
-$version = Convert-ToMsixVersion (Read-CargoVersion)
+$version = Convert-ToMsixVersion $cargoVersion
 $stageDir = Join-Path $artifactDirPath "windows-msix-payload"
 $assetDir = Join-Path $stageDir "Assets"
 $licenseDir = Join-Path $stageDir "licenses"
