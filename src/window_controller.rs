@@ -93,34 +93,10 @@ pub fn should_apply_slide_chrome(fullscreen: bool) -> bool {
 
 pub fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
     if let Some(slide) = windows.slide.upgrade() {
-        #[cfg(target_os = "macos")]
-        {
-            if fullscreen {
-                if let Some((position, size)) = crate::macos_window::main_screen_frame() {
-                    slide.window().set_position(position);
-                    slide.window().set_size(size);
-                }
-            } else {
-                slide.window().set_position(SLIDE_WINDOW_POSITION);
-                slide.window().set_size(LogicalSize::new(
-                    slide.get_slide_window_width(),
-                    slide.get_slide_window_height(),
-                ));
-            }
-            slide.set_titlebar_compensation_height(slide_titlebar_compensation_height(fullscreen));
-            if let Some(presenter) = windows.presenter.upgrade() {
-                presenter.set_slide_fullscreen(fullscreen);
-            }
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            slide.window().set_fullscreen(fullscreen);
-            slide.set_titlebar_compensation_height(slide_titlebar_compensation_height(fullscreen));
-        }
+        slide.window().set_fullscreen(fullscreen);
+        slide.set_titlebar_compensation_height(slide_titlebar_compensation_height(fullscreen));
     }
 
-    #[cfg(not(target_os = "macos"))]
     if let Some(presenter) = windows.presenter.upgrade() {
         presenter.set_slide_fullscreen(fullscreen);
     }

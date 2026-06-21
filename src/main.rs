@@ -965,6 +965,10 @@ fn update_recent_file_menu_labels(presenter: &Weak<PresenterWindow>, labels: Vec
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
     if let Some(slide) = windows.slide.upgrade() {
+        if slide.window().is_fullscreen() {
+            return;
+        }
+
         let compensation_height =
             slide_titlebar_compensation_height(slide.window().is_fullscreen());
         let size = fitted_slide_window_size(
