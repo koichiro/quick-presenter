@@ -17,18 +17,28 @@ every source-only pull request.
 Before publishing a release:
 
 1. Confirm `CI` passes on the release branch.
-2. Run `Build Binaries` manually with `workflow_dispatch`, or push a release
+2. Run `scripts/audit_deps.sh` and resolve dependency advisories, or document
+   any explicitly accepted advisory in `.cargo/audit.toml`.
+3. Run `Build Binaries` manually with `workflow_dispatch`, or push a release
    tag matching `v*`.
-3. Record the successful `Build Binaries` workflow run URL in the release
+4. Record the successful `Build Binaries` workflow run URL in the release
    checklist.
-4. Confirm the Linux, macOS, and Windows artifacts are uploaded and their package
+5. Confirm the Linux, macOS, and Windows artifacts are uploaded and their package
    smoke tests pass.
-5. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
+6. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
    macOS, Windows, and Ubuntu Linux artifacts before publishing.
 
 `Build Binaries` still runs automatically for pull requests that change
 packaging-sensitive files, such as packaging scripts, installer metadata,
 icons, or Cargo dependency metadata.
+
+The dependency advisory audit uses `cargo audit`. Install it with
+`cargo install cargo-audit --locked` before running `scripts/audit_deps.sh`
+locally. Vulnerability advisories fail release validation. Warning-only
+advisories, such as unmaintained or yanked transitive crates, must be reviewed
+before release. Any explicitly accepted advisory must be listed in
+`.cargo/audit.toml` with a reason, impact summary, tracking issue, and review
+date so release maintainers can tell whether the risk is still accepted.
 
 The package smoke tests are intentionally non-interactive and do not create
 Slint windows. Run `quick-presenter --gui-smoke <PDF> --gui-smoke-report <PATH>` from each
