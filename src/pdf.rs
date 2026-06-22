@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn bundled_pdfium_candidates_include_raw_artifact_layout() {
-        let exe = Path::new("/tmp/quick-presenter/qp");
+        let exe = Path::new("/tmp/quick-presenter/quick-presenter");
         let candidates =
             bundled_pdfium_library_candidates(PdfiumLoadPolicy::Packaged, Some(exe), None);
 
@@ -350,7 +350,7 @@ mod tests {
 
     #[test]
     fn bundled_pdfium_candidates_include_macos_app_layout() {
-        let exe = Path::new("/Applications/Quick Presenter.app/Contents/MacOS/qp");
+        let exe = Path::new("/Applications/Quick Presenter.app/Contents/MacOS/quick-presenter");
         let candidates =
             bundled_pdfium_library_candidates(PdfiumLoadPolicy::Packaged, Some(exe), None);
 
@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn bundled_pdfium_candidates_are_deduplicated() {
-        let exe = Path::new("/work/quick-presenter/qp");
+        let exe = Path::new("/work/quick-presenter/quick-presenter");
         let cwd = Path::new("/work/quick-presenter");
         let candidates =
             bundled_pdfium_library_candidates(PdfiumLoadPolicy::Development, Some(exe), Some(cwd));

@@ -7,10 +7,10 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-executable="$repo_root/target/debug/Quick Presenter"
+executable="$repo_root/target/debug/quick-presenter-display-name"
 
-cargo build --bin qp
+cargo build --bin quick-presenter
 
-ln -sf qp "$executable"
+ln -sf quick-presenter "$executable"
 
 exec "$executable" "$@"

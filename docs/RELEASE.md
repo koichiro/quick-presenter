@@ -31,7 +31,7 @@ packaging-sensitive files, such as packaging scripts, installer metadata,
 icons, or Cargo dependency metadata.
 
 The package smoke tests are intentionally non-interactive and do not create
-Slint windows. Run `qp --gui-smoke <PDF> --gui-smoke-report <PATH>` from each
+Slint windows. Run `quick-presenter --gui-smoke <PDF> --gui-smoke-report <PATH>` from each
 packaged artifact to cover app-observable presenter-window, slide-window,
 fullscreen, keyboard command, black-screen, and synchronization behavior. The
 GUI checklist remains the release gate for OS-owned title-bar, menu,
@@ -47,7 +47,7 @@ Use the artifact that matches your operating system:
 | Windows x64 | `quick-presenter-windows-x64` | `QuickPresenter-<version>.msi` |
 | Ubuntu x64 | `quick-presenter-ubuntu-x64` | `quick-presenter_<version>_amd64.deb` |
 
-The uploaded artifact directories may also include raw `qp` or `qp.exe`
+The uploaded artifact directories may also include raw `quick-presenter` or `quick-presenter.exe`
 development binaries. Prefer the packaged artifact for normal use because
 it keeps the executable, bundled PDFium files, desktop metadata, and license
 files in the expected layout.
@@ -99,13 +99,13 @@ sudo apt-get install ./quick-presenter_<version>_amd64.deb
 Then launch Quick Presenter from the desktop launcher, or run:
 
 ```sh
-qp
+quick-presenter
 ```
 
 To open a PDF directly from a shell:
 
 ```sh
-qp --pdf path/to/slides.pdf
+quick-presenter --pdf path/to/slides.pdf
 ```
 
 The current Linux package targets Ubuntu x64. Other Debian-based distributions
@@ -123,7 +123,7 @@ sudo apt-get remove quick-presenter
 Quick Presenter can open a PDF from the app UI or at startup:
 
 ```sh
-qp --pdf path/to/slides.pdf
+quick-presenter --pdf path/to/slides.pdf
 ```
 
 Packaged builds include a presenter window and a separate audience-facing slide

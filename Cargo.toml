@@ -5,7 +5,7 @@ edition = "2021"
 license = "GPL-3.0-or-later"
 
 [[bin]]
-name = "qp"
+name = "quick-presenter"
 path = "src/main.rs"
 
 [dependencies]

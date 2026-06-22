@@ -242,10 +242,10 @@ mod tests {
 
     #[test]
     fn help_text_lists_supported_startup_arguments() {
-        let help = help_text("qp");
+        let help = help_text("quick-presenter");
 
         assert!(help.contains("Quick Presenter"));
-        assert!(help.contains("Usage: qp [OPTIONS]"));
+        assert!(help.contains("Usage: quick-presenter [OPTIONS]"));
         assert!(help.contains("--pdf <PATH>"));
         assert!(help.contains("--smoke-open-pdf <PATH>"));
         assert!(help.contains("--gui-smoke <PATH>"));

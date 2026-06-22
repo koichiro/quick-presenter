@@ -4,6 +4,11 @@ Quick Presenter builds release-oriented package artifacts in the `Build
 Binaries` workflow. The workflow stages bundled PDFium, platform metadata,
 licenses, and installer or app bundle layouts before uploading artifacts.
 
+The GUI application executable is `quick-presenter` on Unix-like platforms and
+`quick-presenter.exe` on Windows. The short `qp` command name is reserved for a
+future automation-oriented CLI entrypoint and is intentionally not used by the
+GUI binary.
+
 ## Bundled PDFium
 
 Release packages and binary artifacts must include PDFium. Quick Presenter does
@@ -17,7 +22,7 @@ Runtime PDFium lookup order:
    - `Contents/Frameworks/pdfium/`
 2. `pdfium/` next to the running executable
 3. `pdfium/` one directory above the running executable, for layouts such as
-   `bin/qp` plus a sibling `pdfium/`
+   `bin/quick-presenter` plus a sibling `pdfium/`
 4. `Contents/MacOS/pdfium/` for raw macOS bundle development layouts
 
 For each `pdfium/` directory, the app checks `lib/`, `bin/`, then the directory
@@ -105,7 +110,7 @@ Quick Presenter provides a non-interactive smoke mode for packaged artifact
 validation:
 
 ```sh
-qp --smoke-open-pdf tests/fixtures/marp-speaker-notes.pdf
+quick-presenter --smoke-open-pdf tests/fixtures/marp-speaker-notes.pdf
 ```
 
 This mode does not create Slint windows. It opens the PDF through the same
@@ -113,7 +118,7 @@ PDFium lookup path as normal startup, renders the first page at a small size, an
 exits with status `0` on success. It is intended for CI and package validation,
 not for end-user presentation playback.
 
-On Windows release builds, `qp.exe` uses the Windows GUI subsystem so packaged
+On Windows release builds, `quick-presenter.exe` uses the Windows GUI subsystem so packaged
 MSI/MSIX launches do not create an extra console window. Smoke validation on
 Windows should rely on the process exit status; debug builds keep the console
 subsystem for local CLI diagnostics.
@@ -133,7 +138,7 @@ menu actions, keyboard focus, black screen mode, and on-screen readability.
 Packaged builds also provide a semi-automated GUI smoke mode:
 
 ```sh
-qp --gui-smoke tests/fixtures/marp-speaker-notes.pdf \
+quick-presenter --gui-smoke tests/fixtures/marp-speaker-notes.pdf \
   --gui-smoke-report /tmp/quick-presenter-gui-smoke.txt
 ```
 
@@ -162,7 +167,7 @@ Quick Presenter.app/
   Contents/
     Info.plist
     MacOS/
-      qp
+      quick-presenter
     Resources/
       QuickPresenter.icns
       pdfium/
@@ -176,7 +181,7 @@ The bundle metadata uses:
 
 - `CFBundleName`: `Quick Presenter`
 - `CFBundleDisplayName`: `Quick Presenter`
-- `CFBundleExecutable`: `qp`
+- `CFBundleExecutable`: `quick-presenter`
 - `CFBundleIconFile`: `QuickPresenter`
 - `NSPrincipalClass`: `NSApplication`
 
@@ -187,7 +192,7 @@ To stage the app bundle locally:
 
 ```sh
 python3 scripts/fetch_pdfium.py --clean
-cargo build --release --bin qp
+cargo build --release --bin quick-presenter
 scripts/stage_macos_app_bundle.sh /tmp/quick-presenter-macos
 ```
 
@@ -257,7 +262,7 @@ scripts/notarize_macos_dmg.sh \
 ticket, and runs a Gatekeeper assessment on the DMG.
 
 After stapling, the script also mounts the final DMG and validates the packaged
-payload. It verifies `Quick Presenter.app`, `Contents/MacOS/qp`, and the bundled
+payload. It verifies `Quick Presenter.app`, `Contents/MacOS/quick-presenter`, and the bundled
 PDFium dylib with `codesign --verify`, runs a Gatekeeper execution assessment on
 the mounted app, and runs a smoke-open check when `QUICK_PRESENTER_DMG_SMOKE_PDF`
 points to a local PDF. This catches cases where the DMG itself is notarized but
@@ -273,7 +278,7 @@ and validates:
 - `Contents/Info.plist` is valid,
 - bundle display name, executable, icon file, package type, and principal class
   are set,
-- `Contents/MacOS/qp` is executable,
+- `Contents/MacOS/quick-presenter` is executable,
 - `QuickPresenter.icns` exists in `Contents/Resources/`,
 - bundled PDFium, license files, and source offer are present.
 - the bundled app executable can run `--smoke-open-pdf` without
@@ -307,26 +312,26 @@ tracked separately from the first disk image packaging flow.
 
 ### Windows
 
-Raw Windows `qp.exe` builds embed `assets/icons/windows/quick-presenter.ico`
+Raw Windows `quick-presenter.exe` builds embed `assets/icons/windows/quick-presenter.ico`
 as an executable resource from `build.rs`. This keeps the development binary
-name as `qp.exe` while allowing Windows shell surfaces to discover the Quick
+name as `quick-presenter.exe` while allowing Windows shell surfaces to discover the Quick
 Presenter icon.
 
-Release builds of `qp.exe` use the Windows GUI subsystem to avoid showing an
+Release builds of `quick-presenter.exe` use the Windows GUI subsystem to avoid showing an
 extra console window when launched from the MSI or MSIX. Debug builds keep the
 console subsystem, so local development still shows command-line output for
 `--help`, `--smoke-open-pdf`, and startup errors.
 
-The `build-binaries.yml` workflow runs on `windows-latest`, builds `qp.exe`, and
-extracts the associated executable icon into `qp-associated-icon.png` inside the
+The `build-binaries.yml` workflow runs on `windows-latest`, builds `quick-presenter.exe`, and
+extracts the associated executable icon into `quick-presenter-associated-icon.png` inside the
 uploaded Windows artifact. That preview is a CI smoke test that the executable
 has an associated icon resource.
 
-The workflow also runs `qp.exe --smoke-open-pdf` from the staged artifact with
+The workflow also runs `quick-presenter.exe --smoke-open-pdf` from the staged artifact with
 `PDFIUM_DYNAMIC_LIB_PATH` unset.
 
 Windows MSI packages are built with WiX Toolset from the staged release binary
-and bundled PDFium files. The installer keeps the executable name as `qp.exe`
+and bundled PDFium files. The installer keeps the executable name as `quick-presenter.exe`
 while presenting the product name as `Quick Presenter` in installer metadata
 and the Start Menu shortcut.
 
@@ -334,7 +339,7 @@ The installed layout is:
 
 ```text
 Quick Presenter/
-  qp.exe
+  quick-presenter.exe
   pdfium/
   licenses/
     QuickPresenter-LICENSE.txt
@@ -342,14 +347,14 @@ Quick Presenter/
     PDFium-LICENSE.txt
 ```
 
-The bundled PDFium directory is installed next to `qp.exe`, which is covered by
+The bundled PDFium directory is installed next to `quick-presenter.exe`, which is covered by
 the runtime lookup order documented above.
 
 To build the MSI locally on Windows:
 
 ```powershell
 python scripts/fetch_pdfium.py --clean
-cargo build --release --bin qp
+cargo build --release --bin quick-presenter
 dotnet tool install --global wix
 scripts/build_windows_msi.ps1
 ```
@@ -365,9 +370,9 @@ validates:
 
 - the MSI artifact exists,
 - administrative extraction with `msiexec /a` succeeds,
-- the extracted layout contains `qp.exe`, bundled PDFium, license files, and the
+- the extracted layout contains `quick-presenter.exe`, bundled PDFium, license files, and the
   source offer,
-- the extracted `qp.exe` can run `--smoke-open-pdf` without
+- the extracted `quick-presenter.exe` can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`.
 
 CI cannot fully verify final Windows shell behavior because Explorer, Alt+Tab,
@@ -377,8 +382,8 @@ state. Use a real Windows machine for final acceptance.
 Manual verification:
 
 - Download the `quick-presenter-windows-x64` artifact or build locally with
-  `cargo build --release --bin qp`.
-- Inspect `qp.exe` in Explorer.
+  `cargo build --release --bin quick-presenter`.
+- Inspect `quick-presenter.exe` in Explorer.
 - Run `scripts/build_windows_msi.ps1` on Windows.
 - Install `artifacts/quick-presenter-windows-x64/QuickPresenter-<version>.msi`.
 - Confirm the Start Menu contains `Quick Presenter`.
@@ -415,13 +420,13 @@ These repository variables are optional:
 - `WINDOWS_SIGNING_PUBLISHER`: expected certificate subject and MSIX manifest
   publisher. If omitted, the workflow uses `CN=Quick Presenter`.
 
-When signing is enabled, CI signs `target/release/qp.exe` before staging and
+When signing is enabled, CI signs `target/release/quick-presenter.exe` before staging and
 packaging so both MSI and MSIX payloads contain the signed executable. After the
 MSI and MSIX are built and layout-validated, CI signs the
 `QuickPresenter-<version>.msi` and `QuickPresenter-<version>.msix`
 containers and verifies signatures for:
 
-- `qp.exe`
+- `quick-presenter.exe`
 - `QuickPresenter-<version>.msi`
 - `QuickPresenter-<version>.msix`
 
@@ -447,7 +452,7 @@ scripts/sign_windows_artifacts.ps1 `
 To verify signatures locally:
 
 ```powershell
-signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/qp.exe"
+signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/quick-presenter.exe"
 signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/QuickPresenter-<version>.msi"
 signtool.exe verify /pa /v "artifacts/quick-presenter-windows-x64/QuickPresenter-<version>.msix"
 ```
@@ -470,7 +475,7 @@ The MSIX payload intentionally mirrors the MSI payload where practical:
 ```text
 QuickPresenter-<version>.msix
   AppxManifest.xml
-  qp.exe
+  quick-presenter.exe
   pdfium/
   licenses/
     QuickPresenter-LICENSE.txt
@@ -485,7 +490,7 @@ To build the unsigned MSIX locally on Windows:
 
 ```powershell
 python scripts/fetch_pdfium.py --clean
-cargo build --release --bin qp
+cargo build --release --bin quick-presenter
 scripts/build_windows_msix.ps1
 ```
 
@@ -500,11 +505,11 @@ The `build-binaries.yml` workflow builds this unsigned MSIX on
 
 - the MSIX artifact exists,
 - `MakeAppx.exe unpack` succeeds,
-- the unpacked layout contains `AppxManifest.xml`, `qp.exe`, bundled PDFium,
+- the unpacked layout contains `AppxManifest.xml`, `quick-presenter.exe`, bundled PDFium,
   icon assets, license files, and the source offer,
-- the manifest contains the expected desktop identity, `qp.exe` application
+- the manifest contains the expected desktop identity, `quick-presenter.exe` application
   entry, and `runFullTrust` capability,
-- the unpacked `qp.exe` can run `--smoke-open-pdf` without
+- the unpacked `quick-presenter.exe` can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`.
 
 The CI workflow intentionally does not run `Add-AppxPackage` for the unsigned
@@ -526,9 +531,9 @@ also includes the Debian package.
 The installed Debian package layout is:
 
 ```text
-/usr/bin/qp -> ../lib/quick-presenter/qp
+/usr/bin/quick-presenter -> ../lib/quick-presenter/quick-presenter
 /usr/lib/quick-presenter/
-  qp
+  quick-presenter
   pdfium/
   licenses/
     QuickPresenter-LICENSE.txt
@@ -543,9 +548,9 @@ The installed Debian package layout is:
 ```
 
 The bundled PDFium directory is installed next to the real application
-executable at `/usr/lib/quick-presenter/qp`, which is covered by the runtime
-lookup order documented above. The `/usr/bin/qp` entry is a symlink so shell
-launches and the desktop entry can keep using the short executable name.
+executable at `/usr/lib/quick-presenter/quick-presenter`, which is covered by the runtime
+lookup order documented above. The `/usr/bin/quick-presenter` entry is a symlink so shell
+launches and the desktop entry use the same GUI executable name.
 
 Linux binary artifacts also stage desktop metadata with
 `scripts/stage_linux_desktop_assets.sh`. The staged layout includes a desktop
@@ -560,7 +565,7 @@ It uses:
 
 ```ini
 Name=Quick Presenter
-Exec=qp %f
+Exec=quick-presenter %f
 Icon=quick-presenter
 ```
 
@@ -586,7 +591,7 @@ To build the Debian package locally on Ubuntu:
 
 ```sh
 python3 scripts/fetch_pdfium.py --clean
-cargo build --release --bin qp
+cargo build --release --bin quick-presenter
 scripts/build_linux_deb.sh
 ```
 
@@ -604,14 +609,14 @@ and builds the Debian package. It validates:
 - each expected hicolor icon file exists and is non-empty,
 - `gtk-update-icon-cache` can process the staged hicolor tree,
 - the Debian package exists and exposes expected package metadata,
-- the extracted Debian package contains `qp`, the bundled `pdfium/` directory,
+- the extracted Debian package contains `quick-presenter`, the bundled `pdfium/` directory,
   license files, the source offer, the desktop entry, and hicolor icons,
-- the extracted `qp` binary can run `--smoke-open-pdf` without
+- the extracted `quick-presenter` binary can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`,
-- the extracted `/usr/bin/qp` symlink can run `--smoke-open-pdf` without
+- the extracted `/usr/bin/quick-presenter` symlink can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`,
 - the Debian package can be installed with `apt`, smoke-tested, and removed.
-- the staged `qp` binary can run `--smoke-open-pdf` without
+- the staged `quick-presenter` binary can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`.
 
 CI cannot fully verify launcher, app switcher, dock, or taskbar rendering because
@@ -631,7 +636,7 @@ sudo apt-get install ./quick-presenter_<version>_amd64.deb
   PDFium path:
 
 ```sh
-env -u PDFIUM_DYNAMIC_LIB_PATH qp --smoke-open-pdf tests/fixtures/marp-speaker-notes.pdf
+env -u PDFIUM_DYNAMIC_LIB_PATH quick-presenter --smoke-open-pdf tests/fixtures/marp-speaker-notes.pdf
 ```
 
 - Confirm the package can be removed cleanly:

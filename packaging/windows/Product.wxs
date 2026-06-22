@@ -30,7 +30,7 @@
           Id="ApplicationStartMenuShortcut"
           Name="Quick Presenter"
           Description="Open Quick Presenter"
-          Target="[INSTALLFOLDER]qp.exe"
+          Target="[INSTALLFOLDER]quick-presenter.exe"
           WorkingDirectory="INSTALLFOLDER"
           Icon="QuickPresenterIcon.ico" />
         <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />

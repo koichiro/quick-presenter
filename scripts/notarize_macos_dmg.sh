@@ -106,7 +106,7 @@ echo "Validating mounted DMG payload"
 hdiutil attach "$output_dmg" -nobrowse -readonly -mountpoint "$mount_dir" >/dev/null
 
 mounted_app="$mount_dir/Quick Presenter.app"
-mounted_executable="$mounted_app/Contents/MacOS/qp"
+mounted_executable="$mounted_app/Contents/MacOS/quick-presenter"
 mounted_pdfium="$mounted_app/Contents/Resources/pdfium/lib/libpdfium.dylib"
 
 if [[ ! -d "$mounted_app" ]]; then

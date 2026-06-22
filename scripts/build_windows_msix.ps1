@@ -1,6 +1,6 @@
 param(
     [string]$ArtifactDir = "artifacts/quick-presenter-windows-x64",
-    [string]$Binary = "target/release/qp.exe",
+    [string]$Binary = "target/release/quick-presenter.exe",
     [string]$OutputMsix = "",
     [string]$Publisher = "CN=Quick Presenter",
     [string]$MakeAppxCommand = "",
@@ -170,7 +170,7 @@ $manifestPath = Join-Path $stageDir "AppxManifest.xml"
 Remove-Item -Recurse -Force $stageDir -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $assetDir, $licenseDir | Out-Null
 
-Copy-Item $binaryPath (Join-Path $stageDir "qp.exe")
+Copy-Item $binaryPath (Join-Path $stageDir "quick-presenter.exe")
 Copy-Item -Recurse $pdfiumPath (Join-Path $stageDir "pdfium")
 Copy-Item $licensePath (Join-Path $licenseDir "QuickPresenter-LICENSE.txt")
 Copy-Item $sourceOfferPath (Join-Path $licenseDir "QuickPresenter-SOURCE-OFFER.txt")

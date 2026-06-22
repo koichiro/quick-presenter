@@ -39,7 +39,7 @@ The first v1.0.0 gate can remain manual, but repeatable app-observable checks
 can run through the packaged app's semi-automated GUI smoke mode:
 
 ```sh
-qp --gui-smoke docs/samples/quick-presenter-demo.pdf \
+quick-presenter --gui-smoke docs/samples/quick-presenter-demo.pdf \
   --gui-smoke-report /tmp/quick-presenter-gui-smoke.txt
 ```
 
@@ -105,7 +105,7 @@ Test on a normal signed-in desktop session, not a headless CI session.
 
 ## Windows
 
-Test from the installed MSI, not only from the raw `qp.exe` diagnostic artifact.
+Test from the installed MSI, not only from the raw `quick-presenter.exe` diagnostic artifact.
 
 - Install `QuickPresenter-<version>.msi`.
 - Launch `Quick Presenter` from the Start Menu.
