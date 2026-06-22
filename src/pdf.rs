@@ -112,34 +112,50 @@ impl PdfDocumentState {
         let mut notes = Vec::new();
 
         for page_index in 0..self.page_count {
+            let Some(mut page_notes) =
+                self.speaker_notes_for_page_cancellable(page_index, &|| is_cancelled())?
+            else {
+                return Ok(None);
+            };
+            notes.append(&mut page_notes);
+        }
+
+        Ok(Some(SpeakerNotes::from_page_notes(notes)))
+    }
+
+    pub fn speaker_notes_for_page_cancellable(
+        &self,
+        page_index: u32,
+        is_cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<Vec<(u32, String)>>> {
+        if is_cancelled() {
+            return Ok(None);
+        }
+
+        let page = self
+            .document
+            .pages()
+            .get(page_index as PdfPageIndex)
+            .with_context(|| format!("failed to load page {}", page_index + 1))?;
+
+        let mut notes = Vec::new();
+        for annotation in page.annotations().iter() {
             if is_cancelled() {
                 return Ok(None);
             }
 
-            let page = self
-                .document
-                .pages()
-                .get(page_index as PdfPageIndex)
-                .with_context(|| format!("failed to load page {}", page_index + 1))?;
+            if annotation.annotation_type() != PdfPageAnnotationType::Text {
+                continue;
+            }
 
-            for annotation in page.annotations().iter() {
-                if is_cancelled() {
-                    return Ok(None);
-                }
-
-                if annotation.annotation_type() != PdfPageAnnotationType::Text {
-                    continue;
-                }
-
-                if let Some(contents) = annotation.contents() {
-                    if is_pdf_speaker_note_annotation(None, Some(&contents)) {
-                        notes.push((page_index + 1, contents));
-                    }
+            if let Some(contents) = annotation.contents() {
+                if is_pdf_speaker_note_annotation(None, Some(&contents)) {
+                    notes.push((page_index + 1, contents));
                 }
             }
         }
 
-        Ok(Some(SpeakerNotes::from_page_notes(notes)))
+        Ok(Some(notes))
     }
 }
 

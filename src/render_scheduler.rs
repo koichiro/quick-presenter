@@ -672,10 +672,11 @@ trait RenderWorkerDocument {
     fn title(&self) -> String;
     fn page_count(&self) -> u32;
     fn render_page_pixels(&self, request: RenderRequest) -> anyhow::Result<RenderedPagePixels>;
-    fn speaker_notes_cancellable(
+    fn speaker_notes_for_page_cancellable(
         &self,
+        page_index: u32,
         is_cancelled: &dyn Fn() -> bool,
-    ) -> anyhow::Result<Option<SpeakerNotes>>;
+    ) -> anyhow::Result<Option<Vec<(u32, String)>>>;
 }
 
 impl RenderWorkerDocument for PdfDocumentState {
@@ -691,17 +692,26 @@ impl RenderWorkerDocument for PdfDocumentState {
         render_page_pixels(self, request)
     }
 
-    fn speaker_notes_cancellable(
+    fn speaker_notes_for_page_cancellable(
         &self,
+        page_index: u32,
         is_cancelled: &dyn Fn() -> bool,
-    ) -> anyhow::Result<Option<SpeakerNotes>> {
-        self.speaker_notes_cancellable(is_cancelled)
+    ) -> anyhow::Result<Option<Vec<(u32, String)>>> {
+        self.speaker_notes_for_page_cancellable(page_index, is_cancelled)
     }
+}
+
+struct SpeakerNotesExtraction {
+    session_id: RenderSessionId,
+    next_page_index: u32,
+    page_count: u32,
+    page_notes: Vec<(u32, String)>,
 }
 
 struct RenderWorkerState<D> {
     document: Option<D>,
     active_session: Option<RenderSessionId>,
+    notes_extraction: Option<SpeakerNotesExtraction>,
     queue: RenderQueue,
     shutdown: bool,
 }
@@ -711,6 +721,7 @@ impl<D> Default for RenderWorkerState<D> {
         Self {
             document: None,
             active_session: None,
+            notes_extraction: None,
             queue: RenderQueue::default(),
             shutdown: false,
         }
@@ -899,12 +910,7 @@ fn process_next_work<D: RenderWorkerDocument>(
             );
         }
         RenderWork::SpeakerNotes => {
-            extract_speaker_notes_on_worker(
-                state.document.as_ref(),
-                session_id,
-                event_mailbox,
-                cancellation,
-            );
+            process_speaker_notes_batch_on_worker(state, session_id, event_mailbox, cancellation);
         }
     }
 
@@ -938,6 +944,7 @@ fn handle_command<D: RenderWorkerDocument>(
             cancellation.activate(session_id);
             state.queue.clear();
             state.active_session = Some(session_id);
+            state.notes_extraction = None;
             state.document = None;
             open_document_on_worker(
                 session_id,
@@ -963,11 +970,19 @@ fn handle_command<D: RenderWorkerDocument>(
             if state.active_session == Some(session_id) {
                 state.document = None;
                 state.active_session = None;
+                state.notes_extraction = None;
+            } else if state
+                .notes_extraction
+                .as_ref()
+                .is_some_and(|extraction| extraction.session_id == session_id)
+            {
+                state.notes_extraction = None;
             }
         }
         RenderCommand::Shutdown => {
             cancellation.shutdown();
             state.shutdown = true;
+            state.notes_extraction = None;
             state.queue.clear();
         }
     }
@@ -1037,21 +1052,54 @@ fn render_page_on_worker<D: RenderWorkerDocument>(
     }
 }
 
-fn extract_speaker_notes_on_worker<D: RenderWorkerDocument>(
-    document: Option<&D>,
+fn process_speaker_notes_batch_on_worker<D: RenderWorkerDocument>(
+    state: &mut RenderWorkerState<D>,
     session_id: RenderSessionId,
     event_mailbox: &RenderEventMailbox,
     cancellation: &RenderCancellation,
 ) {
-    let Some(document) = document else {
+    if state.document.is_none() {
+        return;
+    }
+
+    if state
+        .notes_extraction
+        .as_ref()
+        .is_none_or(|extraction| extraction.session_id != session_id)
+    {
+        let page_count = state
+            .document
+            .as_ref()
+            .map(RenderWorkerDocument::page_count)
+            .unwrap_or(0);
+        state.notes_extraction = Some(SpeakerNotesExtraction {
+            session_id,
+            next_page_index: 0,
+            page_count,
+            page_notes: Vec::new(),
+        });
+    }
+
+    let Some(extraction) = state.notes_extraction.as_ref() else {
         return;
     };
 
-    let notes = match document.speaker_notes_cancellable(&|| cancellation.is_cancelled(session_id))
+    if extraction.next_page_index >= extraction.page_count {
+        finish_speaker_notes_extraction(state, session_id, event_mailbox, cancellation);
+        return;
+    }
+
+    let page_index = extraction.next_page_index;
+    let page_notes = match state
+        .document
+        .as_ref()
+        .expect("speaker notes extraction requires an open document")
+        .speaker_notes_for_page_cancellable(page_index, &|| cancellation.is_cancelled(session_id))
     {
-        Ok(Some(notes)) => notes,
+        Ok(Some(page_notes)) => page_notes,
         Ok(None) => return,
         Err(err) => {
+            state.notes_extraction = None;
             if !cancellation.is_cancelled(session_id) {
                 event_mailbox.send(RenderEvent::SpeakerNotesLoaded {
                     session_id,
@@ -1063,6 +1111,35 @@ fn extract_speaker_notes_on_worker<D: RenderWorkerDocument>(
         }
     };
 
+    let Some(extraction) = state.notes_extraction.as_mut() else {
+        return;
+    };
+
+    extraction.page_notes.extend(page_notes);
+    extraction.next_page_index = extraction.next_page_index.saturating_add(1);
+
+    if extraction.next_page_index >= extraction.page_count {
+        finish_speaker_notes_extraction(state, session_id, event_mailbox, cancellation);
+    } else if !cancellation.is_cancelled(session_id) {
+        state.queue.push_speaker_notes(session_id);
+    }
+}
+
+fn finish_speaker_notes_extraction<D>(
+    state: &mut RenderWorkerState<D>,
+    session_id: RenderSessionId,
+    event_mailbox: &RenderEventMailbox,
+    cancellation: &RenderCancellation,
+) {
+    let Some(extraction) = state.notes_extraction.take() else {
+        return;
+    };
+
+    if extraction.session_id != session_id {
+        return;
+    }
+
+    let notes = SpeakerNotes::from_page_notes(extraction.page_notes);
     if !cancellation.is_cancelled(session_id) {
         event_mailbox.send(RenderEvent::SpeakerNotesLoaded {
             session_id,
@@ -1130,17 +1207,26 @@ mod tests {
             })
         }
 
-        fn speaker_notes_cancellable(
+        fn speaker_notes_for_page_cancellable(
             &self,
+            page_index: u32,
             is_cancelled: &dyn Fn() -> bool,
-        ) -> Result<Option<SpeakerNotes>> {
+        ) -> Result<Option<Vec<(u32, String)>>> {
             if is_cancelled() {
                 return Ok(None);
             }
 
             match &self.notes {
-                FakeNotes::Loaded(notes) => Ok(Some(notes.clone())),
-                FakeNotes::Empty => Ok(None),
+                FakeNotes::Loaded(notes) => {
+                    let page_number = page_index + 1;
+                    Ok(Some(
+                        notes
+                            .note_for_page_number(page_number)
+                            .map(|note| vec![(page_number, note.to_owned())])
+                            .unwrap_or_default(),
+                    ))
+                }
+                FakeNotes::Empty => Ok(Some(Vec::new())),
                 FakeNotes::Fails => bail!("fake notes failed"),
             }
         }
@@ -1231,6 +1317,22 @@ mod tests {
         let events = event_mailbox.drain();
         assert_eq!(events.len(), 1);
         events.into_iter().next().unwrap()
+    }
+
+    fn process_until_single_event(
+        state: &mut RenderWorkerState<FakeDocument>,
+        event_mailbox: &RenderEventMailbox,
+        cancellation: &Arc<RenderCancellation>,
+    ) -> RenderEvent {
+        for _ in 0..16 {
+            assert!(process_next_work(state, event_mailbox, cancellation));
+            let events = event_mailbox.drain();
+            if let Some(event) = events.into_iter().next() {
+                return event;
+            }
+        }
+
+        panic!("expected render event after processing queued work");
     }
 
     #[test]
@@ -1754,8 +1856,7 @@ mod tests {
             &cancellation,
         );
 
-        assert!(process_next_work(&mut state, &event_mailbox, &cancellation));
-        match drain_single_event(&event_mailbox) {
+        match process_until_single_event(&mut state, &event_mailbox, &cancellation) {
             RenderEvent::SpeakerNotesLoaded {
                 session_id,
                 notes,
@@ -1767,6 +1868,104 @@ mod tests {
             }
             other => panic!("expected speaker notes event, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn speaker_notes_work_yields_to_visible_render_work_between_pages() {
+        let session = RenderSessionId(1);
+        let current = request(2, RenderPurpose::CurrentSlide);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: session,
+                path: PathBuf::from("notes.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        event_mailbox.drain();
+        handle_fake_command(
+            RenderCommand::ExtractSpeakerNotes {
+                session_id: session,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert!(process_next_work(&mut state, &event_mailbox, &cancellation));
+        assert!(event_mailbox.drain().is_empty());
+        assert!(state.notes_extraction.is_some());
+
+        handle_fake_command(
+            RenderCommand::RenderPage {
+                session_id: session,
+                request: current,
+                priority: RenderPriority::BlockingVisible,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert!(process_next_work(&mut state, &event_mailbox, &cancellation));
+        match drain_single_event(&event_mailbox) {
+            RenderEvent::PageRendered {
+                session_id,
+                request,
+                ..
+            } => {
+                assert_eq!(session_id, session);
+                assert_eq!(request, current);
+            }
+            other => {
+                panic!("expected visible page render before notes continuation, got {other:?}")
+            }
+        }
+    }
+
+    #[test]
+    fn open_command_clears_in_progress_speaker_notes_extraction() {
+        let first_session = RenderSessionId(1);
+        let second_session = RenderSessionId(2);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: first_session,
+                path: PathBuf::from("notes.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        event_mailbox.drain();
+        handle_fake_command(
+            RenderCommand::ExtractSpeakerNotes {
+                session_id: first_session,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        assert!(process_next_work(&mut state, &event_mailbox, &cancellation));
+        assert!(state.notes_extraction.is_some());
+
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: second_session,
+                path: PathBuf::from("deck.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert!(state.notes_extraction.is_none());
+        assert_eq!(state.active_session, Some(second_session));
+        assert!(cancellation.is_cancelled(first_session));
     }
 
     #[test]
@@ -1793,8 +1992,7 @@ mod tests {
             &cancellation,
         );
 
-        assert!(process_next_work(&mut state, &event_mailbox, &cancellation));
-        match drain_single_event(&event_mailbox) {
+        match process_until_single_event(&mut state, &event_mailbox, &cancellation) {
             RenderEvent::SpeakerNotesLoaded {
                 session_id,
                 notes,
