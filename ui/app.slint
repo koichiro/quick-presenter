@@ -273,10 +273,13 @@ component ThumbnailPane inherits Rectangle {
     in property <[ThumbnailItem]> thumbnails;
     in property <int> current-page-index: 0;
     callback jump-to-page(int);
+    callback request-thumbnail-range(int, int);
 
     background: transparent;
     private property <length> tile-height: 98px;
     private property <length> current-item-y: scroll-view.viewport-y + root.current-page-index * root.tile-height;
+    private property <int> visible-start-index: max(0, round(-scroll-view.viewport-y / root.tile-height));
+    private property <int> visible-end-index: min(root.thumbnails.length - 1, max(0, round((-scroll-view.viewport-y + scroll-view.visible-height) / root.tile-height) + 1));
 
     function bring-current-into-view() {
         if root.current-page-index < 0 || root.current-page-index >= root.thumbnails.length {
@@ -292,12 +295,29 @@ component ThumbnailPane inherits Rectangle {
         }
     }
 
+    function request-visible-thumbnails() {
+        if root.thumbnails.length <= 0 {
+            return;
+        }
+
+        root.request-thumbnail-range(root.visible-start-index, root.visible-end-index);
+    }
+
     changed current-page-index => {
         root.bring-current-into-view();
+        root.request-visible-thumbnails();
     }
 
     changed thumbnails => {
-        root.bring-current-into-view();
+        root.request-visible-thumbnails();
+    }
+
+    changed visible-start-index => {
+        root.request-visible-thumbnails();
+    }
+
+    changed visible-end-index => {
+        root.request-visible-thumbnails();
     }
 
     scroll-view := ScrollView {
@@ -380,6 +400,7 @@ export component PresenterWindow inherits Window {
     callback keyboard-first-page();
     callback keyboard-last-page();
     callback jump-to-page(int);
+    callback request-thumbnail-range(int, int);
 
     title: "Quick Presenter";
     preferred-width: 1024px;
@@ -869,6 +890,9 @@ export component PresenterWindow inherits Window {
                         vertical-stretch: 1;
                         jump-to-page(page-index) => {
                             root.jump-to-page(page-index);
+                        }
+                        request-thumbnail-range(first-index, last-index) => {
+                            root.request-thumbnail-range(first-index, last-index);
                         }
                     }
                 }
