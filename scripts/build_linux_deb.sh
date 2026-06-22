@@ -2,7 +2,7 @@
 set -euo pipefail
 
 artifact_dir="artifacts/quick-presenter-ubuntu-x64"
-binary="target/release/qp"
+binary="target/release/quick-presenter"
 output_deb=""
 keep_work_dir=0
 
@@ -120,9 +120,9 @@ fi
 rm -rf "$package_root"
 mkdir -p "$debian_dir" "$install_dir" "$bin_dir" "$runtime_license_dir" "$doc_dir"
 
-cp "$binary" "$install_dir/qp"
-chmod 755 "$install_dir/qp"
-ln -s "../lib/quick-presenter/qp" "$bin_dir/qp"
+cp "$binary" "$install_dir/quick-presenter"
+chmod 755 "$install_dir/quick-presenter"
+ln -s "../lib/quick-presenter/quick-presenter" "$bin_dir/quick-presenter"
 
 cp -R "pdfium" "$install_dir/pdfium"
 cp "LICENSE" "$runtime_license_dir/QuickPresenter-LICENSE.txt"

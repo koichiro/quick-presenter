@@ -179,7 +179,7 @@ fn startup_program_name() -> String {
                 .map(|name| name.to_string_lossy().into_owned())
         })
         .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "qp".to_string())
+        .unwrap_or_else(|| "quick-presenter".to_string())
 }
 
 fn smoke_open_pdf(path: PathBuf) -> Result<()> {

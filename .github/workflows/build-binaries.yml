@@ -36,13 +36,13 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact-name: quick-presenter-ubuntu-x64
-            binary-name: qp
+            binary-name: quick-presenter
           - os: macos-latest
             artifact-name: quick-presenter-macos
-            binary-name: qp
+            binary-name: quick-presenter
           - os: windows-latest
             artifact-name: quick-presenter-windows-x64
-            binary-name: qp.exe
+            binary-name: quick-presenter.exe
 
     steps:
       - name: Checkout
@@ -91,7 +91,7 @@ jobs:
         run: python scripts/fetch_pdfium.py --clean
 
       - name: Build release binary
-        run: cargo build --release --bin qp
+        run: cargo build --release --bin quick-presenter
 
       - name: Read package version
         shell: bash
@@ -189,7 +189,7 @@ jobs:
           Quick Presenter packaged artifact.
 
           This archive contains the release package for this platform, plus
-          the raw qp executable and PDFium files used to build or validate it.
+          the raw quick-presenter executable and PDFium files used to build or validate it.
 
           Prefer the packaged file for normal installation:
 
@@ -201,7 +201,7 @@ jobs:
           for layout validation. Use the MSI unless a release explicitly
           identifies a signed MSIX as supported.
 
-          Raw qp or qp.exe binaries are development and diagnostic artifacts.
+          Raw quick-presenter or quick-presenter.exe binaries are development and diagnostic artifacts.
           If you run or move a raw executable directly, keep the pdfium directory
           next to it because the executable locates bundled PDFium files relative
           to its own path.
@@ -228,7 +228,7 @@ jobs:
           artifact_dir="artifacts/${{ matrix.artifact-name }}"
           app="$artifact_dir/Quick Presenter.app"
           plist="$app/Contents/Info.plist"
-          executable="$app/Contents/MacOS/qp"
+          executable="$app/Contents/MacOS/quick-presenter"
           resources="$app/Contents/Resources"
 
           test -x "$executable"
@@ -242,7 +242,7 @@ jobs:
           plutil -lint "$plist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$plist")" = "Quick Presenter"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$plist")" = "Quick Presenter"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")" = "qp"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")" = "quick-presenter"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$plist")" = "QuickPresenter"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundlePackageType' "$plist")" = "APPL"
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSPrincipalClass' "$plist")" = "NSApplication"
@@ -283,7 +283,7 @@ jobs:
 
           test -d "$app"
           test -L "$mount_dir/Applications"
-          test -x "$app/Contents/MacOS/qp"
+          test -x "$app/Contents/MacOS/quick-presenter"
           test -s "$app/Contents/Info.plist"
           test -s "$resources/QuickPresenter.icns"
           test -s "$resources/pdfium/LICENSE"
@@ -291,7 +291,7 @@ jobs:
           test -s "$resources/licenses/QuickPresenter-LICENSE.txt"
           test -s "$resources/licenses/PDFium-LICENSE.txt"
 
-          env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$app/Contents/MacOS/qp" \
+          env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$app/Contents/MacOS/quick-presenter" \
             --smoke-open-pdf "$pdf"
 
       - name: Verify Linux desktop metadata
@@ -306,7 +306,7 @@ jobs:
           test -s "$desktop_file"
           grep -Fx "Type=Application" "$desktop_file"
           grep -Fx "Name=Quick Presenter" "$desktop_file"
-          grep -Fx "Exec=qp %f" "$desktop_file"
+          grep -Fx "Exec=quick-presenter %f" "$desktop_file"
           grep -Fx "Icon=quick-presenter" "$desktop_file"
 
           desktop-file-validate "$desktop_file"
@@ -340,8 +340,8 @@ jobs:
           dpkg-deb --info "$deb"
           dpkg-deb --contents "$deb" | tee "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
 
-          grep -F "./usr/bin/qp" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
-          grep -F "./usr/lib/quick-presenter/qp" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+          grep -F "./usr/bin/quick-presenter" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+          grep -F "./usr/lib/quick-presenter/quick-presenter" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
           grep -F "./usr/lib/quick-presenter/pdfium/LICENSE" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
           grep -F "./usr/lib/quick-presenter/pdfium/licenses/" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
           grep -F "./usr/lib/quick-presenter/licenses/QuickPresenter-LICENSE.txt" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
@@ -354,8 +354,8 @@ jobs:
           mkdir -p "$extract_dir"
           dpkg-deb -x "$deb" "$extract_dir"
 
-          test -x "$extract_dir/usr/lib/quick-presenter/qp"
-          test -L "$extract_dir/usr/bin/qp"
+          test -x "$extract_dir/usr/lib/quick-presenter/quick-presenter"
+          test -L "$extract_dir/usr/bin/quick-presenter"
           test -s "$extract_dir/usr/lib/quick-presenter/pdfium/LICENSE"
           test -d "$extract_dir/usr/lib/quick-presenter/pdfium/licenses"
           test -s "$extract_dir/usr/lib/quick-presenter/licenses/QuickPresenter-LICENSE.txt"
@@ -368,20 +368,20 @@ jobs:
 
           (
             cd /tmp
-            env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$extract_dir/usr/lib/quick-presenter/qp" \
+            env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$extract_dir/usr/lib/quick-presenter/quick-presenter" \
               --smoke-open-pdf "$pdf"
           )
 
           (
             cd /tmp
-            PATH="$extract_dir/usr/bin:$PATH" env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE qp \
+            PATH="$extract_dir/usr/bin:$PATH" env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE quick-presenter \
               --smoke-open-pdf "$pdf"
           )
 
           sudo apt-get install -y "$deb"
           (
             cd /tmp
-            env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE qp --smoke-open-pdf "$pdf"
+            env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE quick-presenter --smoke-open-pdf "$pdf"
           )
           sudo apt-get remove -y quick-presenter
 
@@ -393,7 +393,7 @@ jobs:
 
           $artifactDir = 'artifacts/${{ matrix.artifact-name }}'
           $exe = Join-Path $artifactDir '${{ matrix.binary-name }}'
-          $preview = Join-Path $artifactDir 'qp-associated-icon.png'
+          $preview = Join-Path $artifactDir 'quick-presenter-associated-icon.png'
           $previewFullPath = [System.IO.Path]::GetFullPath($preview)
 
           Add-Type -AssemblyName System.Drawing
@@ -456,9 +456,9 @@ jobs:
             throw "Administrative MSI extraction failed with exit code $($msiProcess.ExitCode)"
           }
 
-          $exe = Get-ChildItem $extractDir -Recurse -Filter 'qp.exe' | Select-Object -First 1
+          $exe = Get-ChildItem $extractDir -Recurse -Filter 'quick-presenter.exe' | Select-Object -First 1
           if ($null -eq $exe) {
-            throw "Extracted MSI layout does not contain qp.exe"
+            throw "Extracted MSI layout does not contain quick-presenter.exe"
           }
 
           $installDir = $exe.Directory.FullName
@@ -551,7 +551,7 @@ jobs:
           }
 
           $manifest = Join-Path $extractDir 'AppxManifest.xml'
-          $exe = Join-Path $extractDir 'qp.exe'
+          $exe = Join-Path $extractDir 'quick-presenter.exe'
           $pdfiumDir = Join-Path $extractDir 'pdfium'
           $licenseDir = Join-Path $extractDir 'licenses'
           $assetsDir = Join-Path $extractDir 'Assets'
@@ -560,7 +560,7 @@ jobs:
             throw "Unpacked MSIX layout is missing AppxManifest.xml"
           }
           if (-not (Test-Path $exe -PathType Leaf)) {
-            throw "Unpacked MSIX layout is missing qp.exe"
+            throw "Unpacked MSIX layout is missing quick-presenter.exe"
           }
           if (-not (Test-Path (Join-Path $pdfiumDir 'LICENSE') -PathType Leaf)) {
             throw "Unpacked MSIX layout is missing bundled PDFium license"
@@ -591,8 +591,8 @@ jobs:
           if ($manifestText -notmatch 'Name="Windows\.Desktop"') {
             throw "MSIX manifest is missing Windows.Desktop target family"
           }
-          if ($manifestText -notmatch 'Executable="qp\.exe"') {
-            throw "MSIX manifest is missing qp.exe application entry"
+          if ($manifestText -notmatch 'Executable="quick-presenter\.exe"') {
+            throw "MSIX manifest is missing quick-presenter.exe application entry"
           }
           if ($manifestText -notmatch 'Name="runFullTrust"') {
             throw "MSIX manifest is missing runFullTrust capability"
@@ -668,7 +668,7 @@ jobs:
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             (
               cd /tmp
-              env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$artifact_dir/Quick Presenter.app/Contents/MacOS/qp" \
+              env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$artifact_dir/Quick Presenter.app/Contents/MacOS/quick-presenter" \
                 --smoke-open-pdf "$pdf"
             )
           fi

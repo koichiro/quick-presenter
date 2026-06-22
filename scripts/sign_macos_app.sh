@@ -65,8 +65,8 @@ if [[ ! -s "$app_bundle/Contents/Info.plist" ]]; then
   exit 1
 fi
 
-if [[ ! -x "$app_bundle/Contents/MacOS/qp" ]]; then
-  echo "Missing executable app binary: $app_bundle/Contents/MacOS/qp" >&2
+if [[ ! -x "$app_bundle/Contents/MacOS/quick-presenter" ]]; then
+  echo "Missing executable app binary: $app_bundle/Contents/MacOS/quick-presenter" >&2
   exit 1
 fi
 

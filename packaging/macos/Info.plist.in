@@ -7,7 +7,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>Quick Presenter</string>
 	<key>CFBundleExecutable</key>
-	<string>qp</string>
+	<string>quick-presenter</string>
 	<key>CFBundleIconFile</key>
 	<string>QuickPresenter</string>
 	<key>CFBundleIdentifier</key>

@@ -86,29 +86,29 @@ authoring tool.
 Run the app:
 
 ```sh
-cargo run --bin qp
+cargo run --bin quick-presenter
 ```
 
 Open a PDF at startup:
 
 ```sh
-cargo run --bin qp -- --pdf path/to/slides.pdf
+cargo run --bin quick-presenter -- --pdf path/to/slides.pdf
 ```
 
 For development verification, this repository includes a small fixture PDF:
 
 ```sh
-cargo run --bin qp -- --pdf tests/fixtures/marp-speaker-notes.pdf
+cargo run --bin quick-presenter -- --pdf tests/fixtures/marp-speaker-notes.pdf
 ```
 
 The README screenshot deck can also be opened directly:
 
 ```sh
-cargo run --bin qp -- --pdf docs/samples/quick-presenter-demo.pdf
+cargo run --bin quick-presenter -- --pdf docs/samples/quick-presenter-demo.pdf
 ```
 
-The Cargo package remains `quick-presenter`, while the development executable is
-named `qp`.
+The Cargo package and GUI executable are both named `quick-presenter`. The short
+`qp` command name is reserved for a future automation-oriented CLI entrypoint.
 
 Keyboard controls are documented in [docs/KEYBOARD.md](docs/KEYBOARD.md).
 Recent-file privacy behavior is documented in
@@ -130,7 +130,7 @@ release-oriented PDFium fetch requirements.
 Build the app:
 
 ```sh
-cargo build --bin qp
+cargo build --bin quick-presenter
 ```
 
 Run the standard checks:

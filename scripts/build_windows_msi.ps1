@@ -1,6 +1,6 @@
 param(
     [string]$ArtifactDir = "artifacts/quick-presenter-windows-x64",
-    [string]$Binary = "target/release/qp.exe",
+    [string]$Binary = "target/release/quick-presenter.exe",
     [string]$OutputMsi = "",
     [string]$WixCommand = "wix",
     [switch]$KeepWorkDir
@@ -183,7 +183,7 @@ $generatedWxs = Join-Path $wixWorkDir "Files.wxs"
 Remove-Item -Recurse -Force $stageDir, $wixWorkDir -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $stageDir, $licenseDir, $wixWorkDir | Out-Null
 
-Copy-Item $binaryPath (Join-Path $stageDir "qp.exe")
+Copy-Item $binaryPath (Join-Path $stageDir "quick-presenter.exe")
 Copy-Item -Recurse $pdfiumPath (Join-Path $stageDir "pdfium")
 Copy-Item $licensePath (Join-Path $licenseDir "QuickPresenter-LICENSE.txt")
 Copy-Item $sourceOfferPath (Join-Path $licenseDir "QuickPresenter-SOURCE-OFFER.txt")

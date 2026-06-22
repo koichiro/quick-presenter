@@ -7,7 +7,7 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
 fi
 
 dest="$1"
-binary="${2:-target/release/qp}"
+binary="${2:-target/release/quick-presenter}"
 app_name="Quick Presenter.app"
 bundle="$dest/$app_name"
 contents="$bundle/Contents"
@@ -56,8 +56,8 @@ fi
 rm -rf "$bundle"
 mkdir -p "$macos_dir" "$resources_dir" "$license_dir"
 
-cp "$binary" "$macos_dir/qp"
-chmod 755 "$macos_dir/qp"
+cp "$binary" "$macos_dir/quick-presenter"
+chmod 755 "$macos_dir/quick-presenter"
 
 sed "s/@APP_VERSION@/$version/g" \
   packaging/macos/Info.plist.in > "$contents/Info.plist"

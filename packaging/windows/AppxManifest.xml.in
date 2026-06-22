@@ -30,7 +30,7 @@
   <Applications>
     <Application
       Id="QuickPresenter"
-      Executable="qp.exe"
+      Executable="quick-presenter.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="Quick Presenter"
