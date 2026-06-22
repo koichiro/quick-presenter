@@ -306,7 +306,7 @@ jobs:
           test -s "$desktop_file"
           grep -Fx "Type=Application" "$desktop_file"
           grep -Fx "Name=Quick Presenter" "$desktop_file"
-          grep -Fx "Exec=quick-presenter %f" "$desktop_file"
+          grep -Fx "Exec=quick-presenter --pdf %f" "$desktop_file"
           grep -Fx "Icon=quick-presenter" "$desktop_file"
 
           desktop-file-validate "$desktop_file"
@@ -363,6 +363,7 @@ jobs:
           test -s "$extract_dir/usr/lib/quick-presenter/licenses/PDFium-LICENSE.txt"
           test -s "$extract_dir/usr/share/doc/quick-presenter/QuickPresenter-SOURCE-OFFER.txt"
 
+          grep -Fx "Exec=quick-presenter --pdf %f" "$extract_dir/usr/share/applications/quick-presenter.desktop"
           desktop-file-validate "$extract_dir/usr/share/applications/quick-presenter.desktop"
           gtk-update-icon-cache --ignore-theme-index --force "$extract_dir/usr/share/icons/hicolor"
 
