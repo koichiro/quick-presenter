@@ -274,7 +274,13 @@ struct PreparedPdfSession {
 }
 
 #[allow(dead_code)]
+struct SynchronousPdfSession {
+    doc: PdfDocumentState,
+}
+
+#[allow(dead_code)]
 struct CommittedPdfSession {
+    session: SynchronousPdfSession,
     loaded_path: PathBuf,
     snapshot: Option<PageSnapshot>,
     initial_slide_aspect_ratio: Option<f32>,
@@ -777,6 +783,7 @@ pub(crate) fn open_and_render(
     }
 
     record_recent_pdf(&windows.presenter, state, committed.loaded_path);
+    let _session = committed.session;
 
     Ok(())
 }
@@ -862,11 +869,11 @@ fn commit_prepared_pdf_session_state(
         status_text,
     } = prepared;
 
-    state.pdf = Some(doc);
     state.render_cache = render_cache;
     commit_prepared_pdf_session_metadata(state, notes, presentation, status_text);
 
     CommittedPdfSession {
+        session: SynchronousPdfSession { doc },
         loaded_path,
         snapshot,
         initial_slide_aspect_ratio,
@@ -1041,13 +1048,11 @@ fn enqueue_visible_page_renders(state: &AppState, snapshot: &PageSnapshot) {
 #[allow(dead_code)]
 fn render_into_windows(
     windows: &AppWindowRefs,
+    session: &SynchronousPdfSession,
     state: &mut AppState,
     snapshot: &PageSnapshot,
 ) -> Result<()> {
-    let Some(doc) = state.pdf.as_ref() else {
-        anyhow::bail!("missing open PDF for current presentation");
-    };
-    let rendered = render_pages(doc, &mut state.render_cache, snapshot)?;
+    let rendered = render_pages(&session.doc, &mut state.render_cache, snapshot)?;
     state.render_cache.retain_presentation_window(
         snapshot.current_index,
         snapshot.total_pages,
@@ -1196,18 +1201,18 @@ fn sync_thumbnail_model(presenter: &PresenterWindow, state: &AppState, snapshot:
 }
 
 #[allow(dead_code)]
-fn render_thumbnail_window(state: &mut AppState, snapshot: &PageSnapshot) -> Result<()> {
-    let Some(doc) = state.pdf.as_ref() else {
-        return Ok(());
-    };
-
+fn render_thumbnail_window(
+    session: &SynchronousPdfSession,
+    state: &mut AppState,
+    snapshot: &PageSnapshot,
+) -> Result<()> {
     for page_index in thumbnail_window_indices(
         snapshot.current_index,
         snapshot.total_pages,
         THUMBNAIL_CACHE_RADIUS,
     ) {
         render_pdf_page_cached(
-            doc,
+            &session.doc,
             &mut state.render_cache,
             RenderRequest {
                 page_index,
@@ -1250,18 +1255,18 @@ fn schedule_presentation_preload(state: Rc<RefCell<AppState>>, snapshot: PageSna
 }
 
 #[allow(dead_code)]
-fn preload_presentation_window(state: &mut AppState, snapshot: &PageSnapshot) -> Result<()> {
-    let Some(doc) = state.pdf.as_ref() else {
-        return Ok(());
-    };
-
+fn preload_presentation_window(
+    session: &SynchronousPdfSession,
+    state: &mut AppState,
+    snapshot: &PageSnapshot,
+) -> Result<()> {
     for page_index in presentation_preload_order(
         snapshot.current_index,
         snapshot.total_pages,
         PRESENTATION_CACHE_RADIUS,
     ) {
         render_pdf_page_cached(
-            doc,
+            &session.doc,
             &mut state.render_cache,
             RenderRequest {
                 page_index,
@@ -1569,7 +1574,6 @@ mod tests {
         assert_eq!(state.status_text, original_status);
         assert_eq!(state.render_generation, original_generation);
         assert!(state.black_screen.is_active());
-        assert!(state.pdf.is_none());
     }
 
     #[test]

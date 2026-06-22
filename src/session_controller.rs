@@ -52,7 +52,6 @@ pub fn begin_open_pdf_state(state: &mut AppState, path: PathBuf) -> RenderSessio
     state.render_generation = state.render_generation.wrapping_add(1);
     state.audience_slide.last_good_current = None;
     state.audience_slide.failed_current_page = None;
-    state.pdf = None;
     state.pending_open_path = Some(path);
     state.render_cache.clear();
     state.thumbnails = ThumbnailState::default();
