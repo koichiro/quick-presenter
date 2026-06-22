@@ -22,13 +22,16 @@ Do not publish the release until:
 
 - `CI` passes on the release branch.
 - `Build Binaries` passes and uploads all supported platform artifacts.
+- The successful `Build Binaries` workflow run URL is recorded with the release
+  checklist.
 - The packaged artifact smoke tests pass for macOS, Windows, and Ubuntu Linux.
 - This GUI smoke checklist passes on macOS, Windows, and Ubuntu Linux desktop
   sessions, or every failing item is documented in the release notes as a known
   release blocker or limitation.
 
-Record the tested artifact name, app version, operating system version, display
-setup, and test PDF for each platform.
+Record the successful `Build Binaries` workflow run URL, tested artifact name,
+app version, operating system version, display setup, and test PDF for each
+platform.
 
 ## Semi-Automated Path
 
