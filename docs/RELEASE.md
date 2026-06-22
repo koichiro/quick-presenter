@@ -19,9 +19,11 @@ Before publishing a release:
 1. Confirm `CI` passes on the release branch.
 2. Run `Build Binaries` manually with `workflow_dispatch`, or push a release
    tag matching `v*`.
-3. Confirm the Linux, macOS, and Windows artifacts are uploaded and their package
+3. Record the successful `Build Binaries` workflow run URL in the release
+   checklist.
+4. Confirm the Linux, macOS, and Windows artifacts are uploaded and their package
    smoke tests pass.
-4. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
+5. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
    macOS, Windows, and Ubuntu Linux artifacts before publishing.
 
 `Build Binaries` still runs automatically for pull requests that change
