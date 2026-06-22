@@ -1045,8 +1045,7 @@ export component SlideWindow inherits Window {
 
     slide-focus := FocusScope {
         width: parent.width;
-        height: parent.height + root.titlebar-compensation-height;
-        y: 0px - root.titlebar-compensation-height;
+        height: parent.height;
 
         KeyBinding {
             keys: @keys(Escape);
