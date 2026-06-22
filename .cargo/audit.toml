@@ -1,0 +1,5 @@
+[advisories]
+# Advisory exceptions must include a reason, impact summary, tracking issue,
+# and review date. Keep this list empty unless maintainers explicitly accept
+# the release risk.
+ignore = []

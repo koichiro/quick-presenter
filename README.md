@@ -141,6 +141,12 @@ cargo check
 cargo test
 ```
 
+Run the dependency advisory audit before release validation:
+
+```sh
+scripts/audit_deps.sh
+```
+
 Coverage is measured with:
 
 ```sh
