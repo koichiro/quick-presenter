@@ -52,7 +52,7 @@ use presentation::PresentationState;
 use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
 use render_controller::{
     enqueue_render_plan_if_missing, presentation_preload_render_plan, thumbnail_render_plan,
-    visible_page_render_plan,
+    thumbnail_visible_range_render_plan, visible_page_render_plan,
 };
 use render_controller::{CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH};
 use render_scheduler::{RenderEvent, RenderScheduler};
@@ -84,6 +84,7 @@ slint::include_modules!();
 
 const PRESENTATION_CACHE_RADIUS: u32 = 2;
 const THUMBNAIL_CACHE_RADIUS: u32 = 8;
+const THUMBNAIL_SCROLL_LOOKAHEAD: u32 = 4;
 const RENDER_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(16);
 const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
 const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
@@ -350,6 +351,11 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
             &state_for_jump,
             PresentationCommand::JumpToPage(page_index),
         );
+    });
+
+    let state_for_thumbnail_range = state.clone();
+    app.on_request_thumbnail_range(move |first_index, last_index| {
+        enqueue_thumbnail_visible_range(&state_for_thumbnail_range, first_index, last_index);
     });
 
     let window_refs = refs.clone();
@@ -1084,14 +1090,13 @@ fn apply_rendered_pages_to_windows(
         presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
         presenter.set_status_text(presenter_status_text(state).into());
-        presenter.set_current_page_index(thumbnail_current_row_index(
-            snapshot.total_pages,
-            snapshot.current_index,
-            THUMBNAIL_CACHE_RADIUS,
-        ));
         presenter.set_thumbnails(thumbnail_model(
             &state.thumbnails,
             &state.render_cache,
+            snapshot.current_index,
+        ));
+        presenter.set_current_page_index(thumbnail_current_row_index(
+            snapshot.total_pages,
             snapshot.current_index,
             THUMBNAIL_CACHE_RADIUS,
         ));
@@ -1187,17 +1192,37 @@ fn schedule_thumbnail_render(windows: AppWindowRefs, state: Rc<RefCell<AppState>
 }
 
 fn sync_thumbnail_model(presenter: &PresenterWindow, state: &AppState, snapshot: &PageSnapshot) {
+    presenter.set_thumbnails(thumbnail_model(
+        &state.thumbnails,
+        &state.render_cache,
+        snapshot.current_index,
+    ));
     presenter.set_current_page_index(thumbnail_current_row_index(
         snapshot.total_pages,
         snapshot.current_index,
         THUMBNAIL_CACHE_RADIUS,
     ));
-    presenter.set_thumbnails(thumbnail_model(
-        &state.thumbnails,
-        &state.render_cache,
-        snapshot.current_index,
-        THUMBNAIL_CACHE_RADIUS,
-    ));
+}
+
+fn enqueue_thumbnail_visible_range(
+    state: &Rc<RefCell<AppState>>,
+    first_index: i32,
+    last_index: i32,
+) {
+    let state = state.borrow();
+    let Some(snapshot) = state.presentation.snapshot() else {
+        return;
+    };
+
+    enqueue_render_plan_if_missing(
+        &state,
+        thumbnail_visible_range_render_plan(
+            snapshot.total_pages,
+            first_index,
+            last_index,
+            THUMBNAIL_SCROLL_LOOKAHEAD,
+        ),
+    );
 }
 
 #[allow(dead_code)]
@@ -1439,16 +1464,8 @@ fn handle_page_rendered(
         };
         if let Some(snapshot) = outcome.snapshot.as_ref() {
             if request.purpose == RenderPurpose::Thumbnail {
-                if thumbnail_window_indices(
-                    snapshot.current_index,
-                    snapshot.total_pages,
-                    THUMBNAIL_CACHE_RADIUS,
-                )
-                .contains(&request.page_index)
-                {
-                    if let Some(presenter) = windows.presenter.upgrade() {
-                        sync_thumbnail_model(&presenter, &state, snapshot);
-                    }
+                if let Some(presenter) = windows.presenter.upgrade() {
+                    sync_thumbnail_model(&presenter, &state, snapshot);
                 }
             } else {
                 apply_snapshot_to_windows(windows, &state, snapshot);

@@ -9,9 +9,7 @@ use crate::{
     errors::PresenterMessage,
     presentation::PageSnapshot,
     render_controller::{CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH},
-    rendering::{
-        thumbnail_window_indices, RenderCache, RenderPurpose, RenderRequest, RenderedPage,
-    },
+    rendering::{RenderCache, RenderPurpose, RenderRequest, RenderedPage},
     window_controller::AppWindowRefs,
     PresenterWindow, ThumbnailItem,
 };
@@ -88,7 +86,6 @@ pub fn apply_snapshot_to_windows(
             &state.thumbnails,
             &state.render_cache,
             snapshot.current_index,
-            crate::THUMBNAIL_CACHE_RADIUS,
         ));
 
         let current_note = state.notes.note_for_page_index(snapshot.current_index);
@@ -161,11 +158,9 @@ pub fn thumbnail_model(
     thumbnails: &ThumbnailState,
     cache: &RenderCache,
     current_index: u32,
-    radius: u32,
 ) -> ModelRc<ThumbnailItem> {
     let placeholder = thumbnail_placeholder_image();
-    let items = thumbnail_window_indices(current_index, thumbnails.total_pages, radius)
-        .into_iter()
+    let items = (0..thumbnails.total_pages)
         .map(|index| {
             let image = cache
                 .peek(RenderRequest {
@@ -188,11 +183,11 @@ pub fn thumbnail_model(
 }
 
 pub fn thumbnail_current_row_index(total_pages: u32, current_index: u32, radius: u32) -> i32 {
-    thumbnail_window_indices(current_index, total_pages, radius)
-        .iter()
-        .position(|index| *index == current_index)
-        .and_then(|index| i32::try_from(index).ok())
-        .unwrap_or(0)
+    let _ = radius;
+    if total_pages == 0 {
+        return 0;
+    }
+    i32::try_from(current_index.min(total_pages.saturating_sub(1))).unwrap_or(i32::MAX)
 }
 
 pub fn placeholder_slide() -> RenderedPage {
@@ -266,12 +261,11 @@ mod tests {
         }
     }
 
-    fn thumbnail_items(total_pages: u32, current_index: u32, radius: u32) -> Vec<ThumbnailItem> {
+    fn thumbnail_items(total_pages: u32, current_index: u32) -> Vec<ThumbnailItem> {
         let model = thumbnail_model(
             &ThumbnailState { total_pages },
             &RenderCache::default(),
             current_index,
-            radius,
         );
 
         (0..model.row_count())
@@ -328,38 +322,38 @@ mod tests {
     }
 
     #[test]
-    fn thumbnail_model_uses_nearby_window_for_large_documents() {
-        let items = thumbnail_items(10_000, 5_000, 8);
+    fn thumbnail_model_includes_all_pages_for_large_documents() {
+        let items = thumbnail_items(10_000, 5_000);
 
-        assert_eq!(items.len(), 17);
-        assert_eq!(items.first().unwrap().page_index, 4_992);
-        assert_eq!(items.last().unwrap().page_index, 5_008);
+        assert_eq!(items.len(), 10_000);
+        assert_eq!(items.first().unwrap().page_index, 0);
+        assert_eq!(items.last().unwrap().page_index, 9_999);
     }
 
     #[test]
-    fn thumbnail_model_clamps_window_at_document_edges() {
-        let first_page_items = thumbnail_items(10, 0, 3);
-        let last_page_items = thumbnail_items(10, 9, 3);
+    fn thumbnail_model_keeps_absolute_rows_at_document_edges() {
+        let first_page_items = thumbnail_items(10, 0);
+        let last_page_items = thumbnail_items(10, 9);
 
         assert_eq!(
             first_page_items
                 .iter()
                 .map(|item| item.page_index)
                 .collect::<Vec<_>>(),
-            vec![0, 1, 2, 3]
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         );
         assert_eq!(
             last_page_items
                 .iter()
                 .map(|item| item.page_index)
                 .collect::<Vec<_>>(),
-            vec![6, 7, 8, 9]
+            vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         );
     }
 
     #[test]
     fn thumbnail_model_marks_only_current_page() {
-        let items = thumbnail_items(10_000, 5_000, 8);
+        let items = thumbnail_items(10_000, 5_000);
 
         let current_items = items
             .iter()
@@ -371,9 +365,11 @@ mod tests {
     }
 
     #[test]
-    fn thumbnail_current_row_index_uses_window_relative_position() {
-        assert_eq!(thumbnail_current_row_index(10_000, 5_000, 8), 8);
+    fn thumbnail_current_row_index_uses_absolute_position() {
+        assert_eq!(thumbnail_current_row_index(10_000, 5_000, 8), 5_000);
         assert_eq!(thumbnail_current_row_index(10, 0, 3), 0);
-        assert_eq!(thumbnail_current_row_index(10, 9, 3), 3);
+        assert_eq!(thumbnail_current_row_index(10, 9, 3), 9);
+        assert_eq!(thumbnail_current_row_index(10, 99, 3), 9);
+        assert_eq!(thumbnail_current_row_index(0, 99, 3), 0);
     }
 }

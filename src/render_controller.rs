@@ -83,6 +83,55 @@ pub fn thumbnail_render_plan(
     .collect()
 }
 
+pub fn thumbnail_visible_range_render_plan(
+    total_pages: u32,
+    first_visible_index: i32,
+    last_visible_index: i32,
+    lookahead: u32,
+) -> Vec<RenderPlanItem> {
+    let Some((first, last)) = thumbnail_visible_range(
+        total_pages,
+        first_visible_index,
+        last_visible_index,
+        lookahead,
+    ) else {
+        return Vec::new();
+    };
+
+    (first..=last)
+        .map(|page_index| RenderPlanItem {
+            request: RenderRequest {
+                page_index,
+                width: THUMBNAIL_RENDER_WIDTH,
+                purpose: RenderPurpose::Thumbnail,
+            },
+            priority: RenderPriority::Background,
+        })
+        .collect()
+}
+
+fn thumbnail_visible_range(
+    total_pages: u32,
+    first_visible_index: i32,
+    last_visible_index: i32,
+    lookahead: u32,
+) -> Option<(u32, u32)> {
+    if total_pages == 0 || first_visible_index < 0 || last_visible_index < 0 {
+        return None;
+    }
+
+    let first = u32::try_from(first_visible_index).ok()?;
+    let last = u32::try_from(last_visible_index).ok()?;
+    if first >= total_pages {
+        return None;
+    }
+
+    let last_page = total_pages.saturating_sub(1);
+    let start = first.saturating_sub(lookahead);
+    let end = last.min(last_page).saturating_add(lookahead).min(last_page);
+    Some((start, end.max(start)))
+}
+
 pub fn enqueue_render_plan_if_missing(
     state: &AppState,
     plan: impl IntoIterator<Item = RenderPlanItem>,
@@ -198,6 +247,48 @@ mod tests {
         assert!(plan
             .iter()
             .all(|item| item.request.purpose == RenderPurpose::Thumbnail));
+    }
+
+    #[test]
+    fn thumbnail_visible_range_plan_expands_visible_rows_with_lookahead() {
+        let plan = thumbnail_visible_range_render_plan(100, 20, 24, 3);
+
+        assert_eq!(
+            plan.iter()
+                .map(|item| item.request.page_index)
+                .collect::<Vec<_>>(),
+            (17..=27).collect::<Vec<_>>()
+        );
+        assert!(plan
+            .iter()
+            .all(|item| item.request.purpose == RenderPurpose::Thumbnail));
+    }
+
+    #[test]
+    fn thumbnail_visible_range_plan_clamps_to_document_edges() {
+        let first = thumbnail_visible_range_render_plan(10, 0, 2, 4);
+        let last = thumbnail_visible_range_render_plan(10, 8, 12, 4);
+
+        assert_eq!(
+            first
+                .iter()
+                .map(|item| item.request.page_index)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2, 3, 4, 5, 6]
+        );
+        assert_eq!(
+            last.iter()
+                .map(|item| item.request.page_index)
+                .collect::<Vec<_>>(),
+            vec![4, 5, 6, 7, 8, 9]
+        );
+    }
+
+    #[test]
+    fn thumbnail_visible_range_plan_ignores_invalid_ranges() {
+        assert!(thumbnail_visible_range_render_plan(0, 0, 2, 4).is_empty());
+        assert!(thumbnail_visible_range_render_plan(10, -1, 2, 4).is_empty());
+        assert!(thumbnail_visible_range_render_plan(10, 99, 100, 4).is_empty());
     }
 
     #[test]
