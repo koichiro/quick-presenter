@@ -1,6 +1,7 @@
 use std::{collections::HashSet, path::PathBuf};
 use std::{
     collections::VecDeque,
+    panic::{catch_unwind, AssertUnwindSafe},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Condvar, Mutex,
@@ -79,6 +80,10 @@ pub enum RenderEvent {
         session_id: RenderSessionId,
         job_id: RenderJobId,
         request: RenderRequest,
+        message: String,
+    },
+    WorkerFailed {
+        session_id: Option<RenderSessionId>,
         message: String,
     },
 }
@@ -605,6 +610,7 @@ fn render_event_key(event: &RenderEvent) -> Option<RenderEventKey> {
             session_id: *session_id,
             request: *request,
         }),
+        RenderEvent::WorkerFailed { .. } => None,
     }
 }
 
@@ -619,6 +625,7 @@ fn event_drop_score(event: &RenderEvent) -> u8 {
         }
         RenderEvent::SpeakerNotesLoaded { .. } => 2,
         RenderEvent::Opened { .. } | RenderEvent::OpenFailed { .. } => 1,
+        RenderEvent::WorkerFailed { .. } => 0,
     }
 }
 
@@ -647,9 +654,17 @@ impl RenderCancellation {
         self.active_session.store(0, Ordering::Release);
     }
 
-    fn is_cancelled(&self, session_id: RenderSessionId) -> bool {
+    fn current_session(&self) -> Option<RenderSessionId> {
+        let session_id = self.active_session.load(Ordering::Acquire);
+        (session_id != 0).then_some(RenderSessionId(session_id))
+    }
+
+    fn is_shutdown(&self) -> bool {
         self.shutdown.load(Ordering::Acquire)
-            || self.active_session.load(Ordering::Acquire) != session_id.0
+    }
+
+    fn is_cancelled(&self, session_id: RenderSessionId) -> bool {
+        self.is_shutdown() || self.active_session.load(Ordering::Acquire) != session_id.0
     }
 }
 
@@ -724,10 +739,11 @@ impl RenderScheduler {
         let worker_event_mailbox = Arc::clone(&event_mailbox);
         let worker_cancellation = Arc::clone(&cancellation);
         thread::spawn(move || {
-            render_worker(
+            run_render_worker_guarded(
                 worker_command_mailbox,
                 worker_event_mailbox,
                 worker_cancellation,
+                render_worker,
             )
         });
 
@@ -774,6 +790,44 @@ impl Drop for RenderScheduler {
         self.cancellation.shutdown();
         self.command_mailbox.send(RenderCommand::Shutdown);
     }
+}
+
+fn run_render_worker_guarded(
+    command_mailbox: Arc<RenderCommandMailbox>,
+    event_mailbox: Arc<RenderEventMailbox>,
+    cancellation: Arc<RenderCancellation>,
+    worker: impl FnOnce(Arc<RenderCommandMailbox>, Arc<RenderEventMailbox>, Arc<RenderCancellation>),
+) {
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        worker(
+            Arc::clone(&command_mailbox),
+            Arc::clone(&event_mailbox),
+            Arc::clone(&cancellation),
+        );
+    }));
+
+    if cancellation.is_shutdown() {
+        return;
+    }
+
+    let message = match result {
+        Ok(()) => "Render worker stopped unexpectedly.".to_owned(),
+        Err(payload) => panic_payload_message(payload.as_ref())
+            .map(|message| format!("Render worker failed: {message}"))
+            .unwrap_or_else(|| "Render worker failed unexpectedly.".to_owned()),
+    };
+
+    event_mailbox.send(RenderEvent::WorkerFailed {
+        session_id: cancellation.current_session(),
+        message,
+    });
+}
+
+fn panic_payload_message(payload: &(dyn std::any::Any + Send)) -> Option<String> {
+    payload
+        .downcast_ref::<&str>()
+        .map(|message| (*message).to_owned())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
 }
 
 fn render_worker(
@@ -1443,6 +1497,79 @@ mod tests {
             }
             other => panic!("expected page failed event, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn event_mailbox_preserves_worker_failure_when_full() {
+        let session = RenderSessionId(1);
+        let mut pending = PendingRenderEvents::new(1);
+
+        pending.push(RenderEvent::PageFailed {
+            session_id: session,
+            job_id: RenderJobId(1),
+            request: request(1, RenderPurpose::CurrentSlide),
+            message: "current".to_owned(),
+        });
+        pending.push(RenderEvent::WorkerFailed {
+            session_id: Some(session),
+            message: "worker failed".to_owned(),
+        });
+
+        let events = pending.drain();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            RenderEvent::WorkerFailed {
+                session_id,
+                message,
+            } => {
+                assert_eq!(*session_id, Some(session));
+                assert_eq!(message, "worker failed");
+            }
+            other => panic!("expected worker failed event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn guarded_worker_panic_emits_worker_failed_event_for_active_session() {
+        let session = RenderSessionId(1);
+        let command_mailbox = Arc::new(RenderCommandMailbox::default());
+        let event_mailbox = Arc::new(RenderEventMailbox::default());
+        let cancellation = Arc::new(RenderCancellation::default());
+        cancellation.activate(session);
+
+        run_render_worker_guarded(
+            command_mailbox,
+            Arc::clone(&event_mailbox),
+            cancellation,
+            |_, _, _| panic!("fake worker panic"),
+        );
+
+        match drain_single_event(&event_mailbox) {
+            RenderEvent::WorkerFailed {
+                session_id,
+                message,
+            } => {
+                assert_eq!(session_id, Some(session));
+                assert!(message.contains("fake worker panic"));
+            }
+            other => panic!("expected worker failed event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn guarded_worker_shutdown_does_not_emit_worker_failed_event() {
+        let command_mailbox = Arc::new(RenderCommandMailbox::default());
+        let event_mailbox = Arc::new(RenderEventMailbox::default());
+        let cancellation = Arc::new(RenderCancellation::default());
+
+        run_render_worker_guarded(
+            command_mailbox,
+            Arc::clone(&event_mailbox),
+            Arc::clone(&cancellation),
+            |_, _, cancellation| cancellation.shutdown(),
+        );
+
+        assert!(event_mailbox.drain().is_empty());
     }
 
     #[test]
