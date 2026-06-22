@@ -62,7 +62,7 @@ use rendering::{thumbnail_window_indices, RenderPurpose, RenderRequest, Rendered
 use session_controller::{
     apply_session_command, begin_open_pdf_state, commit_page_render_failed_state,
     commit_page_rendered_state, commit_render_open_failed_state, commit_render_opened_state,
-    commit_speaker_notes_loaded_state,
+    commit_render_worker_failed_state, commit_speaker_notes_loaded_state,
 };
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode, Weak};
 use timer::PresentationTimer;
@@ -1332,6 +1332,10 @@ fn handle_render_event(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, e
             message,
             ..
         } => handle_page_render_failed(windows, state, session_id, request, message),
+        RenderEvent::WorkerFailed {
+            session_id,
+            message,
+        } => handle_render_worker_failed(windows, state, session_id, message),
     }
 }
 
@@ -1478,6 +1482,29 @@ fn handle_page_render_failed(
         &windows.presenter,
         PresenterMessage::new(
             "Could not render this page. Try another PDF or page.",
+            errors::MessageSeverity::Error,
+        ),
+    );
+}
+
+fn handle_render_worker_failed(
+    windows: &AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+    session_id: Option<render_scheduler::RenderSessionId>,
+    message: String,
+) {
+    warn!(error = %message, "render worker failed");
+    let accepted = {
+        let mut state = state.borrow_mut();
+        commit_render_worker_failed_state(&mut state, session_id)
+    };
+    if !accepted {
+        return;
+    }
+    set_presenter_message(
+        &windows.presenter,
+        PresenterMessage::new(
+            "Rendering stopped. Reopen the PDF.",
             errors::MessageSeverity::Error,
         ),
     );
