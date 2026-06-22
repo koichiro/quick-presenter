@@ -42,6 +42,10 @@ thumbnail, and preload requests to that worker and receives metadata, rendered
 pixels, and presenter-facing errors through render events. UI-thread state should
 not hold PDFium-owning types in the production path.
 
+Test and GUI smoke helpers may open a temporary synchronous PDF session, but that
+session is kept outside `AppState` so production state still reflects the
+worker-local ownership model.
+
 This single-worker model is intentional until a future design proves a broader
 thread-safety strategy. Any parallel rendering change must make an explicit
 decision about PDFium's thread-safety guarantees, whether documents are opened
