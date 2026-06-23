@@ -86,6 +86,8 @@ Run these checks on every platform.
 | Press `Escape` while the slide window has focus and is fullscreen. | The slide window exits fullscreen without changing pages. |
 | Toggle black screen mode with the UI and `B`. | The slide window blanks and restores while presenter controls remain usable. |
 | Navigate while black screen mode is active, then restore. | The restored slide shows the current page after the hidden navigation. |
+| Confirm the Window menu does not offer a presenter-hide action. | The presenter controls cannot be hidden from the app menu. |
+| Hide the slide window from the Window menu, then show it again. | The presenter window remains visible and can recover the slide window. |
 | Close the app from normal window controls. | The app exits without hanging windows or crash dialogs. |
 
 ## macOS
@@ -99,7 +101,8 @@ Test on a normal signed-in desktop session, not a headless CI session.
 - Confirm the app name and icon appear in Cmd+Tab.
 - Confirm `File > Open PDF...` opens the file picker and can load the test PDF.
 - Confirm window menu actions for showing or focusing the presenter and slide
-  windows work where present.
+  windows work where present, and that the presenter window cannot be hidden
+  from the app menu.
 - Confirm fullscreen entry and exit do not strand the slide window on a hidden
   Space.
 
@@ -114,7 +117,8 @@ Test from the installed MSI, not only from the raw `quick-presenter.exe` diagnos
 - Confirm the app uses the Quick Presenter icon in the Start Menu, taskbar, and
   Alt+Tab.
 - Confirm `File > Open PDF...` opens the file picker and can load the test PDF.
-- Confirm window show, hide, or bring-to-front menu actions work where present.
+- Confirm window show, hide, or bring-to-front menu actions work where present,
+  and that the presenter window cannot be hidden from the app menu.
 - Confirm fullscreen entry and exit work with the slide window on the intended
   display.
 - Uninstall the MSI after testing and confirm the normal uninstall path works.
@@ -133,7 +137,8 @@ sudo apt-get install ./quick-presenter_<version>_amd64.deb
 - Confirm the app name and icon appear in launcher search, the app switcher, and
   the desktop environment's dock, taskbar, or panel.
 - Confirm `File > Open PDF...` opens the file picker and can load the test PDF.
-- Confirm window show, hide, or bring-to-front menu actions work where present.
+- Confirm window show, hide, or bring-to-front menu actions work where present,
+  and that the presenter window cannot be hidden from the app menu.
 - Confirm fullscreen entry and exit behave predictably under the tested desktop
   environment.
 - Remove the package after testing:
