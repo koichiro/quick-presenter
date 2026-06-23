@@ -170,6 +170,12 @@ fn render_enqueue_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        app_state::AppState,
+        render_scheduler::{RenderCommand, RenderScheduler},
+        rendering::RenderedPage,
+    };
+    use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
     fn snapshot(current_index: u32, total_pages: u32) -> PageSnapshot {
         PageSnapshot {
@@ -180,6 +186,42 @@ mod tests {
             next_index: (current_index + 1 < total_pages).then_some(current_index + 1),
             page_label: format!("{} / {}", current_index + 1, total_pages),
         }
+    }
+
+    fn current_request(page_index: u32) -> RenderRequest {
+        RenderRequest {
+            page_index,
+            width: CURRENT_RENDER_WIDTH,
+            purpose: RenderPurpose::CurrentSlide,
+        }
+    }
+
+    fn active_state_with_scheduler(session_id: RenderSessionId) -> AppState {
+        let mut state = AppState {
+            render_scheduler: Some(RenderScheduler::without_worker_for_test()),
+            ..AppState::default()
+        };
+        let pending = state.render_sessions.begin_open_session();
+        assert_eq!(pending, session_id);
+        assert!(state.render_sessions.commit_pending_open(session_id));
+        state
+    }
+
+    fn cached_page() -> RenderedPage {
+        let pixels = SharedPixelBuffer::<Rgba8Pixel>::new(1, 1);
+        RenderedPage {
+            image: Image::from_rgba8(pixels),
+            aspect_ratio: 1.0,
+            estimated_bytes: 4,
+        }
+    }
+
+    fn drained_commands(state: &AppState) -> Vec<RenderCommand> {
+        state
+            .render_scheduler
+            .as_ref()
+            .expect("test state should include scheduler")
+            .drain_commands_for_test()
     }
 
     #[test]
@@ -318,5 +360,71 @@ mod tests {
             render_enqueue_session(false, Some(RenderSessionId(7)), true),
             Some(RenderSessionId(7))
         );
+    }
+
+    #[test]
+    fn enqueue_render_plan_sends_missing_work_to_scheduler() {
+        let session = RenderSessionId(1);
+        let state = active_state_with_scheduler(session);
+        let request = current_request(2);
+
+        enqueue_render_plan_if_missing(
+            &state,
+            [RenderPlanItem {
+                request,
+                priority: RenderPriority::BlockingVisible,
+            }],
+        );
+
+        let commands = drained_commands(&state);
+        assert_eq!(commands.len(), 1);
+        match &commands[0] {
+            RenderCommand::RenderPage {
+                session_id,
+                request: queued_request,
+                priority,
+            } => {
+                assert_eq!(*session_id, session);
+                assert_eq!(*queued_request, request);
+                assert_eq!(*priority, RenderPriority::BlockingVisible);
+            }
+            other => panic!("expected render page command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn enqueue_render_plan_skips_cached_work_without_sending_command() {
+        let session = RenderSessionId(1);
+        let mut state = active_state_with_scheduler(session);
+        let request = current_request(2);
+        state.render_cache.insert(request, cached_page());
+
+        enqueue_render_plan_if_missing(
+            &state,
+            [RenderPlanItem {
+                request,
+                priority: RenderPriority::BlockingVisible,
+            }],
+        );
+
+        assert!(drained_commands(&state).is_empty());
+    }
+
+    #[test]
+    fn enqueue_render_plan_skips_when_no_session_is_committed() {
+        let state = AppState {
+            render_scheduler: Some(RenderScheduler::without_worker_for_test()),
+            ..AppState::default()
+        };
+
+        enqueue_render_plan_if_missing(
+            &state,
+            [RenderPlanItem {
+                request: current_request(2),
+                priority: RenderPriority::BlockingVisible,
+            }],
+        );
+
+        assert!(drained_commands(&state).is_empty());
     }
 }

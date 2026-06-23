@@ -60,6 +60,13 @@ The automated portion stays inside the existing Rust ownership boundary:
 state transitions stay in Rust, Slint remains responsible for windows and
 events, and platform-specific shell checks remain outside the core application.
 
+The current `--gui-smoke` command is a state and window smoke check. It opens
+and renders through the synchronous helper used by this smoke mode, then drives
+the normal presentation commands against the resulting windows. Production
+startup and file-open flows use the asynchronous render scheduler, so release
+coverage for that path is tracked separately in #234 until an async GUI smoke
+mode or split smoke contract is added.
+
 Avoid making the first version depend on heavyweight cross-platform GUI drivers.
 They are useful later for screenshots or accessibility assertions, but they can
 make release validation more fragile than the behavior being tested. If external
