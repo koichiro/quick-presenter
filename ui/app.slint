@@ -390,7 +390,6 @@ export component PresenterWindow inherits Window {
     callback toggle-slide-fullscreen();
     callback exit-slide-fullscreen();
     callback show-presenter-window();
-    callback hide-presenter-window();
     callback show-slide-window();
     callback hide-slide-window();
     callback bring-presenter-window-to-front();
@@ -526,13 +525,6 @@ export component PresenterWindow inherits Window {
                 title: "Show Presenter Window";
                 activated => {
                     root.show-presenter-window();
-                }
-            }
-
-            MenuItem {
-                title: "Hide Presenter Window";
-                activated => {
-                    root.hide-presenter-window();
                 }
             }
 

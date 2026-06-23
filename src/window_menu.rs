@@ -29,11 +29,6 @@ impl WindowMenuState {
     pub fn set_slide_visible(&mut self, visible: bool) {
         self.slide_visible = visible;
     }
-
-    pub fn close_presentation_session(&mut self) {
-        self.presenter_visible = false;
-        self.slide_visible = false;
-    }
 }
 
 #[cfg(test)]
@@ -65,16 +60,6 @@ mod tests {
         state.set_slide_visible(false);
 
         assert!(state.presenter_visible());
-        assert!(!state.slide_visible());
-    }
-
-    #[test]
-    fn closing_presentation_session_marks_both_windows_hidden() {
-        let mut state = WindowMenuState::default();
-
-        state.close_presentation_session();
-
-        assert!(!state.presenter_visible());
         assert!(!state.slide_visible());
     }
 }

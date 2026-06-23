@@ -74,8 +74,8 @@ use view_sync::{
 };
 use view_sync::{black_slide_image, presenter_status_text};
 use window_controller::{
-    apply_macos_slide_window_chrome, fitted_slide_window_size, hide_presenter_window,
-    hide_slide_window, set_slide_fullscreen, show_presenter_window, show_slide_window,
+    apply_macos_slide_window_chrome, fitted_slide_window_size, hide_slide_window,
+    set_slide_fullscreen, show_presenter_window, show_slide_window,
     slide_titlebar_compensation_height, start_slide_chrome_sync, sync_slide_chrome, AppWindowRefs,
     AppWindows,
 };
@@ -291,7 +291,7 @@ struct CommittedPdfSession {
 fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<AppState>>) {
     let app = &windows.presenter;
 
-    wire_presenter_close_request(windows, refs.clone(), state.clone());
+    wire_presenter_close_request(windows);
 
     let window_refs = refs.clone();
     let state_for_open = state.clone();
@@ -497,29 +497,17 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     });
 }
 
-fn wire_presenter_close_request(
-    windows: &AppWindows,
-    refs: AppWindowRefs,
-    state: Rc<RefCell<AppState>>,
-) {
-    windows.presenter.window().on_close_requested(move || {
-        close_presentation_session_from_presenter(&refs, &state);
-        CloseRequestResponse::HideWindow
-    });
-}
-
-fn close_presentation_session_from_presenter(
-    windows: &AppWindowRefs,
-    state: &Rc<RefCell<AppState>>,
-) {
-    {
-        let mut state = state.borrow_mut();
-        state.window_menu.close_presentation_session();
-        state.fullscreen.exit_slide_fullscreen();
-    }
-
-    set_slide_fullscreen(windows, false);
-    hide_slide_window(windows);
+fn wire_presenter_close_request(windows: &AppWindows) {
+    windows
+        .presenter
+        .window()
+        .on_close_requested(move || match slint::quit_event_loop() {
+            Ok(()) => CloseRequestResponse::KeepWindowShown,
+            Err(err) => {
+                warn!(error = ?err, "failed to quit event loop from presenter close request");
+                CloseRequestResponse::KeepWindowShown
+            }
+        });
 }
 
 fn apply_app_metadata(app: &PresenterWindow) {
@@ -546,18 +534,6 @@ fn wire_window_menu_callbacks(
             state_for_presenter_toggle.clone(),
             |windows, state| {
                 show_presenter_window_from_menu(&windows, &state);
-            },
-        );
-    });
-
-    let window_refs = refs.clone();
-    let state_for_slide_toggle = state.clone();
-    presenter.on_hide_presenter_window(move || {
-        schedule_window_menu_action(
-            window_refs.clone(),
-            state_for_slide_toggle.clone(),
-            |windows, state| {
-                hide_presenter_window_from_menu(&windows, &state);
             },
         );
     });
@@ -675,23 +651,6 @@ fn handle_presentation_command(
 fn show_presenter_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
     state.borrow_mut().window_menu.set_presenter_visible(true);
     show_presenter_window(windows);
-}
-
-fn hide_presenter_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
-    let show_slide_first = {
-        let mut state = state.borrow_mut();
-        let show_slide_first = !state.window_menu.slide_visible();
-        if show_slide_first {
-            state.window_menu.set_slide_visible(true);
-        }
-        state.window_menu.set_presenter_visible(false);
-        show_slide_first
-    };
-
-    if show_slide_first {
-        show_slide_window(windows);
-    }
-    hide_presenter_window(windows);
 }
 
 fn show_slide_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
