@@ -786,14 +786,14 @@ jobs:
 
       - name: Upload GUI smoke reports
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact-name }}-gui-smoke
           path: artifacts/${{ matrix.artifact-name }}/gui-smoke
           if-no-files-found: ignore
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact-name }}
           path: artifacts/${{ matrix.artifact-name }}
