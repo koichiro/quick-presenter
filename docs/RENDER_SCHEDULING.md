@@ -97,3 +97,8 @@ protected events are worker failures, then open results, speaker-note results,
 current-slide results, next-preview results, and thumbnails. Thumbnail events are
 the easiest to regenerate; worker failure and open results are needed to keep the
 presenter state understandable.
+
+## Cache budgets
+
+Render cache size limits, representative fixed-width memory estimates, and the
+v1.0.0 budget decision are documented in [Render Cache Budgets](CACHE_BUDGETS.md).
