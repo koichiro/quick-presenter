@@ -35,10 +35,67 @@ Do not publish the release until:
 - This GUI smoke checklist passes on macOS, Windows, and Ubuntu Linux desktop
   sessions, or every failing item is documented in the release notes as a known
   release blocker or limitation.
+- Manual GUI smoke reports for macOS, Windows, and Ubuntu Linux are attached to
+  the GitHub release, or each missing platform report has an explicit waiver in
+  the release notes.
 
 Record the successful `Build Binaries` workflow run URL, tested artifact name,
 app version, operating system version, display setup, and test PDF for each
 platform.
+
+## Manual Report Artifacts
+
+Store completed manual GUI smoke reports with the GitHub release that contains
+the tested binaries. Use one Markdown report per platform:
+
+- `quick-presenter-<version>-macos-manual-gui-smoke.md`
+- `quick-presenter-<version>-windows-x64-manual-gui-smoke.md`
+- `quick-presenter-<version>-ubuntu-x64-manual-gui-smoke.md`
+
+The CI-generated `quick-presenter-ubuntu-x64-gui-smoke` report and the
+macOS/Windows skip-reason reports remain useful release evidence, but they do
+not replace the manual desktop-session reports. If a platform cannot be tested
+for a release, record the waiver in the release notes with the reason, impact,
+and follow-up issue.
+
+Each manual report must identify the exact tested artifact. Include the
+following fields before the checklist results:
+
+```markdown
+# Quick Presenter Manual GUI Smoke Report
+
+- Release: v1.0.0
+- Platform: macOS | Windows x64 | Ubuntu x64
+- Result: pass | fail | waived
+- Tester:
+- Test date:
+- Build Binaries run:
+- Artifact archive:
+- Tested package file:
+- Tested package SHA-256:
+- Source commit or tag:
+- App version:
+- Signing/notarization state:
+- Operating system version:
+- Desktop environment/display server:
+- Display setup:
+- Test PDF:
+- Semi-automated GUI smoke report:
+
+## Checklist Results
+
+- Shared checks:
+- Focus and window recovery checks:
+- Platform-specific checks:
+
+## Failures, Waivers, and Notes
+
+```
+
+Use `shasum -a 256 <file>` on macOS or Linux, or
+`Get-FileHash -Algorithm SHA256 <file>` on Windows, to record the tested package
+hash. The hash should be for the final package file that a user installs or
+opens, such as the DMG, MSI, or Debian package.
 
 ## Semi-Automated Path
 
