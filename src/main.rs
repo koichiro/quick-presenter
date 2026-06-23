@@ -72,7 +72,7 @@ use view_sync::{
     apply_opening_state_to_windows, apply_snapshot_to_windows, set_presenter_message,
     thumbnail_current_row_index, thumbnail_model,
 };
-use view_sync::{black_slide_image, estimated_notes_viewport_height, presenter_status_text};
+use view_sync::{black_slide_image, presenter_status_text};
 use window_controller::{
     apply_macos_slide_window_chrome, fitted_slide_window_size, hide_slide_window,
     set_slide_fullscreen, show_presenter_window, show_slide_window,
@@ -1103,7 +1103,6 @@ fn apply_rendered_pages_to_windows(
         let current_note = state.notes.note_for_page_index(snapshot.current_index);
         presenter.set_has_notes(current_note.is_some());
         presenter.set_notes_text(current_note.unwrap_or_default().into());
-        presenter.set_notes_viewport_height(estimated_notes_viewport_height(current_note));
     }
 
     if let Some(slide) = windows.slide.upgrade() {
