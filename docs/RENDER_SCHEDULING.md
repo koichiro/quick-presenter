@@ -50,11 +50,14 @@ Control commands are not part of the bounded render-work capacity:
 - After `Shutdown` is queued, later commands are ignored except another
   `Shutdown`.
 - `Open` clears pending work and replaces pending non-shutdown control commands.
-- `Close` clears pending work for the matching session and is delivered before
-  render work.
 
-The worker repeats the same session cleanup for `Open`, `Close`, and `Shutdown`
-because commands may already have crossed the mailbox boundary.
+There is no standalone close command in the supported scheduler contract. The
+app replaces decks with `Open` and stops the worker with `Shutdown`; a future
+user-facing "Close PDF" action should define app-state cleanup before adding a
+new scheduler command.
+
+The worker repeats the same session cleanup for `Open` and `Shutdown` because
+commands may already have crossed the mailbox boundary.
 
 ## Render events
 
