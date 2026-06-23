@@ -750,17 +750,24 @@ fn begin_open_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, path: 
         .unwrap_or("PDF")
         .to_owned();
 
-    let session_id = {
+    let had_open_deck = {
         let mut state = state.borrow_mut();
+        let had_open_deck = state.presentation.snapshot().is_some();
         let session_id = begin_open_pdf_state(&mut state, path.clone());
         if let Some(scheduler) = state.render_scheduler.as_ref() {
             scheduler.open(session_id, path);
         }
-        session_id
+        had_open_deck
     };
 
-    let _ = session_id;
-    apply_opening_state_to_windows(windows, &title);
+    if had_open_deck {
+        set_presenter_message(
+            &windows.presenter,
+            PresenterMessage::new("Opening PDF...", errors::MessageSeverity::Info),
+        );
+    } else {
+        apply_opening_state_to_windows(windows, &title);
+    }
 }
 
 #[allow(dead_code)]
