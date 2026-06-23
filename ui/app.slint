@@ -51,7 +51,7 @@ component NotesView inherits Rectangle {
         height: parent.height - 20px;
         viewport-width: self.visible-width;
         viewport-height: max(self.visible-height, root.notes-viewport-height * 1px);
-        vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+        vertical-scrollbar-policy: root.has-notes ? ScrollBarPolicy.always-on : ScrollBarPolicy.as-needed;
 
         notes-input := TextInput {
             text: root.has-notes ? root.notes-text : "No notes";

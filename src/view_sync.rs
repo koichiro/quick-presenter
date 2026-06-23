@@ -120,15 +120,15 @@ pub fn estimated_notes_viewport_height(note: Option<&str>) -> f32 {
         return 0.0;
     }
 
-    const CHARS_PER_LINE: usize = 86;
-    const LINE_HEIGHT: f32 = 16.0;
-    const MIN_HEIGHT: f32 = 24.0;
+    const CHARS_PER_LINE: usize = 96;
+    const LINE_HEIGHT: f32 = 13.5;
+    const MIN_HEIGHT: f32 = 20.0;
 
     let line_count: usize = note
         .lines()
         .map(|line| {
             let width_units = line.chars().map(display_width_units).sum::<usize>();
-            (width_units / CHARS_PER_LINE).max(1) + usize::from(width_units % CHARS_PER_LINE != 0)
+            (width_units.max(1) + CHARS_PER_LINE - 1) / CHARS_PER_LINE
         })
         .sum();
 
@@ -318,7 +318,7 @@ mod tests {
         let short = estimated_notes_viewport_height(Some("Short note"));
         let long = estimated_notes_viewport_height(Some(&"Long note. ".repeat(80)));
 
-        assert!(short >= 24.0);
+        assert!(short >= 20.0);
         assert!(long > short);
         assert!(long < 3000.0);
     }
