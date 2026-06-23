@@ -565,7 +565,7 @@ It uses:
 
 ```ini
 Name=Quick Presenter
-Exec=quick-presenter %f
+Exec=quick-presenter --pdf %f
 Icon=quick-presenter
 ```
 
