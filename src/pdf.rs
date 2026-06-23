@@ -554,6 +554,28 @@ mod tests {
         assert!(japanese_note.contains("UI"));
     }
 
+    #[test]
+    fn pdf_document_state_extracts_long_speaker_notes_fixture() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+
+        if !local_pdfium_available() {
+            return;
+        }
+
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/long-speaker-notes.pdf");
+        let document = PdfDocumentState::open(path).expect("long-note fixture PDF should open");
+        let notes = document
+            .speaker_notes()
+            .expect("long-note fixture speaker notes should be readable");
+        let note = notes
+            .note_for_page_number(1)
+            .expect("first page should have long speaker notes");
+
+        assert!(note.contains("deliberately long speaker note"));
+        assert!(note.contains("End of the long speaker note."));
+    }
+
     fn pdfium_test_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
