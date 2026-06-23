@@ -20,10 +20,10 @@ const PDF_HEADER: &[u8; 5] = b"%PDF-";
 
 /// Refuse unusually large inputs before handing them to native PDF parsing.
 ///
-/// The limit is intentionally conservative for v1.0.0: large enough for normal
-/// slide decks, small enough to avoid accidental multi-GB files or other inputs
-/// that should be handled by a future isolated PDFium process.
-const MAX_PREFLIGHT_PDF_BYTES: u64 = 512 * 1024 * 1024;
+/// The limit is intentionally conservative for v1.0.0: large enough for
+/// image-heavy slide decks, small enough to avoid accidental multi-GB files or
+/// other inputs that should be handled by a future isolated PDFium process.
+const MAX_PREFLIGHT_PDF_BYTES: u64 = 1024 * 1024 * 1024;
 
 /// Worker-local PDF document state.
 ///
@@ -208,8 +208,8 @@ fn preflight_pdf_input(path: &Path) -> Result<()> {
 
     if size > MAX_PREFLIGHT_PDF_BYTES {
         bail!(
-            "file is larger than the supported {} MiB PDF input limit",
-            MAX_PREFLIGHT_PDF_BYTES / 1024 / 1024
+            "file is larger than the supported {} GiB PDF input limit",
+            MAX_PREFLIGHT_PDF_BYTES / 1024 / 1024 / 1024
         );
     }
 
@@ -379,6 +379,7 @@ mod tests {
     use super::*;
     use std::{
         fs,
+        io::Write,
         sync::{Mutex, OnceLock},
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -532,11 +533,29 @@ mod tests {
     }
 
     #[test]
+    fn preflight_accepts_file_at_size_limit() {
+        let path = temp_test_path("size-limit.pdf");
+        let mut file = fs::File::create(&path).expect("test file should be creatable");
+        file.write_all(PDF_HEADER)
+            .expect("test file header should be writable");
+        file.set_len(MAX_PREFLIGHT_PDF_BYTES)
+            .expect("test file should be sizable");
+        drop(file);
+
+        preflight_pdf_input(&path).expect("size limit should pass preflight");
+
+        fs::remove_file(path).expect("test file should be removable");
+    }
+
+    #[test]
     fn preflight_rejects_oversized_files() {
         let path = temp_test_path("oversized.pdf");
-        let file = fs::File::create(&path).expect("test file should be creatable");
+        let mut file = fs::File::create(&path).expect("test file should be creatable");
+        file.write_all(PDF_HEADER)
+            .expect("test file header should be writable");
         file.set_len(MAX_PREFLIGHT_PDF_BYTES + 1)
             .expect("test file should be sizable");
+        drop(file);
 
         let error = preflight_pdf_input(&path).unwrap_err();
 
