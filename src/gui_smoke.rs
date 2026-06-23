@@ -1,4 +1,11 @@
-use std::{cell::RefCell, fs, path::Path, rc::Rc};
+use std::{
+    cell::RefCell,
+    fs,
+    path::Path,
+    rc::Rc,
+    thread,
+    time::{Duration, Instant},
+};
 
 use anyhow::{bail, Context, Result};
 use slint::ComponentHandle;
@@ -11,6 +18,9 @@ use crate::{
     rendering::{RenderPurpose, RenderRequest},
     window_controller::{set_slide_fullscreen, AppWindows},
 };
+
+const ASYNC_OPEN_TIMEOUT: Duration = Duration::from_secs(10);
+const ASYNC_OPEN_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 pub fn run(options: GuiSmokeOptions) -> Result<()> {
     let mut report = GuiSmokeReport::new(options.pdf_path.display().to_string());
@@ -79,10 +89,11 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         "slide window weak handle could not be upgraded",
     );
 
-    crate::open_and_render(&window_refs, &state, options.pdf_path.clone())
-        .context("failed to open and render PDF in Slint windows")?;
+    crate::begin_open_pdf(&window_refs, &state, options.pdf_path.clone());
+    wait_for_async_open(&window_refs, &state)
+        .context("failed to open and render PDF through async render scheduler")?;
 
-    report.pass("opened and rendered PDF in Slint windows");
+    report.pass("opened and rendered PDF through async render scheduler");
     report_state(
         report,
         &state,
@@ -257,6 +268,51 @@ fn current_page_index(state: &AppState) -> Option<u32> {
         .map(|snapshot| snapshot.current_index)
 }
 
+fn wait_for_async_open(
+    windows: &crate::window_controller::AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+) -> Result<()> {
+    let started = Instant::now();
+    let mut speaker_notes_loaded = false;
+    while started.elapsed() < ASYNC_OPEN_TIMEOUT {
+        let drain = crate::drain_render_events(windows, state);
+        speaker_notes_loaded |= drain.speaker_notes_loaded;
+        if drain.open_failed {
+            bail!("async render scheduler failed to open PDF");
+        }
+        if drain.page_failed {
+            bail!("async render scheduler failed to render a page");
+        }
+        if drain.worker_failed {
+            bail!("async render worker failed during GUI smoke");
+        }
+        if async_open_is_ready(&state.borrow(), speaker_notes_loaded) {
+            return Ok(());
+        }
+        thread::sleep(ASYNC_OPEN_POLL_INTERVAL);
+    }
+
+    bail!("timed out waiting for async render scheduler to open, render, and load speaker notes")
+}
+
+fn async_open_is_ready(state: &AppState, speaker_notes_loaded: bool) -> bool {
+    let Some(snapshot) = state.presentation.snapshot() else {
+        return false;
+    };
+
+    let current_slide_cached = state
+        .render_cache
+        .peek(RenderRequest {
+            page_index: snapshot.current_index,
+            width: CURRENT_RENDER_WIDTH,
+            purpose: RenderPurpose::CurrentSlide,
+        })
+        .is_some();
+    let next_preview_known = snapshot.total_pages == 1 || snapshot.next_index.is_some();
+
+    current_slide_cached && next_preview_known && speaker_notes_loaded
+}
+
 fn write_report(path: &Path, output: &str) -> Result<()> {
     if let Some(parent) = path
         .parent()
@@ -352,6 +408,17 @@ struct GuiSmokeCheck {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{presentation::PresentationState, rendering::RenderedPage};
+    use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
+
+    fn cached_page() -> RenderedPage {
+        let pixels = SharedPixelBuffer::<Rgba8Pixel>::new(1, 1);
+        RenderedPage {
+            image: Image::from_rgba8(pixels),
+            aspect_ratio: 1.0,
+            estimated_bytes: 4,
+        }
+    }
 
     #[test]
     fn report_counts_passed_and_failed_checks() {
@@ -366,5 +433,48 @@ mod tests {
         assert!(rendered.contains("Quick Presenter GUI Smoke Report"));
         assert!(rendered.contains("PASS: created windows"));
         assert!(rendered.contains("FAIL: opened PDF"));
+    }
+
+    #[test]
+    fn async_open_ready_requires_presentation_current_render_and_notes_status() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 2),
+            status_text: "Ready".to_owned(),
+            ..AppState::default()
+        };
+
+        assert!(!async_open_is_ready(&state, false));
+
+        state.render_cache.insert(
+            RenderRequest {
+                page_index: 0,
+                width: CURRENT_RENDER_WIDTH,
+                purpose: RenderPurpose::CurrentSlide,
+            },
+            cached_page(),
+        );
+
+        assert!(!async_open_is_ready(&state, false));
+        assert!(async_open_is_ready(&state, true));
+    }
+
+    #[test]
+    fn async_open_ready_accepts_speaker_notes_warning_status() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 1),
+            status_text: "Could not read speaker notes".to_owned(),
+            ..AppState::default()
+        };
+
+        state.render_cache.insert(
+            RenderRequest {
+                page_index: 0,
+                width: CURRENT_RENDER_WIDTH,
+                purpose: RenderPurpose::CurrentSlide,
+            },
+            cached_page(),
+        );
+
+        assert!(async_open_is_ready(&state, true));
     }
 }
