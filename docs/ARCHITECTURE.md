@@ -42,6 +42,9 @@ thumbnail, and preload requests to that worker and receives metadata, rendered
 pixels, and presenter-facing errors through render events. UI-thread state should
 not hold PDFium-owning types in the production path.
 
+Render command backlog, worker queue, and render event drop behavior are defined
+in [Render Scheduling](RENDER_SCHEDULING.md).
+
 Test and GUI smoke helpers may open a temporary synchronous PDF session, but that
 session is kept outside `AppState` so production state still reflects the
 worker-local ownership model.

@@ -88,6 +88,90 @@ pub enum RenderEvent {
     },
 }
 
+#[derive(Debug)]
+struct RenderSchedulingPolicy;
+
+impl RenderSchedulingPolicy {
+    fn accepts_command_after_shutdown(command: &RenderCommand) -> bool {
+        matches!(command, RenderCommand::Shutdown)
+    }
+
+    fn command_pop_index(controls: &VecDeque<RenderCommand>) -> Option<usize> {
+        controls
+            .iter()
+            .position(|command| matches!(command, RenderCommand::Shutdown))
+            .or_else(|| {
+                controls
+                    .iter()
+                    .position(|command| matches!(command, RenderCommand::Open { .. }))
+            })
+            .or_else(|| (!controls.is_empty()).then_some(0))
+    }
+
+    fn open_retains_control(command: &RenderCommand) -> bool {
+        matches!(command, RenderCommand::Shutdown)
+    }
+
+    fn work_priority_for_key(key: QueueKey, requested: RenderPriority) -> RenderPriority {
+        match key {
+            QueueKey::Page { .. } => requested,
+            QueueKey::SpeakerNotes { .. } => Self::speaker_notes_priority(),
+        }
+    }
+
+    fn speaker_notes_priority() -> RenderPriority {
+        RenderPriority::Background
+    }
+
+    fn work_pop_key(priority: RenderPriority, sequence: u64) -> (RenderPriority, u64) {
+        (priority, u64::MAX.saturating_sub(sequence))
+    }
+
+    fn work_drop_key(priority: RenderPriority, sequence: u64) -> (RenderPriority, u64) {
+        (priority, sequence)
+    }
+
+    fn event_key(event: &RenderEvent) -> Option<RenderEventKey> {
+        match event {
+            RenderEvent::Opened { session_id, .. } | RenderEvent::OpenFailed { session_id, .. } => {
+                Some(RenderEventKey::Open(*session_id))
+            }
+            RenderEvent::SpeakerNotesLoaded { session_id, .. } => {
+                Some(RenderEventKey::SpeakerNotes(*session_id))
+            }
+            RenderEvent::PageRendered {
+                session_id,
+                request,
+                ..
+            }
+            | RenderEvent::PageFailed {
+                session_id,
+                request,
+                ..
+            } => Some(RenderEventKey::Page {
+                session_id: *session_id,
+                request: *request,
+            }),
+            RenderEvent::WorkerFailed { .. } => None,
+        }
+    }
+
+    fn event_drop_score(event: &RenderEvent) -> u8 {
+        match event {
+            RenderEvent::PageRendered { request, .. } | RenderEvent::PageFailed { request, .. } => {
+                match request.purpose {
+                    RenderPurpose::Thumbnail => 5,
+                    RenderPurpose::NextPreview => 4,
+                    RenderPurpose::CurrentSlide => 3,
+                }
+            }
+            RenderEvent::SpeakerNotesLoaded { .. } => 2,
+            RenderEvent::Opened { .. } | RenderEvent::OpenFailed { .. } => 1,
+            RenderEvent::WorkerFailed { .. } => 0,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct RenderSessionTracker {
     next_session: u64,
@@ -210,7 +294,7 @@ impl RenderQueue {
         self.items.push(QueuedWork {
             key,
             job_id,
-            priority,
+            priority: RenderSchedulingPolicy::work_priority_for_key(key, priority),
             sequence: self.next_sequence,
         });
 
@@ -231,7 +315,7 @@ impl RenderQueue {
         self.items.push(QueuedWork {
             key,
             job_id,
-            priority: RenderPriority::Background,
+            priority: RenderSchedulingPolicy::speaker_notes_priority(),
             sequence: self.next_sequence,
         });
 
@@ -271,7 +355,9 @@ impl RenderQueue {
         self.items
             .iter()
             .enumerate()
-            .max_by_key(|(_, item)| (item.priority, u64::MAX.saturating_sub(item.sequence)))
+            .max_by_key(|(_, item)| {
+                RenderSchedulingPolicy::work_pop_key(item.priority, item.sequence)
+            })
             .map(|(index, _)| index)
     }
 }
@@ -323,7 +409,8 @@ impl PendingRenderCommands {
     }
 
     fn push(&mut self, command: RenderCommand) {
-        if self.has_shutdown() && !matches!(command, RenderCommand::Shutdown) {
+        if self.has_shutdown() && !RenderSchedulingPolicy::accepts_command_after_shutdown(&command)
+        {
             return;
         }
 
@@ -331,7 +418,7 @@ impl PendingRenderCommands {
             RenderCommand::Open { session_id, path } => {
                 self.clear_work();
                 self.controls
-                    .retain(|command| matches!(command, RenderCommand::Shutdown));
+                    .retain(RenderSchedulingPolicy::open_retains_control);
                 self.controls
                     .push_back(RenderCommand::Open { session_id, path });
             }
@@ -351,7 +438,7 @@ impl PendingRenderCommands {
             RenderCommand::ExtractSpeakerNotes { session_id } => {
                 self.push_work(
                     QueueKey::SpeakerNotes { session_id },
-                    RenderPriority::Background,
+                    RenderSchedulingPolicy::speaker_notes_priority(),
                 );
             }
             RenderCommand::Close { session_id } => {
@@ -367,24 +454,8 @@ impl PendingRenderCommands {
     }
 
     fn pop(&mut self) -> Option<RenderCommand> {
-        if let Some(index) = self
-            .controls
-            .iter()
-            .position(|command| matches!(command, RenderCommand::Shutdown))
-        {
+        if let Some(index) = RenderSchedulingPolicy::command_pop_index(&self.controls) {
             return self.controls.remove(index);
-        }
-
-        if let Some(index) = self
-            .controls
-            .iter()
-            .position(|command| matches!(command, RenderCommand::Open { .. }))
-        {
-            return self.controls.remove(index);
-        }
-
-        if let Some(command) = self.controls.pop_front() {
-            return Some(command);
         }
 
         let index = self.next_work_index()?;
@@ -403,7 +474,7 @@ impl PendingRenderCommands {
         self.work_keys.insert(key);
         self.works.push(PendingWorkCommand {
             key,
-            priority,
+            priority: RenderSchedulingPolicy::work_priority_for_key(key, priority),
             sequence: self.next_sequence,
         });
         self.enforce_work_capacity();
@@ -451,7 +522,9 @@ impl PendingRenderCommands {
         self.works
             .iter()
             .enumerate()
-            .max_by_key(|(_, work)| (work.priority, u64::MAX.saturating_sub(work.sequence)))
+            .max_by_key(|(_, work)| {
+                RenderSchedulingPolicy::work_pop_key(work.priority, work.sequence)
+            })
             .map(|(index, _)| index)
     }
 
@@ -459,7 +532,9 @@ impl PendingRenderCommands {
         self.works
             .iter()
             .enumerate()
-            .min_by_key(|(_, work)| (work.priority, work.sequence))
+            .min_by_key(|(_, work)| {
+                RenderSchedulingPolicy::work_drop_key(work.priority, work.sequence)
+            })
             .map(|(index, _)| index)
     }
 
@@ -561,11 +636,11 @@ impl PendingRenderEvents {
             return;
         }
 
-        if let Some(key) = render_event_key(&event) {
+        if let Some(key) = RenderSchedulingPolicy::event_key(&event) {
             if let Some(existing) = self
                 .events
                 .iter()
-                .position(|queued| render_event_key(queued) == Some(key))
+                .position(|queued| RenderSchedulingPolicy::event_key(queued) == Some(key))
             {
                 self.events[existing] = event;
                 return;
@@ -584,13 +659,13 @@ impl PendingRenderEvents {
     }
 
     fn make_room_for(&mut self, event: &RenderEvent) -> bool {
-        let incoming = event_drop_score(event);
+        let incoming = RenderSchedulingPolicy::event_drop_score(event);
         let Some((index, score)) = self
             .events
             .iter()
             .enumerate()
-            .max_by_key(|(_, event)| event_drop_score(event))
-            .map(|(index, event)| (index, event_drop_score(event)))
+            .max_by_key(|(_, event)| RenderSchedulingPolicy::event_drop_score(event))
+            .map(|(index, event)| (index, RenderSchedulingPolicy::event_drop_score(event)))
         else {
             return true;
         };
@@ -628,46 +703,6 @@ impl RenderEventMailbox {
             .lock()
             .expect("render event mailbox poisoned")
             .drain()
-    }
-}
-
-fn render_event_key(event: &RenderEvent) -> Option<RenderEventKey> {
-    match event {
-        RenderEvent::Opened { session_id, .. } | RenderEvent::OpenFailed { session_id, .. } => {
-            Some(RenderEventKey::Open(*session_id))
-        }
-        RenderEvent::SpeakerNotesLoaded { session_id, .. } => {
-            Some(RenderEventKey::SpeakerNotes(*session_id))
-        }
-        RenderEvent::PageRendered {
-            session_id,
-            request,
-            ..
-        }
-        | RenderEvent::PageFailed {
-            session_id,
-            request,
-            ..
-        } => Some(RenderEventKey::Page {
-            session_id: *session_id,
-            request: *request,
-        }),
-        RenderEvent::WorkerFailed { .. } => None,
-    }
-}
-
-fn event_drop_score(event: &RenderEvent) -> u8 {
-    match event {
-        RenderEvent::PageRendered { request, .. } | RenderEvent::PageFailed { request, .. } => {
-            match request.purpose {
-                RenderPurpose::Thumbnail => 5,
-                RenderPurpose::NextPreview => 4,
-                RenderPurpose::CurrentSlide => 3,
-            }
-        }
-        RenderEvent::SpeakerNotesLoaded { .. } => 2,
-        RenderEvent::Opened { .. } | RenderEvent::OpenFailed { .. } => 1,
-        RenderEvent::WorkerFailed { .. } => 0,
     }
 }
 
@@ -1355,6 +1390,13 @@ mod tests {
         }
     }
 
+    fn pop_speaker_notes_command(command: RenderCommand) -> RenderSessionId {
+        match command {
+            RenderCommand::ExtractSpeakerNotes { session_id } => session_id,
+            other => panic!("expected speaker notes command, got {other:?}"),
+        }
+    }
+
     fn drain_single_event(event_mailbox: &RenderEventMailbox) -> RenderEvent {
         let events = event_mailbox.drain();
         assert_eq!(events.len(), 1);
@@ -1547,6 +1589,42 @@ mod tests {
     }
 
     #[test]
+    fn command_mailbox_uses_worker_queue_work_order_policy() {
+        let session = RenderSessionId(1);
+        let thumbnail = request(2, RenderPurpose::Thumbnail);
+        let current = request(1, RenderPurpose::CurrentSlide);
+        let preview = request(3, RenderPurpose::NextPreview);
+        let mut pending = PendingRenderCommands::new(8);
+        let mut queue = RenderQueue::default();
+
+        for (request, priority) in [
+            (thumbnail, RenderPriority::Background),
+            (current, RenderPriority::BlockingVisible),
+            (preview, RenderPriority::VisibleAux),
+        ] {
+            pending.push(RenderCommand::RenderPage {
+                session_id: session,
+                request,
+                priority,
+            });
+            queue.push(session, request, priority);
+        }
+        pending.push(RenderCommand::ExtractSpeakerNotes {
+            session_id: session,
+        });
+        queue.push_speaker_notes(session);
+
+        assert_eq!(pop_page_command(pending.pop().unwrap()).1, current);
+        assert_eq!(queue.pop().unwrap().2, RenderWork::Page(current));
+        assert_eq!(pop_page_command(pending.pop().unwrap()).1, preview);
+        assert_eq!(queue.pop().unwrap().2, RenderWork::Page(preview));
+        assert_eq!(pop_page_command(pending.pop().unwrap()).1, thumbnail);
+        assert_eq!(queue.pop().unwrap().2, RenderWork::Page(thumbnail));
+        assert_eq!(pop_speaker_notes_command(pending.pop().unwrap()), session);
+        assert_eq!(queue.pop().unwrap().2, RenderWork::SpeakerNotes);
+    }
+
+    #[test]
     fn command_mailbox_drops_low_priority_work_when_capacity_is_reached() {
         let session = RenderSessionId(1);
         let mut pending = PendingRenderCommands::new(2);
@@ -1582,6 +1660,40 @@ mod tests {
     }
 
     #[test]
+    fn command_mailbox_drops_oldest_equal_priority_work_when_capacity_is_reached() {
+        let session = RenderSessionId(1);
+        let mut pending = PendingRenderCommands::new(2);
+        let first_thumbnail = request(1, RenderPurpose::Thumbnail);
+        let second_thumbnail = request(2, RenderPurpose::Thumbnail);
+        let warm = request(3, RenderPurpose::CurrentSlide);
+
+        pending.push(RenderCommand::RenderPage {
+            session_id: session,
+            request: first_thumbnail,
+            priority: RenderPriority::Background,
+        });
+        pending.push(RenderCommand::RenderPage {
+            session_id: session,
+            request: second_thumbnail,
+            priority: RenderPriority::Background,
+        });
+        pending.push(RenderCommand::RenderPage {
+            session_id: session,
+            request: warm,
+            priority: RenderPriority::Warm,
+        });
+
+        assert_eq!(pending.works.len(), 2);
+        assert!(!pending.work_keys.contains(&QueueKey::Page {
+            session_id: session,
+            request: first_thumbnail,
+        }));
+        assert_eq!(pop_page_command(pending.pop().unwrap()).1, warm);
+        assert_eq!(pop_page_command(pending.pop().unwrap()).1, second_thumbnail);
+        assert!(pending.is_empty());
+    }
+
+    #[test]
     fn command_mailbox_open_replaces_stale_pending_work() {
         let first_session = RenderSessionId(1);
         let second_session = RenderSessionId(2);
@@ -1605,6 +1717,64 @@ mod tests {
             }
             other => panic!("expected open command, got {other:?}"),
         }
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn command_mailbox_close_clears_matching_backlog_and_runs_before_work() {
+        let first_session = RenderSessionId(1);
+        let second_session = RenderSessionId(2);
+        let mut pending = PendingRenderCommands::new(8);
+        let first = request(1, RenderPurpose::CurrentSlide);
+        let second = request(2, RenderPurpose::CurrentSlide);
+
+        pending.push(RenderCommand::RenderPage {
+            session_id: first_session,
+            request: first,
+            priority: RenderPriority::BlockingVisible,
+        });
+        pending.push(RenderCommand::RenderPage {
+            session_id: second_session,
+            request: second,
+            priority: RenderPriority::BlockingVisible,
+        });
+        pending.push(RenderCommand::Close {
+            session_id: first_session,
+        });
+
+        match pending.pop().unwrap() {
+            RenderCommand::Close { session_id } => assert_eq!(session_id, first_session),
+            other => panic!("expected close command, got {other:?}"),
+        }
+        let (session_id, request, _) = pop_page_command(pending.pop().unwrap());
+        assert_eq!(session_id, second_session);
+        assert_eq!(request, second);
+        assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn command_mailbox_shutdown_clears_backlog_and_ignores_later_commands() {
+        let session = RenderSessionId(1);
+        let mut pending = PendingRenderCommands::new(8);
+
+        pending.push(RenderCommand::Open {
+            session_id: session,
+            path: PathBuf::from("deck.pdf"),
+        });
+        pending.push(RenderCommand::RenderPage {
+            session_id: session,
+            request: request(1, RenderPurpose::CurrentSlide),
+            priority: RenderPriority::BlockingVisible,
+        });
+        pending.push(RenderCommand::Shutdown);
+        pending.push(RenderCommand::Open {
+            session_id: RenderSessionId(2),
+            path: PathBuf::from("ignored.pdf"),
+        });
+
+        assert!(pending.works.is_empty());
+        assert_eq!(pending.controls.len(), 1);
+        assert!(matches!(pending.pop().unwrap(), RenderCommand::Shutdown));
         assert!(pending.is_empty());
     }
 
@@ -1637,6 +1807,68 @@ mod tests {
                 assert_eq!(message, "second");
             }
             other => panic!("expected page failed event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn event_mailbox_preserves_open_result_over_visible_event_when_full() {
+        let session = RenderSessionId(1);
+        let mut pending = PendingRenderEvents::new(1);
+
+        pending.push(RenderEvent::PageFailed {
+            session_id: session,
+            job_id: RenderJobId(1),
+            request: request(1, RenderPurpose::CurrentSlide),
+            message: "current".to_owned(),
+        });
+        pending.push(RenderEvent::OpenFailed {
+            session_id: session,
+            message: "open failed".to_owned(),
+        });
+
+        let events = pending.drain();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            RenderEvent::OpenFailed {
+                session_id: event_session,
+                message,
+            } => {
+                assert_eq!(*event_session, session);
+                assert_eq!(message, "open failed");
+            }
+            other => panic!("expected open failed event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn event_mailbox_preserves_speaker_notes_over_visible_event_when_full() {
+        let session = RenderSessionId(1);
+        let mut pending = PendingRenderEvents::new(1);
+
+        pending.push(RenderEvent::PageFailed {
+            session_id: session,
+            job_id: RenderJobId(1),
+            request: request(1, RenderPurpose::CurrentSlide),
+            message: "current".to_owned(),
+        });
+        pending.push(RenderEvent::SpeakerNotesLoaded {
+            session_id: session,
+            notes: SpeakerNotes::empty(),
+            status_text: "Ready".to_owned(),
+        });
+
+        let events = pending.drain();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            RenderEvent::SpeakerNotesLoaded {
+                session_id: event_session,
+                status_text,
+                ..
+            } => {
+                assert_eq!(*event_session, session);
+                assert_eq!(status_text, "Ready");
+            }
+            other => panic!("expected speaker notes loaded event, got {other:?}"),
         }
     }
 
