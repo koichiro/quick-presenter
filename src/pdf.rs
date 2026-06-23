@@ -1,4 +1,6 @@
 use std::{
+    fs,
+    io::Read,
     marker::PhantomData,
     path::{Path, PathBuf},
     rc::Rc,
@@ -14,6 +16,14 @@ use crate::notes::{is_pdf_speaker_note_annotation, SpeakerNotes};
 
 const PDFIUM_DYNAMIC_LIB_PATH_ENV: &str = "PDFIUM_DYNAMIC_LIB_PATH";
 const PDFIUM_OVERRIDE_GUARD_ENV: &str = "QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE";
+const PDF_HEADER: &[u8; 5] = b"%PDF-";
+
+/// Refuse unusually large inputs before handing them to native PDF parsing.
+///
+/// The limit is intentionally conservative for v1.0.0: large enough for
+/// image-heavy slide decks, small enough to avoid accidental multi-GB files or
+/// other inputs that should be handled by a future isolated PDFium process.
+const MAX_PREFLIGHT_PDF_BYTES: u64 = 1024 * 1024 * 1024;
 
 /// Worker-local PDF document state.
 ///
@@ -31,6 +41,9 @@ pub struct PdfDocumentState {
 
 impl PdfDocumentState {
     pub fn open(path: PathBuf) -> Result<Self> {
+        preflight_pdf_input(&path)
+            .with_context(|| format!("failed to open PDF: {}", path.display()))?;
+
         let pdfium = shared_pdfium()?;
         let document = pdfium
             .load_pdf_from_file(&path, None)
@@ -179,6 +192,37 @@ fn document_title(path: &Path) -> String {
         .and_then(|name| name.to_str())
         .unwrap_or("Untitled PDF")
         .to_owned()
+}
+
+fn preflight_pdf_input(path: &Path) -> Result<()> {
+    let metadata = fs::metadata(path).context("file does not exist or cannot be accessed")?;
+
+    if !metadata.is_file() {
+        bail!("path is not a regular file");
+    }
+
+    let size = metadata.len();
+    if size == 0 {
+        bail!("file is empty");
+    }
+
+    if size > MAX_PREFLIGHT_PDF_BYTES {
+        bail!(
+            "file is larger than the supported {} GiB PDF input limit",
+            MAX_PREFLIGHT_PDF_BYTES / 1024 / 1024 / 1024
+        );
+    }
+
+    let mut file = fs::File::open(path).context("file cannot be opened")?;
+    let mut header = [0; PDF_HEADER.len()];
+    file.read_exact(&mut header)
+        .context("file is too short to contain a PDF header")?;
+
+    if &header != PDF_HEADER {
+        bail!("file does not start with a PDF header");
+    }
+
+    Ok(())
 }
 
 fn create_pdfium() -> Result<Pdfium> {
@@ -335,6 +379,7 @@ mod tests {
     use super::*;
     use std::{
         fs,
+        io::Write,
         sync::{Mutex, OnceLock},
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -446,6 +491,96 @@ mod tests {
             PdfiumLoadPolicy::Packaged,
             Some("true")
         ));
+    }
+
+    #[test]
+    fn preflight_accepts_pdf_header() {
+        let path = write_temp_file("valid.pdf", b"%PDF-1.7\n");
+
+        preflight_pdf_input(&path).expect("PDF header should pass preflight");
+
+        fs::remove_file(path).expect("test PDF should be removable");
+    }
+
+    #[test]
+    fn preflight_rejects_missing_path() {
+        let path = temp_test_path("missing.pdf");
+
+        let error = preflight_pdf_input(&path).unwrap_err();
+
+        assert!(error.to_string().contains("file does not exist"));
+    }
+
+    #[test]
+    fn preflight_rejects_directories() {
+        let path = temp_test_path("directory");
+        fs::create_dir(&path).expect("test directory should be creatable");
+
+        let error = preflight_pdf_input(&path).unwrap_err();
+
+        assert!(error.to_string().contains("not a regular file"));
+        fs::remove_dir(path).expect("test directory should be removable");
+    }
+
+    #[test]
+    fn preflight_rejects_empty_files() {
+        let path = write_temp_file("empty.pdf", b"");
+
+        let error = preflight_pdf_input(&path).unwrap_err();
+
+        assert!(error.to_string().contains("file is empty"));
+        fs::remove_file(path).expect("test file should be removable");
+    }
+
+    #[test]
+    fn preflight_accepts_file_at_size_limit() {
+        let path = temp_test_path("size-limit.pdf");
+        let mut file = fs::File::create(&path).expect("test file should be creatable");
+        file.write_all(PDF_HEADER)
+            .expect("test file header should be writable");
+        file.set_len(MAX_PREFLIGHT_PDF_BYTES)
+            .expect("test file should be sizable");
+        drop(file);
+
+        preflight_pdf_input(&path).expect("size limit should pass preflight");
+
+        fs::remove_file(path).expect("test file should be removable");
+    }
+
+    #[test]
+    fn preflight_rejects_oversized_files() {
+        let path = temp_test_path("oversized.pdf");
+        let mut file = fs::File::create(&path).expect("test file should be creatable");
+        file.write_all(PDF_HEADER)
+            .expect("test file header should be writable");
+        file.set_len(MAX_PREFLIGHT_PDF_BYTES + 1)
+            .expect("test file should be sizable");
+        drop(file);
+
+        let error = preflight_pdf_input(&path).unwrap_err();
+
+        assert!(error.to_string().contains("larger than the supported"));
+        fs::remove_file(path).expect("test file should be removable");
+    }
+
+    #[test]
+    fn preflight_rejects_non_pdf_header() {
+        let path = write_temp_file("not-a-pdf.txt", b"hello");
+
+        let error = preflight_pdf_input(&path).unwrap_err();
+
+        assert!(error.to_string().contains("PDF header"));
+        fs::remove_file(path).expect("test file should be removable");
+    }
+
+    #[test]
+    fn preflight_rejects_short_non_empty_files() {
+        let path = write_temp_file("short.pdf", b"%PD");
+
+        let error = preflight_pdf_input(&path).unwrap_err();
+
+        assert!(error.to_string().contains("too short"));
+        fs::remove_file(path).expect("test file should be removable");
     }
 
     #[test]
@@ -591,15 +726,25 @@ mod tests {
     }
 
     fn write_test_pdf() -> PathBuf {
-        let id = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock should be after UNIX epoch")
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("quick-presenter-test-{id}.pdf"));
+        let path = temp_test_path("test.pdf");
 
         fs::write(&path, minimal_pdf()).expect("test PDF should be writable");
 
         path
+    }
+
+    fn write_temp_file(name: &str, contents: &[u8]) -> PathBuf {
+        let path = temp_test_path(name);
+        fs::write(&path, contents).expect("test file should be writable");
+        path
+    }
+
+    fn temp_test_path(name: &str) -> PathBuf {
+        let id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after UNIX epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("quick-presenter-{id}-{name}"))
     }
 
     fn minimal_pdf() -> Vec<u8> {
