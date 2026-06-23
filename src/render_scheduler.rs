@@ -827,6 +827,29 @@ impl RenderScheduler {
         self.event_mailbox.drain()
     }
 
+    #[cfg(test)]
+    pub(crate) fn without_worker_for_test() -> Self {
+        Self {
+            command_mailbox: Arc::new(RenderCommandMailbox::default()),
+            event_mailbox: Arc::new(RenderEventMailbox::default()),
+            cancellation: Arc::new(RenderCancellation::default()),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn drain_commands_for_test(&self) -> Vec<RenderCommand> {
+        let mut commands = Vec::new();
+        while let Some(command) = self.command_mailbox.try_recv() {
+            commands.push(command);
+        }
+        commands
+    }
+
+    #[cfg(test)]
+    fn send_event_for_test(&self, event: RenderEvent) {
+        self.event_mailbox.send(event);
+    }
+
     fn send(&self, command: RenderCommand) {
         self.command_mailbox.send(command);
     }
@@ -1674,6 +1697,29 @@ mod tests {
     }
 
     #[test]
+    fn command_mailbox_shutdown_after_backlog_discards_pending_work() {
+        let session = RenderSessionId(1);
+        let mut pending = PendingRenderCommands::new(8);
+
+        for page_index in 0..4 {
+            pending.push(RenderCommand::RenderPage {
+                session_id: session,
+                request: request(page_index, RenderPurpose::CurrentSlide),
+                priority: RenderPriority::Warm,
+            });
+        }
+        pending.push(RenderCommand::ExtractSpeakerNotes {
+            session_id: session,
+        });
+        pending.push(RenderCommand::Shutdown);
+
+        assert!(pending.works.is_empty());
+        assert_eq!(pending.controls.len(), 1);
+        assert!(matches!(pending.pop().unwrap(), RenderCommand::Shutdown));
+        assert!(pending.is_empty());
+    }
+
+    #[test]
     fn event_mailbox_coalesces_page_events_by_session_and_request() {
         let session = RenderSessionId(1);
         let current = request(1, RenderPurpose::CurrentSlide);
@@ -1826,6 +1872,133 @@ mod tests {
             }
             other => panic!("expected worker failed event, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn event_mailbox_drops_lower_value_incoming_event_when_full() {
+        let session = RenderSessionId(1);
+        let mut pending = PendingRenderEvents::new(1);
+
+        pending.push(RenderEvent::OpenFailed {
+            session_id: session,
+            message: "open failed".to_owned(),
+        });
+        pending.push(RenderEvent::PageFailed {
+            session_id: session,
+            job_id: RenderJobId(1),
+            request: request(1, RenderPurpose::Thumbnail),
+            message: "thumbnail failed".to_owned(),
+        });
+
+        let events = pending.drain();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            RenderEvent::OpenFailed { message, .. } => {
+                assert_eq!(message, "open failed");
+            }
+            other => panic!("expected open failed event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn event_mailbox_with_zero_capacity_drops_every_event() {
+        let session = RenderSessionId(1);
+        let mut pending = PendingRenderEvents::new(0);
+
+        pending.push(RenderEvent::WorkerFailed {
+            session_id: Some(session),
+            message: "worker failed".to_owned(),
+        });
+
+        assert!(pending.drain().is_empty());
+    }
+
+    #[test]
+    fn event_mailbox_drain_clears_events() {
+        let session = RenderSessionId(1);
+        let mailbox = RenderEventMailbox::default();
+
+        mailbox.send(RenderEvent::OpenFailed {
+            session_id: session,
+            message: "open failed".to_owned(),
+        });
+
+        assert_eq!(mailbox.drain().len(), 1);
+        assert!(mailbox.drain().is_empty());
+    }
+
+    #[test]
+    fn public_scheduler_methods_send_commands_without_worker() {
+        let session = RenderSessionId(1);
+        let scheduler = RenderScheduler::without_worker_for_test();
+        let current = request(1, RenderPurpose::CurrentSlide);
+
+        scheduler.open(session, PathBuf::from("deck.pdf"));
+        scheduler.render_page(session, current, RenderPriority::BlockingVisible);
+        scheduler.extract_speaker_notes(session);
+
+        let commands = scheduler.drain_commands_for_test();
+        assert_eq!(commands.len(), 3);
+        match &commands[0] {
+            RenderCommand::Open { session_id, path } => {
+                assert_eq!(*session_id, session);
+                assert_eq!(path, &PathBuf::from("deck.pdf"));
+            }
+            other => panic!("expected open command, got {other:?}"),
+        }
+        match &commands[1] {
+            RenderCommand::RenderPage {
+                session_id,
+                request,
+                priority,
+            } => {
+                assert_eq!(*session_id, session);
+                assert_eq!(*request, current);
+                assert_eq!(*priority, RenderPriority::BlockingVisible);
+            }
+            other => panic!("expected render page command, got {other:?}"),
+        }
+        assert!(matches!(
+            commands[2],
+            RenderCommand::ExtractSpeakerNotes { session_id } if session_id == session
+        ));
+    }
+
+    #[test]
+    fn public_scheduler_drain_events_clears_queued_events() {
+        let session = RenderSessionId(1);
+        let scheduler = RenderScheduler::without_worker_for_test();
+
+        scheduler.send_event_for_test(RenderEvent::OpenFailed {
+            session_id: session,
+            message: "open failed".to_owned(),
+        });
+
+        assert_eq!(scheduler.drain_events().len(), 1);
+        assert!(scheduler.drain_events().is_empty());
+    }
+
+    #[test]
+    fn dropping_scheduler_without_worker_sends_shutdown_and_cancels_session() {
+        let session = RenderSessionId(1);
+        let command_mailbox = Arc::new(RenderCommandMailbox::default());
+        let event_mailbox = Arc::new(RenderEventMailbox::default());
+        let cancellation = Arc::new(RenderCancellation::default());
+        cancellation.activate(session);
+
+        let scheduler = RenderScheduler {
+            command_mailbox: Arc::clone(&command_mailbox),
+            event_mailbox,
+            cancellation: Arc::clone(&cancellation),
+        };
+
+        drop(scheduler);
+
+        assert!(cancellation.is_cancelled(session));
+        assert!(matches!(
+            command_mailbox.try_recv(),
+            Some(RenderCommand::Shutdown)
+        ));
     }
 
     #[test]
