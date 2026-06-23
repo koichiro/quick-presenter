@@ -48,17 +48,8 @@ pub fn apply_session_command(
 }
 
 pub fn begin_open_pdf_state(state: &mut AppState, path: PathBuf) -> RenderSessionId {
-    let session_id = state.render_sessions.begin_session();
-    state.render_generation = state.render_generation.wrapping_add(1);
-    state.audience_slide.last_good_current = None;
-    state.audience_slide.failed_current_page = None;
+    let session_id = state.render_sessions.begin_open_session();
     state.pending_open_path = Some(path);
-    state.render_cache.clear();
-    state.thumbnails = ThumbnailState::default();
-    state.notes = SpeakerNotes::empty();
-    state.presentation = PresentationState::empty();
-    state.black_screen.set_active(false);
-    state.timer.reset();
     state.status_text = "Opening PDF...".to_owned();
     session_id
 }
@@ -70,7 +61,7 @@ pub fn commit_render_opened_state(
     page_count: u32,
     status_text: String,
 ) -> Option<OpenedSessionOutcome> {
-    if !state.render_sessions.accepts(session_id) {
+    if !state.render_sessions.commit_pending_open(session_id) {
         return None;
     }
 
@@ -78,6 +69,7 @@ pub fn commit_render_opened_state(
     state.audience_slide.last_good_current = None;
     state.audience_slide.failed_current_page = None;
     state.render_cache.clear();
+    state.notes = SpeakerNotes::empty();
     state.presentation = PresentationState::open_document(title, page_count);
     state.thumbnails = ThumbnailState {
         total_pages: page_count,
@@ -98,7 +90,7 @@ pub struct OpenedSessionOutcome {
 }
 
 pub fn commit_render_open_failed_state(state: &mut AppState, session_id: RenderSessionId) -> bool {
-    if !state.render_sessions.accepts(session_id) {
+    if !state.render_sessions.clear_pending_open(session_id) {
         return false;
     }
 
@@ -199,12 +191,22 @@ pub fn commit_render_worker_failed_state(
     state: &mut AppState,
     session_id: Option<RenderSessionId>,
 ) -> bool {
-    if !session_id.is_some_and(|session_id| state.render_sessions.accepts(session_id)) {
+    let Some(session_id) = session_id else {
+        return false;
+    };
+
+    let current_session_failed = state.render_sessions.accepts(session_id);
+    let pending_open_failed =
+        !current_session_failed && state.render_sessions.clear_pending_open(session_id);
+
+    if !current_session_failed && !pending_open_failed {
         return false;
     }
 
-    if let Some(snapshot) = state.presentation.snapshot() {
-        state.audience_slide.failed_current_page = Some(snapshot.current_index);
+    if current_session_failed {
+        if let Some(snapshot) = state.presentation.snapshot() {
+            state.audience_slide.failed_current_page = Some(snapshot.current_index);
+        }
     }
     state.status_text = "Rendering stopped. Reopen the PDF.".to_owned();
     state.pending_open_path = None;
@@ -257,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn begin_open_pdf_state_resets_current_session_metadata() {
+    fn begin_open_pdf_state_tracks_pending_open_without_clearing_current_deck() {
         let mut state = AppState {
             presentation: PresentationState::open_document("Existing deck", 3),
             status_text: "Ready".to_owned(),
@@ -266,13 +268,15 @@ mod tests {
         };
         state.presentation.next_page();
         state.black_screen.set_active(true);
+        let original_snapshot = state.presentation.snapshot();
 
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
 
-        assert_eq!(state.render_sessions.current_session(), Some(session_id));
-        assert_eq!(state.render_generation, 8);
-        assert_eq!(state.presentation.snapshot(), None);
-        assert!(!state.black_screen.is_active());
+        assert_eq!(state.render_sessions.current_session(), None);
+        assert!(state.render_sessions.accepts_pending_open(session_id));
+        assert_eq!(state.render_generation, 7);
+        assert_eq!(state.presentation.snapshot(), original_snapshot);
+        assert!(state.black_screen.is_active());
         assert_eq!(state.status_text, "Opening PDF...");
         assert_eq!(state.pending_open_path, Some(PathBuf::from("deck.pdf")));
     }
@@ -375,10 +379,8 @@ mod tests {
         );
 
         assert!(outcome.is_none());
-        assert_eq!(
-            state.render_sessions.current_session(),
-            Some(current_session)
-        );
+        assert_eq!(state.render_sessions.current_session(), None);
+        assert!(state.render_sessions.accepts_pending_open(current_session));
         assert_eq!(state.presentation.snapshot(), None);
         assert_eq!(state.pending_open_path, Some(PathBuf::from("new.pdf")));
     }
@@ -405,7 +407,8 @@ mod tests {
         assert_eq!(snapshot.page_label, "1 / 3");
         assert_eq!(state.thumbnails.total_pages, 3);
         assert_eq!(state.status_text, "Ready");
-        assert_eq!(state.notes.note_for_page_number(1), Some("stale"));
+        assert!(state.notes.is_empty());
+        assert_eq!(state.render_sessions.current_session(), Some(session_id));
         assert_eq!(outcome.loaded_path, Some(PathBuf::from("deck.pdf")));
         assert_eq!(state.pending_open_path, None);
     }
@@ -414,6 +417,13 @@ mod tests {
     fn speaker_notes_loaded_event_commits_for_current_session() {
         let mut state = AppState::default();
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            session_id,
+            "Deck".to_owned(),
+            2,
+            "Ready".to_owned(),
+        );
         let notes = SpeakerNotes::from_page_notes([(2, "Presenter note".to_owned())]);
 
         assert!(commit_speaker_notes_loaded_state(
@@ -451,6 +461,40 @@ mod tests {
 
         assert!(commit_render_open_failed_state(&mut state, session_id));
 
+        assert_eq!(state.pending_open_path, None);
+        assert_eq!(
+            state.status_text,
+            "Could not open PDF. Choose another file."
+        );
+    }
+
+    #[test]
+    fn failed_replacement_open_preserves_current_presentation() {
+        let mut state = AppState::default();
+        let current_session = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            current_session,
+            "Existing deck".to_owned(),
+            3,
+            "Ready".to_owned(),
+        );
+        state.presentation.next_page();
+        state.notes = SpeakerNotes::from_page_notes([(2, "Keep this note".to_owned())]);
+        state.black_screen.set_active(true);
+        let original_snapshot = state.presentation.snapshot();
+
+        let pending_session = begin_open_pdf_state(&mut state, PathBuf::from("broken.pdf"));
+
+        assert!(commit_render_open_failed_state(&mut state, pending_session));
+
+        assert_eq!(
+            state.render_sessions.current_session(),
+            Some(current_session)
+        );
+        assert_eq!(state.presentation.snapshot(), original_snapshot);
+        assert_eq!(state.notes.note_for_page_number(2), Some("Keep this note"));
+        assert!(state.black_screen.is_active());
         assert_eq!(state.pending_open_path, None);
         assert_eq!(
             state.status_text,

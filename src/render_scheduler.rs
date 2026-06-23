@@ -91,23 +91,47 @@ pub enum RenderEvent {
 #[derive(Debug, Default)]
 pub struct RenderSessionTracker {
     next_session: u64,
-    current_session: Option<RenderSessionId>,
+    committed_session: Option<RenderSessionId>,
+    pending_open_session: Option<RenderSessionId>,
 }
 
 impl RenderSessionTracker {
-    pub fn begin_session(&mut self) -> RenderSessionId {
+    pub fn begin_open_session(&mut self) -> RenderSessionId {
         self.next_session = self.next_session.wrapping_add(1);
         let session_id = RenderSessionId(self.next_session);
-        self.current_session = Some(session_id);
+        self.pending_open_session = Some(session_id);
         session_id
     }
 
     pub fn current_session(&self) -> Option<RenderSessionId> {
-        self.current_session
+        self.committed_session
     }
 
     pub fn accepts(&self, session_id: RenderSessionId) -> bool {
-        self.current_session == Some(session_id)
+        self.committed_session == Some(session_id)
+    }
+
+    pub fn accepts_pending_open(&self, session_id: RenderSessionId) -> bool {
+        self.pending_open_session == Some(session_id)
+    }
+
+    pub fn commit_pending_open(&mut self, session_id: RenderSessionId) -> bool {
+        if !self.accepts_pending_open(session_id) {
+            return false;
+        }
+
+        self.committed_session = Some(session_id);
+        self.pending_open_session = None;
+        true
+    }
+
+    pub fn clear_pending_open(&mut self, session_id: RenderSessionId) -> bool {
+        if !self.accepts_pending_open(session_id) {
+            return false;
+        }
+
+        self.pending_open_session = None;
+        true
     }
 }
 
@@ -766,7 +790,6 @@ impl RenderScheduler {
     }
 
     pub fn open(&self, session_id: RenderSessionId, path: PathBuf) {
-        self.cancellation.activate(session_id);
         self.send(RenderCommand::Open { session_id, path });
     }
 
@@ -941,16 +964,14 @@ fn handle_command<D: RenderWorkerDocument>(
 ) {
     match command {
         RenderCommand::Open { session_id, path } => {
-            cancellation.activate(session_id);
             state.queue.clear();
-            state.active_session = Some(session_id);
             state.notes_extraction = None;
-            state.document = None;
             open_document_on_worker(
                 session_id,
                 path,
-                &mut state.document,
+                state,
                 event_mailbox,
+                cancellation,
                 open_document,
             );
         }
@@ -991,15 +1012,18 @@ fn handle_command<D: RenderWorkerDocument>(
 fn open_document_on_worker<D: RenderWorkerDocument>(
     session_id: RenderSessionId,
     path: PathBuf,
-    document: &mut Option<D>,
+    state: &mut RenderWorkerState<D>,
     event_mailbox: &RenderEventMailbox,
+    cancellation: &Arc<RenderCancellation>,
     open_document: fn(PathBuf) -> anyhow::Result<D>,
 ) {
     match open_document(path) {
         Ok(doc) => {
             let title = doc.title();
             let page_count = doc.page_count();
-            *document = Some(doc);
+            state.document = Some(doc);
+            state.active_session = Some(session_id);
+            cancellation.activate(session_id);
             event_mailbox.send(RenderEvent::Opened {
                 session_id,
                 title,
@@ -1336,12 +1360,16 @@ mod tests {
     }
 
     #[test]
-    fn session_tracker_accepts_only_current_session() {
+    fn session_tracker_accepts_only_committed_session() {
         let mut tracker = RenderSessionTracker::default();
-        let first = tracker.begin_session();
-        let second = tracker.begin_session();
+        let first = tracker.begin_open_session();
+        let second = tracker.begin_open_session();
 
         assert!(!tracker.accepts(first));
+        assert!(!tracker.accepts(second));
+        assert!(!tracker.commit_pending_open(first));
+        assert!(tracker.commit_pending_open(second));
+        assert!(!tracker.accepts_pending_open(second));
         assert!(tracker.accepts(second));
         assert_eq!(tracker.current_session(), Some(second));
     }
@@ -1722,7 +1750,7 @@ mod tests {
             &cancellation,
         );
 
-        assert_eq!(state.active_session, Some(session));
+        assert_eq!(state.active_session, None);
         assert!(state.document.is_none());
         match drain_single_event(&event_mailbox) {
             RenderEvent::OpenFailed {
@@ -1733,6 +1761,68 @@ mod tests {
                 assert!(message.contains("fake open failed"));
             }
             other => panic!("expected open failed event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn failed_replacement_open_keeps_active_document_renderable() {
+        let current_session = RenderSessionId(1);
+        let pending_session = RenderSessionId(2);
+        let current = request(1, RenderPurpose::CurrentSlide);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: current_session,
+                path: PathBuf::from("deck.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        event_mailbox.drain();
+
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: pending_session,
+                path: PathBuf::from("fail.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert_eq!(state.active_session, Some(current_session));
+        assert!(state.document.is_some());
+        match drain_single_event(&event_mailbox) {
+            RenderEvent::OpenFailed { session_id, .. } => {
+                assert_eq!(session_id, pending_session);
+            }
+            other => panic!("expected open failed event, got {other:?}"),
+        }
+
+        handle_fake_command(
+            RenderCommand::RenderPage {
+                session_id: current_session,
+                request: current,
+                priority: RenderPriority::BlockingVisible,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert!(process_next_work(&mut state, &event_mailbox, &cancellation));
+        match drain_single_event(&event_mailbox) {
+            RenderEvent::PageRendered {
+                session_id,
+                request,
+                ..
+            } => {
+                assert_eq!(session_id, current_session);
+                assert_eq!(request, current);
+            }
+            other => panic!("expected page rendered event, got {other:?}"),
         }
     }
 
