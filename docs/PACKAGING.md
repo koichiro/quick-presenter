@@ -148,6 +148,12 @@ non-zero on failed app-observable checks. It still does not replace the manual
 desktop-session checks for OS-owned shell, focus, and visual readability
 behavior.
 
+`build-binaries.yml` runs this GUI smoke mode from the installed Ubuntu package
+under Xvfb and uploads the report as `quick-presenter-ubuntu-x64-gui-smoke`.
+The workflow uploads explicit skip-reason reports for macOS and Windows because
+hosted CI does not provide the normal desktop sessions needed to make platform
+GUI behavior a reliable release gate.
+
 ## Application Icons
 
 The source icon assets are documented in `docs/ICONS.md`.

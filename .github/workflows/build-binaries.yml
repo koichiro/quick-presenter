@@ -83,8 +83,11 @@ jobs:
             libwayland-dev \
             libx11-dev \
             libxcb1-dev \
+            libxkbcommon-x11-0 \
             libxkbcommon-dev \
-            pkg-config
+            pkg-config \
+            xauth \
+            xvfb
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -201,6 +204,7 @@ jobs:
 
           artifact_dir="artifacts/${{ matrix.artifact-name }}"
           mkdir -p "$artifact_dir"
+          mkdir -p "$artifact_dir/gui-smoke"
 
           cp "target/release/${{ matrix.binary-name }}" "$artifact_dir/"
           cp -R pdfium "$artifact_dir/pdfium"
@@ -314,6 +318,23 @@ jobs:
           env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$app/Contents/MacOS/quick-presenter" \
             --smoke-open-pdf "$pdf"
 
+      - name: Record macOS GUI smoke CI skip
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          report_dir="$GITHUB_WORKSPACE/artifacts/${{ matrix.artifact-name }}/gui-smoke"
+          cat > "$report_dir/macos-skipped.txt" <<'REPORT'
+          Quick Presenter GUI Smoke Report
+          Result: skipped
+
+          The macOS packaged artifact GUI smoke check is intentionally manual in Build Binaries.
+          GitHub-hosted macOS runners do not provide the normal signed-in desktop session needed
+          to treat Slint window, focus, Space, Dock, Cmd+Tab, and Gatekeeper behavior as a reliable
+          release gate. Run docs/GUI_SMOKE_CHECKLIST.md against the final macOS artifact.
+          REPORT
+
       - name: Verify Linux desktop metadata
         if: runner.os == 'Linux'
         shell: bash
@@ -400,11 +421,23 @@ jobs:
           )
 
           sudo apt-get install -y "$deb"
+          trap 'sudo apt-get remove -y quick-presenter || true' EXIT
           (
             cd /tmp
             env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE quick-presenter --smoke-open-pdf "$pdf"
           )
+
+          (
+            cd /tmp
+            xvfb-run -a -s "-screen 0 1920x1080x24" \
+              env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE \
+                LIBGL_ALWAYS_SOFTWARE=1 \
+                quick-presenter \
+                --gui-smoke "$pdf" \
+                --gui-smoke-report "$artifact_dir/gui-smoke/ubuntu-deb-installed.txt"
+          )
           sudo apt-get remove -y quick-presenter
+          trap - EXIT
 
       - name: Verify Windows executable icon
         if: runner.os == 'Windows'
@@ -721,12 +754,39 @@ jobs:
             Pop-Location
           }
 
+      - name: Record Windows GUI smoke CI skip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $reportDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}/gui-smoke'
+          New-Item -ItemType Directory -Force $reportDir | Out-Null
+          @'
+          Quick Presenter GUI Smoke Report
+          Result: skipped
+
+          The Windows packaged artifact GUI smoke check is intentionally manual in Build Binaries.
+          GitHub-hosted Windows runners do not provide the normal installed desktop session needed
+          to treat Slint window, focus, Start Menu, taskbar, Alt+Tab, SmartScreen, and installer UI
+          behavior as a reliable release gate. Run docs/GUI_SMOKE_CHECKLIST.md against the final
+          Windows MSI artifact.
+          '@ | Set-Content -Path (Join-Path $reportDir 'windows-skipped.txt') -Encoding utf8
+
       - name: Clean Windows signing certificate
         if: always() && runner.os == 'Windows'
         shell: pwsh
         run: |
           $pfxPath = Join-Path $env:RUNNER_TEMP 'quick-presenter-signing.pfx'
           Remove-Item -Force $pfxPath -ErrorAction SilentlyContinue
+
+      - name: Upload GUI smoke reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact-name }}-gui-smoke
+          path: artifacts/${{ matrix.artifact-name }}/gui-smoke
+          if-no-files-found: ignore
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
