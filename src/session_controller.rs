@@ -191,24 +191,14 @@ pub fn commit_render_worker_failed_state(
     state: &mut AppState,
     session_id: Option<RenderSessionId>,
 ) -> bool {
-    let Some(session_id) = session_id else {
-        return false;
-    };
-
-    let current_session_failed = state.render_sessions.accepts(session_id);
-    let pending_open_failed =
-        !current_session_failed && state.render_sessions.clear_pending_open(session_id);
-
-    if !current_session_failed && !pending_open_failed {
+    if !state.render_sessions.mark_worker_failed(session_id) {
         return false;
     }
 
-    if current_session_failed {
-        if let Some(snapshot) = state.presentation.snapshot() {
-            state.audience_slide.failed_current_page = Some(snapshot.current_index);
-        }
+    if let Some(snapshot) = state.presentation.snapshot() {
+        state.audience_slide.failed_current_page = Some(snapshot.current_index);
     }
-    state.status_text = "Rendering stopped. Reopen the PDF.".to_owned();
+    state.status_text = "Rendering stopped. Open the PDF again.".to_owned();
     state.pending_open_path = None;
     true
 }
@@ -754,13 +744,14 @@ mod tests {
             Some(session_id)
         ));
 
-        assert_eq!(state.status_text, "Rendering stopped. Reopen the PDF.");
+        assert_eq!(state.status_text, "Rendering stopped. Open the PDF again.");
         assert_eq!(state.pending_open_path, None);
+        assert_eq!(state.render_sessions.current_session(), None);
         assert_eq!(state.audience_slide.failed_current_page, Some(0));
     }
 
     #[test]
-    fn render_worker_failure_clears_pending_open_for_current_session() {
+    fn render_worker_failure_clears_pending_open_for_identified_session() {
         let mut state = AppState::default();
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
 
@@ -769,8 +760,9 @@ mod tests {
             Some(session_id)
         ));
 
-        assert_eq!(state.status_text, "Rendering stopped. Reopen the PDF.");
+        assert_eq!(state.status_text, "Rendering stopped. Open the PDF again.");
         assert_eq!(state.pending_open_path, None);
+        assert_eq!(state.render_sessions.current_session(), None);
         assert_eq!(state.audience_slide.failed_current_page, None);
     }
 
@@ -787,5 +779,27 @@ mod tests {
 
         assert_eq!(state.status_text, "Opening PDF...");
         assert_eq!(state.pending_open_path, Some(PathBuf::from("new.pdf")));
+    }
+
+    #[test]
+    fn unidentified_render_worker_failure_clears_pending_open_and_current_session() {
+        let mut state = AppState::default();
+        let current_session = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            current_session,
+            "Deck".to_owned(),
+            2,
+            "Ready".to_owned(),
+        );
+        let pending_session = begin_open_pdf_state(&mut state, PathBuf::from("new.pdf"));
+
+        assert!(commit_render_worker_failed_state(&mut state, None));
+
+        assert_eq!(state.render_sessions.current_session(), None);
+        assert!(!state.render_sessions.accepts_pending_open(pending_session));
+        assert_eq!(state.pending_open_path, None);
+        assert_eq!(state.status_text, "Rendering stopped. Open the PDF again.");
+        assert_eq!(state.audience_slide.failed_current_page, Some(0));
     }
 }
