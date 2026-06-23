@@ -702,7 +702,11 @@ fn load_startup_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, path
     begin_open_pdf(windows, state, path);
 }
 
-fn begin_open_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, path: PathBuf) {
+pub(crate) fn begin_open_pdf(
+    windows: &AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+    path: PathBuf,
+) {
     let title = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -1283,12 +1287,23 @@ fn preload_presentation_window(
 fn start_render_event_updates(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, RENDER_EVENT_POLL_INTERVAL, move || {
-        drain_render_events(&windows, &state)
+        let _ = drain_render_events(&windows, &state);
     });
     timer
 }
 
-fn drain_render_events(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+#[derive(Default)]
+pub(crate) struct RenderEventDrain {
+    pub speaker_notes_loaded: bool,
+    pub open_failed: bool,
+    pub page_failed: bool,
+    pub worker_failed: bool,
+}
+
+pub(crate) fn drain_render_events(
+    windows: &AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+) -> RenderEventDrain {
     let events = {
         let state = state.borrow();
         state
@@ -1298,9 +1313,18 @@ fn drain_render_events(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
             .unwrap_or_default()
     };
 
+    let mut drain = RenderEventDrain::default();
     for event in events {
+        match &event {
+            RenderEvent::SpeakerNotesLoaded { .. } => drain.speaker_notes_loaded = true,
+            RenderEvent::OpenFailed { .. } => drain.open_failed = true,
+            RenderEvent::PageFailed { .. } => drain.page_failed = true,
+            RenderEvent::WorkerFailed { .. } => drain.worker_failed = true,
+            RenderEvent::Opened { .. } | RenderEvent::PageRendered { .. } => {}
+        }
         handle_render_event(windows, state, event);
     }
+    drain
 }
 
 fn handle_render_event(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, event: RenderEvent) {
