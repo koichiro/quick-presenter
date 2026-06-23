@@ -16,6 +16,10 @@ Use `docs/samples/quick-presenter-demo.pdf` or
 `PDFIUM_DYNAMIC_LIB_PATH` and `QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE` unset
 unless you are diagnosing a package layout failure.
 
+For notes-specific readability checks, also use a PDF page with speaker notes
+long enough to overflow the presenter notes area at the minimum supported
+presenter window size.
+
 ## Release Gate
 
 Do not publish the release until:
@@ -90,6 +94,7 @@ Run these checks on every platform.
 | Open the known-good PDF from the app UI. | The PDF opens without a presenter-visible error. |
 | Confirm both windows are visible. | The presenter window and audience-facing slide window appear. |
 | Press next-page controls until the end of the deck. | The current slide, next preview, page label, timer, clock, and notes stay readable. |
+| Open a long-note PDF page at the minimum presenter window size. | The notes area scrolls so the full speaker note can be read without resizing the app, while the current slide, next preview, and thumbnails remain usable. |
 | Press previous-page controls until the start of the deck. | Both windows stay synchronized and page navigation clamps at page 1. |
 | Use first-page and last-page controls. | Both windows jump to the expected page. |
 | Use keyboard navigation in the presenter window. | Keys in `docs/KEYBOARD.md` update both windows. |
