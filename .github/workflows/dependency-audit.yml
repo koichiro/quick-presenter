@@ -1,0 +1,42 @@
+name: Dependency Audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 18 * * 0"
+  pull_request:
+    paths:
+      - ".github/workflows/dependency-audit.yml"
+      - ".cargo/audit.toml"
+      - "scripts/audit_deps.sh"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_HTTP_MULTIPLEXING: "false"
+  CARGO_NET_RETRY: "10"
+
+jobs:
+  dependency-audit:
+    name: Dependency advisory audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit dependencies
+        run: scripts/audit_deps.sh

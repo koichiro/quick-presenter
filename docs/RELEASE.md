@@ -17,8 +17,9 @@ every source-only pull request.
 Before publishing a release:
 
 1. Confirm `CI` passes on the release branch.
-2. Run `scripts/audit_deps.sh` and resolve dependency advisories, or document
-   any explicitly accepted advisory in `.cargo/audit.toml`.
+2. Confirm the scheduled `Dependency Audit` workflow has passed recently, then
+   run `scripts/audit_deps.sh` locally and resolve dependency advisories, or
+   document any explicitly accepted advisory in `.cargo/audit.toml`.
 3. Run `Build Binaries` manually with `workflow_dispatch`, or push a release
    tag matching `v*`.
 4. Record the successful `Build Binaries` workflow run URL in the release
@@ -38,11 +39,32 @@ icons, or Cargo dependency metadata.
 
 The dependency advisory audit uses `cargo audit`. Install it with
 `cargo install cargo-audit --locked` before running `scripts/audit_deps.sh`
-locally. Vulnerability advisories fail release validation. Warning-only
-advisories, such as unmaintained or yanked transitive crates, must be reviewed
-before release. Any explicitly accepted advisory must be listed in
+locally. The `Dependency Audit` workflow runs the same script on a weekly
+schedule and can also be started manually. `Build Binaries` keeps its own
+dependency advisory audit so release package validation still fails on
+unaccepted vulnerability advisories even if the scheduled workflow was skipped
+or stale.
+
+Warning-only advisories, such as unmaintained or yanked transitive crates, must
+be reviewed before release. Any explicitly accepted advisory must be listed in
 `.cargo/audit.toml` with a reason, impact summary, tracking issue, and review
 date so release maintainers can tell whether the risk is still accepted.
+Dependabot checks Cargo and GitHub Actions dependencies weekly.
+
+GitHub Actions should use predictable references. First-party actions may use a
+major version tag when Dependabot covers update review. Third-party actions
+should be added only when the release workflow needs them and should use at
+least a major or minor version tag when the action publishes versioned tags.
+Toolchain selector actions may use explicit toolchain channel references such
+as `stable`. Any third-party action that affects release signing, notarization,
+package upload, or artifact trust should be considered for commit SHA pinning
+before adoption. Shell-installed tools should use an explicit version or a
+locked installation mode when the tool supports it.
+
+SBOM generation is not part of the v1.0.0 release baseline. Release artifacts
+bundle Rust dependencies, platform packages, and PDFium native binaries, so the
+project will choose an artifact-level SBOM policy separately before adopting a
+tool or output format.
 
 The package smoke tests are intentionally non-interactive and do not create
 Slint windows. `Build Binaries` also runs
