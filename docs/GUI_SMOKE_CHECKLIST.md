@@ -108,7 +108,28 @@ Run these checks on every platform.
 | Navigate while black screen mode is active, then restore. | The restored slide shows the current page after the hidden navigation. |
 | Confirm the Window menu does not offer a presenter-hide action. | The presenter controls cannot be hidden from the app menu. |
 | Hide the slide window from the Window menu, then show it again. | The presenter window remains visible and can recover the slide window. |
+| Bring the presenter window to front from the Window menu after focusing or covering it with the slide window. | The presenter window becomes usable again without changing the current slide, fullscreen state, or black-screen state. |
+| Bring the slide window to front from the Window menu after focusing or covering it with the presenter window. | The slide window becomes usable again and stays synchronized with the presenter window. |
+| Move focus between the presenter window, slide window, and another application, then return through the normal app switcher or Window menu. | Keyboard navigation still works in the focused Quick Presenter window, and presenter controls remain reachable. |
 | Close the app from normal window controls. | The app exits without hanging windows or crash dialogs. |
+
+## Focus and Window Recovery Checks
+
+Run these focused recovery scenarios on every platform after opening the
+known-good PDF. They cover the highest-risk live-presentation paths where
+operating-system focus, fullscreen, hiding, or app switching can interrupt the
+normal presenter workflow.
+
+| Scenario | Expected result |
+| --- | --- |
+| Give focus to the presenter window and press next, previous, first, and last keyboard shortcuts from `docs/KEYBOARD.md`. | Both windows update together, and page navigation clamps at the document bounds. |
+| Give focus to the slide window and press next, previous, first, and last keyboard shortcuts from `docs/KEYBOARD.md`. | Both windows update together even when the audience-facing window has focus. |
+| Enter slide fullscreen from the presenter controls, switch focus away from Quick Presenter, then return to Quick Presenter. | The presenter window remains reachable, and the slide window stays fullscreen until a documented exit control is used. |
+| Enter slide fullscreen from the slide window with `F5` or `F`, then exit with `Escape`. | The slide window returns to windowed mode without changing pages. |
+| Toggle black screen, switch focus away from Quick Presenter, return, then toggle black screen off. | The slide window restores to the current page and both windows remain synchronized. |
+| Hide the slide window, continue navigating from the presenter window, then show or bring the slide window to front. | The recovered slide window shows the current page, not the page that was visible before hiding. |
+| Cover or background each Quick Presenter window, then use the Window menu to bring the presenter and slide windows back to front. | Each window can be recovered without reopening the PDF or restarting the app. |
+| After accidental focus changes, recover to a normal presenter state: presenter window visible, slide window visible or fullscreen, keyboard navigation working in the focused Quick Presenter window. | The presenter can continue the deck without losing page position, black-screen state, or fullscreen state. |
 
 ## macOS
 
@@ -125,6 +146,8 @@ Test on a normal signed-in desktop session, not a headless CI session.
   from the app menu.
 - Confirm fullscreen entry and exit do not strand the slide window on a hidden
   Space.
+- Record any Space, Dock, or Cmd+Tab behavior that changes how the presenter
+  window is recovered while the slide window is fullscreen.
 
 ## Windows
 
@@ -141,6 +164,8 @@ Test from the installed MSI, not only from the raw `quick-presenter.exe` diagnos
   and that the presenter window cannot be hidden from the app menu.
 - Confirm fullscreen entry and exit work with the slide window on the intended
   display.
+- Record any taskbar, Alt+Tab, or display-selection behavior that changes how
+  the presenter and slide windows are recovered after focus moves away.
 - Uninstall the MSI after testing and confirm the normal uninstall path works.
 
 ## Ubuntu Linux
@@ -161,6 +186,9 @@ sudo apt-get install ./quick-presenter_<version>_amd64.deb
   and that the presenter window cannot be hidden from the app menu.
 - Confirm fullscreen entry and exit behave predictably under the tested desktop
   environment.
+- Record the desktop environment and display server when focus, app-switcher,
+  or fullscreen behavior differs between GNOME, X11, Wayland, or other tested
+  sessions.
 - Remove the package after testing:
 
 ```sh
