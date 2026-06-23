@@ -32,6 +32,7 @@ pub fn apply_opening_state_to_windows(windows: &AppWindowRefs, title: &str) {
         ))));
         presenter.set_has_notes(false);
         presenter.set_notes_text("".into());
+        presenter.set_notes_viewport_height(0.0);
     }
 
     if let Some(slide) = windows.slide.upgrade() {
@@ -91,6 +92,7 @@ pub fn apply_snapshot_to_windows(
         let current_note = state.notes.note_for_page_index(snapshot.current_index);
         presenter.set_has_notes(current_note.is_some());
         presenter.set_notes_text(current_note.unwrap_or_default().into());
+        presenter.set_notes_viewport_height(estimated_notes_viewport_height(current_note));
     }
 
     if let Some(slide) = windows.slide.upgrade() {
@@ -106,6 +108,38 @@ pub fn apply_snapshot_to_windows(
 pub fn set_presenter_message(weak: &Weak<PresenterWindow>, message: PresenterMessage) {
     if let Some(app) = weak.upgrade() {
         app.set_status_text(message.text().into());
+    }
+}
+
+pub fn estimated_notes_viewport_height(note: Option<&str>) -> f32 {
+    let Some(note) = note else {
+        return 0.0;
+    };
+
+    if note.trim().is_empty() {
+        return 0.0;
+    }
+
+    const CHARS_PER_LINE: usize = 86;
+    const LINE_HEIGHT: f32 = 16.0;
+    const MIN_HEIGHT: f32 = 24.0;
+
+    let line_count: usize = note
+        .lines()
+        .map(|line| {
+            let width_units = line.chars().map(display_width_units).sum::<usize>();
+            (width_units / CHARS_PER_LINE).max(1) + usize::from(width_units % CHARS_PER_LINE != 0)
+        })
+        .sum();
+
+    (line_count as f32 * LINE_HEIGHT).max(MIN_HEIGHT)
+}
+
+fn display_width_units(character: char) -> usize {
+    if character.is_ascii() {
+        1
+    } else {
+        2
     }
 }
 
@@ -271,6 +305,30 @@ mod tests {
         (0..model.row_count())
             .map(|row| model.row_data(row).expect("thumbnail row should exist"))
             .collect()
+    }
+
+    #[test]
+    fn estimated_notes_viewport_height_is_zero_without_notes() {
+        assert_eq!(estimated_notes_viewport_height(None), 0.0);
+        assert_eq!(estimated_notes_viewport_height(Some("   ")), 0.0);
+    }
+
+    #[test]
+    fn estimated_notes_viewport_height_grows_with_wrapped_content() {
+        let short = estimated_notes_viewport_height(Some("Short note"));
+        let long = estimated_notes_viewport_height(Some(&"Long note. ".repeat(80)));
+
+        assert!(short >= 24.0);
+        assert!(long > short);
+        assert!(long < 3000.0);
+    }
+
+    #[test]
+    fn estimated_notes_viewport_height_counts_wide_text() {
+        let ascii = estimated_notes_viewport_height(Some(&"a".repeat(86)));
+        let japanese = estimated_notes_viewport_height(Some(&"日".repeat(86)));
+
+        assert!(japanese > ascii);
     }
 
     #[test]

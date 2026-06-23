@@ -38,6 +38,7 @@ component SlideView inherits Rectangle {
 component NotesView inherits Rectangle {
     in property <bool> has-notes: false;
     in property <string> notes-text: "";
+    in property <float> notes-viewport-height: 0;
 
     background: #111315;
     border-color: #3c4043;
@@ -49,8 +50,8 @@ component NotesView inherits Rectangle {
         width: parent.width - 20px;
         height: parent.height - 20px;
         viewport-width: self.visible-width;
-        viewport-height: root.has-notes ? 3000px : self.visible-height;
-        vertical-scrollbar-policy: root.has-notes ? ScrollBarPolicy.always-on : ScrollBarPolicy.as-needed;
+        viewport-height: max(self.visible-height, root.notes-viewport-height * 1px);
+        vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
 
         notes-input := TextInput {
             text: root.has-notes ? root.notes-text : "No notes";
@@ -365,6 +366,7 @@ export component PresenterWindow inherits Window {
     in property <string> document-title: "No PDF opened";
     in property <string> page-label: "";
     in property <string> notes-text: "";
+    in property <float> notes-viewport-height: 0;
     in property <bool> slide-fullscreen: false;
     in property <bool> use-physical-control-shortcuts: false;
     in property <string> clock-time-label: "--:--";
@@ -822,6 +824,7 @@ export component PresenterWindow inherits Window {
                     NotesView {
                         has-notes: root.has-notes;
                         notes-text: root.notes-text;
+                        notes-viewport-height: root.notes-viewport-height;
                         horizontal-stretch: 1;
                         vertical-stretch: 1;
                     }
