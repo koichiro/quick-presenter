@@ -48,13 +48,24 @@ component NotesView inherits Rectangle {
         y: 10px;
         width: parent.width - 20px;
         height: parent.height - 20px;
-        viewport-width: self.width;
+        viewport-width: self.visible-width;
+        viewport-height: root.has-notes ? 3000px : self.visible-height;
+        vertical-scrollbar-policy: root.has-notes ? ScrollBarPolicy.always-on : ScrollBarPolicy.as-needed;
 
-        Text {
+        notes-input := TextInput {
             text: root.has-notes ? root.notes-text : "No notes";
             color: root.has-notes ? #f1f3f4 : #9aa0a6;
-            width: scroll-view.viewport-width;
             wrap: word-wrap;
+            single-line: false;
+            read-only: true;
+            page-height: scroll-view.visible-height;
+            text-cursor-width: 0px;
+            key-pressed(event) => {
+                reject
+            }
+            key-released(event) => {
+                reject
+            }
         }
     }
 }
