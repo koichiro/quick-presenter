@@ -47,9 +47,6 @@ pub enum RenderCommand {
     ExtractSpeakerNotes {
         session_id: RenderSessionId,
     },
-    Close {
-        session_id: RenderSessionId,
-    },
     Shutdown,
 }
 
@@ -329,13 +326,6 @@ impl RenderQueue {
         Some((item.job_id, item.key.session_id(), item.key.work()))
     }
 
-    pub fn clear_session(&mut self, session_id: RenderSessionId) {
-        self.items
-            .retain(|item| item.key.session_id() != session_id);
-        self.queued_keys
-            .retain(|key| key.session_id() != session_id);
-    }
-
     pub fn clear(&mut self) {
         self.items.clear();
         self.queued_keys.clear();
@@ -441,10 +431,6 @@ impl PendingRenderCommands {
                     RenderSchedulingPolicy::speaker_notes_priority(),
                 );
             }
-            RenderCommand::Close { session_id } => {
-                self.clear_session(session_id);
-                self.controls.push_back(RenderCommand::Close { session_id });
-            }
             RenderCommand::Shutdown => {
                 self.controls.clear();
                 self.clear_work();
@@ -478,23 +464,6 @@ impl PendingRenderCommands {
             sequence: self.next_sequence,
         });
         self.enforce_work_capacity();
-    }
-
-    fn clear_session(&mut self, session_id: RenderSessionId) {
-        self.works
-            .retain(|work| work.key.session_id() != session_id);
-        self.work_keys.retain(|key| key.session_id() != session_id);
-        self.controls.retain(|command| match command {
-            RenderCommand::Open {
-                session_id: command_session,
-                ..
-            }
-            | RenderCommand::Close {
-                session_id: command_session,
-            } => *command_session != session_id,
-            RenderCommand::ExtractSpeakerNotes { .. } | RenderCommand::RenderPage { .. } => true,
-            RenderCommand::Shutdown => true,
-        });
     }
 
     fn clear_work(&mut self) {
@@ -715,15 +684,6 @@ struct RenderCancellation {
 impl RenderCancellation {
     fn activate(&self, session_id: RenderSessionId) {
         self.active_session.store(session_id.0, Ordering::Release);
-    }
-
-    fn close(&self, session_id: RenderSessionId) {
-        let _ = self.active_session.compare_exchange(
-            session_id.0,
-            0,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        );
     }
 
     fn shutdown(&self) {
@@ -1037,21 +997,6 @@ fn handle_command<D: RenderWorkerDocument>(
         }
         RenderCommand::ExtractSpeakerNotes { session_id } => {
             state.queue.push_speaker_notes(session_id);
-        }
-        RenderCommand::Close { session_id } => {
-            cancellation.close(session_id);
-            state.queue.clear_session(session_id);
-            if state.active_session == Some(session_id) {
-                state.document = None;
-                state.active_session = None;
-                state.notes_extraction = None;
-            } else if state
-                .notes_extraction
-                .as_ref()
-                .is_some_and(|extraction| extraction.session_id == session_id)
-            {
-                state.notes_extraction = None;
-            }
         }
         RenderCommand::Shutdown => {
             cancellation.shutdown();
@@ -1528,24 +1473,6 @@ mod tests {
     }
 
     #[test]
-    fn clear_session_drops_only_matching_jobs() {
-        let mut queue = RenderQueue::default();
-        let first_session = RenderSessionId(1);
-        let second_session = RenderSessionId(2);
-        let first = request(1, RenderPurpose::Thumbnail);
-        let second = request(2, RenderPurpose::Thumbnail);
-
-        queue.push(first_session, first, RenderPriority::Background);
-        queue.push(second_session, second, RenderPriority::Background);
-        queue.clear_session(first_session);
-
-        let (_, session_id, work) = queue.pop().unwrap();
-        assert_eq!(session_id, second_session);
-        assert_eq!(work, RenderWork::Page(second));
-        assert!(queue.is_empty());
-    }
-
-    #[test]
     fn cancellation_tracks_superseded_sessions() {
         let cancellation = RenderCancellation::default();
         let first = RenderSessionId(1);
@@ -1717,38 +1644,6 @@ mod tests {
             }
             other => panic!("expected open command, got {other:?}"),
         }
-        assert!(pending.is_empty());
-    }
-
-    #[test]
-    fn command_mailbox_close_clears_matching_backlog_and_runs_before_work() {
-        let first_session = RenderSessionId(1);
-        let second_session = RenderSessionId(2);
-        let mut pending = PendingRenderCommands::new(8);
-        let first = request(1, RenderPurpose::CurrentSlide);
-        let second = request(2, RenderPurpose::CurrentSlide);
-
-        pending.push(RenderCommand::RenderPage {
-            session_id: first_session,
-            request: first,
-            priority: RenderPriority::BlockingVisible,
-        });
-        pending.push(RenderCommand::RenderPage {
-            session_id: second_session,
-            request: second,
-            priority: RenderPriority::BlockingVisible,
-        });
-        pending.push(RenderCommand::Close {
-            session_id: first_session,
-        });
-
-        match pending.pop().unwrap() {
-            RenderCommand::Close { session_id } => assert_eq!(session_id, first_session),
-            other => panic!("expected close command, got {other:?}"),
-        }
-        let (session_id, request, _) = pop_page_command(pending.pop().unwrap());
-        assert_eq!(session_id, second_session);
-        assert_eq!(request, second);
         assert!(pending.is_empty());
     }
 
@@ -2368,35 +2263,6 @@ mod tests {
             }
             other => panic!("expected speaker notes warning event, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn close_command_clears_active_session_and_matching_jobs() {
-        let session = RenderSessionId(1);
-        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
-        state.document = Some(open_fake_document(PathBuf::from("deck.pdf")).unwrap());
-        state.active_session = Some(session);
-        cancellation.activate(session);
-        state.queue.push(
-            session,
-            request(1, RenderPurpose::CurrentSlide),
-            RenderPriority::Warm,
-        );
-
-        handle_fake_command(
-            RenderCommand::Close {
-                session_id: session,
-            },
-            &mut state,
-            &event_mailbox,
-            &cancellation,
-        );
-
-        assert_eq!(state.active_session, None);
-        assert!(state.document.is_none());
-        assert!(state.queue.is_empty());
-        assert!(cancellation.is_cancelled(session));
-        assert!(!state.shutdown);
     }
 
     #[test]
