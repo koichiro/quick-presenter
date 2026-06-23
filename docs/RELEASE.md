@@ -25,7 +25,9 @@ Before publishing a release:
    checklist.
 5. Confirm the Linux, macOS, and Windows artifacts are uploaded and their package
    smoke tests pass.
-6. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
+6. Review the uploaded `quick-presenter-ubuntu-x64-gui-smoke` report and the
+   macOS/Windows GUI smoke skip-reason reports from `Build Binaries`.
+7. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
    macOS, Windows, and Ubuntu Linux artifacts before publishing.
 
 `Build Binaries` still runs automatically for pull requests that change
@@ -41,9 +43,11 @@ before release. Any explicitly accepted advisory must be listed in
 date so release maintainers can tell whether the risk is still accepted.
 
 The package smoke tests are intentionally non-interactive and do not create
-Slint windows. Run `quick-presenter --gui-smoke <PDF> --gui-smoke-report <PATH>` from each
-packaged artifact to cover app-observable presenter-window, slide-window,
-fullscreen, keyboard command, black-screen, and synchronization behavior. The
+Slint windows. `Build Binaries` also runs
+`quick-presenter --gui-smoke <PDF> --gui-smoke-report <PATH>` from the installed
+Ubuntu package under Xvfb and uploads the report. macOS and Windows runners
+upload explicit GUI smoke skip-reason reports because hosted CI does not provide
+the normal desktop sessions needed for reliable platform GUI release gates. The
 GUI checklist remains the release gate for OS-owned title-bar, menu,
 keyboard-focus, shell integration, and readability behavior.
 

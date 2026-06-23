@@ -25,6 +25,8 @@ Do not publish the release until:
 - The successful `Build Binaries` workflow run URL is recorded with the release
   checklist.
 - The packaged artifact smoke tests pass for macOS, Windows, and Ubuntu Linux.
+- The uploaded `quick-presenter-ubuntu-x64-gui-smoke` report passes, and the
+  macOS/Windows GUI smoke skip-reason reports are reviewed.
 - This GUI smoke checklist passes on macOS, Windows, and Ubuntu Linux desktop
   sessions, or every failing item is documented in the release notes as a known
   release blocker or limitation.
@@ -65,6 +67,12 @@ scheduler used by production startup and file-open flows, then drains render
 events until the first visible slide render and speaker-note check are reflected
 in app state. After that async open/render check passes, it drives the normal
 presentation commands against the resulting windows.
+
+`Build Binaries` runs this command from the installed Ubuntu package under Xvfb
+and uploads the text report as `quick-presenter-ubuntu-x64-gui-smoke`. The same
+workflow uploads explicit skip-reason reports for macOS and Windows because
+GitHub-hosted runners do not provide the normal desktop sessions needed to make
+platform GUI behavior a reliable release gate.
 
 Avoid making the first version depend on heavyweight cross-platform GUI drivers.
 They are useful later for screenshots or accessibility assertions, but they can
