@@ -6,7 +6,7 @@ use std::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Condvar, Mutex,
     },
-    thread,
+    thread::{self, JoinHandle},
 };
 
 use crate::{
@@ -31,6 +31,14 @@ pub enum RenderPriority {
     Warm,
     VisibleAux,
     BlockingVisible,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum RenderWorkerLifecycle {
+    Running,
+    ShutdownRequested,
+    Stopped,
+    Failed,
 }
 
 #[derive(Debug)]
@@ -775,6 +783,8 @@ pub struct RenderScheduler {
     command_mailbox: Arc<RenderCommandMailbox>,
     event_mailbox: Arc<RenderEventMailbox>,
     cancellation: Arc<RenderCancellation>,
+    lifecycle: Arc<Mutex<RenderWorkerLifecycle>>,
+    worker: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl RenderScheduler {
@@ -783,14 +793,17 @@ impl RenderScheduler {
         let command_mailbox = Arc::new(RenderCommandMailbox::default());
         let event_mailbox = Arc::new(RenderEventMailbox::default());
         let cancellation = Arc::new(RenderCancellation::default());
+        let lifecycle = Arc::new(Mutex::new(RenderWorkerLifecycle::Running));
         let worker_command_mailbox = Arc::clone(&command_mailbox);
         let worker_event_mailbox = Arc::clone(&event_mailbox);
         let worker_cancellation = Arc::clone(&cancellation);
-        thread::spawn(move || {
+        let worker_lifecycle = Arc::clone(&lifecycle);
+        let worker = thread::spawn(move || {
             run_render_worker_guarded(
                 worker_command_mailbox,
                 worker_event_mailbox,
                 worker_cancellation,
+                worker_lifecycle,
                 render_worker,
             )
         });
@@ -799,6 +812,8 @@ impl RenderScheduler {
             command_mailbox,
             event_mailbox,
             cancellation,
+            lifecycle,
+            worker: Mutex::new(Some(worker)),
         }
     }
 
@@ -827,12 +842,73 @@ impl RenderScheduler {
         self.event_mailbox.drain()
     }
 
+    pub fn lifecycle(&self) -> RenderWorkerLifecycle {
+        *self.lifecycle.lock().expect("render lifecycle poisoned")
+    }
+
+    pub fn request_shutdown(&self) {
+        let should_send_shutdown = {
+            let mut lifecycle = self.lifecycle.lock().expect("render lifecycle poisoned");
+            match *lifecycle {
+                RenderWorkerLifecycle::Running => {
+                    *lifecycle = RenderWorkerLifecycle::ShutdownRequested;
+                    true
+                }
+                RenderWorkerLifecycle::ShutdownRequested => true,
+                RenderWorkerLifecycle::Stopped | RenderWorkerLifecycle::Failed => false,
+            }
+        };
+
+        if should_send_shutdown {
+            self.cancellation.shutdown();
+            self.command_mailbox.send(RenderCommand::Shutdown);
+        }
+    }
+
+    pub fn can_be_replaced(&self) -> bool {
+        if !matches!(
+            self.lifecycle(),
+            RenderWorkerLifecycle::Stopped | RenderWorkerLifecycle::Failed
+        ) {
+            return false;
+        }
+
+        self.worker
+            .lock()
+            .expect("render worker handle poisoned")
+            .as_ref()
+            .is_none_or(JoinHandle::is_finished)
+    }
+
+    pub fn try_join_finished_worker(&self) -> bool {
+        let mut worker = self.worker.lock().expect("render worker handle poisoned");
+        let Some(handle) = worker.as_ref() else {
+            return true;
+        };
+        if !handle.is_finished() {
+            return false;
+        }
+
+        let handle = worker
+            .take()
+            .expect("render worker handle should exist after finished check");
+        let _ = handle.join();
+        true
+    }
+
     #[cfg(test)]
     pub(crate) fn without_worker_for_test() -> Self {
+        Self::without_worker_with_lifecycle_for_test(RenderWorkerLifecycle::Stopped)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn without_worker_with_lifecycle_for_test(lifecycle: RenderWorkerLifecycle) -> Self {
         Self {
             command_mailbox: Arc::new(RenderCommandMailbox::default()),
             event_mailbox: Arc::new(RenderEventMailbox::default()),
             cancellation: Arc::new(RenderCancellation::default()),
+            lifecycle: Arc::new(Mutex::new(lifecycle)),
+            worker: Mutex::new(None),
         }
     }
 
@@ -857,8 +933,7 @@ impl RenderScheduler {
 
 impl Drop for RenderScheduler {
     fn drop(&mut self) {
-        self.cancellation.shutdown();
-        self.command_mailbox.send(RenderCommand::Shutdown);
+        self.request_shutdown();
     }
 }
 
@@ -866,6 +941,7 @@ fn run_render_worker_guarded(
     command_mailbox: Arc<RenderCommandMailbox>,
     event_mailbox: Arc<RenderEventMailbox>,
     cancellation: Arc<RenderCancellation>,
+    lifecycle: Arc<Mutex<RenderWorkerLifecycle>>,
     worker: impl FnOnce(Arc<RenderCommandMailbox>, Arc<RenderEventMailbox>, Arc<RenderCancellation>),
 ) {
     let result = catch_unwind(AssertUnwindSafe(|| {
@@ -877,6 +953,7 @@ fn run_render_worker_guarded(
     }));
 
     if cancellation.is_shutdown() {
+        *lifecycle.lock().expect("render lifecycle poisoned") = RenderWorkerLifecycle::Stopped;
         return;
     }
 
@@ -887,6 +964,7 @@ fn run_render_worker_guarded(
             .unwrap_or_else(|| "Render worker failed unexpectedly.".to_owned()),
     };
 
+    *lifecycle.lock().expect("render lifecycle poisoned") = RenderWorkerLifecycle::Failed;
     event_mailbox.send(RenderEvent::WorkerFailed {
         session_id: cancellation.current_session(),
         message,
@@ -1984,17 +2062,24 @@ mod tests {
         let command_mailbox = Arc::new(RenderCommandMailbox::default());
         let event_mailbox = Arc::new(RenderEventMailbox::default());
         let cancellation = Arc::new(RenderCancellation::default());
+        let lifecycle = Arc::new(Mutex::new(RenderWorkerLifecycle::Running));
         cancellation.activate(session);
 
         let scheduler = RenderScheduler {
             command_mailbox: Arc::clone(&command_mailbox),
             event_mailbox,
             cancellation: Arc::clone(&cancellation),
+            lifecycle: Arc::clone(&lifecycle),
+            worker: Mutex::new(None),
         };
 
         drop(scheduler);
 
         assert!(cancellation.is_cancelled(session));
+        assert_eq!(
+            *lifecycle.lock().expect("render lifecycle poisoned"),
+            RenderWorkerLifecycle::ShutdownRequested
+        );
         assert!(matches!(
             command_mailbox.try_recv(),
             Some(RenderCommand::Shutdown)
@@ -2007,15 +2092,21 @@ mod tests {
         let command_mailbox = Arc::new(RenderCommandMailbox::default());
         let event_mailbox = Arc::new(RenderEventMailbox::default());
         let cancellation = Arc::new(RenderCancellation::default());
+        let lifecycle = Arc::new(Mutex::new(RenderWorkerLifecycle::Running));
         cancellation.activate(session);
 
         run_render_worker_guarded(
             command_mailbox,
             Arc::clone(&event_mailbox),
             cancellation,
+            Arc::clone(&lifecycle),
             |_, _, _| panic!("fake worker panic"),
         );
 
+        assert_eq!(
+            *lifecycle.lock().expect("render lifecycle poisoned"),
+            RenderWorkerLifecycle::Failed
+        );
         match drain_single_event(&event_mailbox) {
             RenderEvent::WorkerFailed {
                 session_id,
@@ -2033,15 +2124,30 @@ mod tests {
         let command_mailbox = Arc::new(RenderCommandMailbox::default());
         let event_mailbox = Arc::new(RenderEventMailbox::default());
         let cancellation = Arc::new(RenderCancellation::default());
+        let lifecycle = Arc::new(Mutex::new(RenderWorkerLifecycle::Running));
 
         run_render_worker_guarded(
             command_mailbox,
             Arc::clone(&event_mailbox),
             Arc::clone(&cancellation),
+            Arc::clone(&lifecycle),
             |_, _, cancellation| cancellation.shutdown(),
         );
 
+        assert_eq!(
+            *lifecycle.lock().expect("render lifecycle poisoned"),
+            RenderWorkerLifecycle::Stopped
+        );
         assert!(event_mailbox.drain().is_empty());
+    }
+
+    #[test]
+    fn scheduler_without_worker_is_immediately_replaceable() {
+        let scheduler = RenderScheduler::without_worker_for_test();
+
+        assert_eq!(scheduler.lifecycle(), RenderWorkerLifecycle::Stopped);
+        assert!(scheduler.can_be_replaced());
+        assert!(scheduler.try_join_finished_worker());
     }
 
     #[test]

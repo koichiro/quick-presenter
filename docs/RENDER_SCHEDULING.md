@@ -59,6 +59,29 @@ new scheduler command.
 The worker repeats the same session cleanup for `Open` and `Shutdown` because
 commands may already have crossed the mailbox boundary.
 
+## Worker lifecycle
+
+`RenderScheduler` owns the render worker thread handle and tracks its lifecycle
+explicitly:
+
+- `Running`: the worker may own a PDFium document and may be inside a PDFium
+  call.
+- `ShutdownRequested`: shutdown has been requested, but the worker has not
+  necessarily finished. This state is not safe for replacement.
+- `Stopped`: the worker exited after an intentional shutdown.
+- `Failed`: the guarded worker caught a panic or unexpected return.
+
+Quick Presenter may construct a replacement render worker only after the
+previous scheduler is terminal (`Stopped` or `Failed`) and its thread handle has
+finished. The replacement path attempts to join the finished worker before
+installing a new scheduler. It must not create a new worker while the previous
+worker is still `Running` or `ShutdownRequested`, because that worker may still
+be inside a long-running PDFium call.
+
+Shutdown and session changes use cooperative cancellation. The app does not try
+to forcefully interrupt PDFium; if a PDFium call is slow, the old worker remains
+the only worker until it reaches the cancellation boundary and exits.
+
 ## Render events
 
 Rendered events are also bounded while the UI waits to drain them. Event delivery
