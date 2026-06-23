@@ -55,7 +55,7 @@ use render_controller::{
     thumbnail_visible_range_render_plan, visible_page_render_plan,
 };
 use render_controller::{CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH};
-use render_scheduler::{RenderEvent, RenderScheduler};
+use render_scheduler::{RenderEvent, RenderScheduler, RenderWorkerLifecycle};
 use rendering::presentation_preload_order;
 use rendering::RenderCache;
 use rendering::{thumbnail_window_indices, RenderPurpose, RenderRequest, RenderedPage};
@@ -716,8 +716,17 @@ pub(crate) fn begin_open_pdf(
     let had_open_deck = {
         let mut state = state.borrow_mut();
         let had_open_deck = state.presentation.snapshot().is_some();
+        if !ensure_render_scheduler_for_open(&mut state) {
+            state.status_text = "Rendering is still stopping. Try again in a moment.".to_owned();
+            return;
+        }
+
         let session_id = begin_open_pdf_state(&mut state, path.clone());
-        render_scheduler_for_open(&mut state).open(session_id, path);
+        state
+            .render_scheduler
+            .as_ref()
+            .expect("render scheduler should exist after open readiness check")
+            .open(session_id, path);
         had_open_deck
     };
 
@@ -731,10 +740,26 @@ pub(crate) fn begin_open_pdf(
     }
 }
 
-fn render_scheduler_for_open(state: &mut AppState) -> &RenderScheduler {
-    state
-        .render_scheduler
-        .get_or_insert_with(RenderScheduler::start)
+fn ensure_render_scheduler_for_open(state: &mut AppState) -> bool {
+    let Some(scheduler) = state.render_scheduler.as_ref() else {
+        state.render_scheduler = Some(RenderScheduler::start());
+        return true;
+    };
+
+    match scheduler.lifecycle() {
+        RenderWorkerLifecycle::Running => true,
+        RenderWorkerLifecycle::ShutdownRequested => false,
+        RenderWorkerLifecycle::Stopped | RenderWorkerLifecycle::Failed => {
+            if !scheduler.can_be_replaced() {
+                return false;
+            }
+            if !scheduler.try_join_finished_worker() {
+                return false;
+            }
+            state.render_scheduler = Some(RenderScheduler::start());
+            true
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -1532,7 +1557,9 @@ fn commit_render_worker_failed_app_state(
 ) -> bool {
     let accepted = commit_render_worker_failed_state(state, session_id);
     if accepted {
-        state.render_scheduler = None;
+        if let Some(scheduler) = state.render_scheduler.as_ref() {
+            scheduler.try_join_finished_worker();
+        }
     }
     accepted
 }
@@ -1599,9 +1626,9 @@ mod tests {
     }
 
     #[test]
-    fn worker_failure_drops_render_scheduler_handle() {
+    fn worker_failure_keeps_render_scheduler_handle_until_replacement() {
         let mut state = AppState {
-            render_scheduler: Some(RenderScheduler::start()),
+            render_scheduler: Some(RenderScheduler::without_worker_for_test()),
             ..AppState::default()
         };
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
@@ -1618,7 +1645,7 @@ mod tests {
             Some(session_id)
         ));
 
-        assert!(state.render_scheduler.is_none());
+        assert!(state.render_scheduler.is_some());
         assert_eq!(state.render_sessions.current_session(), None);
     }
 
@@ -1626,11 +1653,48 @@ mod tests {
     fn open_recreates_missing_render_scheduler() {
         let mut state = AppState::default();
 
-        {
-            let _ = render_scheduler_for_open(&mut state);
-        }
+        assert!(ensure_render_scheduler_for_open(&mut state));
 
         assert!(state.render_scheduler.is_some());
+    }
+
+    #[test]
+    fn open_replaces_stopped_render_scheduler() {
+        let mut state = AppState {
+            render_scheduler: Some(RenderScheduler::without_worker_for_test()),
+            ..AppState::default()
+        };
+
+        assert!(ensure_render_scheduler_for_open(&mut state));
+
+        assert_eq!(
+            state
+                .render_scheduler
+                .as_ref()
+                .expect("scheduler should be recreated")
+                .lifecycle(),
+            RenderWorkerLifecycle::Running
+        );
+    }
+
+    #[test]
+    fn open_does_not_replace_scheduler_while_shutdown_is_pending() {
+        let mut state = AppState {
+            render_scheduler: Some(RenderScheduler::without_worker_with_lifecycle_for_test(
+                RenderWorkerLifecycle::ShutdownRequested,
+            )),
+            ..AppState::default()
+        };
+
+        assert!(!ensure_render_scheduler_for_open(&mut state));
+        assert_eq!(
+            state
+                .render_scheduler
+                .as_ref()
+                .expect("scheduler should remain present")
+                .lifecycle(),
+            RenderWorkerLifecycle::ShutdownRequested
+        );
     }
 
     #[test]
