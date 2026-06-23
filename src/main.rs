@@ -1493,7 +1493,7 @@ fn handle_page_rendered(
         outcome
     };
 
-    if let Some(aspect_ratio) = outcome.fit_aspect_ratio {
+    if let Some(aspect_ratio) = outcome.initial_fit_aspect_ratio {
         fit_slide_window_to_aspect_ratio(windows, aspect_ratio);
     }
 }

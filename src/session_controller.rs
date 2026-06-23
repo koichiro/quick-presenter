@@ -147,7 +147,13 @@ pub fn commit_page_rendered_state(
             && request.page_index == snapshot.current_index
     });
 
-    let fit_aspect_ratio = is_visible_current_slide.map(|_| page.aspect_ratio);
+    let initial_fit_aspect_ratio = is_visible_current_slide.and_then(|_| {
+        state
+            .audience_slide
+            .last_good_current
+            .is_none()
+            .then_some(page.aspect_ratio)
+    });
     if is_visible_current_slide.is_some() {
         state.audience_slide.last_good_current = Some(page);
         state.audience_slide.failed_current_page = None;
@@ -155,13 +161,13 @@ pub fn commit_page_rendered_state(
 
     Some(PageRenderedOutcome {
         snapshot,
-        fit_aspect_ratio,
+        initial_fit_aspect_ratio,
     })
 }
 
 pub struct PageRenderedOutcome {
     pub snapshot: Option<PageSnapshot>,
-    pub fit_aspect_ratio: Option<f32>,
+    pub initial_fit_aspect_ratio: Option<f32>,
 }
 
 pub fn commit_page_render_failed_state(
@@ -505,7 +511,7 @@ mod tests {
     }
 
     #[test]
-    fn current_page_render_returns_snapshot_and_fit_aspect_ratio() {
+    fn first_current_page_render_requests_initial_slide_window_fit() {
         let mut state = AppState::default();
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
         commit_render_opened_state(
@@ -527,12 +533,47 @@ mod tests {
         .expect("current session should accept rendered page");
 
         assert_eq!(outcome.snapshot.unwrap().current_index, 0);
-        assert_eq!(outcome.fit_aspect_ratio, Some(4.0 / 3.0));
+        assert_eq!(outcome.initial_fit_aspect_ratio, Some(4.0 / 3.0));
         assert!(state.render_cache.peek(request).is_some());
     }
 
     #[test]
-    fn preview_render_does_not_request_slide_window_fit() {
+    fn subsequent_current_page_render_does_not_request_slide_window_fit() {
+        let mut state = AppState::default();
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            session_id,
+            "Deck".to_owned(),
+            2,
+            "Ready".to_owned(),
+        );
+        commit_page_rendered_state(
+            &mut state,
+            session_id,
+            current_slide_request(0),
+            rendered_page(4.0 / 3.0),
+            2,
+        )
+        .expect("first current page render should be accepted");
+        state.presentation.next_page();
+        let request = current_slide_request(1);
+
+        let outcome = commit_page_rendered_state(
+            &mut state,
+            session_id,
+            request,
+            rendered_page(16.0 / 9.0),
+            2,
+        )
+        .expect("current session should accept subsequent current page render");
+
+        assert_eq!(outcome.snapshot.unwrap().current_index, 1);
+        assert_eq!(outcome.initial_fit_aspect_ratio, None);
+    }
+
+    #[test]
+    fn preview_render_does_not_request_initial_slide_window_fit() {
         let mut state = AppState::default();
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
         commit_render_opened_state(
@@ -553,7 +594,7 @@ mod tests {
         .expect("current session should accept preview render");
 
         assert_eq!(outcome.snapshot.unwrap().current_index, 0);
-        assert_eq!(outcome.fit_aspect_ratio, None);
+        assert_eq!(outcome.initial_fit_aspect_ratio, None);
     }
 
     #[test]
