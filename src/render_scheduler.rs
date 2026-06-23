@@ -133,6 +133,24 @@ impl RenderSessionTracker {
         self.pending_open_session = None;
         true
     }
+
+    pub fn mark_worker_failed(&mut self, session_id: Option<RenderSessionId>) -> bool {
+        let failure_matches = match session_id {
+            Some(session_id) => {
+                self.committed_session == Some(session_id)
+                    || self.pending_open_session == Some(session_id)
+            }
+            None => true,
+        };
+
+        if !failure_matches {
+            return false;
+        }
+
+        self.committed_session = None;
+        self.pending_open_session = None;
+        true
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
@@ -1372,6 +1390,30 @@ mod tests {
         assert!(!tracker.accepts_pending_open(second));
         assert!(tracker.accepts(second));
         assert_eq!(tracker.current_session(), Some(second));
+    }
+
+    #[test]
+    fn session_tracker_worker_failure_clears_committed_and_pending_sessions() {
+        let mut tracker = RenderSessionTracker::default();
+        let current = tracker.begin_open_session();
+        assert!(tracker.commit_pending_open(current));
+        let pending = tracker.begin_open_session();
+
+        assert!(tracker.mark_worker_failed(Some(current)));
+
+        assert_eq!(tracker.current_session(), None);
+        assert!(!tracker.accepts_pending_open(pending));
+    }
+
+    #[test]
+    fn session_tracker_ignores_worker_failure_for_unknown_session() {
+        let mut tracker = RenderSessionTracker::default();
+        let current = tracker.begin_open_session();
+        assert!(tracker.commit_pending_open(current));
+
+        assert!(!tracker.mark_worker_failed(Some(RenderSessionId(99))));
+
+        assert_eq!(tracker.current_session(), Some(current));
     }
 
     #[test]

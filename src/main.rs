@@ -713,9 +713,7 @@ fn begin_open_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, path: 
         let mut state = state.borrow_mut();
         let had_open_deck = state.presentation.snapshot().is_some();
         let session_id = begin_open_pdf_state(&mut state, path.clone());
-        if let Some(scheduler) = state.render_scheduler.as_ref() {
-            scheduler.open(session_id, path);
-        }
+        render_scheduler_for_open(&mut state).open(session_id, path);
         had_open_deck
     };
 
@@ -727,6 +725,12 @@ fn begin_open_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, path: 
     } else {
         apply_opening_state_to_windows(windows, &title);
     }
+}
+
+fn render_scheduler_for_open(state: &mut AppState) -> &RenderScheduler {
+    state
+        .render_scheduler
+        .get_or_insert_with(RenderScheduler::start)
 }
 
 #[allow(dead_code)]
@@ -1484,7 +1488,7 @@ fn handle_render_worker_failed(
     warn!(error = %message, "render worker failed");
     let accepted = {
         let mut state = state.borrow_mut();
-        commit_render_worker_failed_state(&mut state, session_id)
+        commit_render_worker_failed_app_state(&mut state, session_id)
     };
     if !accepted {
         return;
@@ -1492,10 +1496,21 @@ fn handle_render_worker_failed(
     set_presenter_message(
         &windows.presenter,
         PresenterMessage::new(
-            "Rendering stopped. Reopen the PDF.",
+            "Rendering stopped. Open the PDF again.",
             errors::MessageSeverity::Error,
         ),
     );
+}
+
+fn commit_render_worker_failed_app_state(
+    state: &mut AppState,
+    session_id: Option<render_scheduler::RenderSessionId>,
+) -> bool {
+    let accepted = commit_render_worker_failed_state(state, session_id);
+    if accepted {
+        state.render_scheduler = None;
+    }
+    accepted
 }
 
 fn start_presenter_time_updates(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
@@ -1557,6 +1572,41 @@ mod tests {
         assert_eq!(state.status_text, original_status);
         assert_eq!(state.render_generation, original_generation);
         assert!(state.black_screen.is_active());
+    }
+
+    #[test]
+    fn worker_failure_drops_render_scheduler_handle() {
+        let mut state = AppState {
+            render_scheduler: Some(RenderScheduler::start()),
+            ..AppState::default()
+        };
+        let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+        commit_render_opened_state(
+            &mut state,
+            session_id,
+            "Deck".to_owned(),
+            2,
+            "Ready".to_owned(),
+        );
+
+        assert!(commit_render_worker_failed_app_state(
+            &mut state,
+            Some(session_id)
+        ));
+
+        assert!(state.render_scheduler.is_none());
+        assert_eq!(state.render_sessions.current_session(), None);
+    }
+
+    #[test]
+    fn open_recreates_missing_render_scheduler() {
+        let mut state = AppState::default();
+
+        {
+            let _ = render_scheduler_for_open(&mut state);
+        }
+
+        assert!(state.render_scheduler.is_some());
     }
 
     #[test]
