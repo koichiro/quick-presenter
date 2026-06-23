@@ -1533,7 +1533,7 @@ fn handle_render_worker_failed(
     set_presenter_message(
         &windows.presenter,
         PresenterMessage::new(
-            "Rendering stopped. Reopen the PDF.",
+            "Rendering stopped. Open the PDF again.",
             errors::MessageSeverity::Error,
         ),
     );
