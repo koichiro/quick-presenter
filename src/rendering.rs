@@ -351,8 +351,13 @@ fn eviction_priority(purpose: RenderPurpose) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render_controller::{
+        CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH,
+    };
     use slint::{Rgba8Pixel, SharedPixelBuffer};
     use std::{cell::Cell, collections::HashSet, rc::Rc};
+
+    const BYTES_PER_MIB: usize = 1024 * 1024;
 
     fn request(page_index: u32, width: i32, purpose: RenderPurpose) -> RenderRequest {
         RenderRequest {
@@ -391,6 +396,16 @@ mod tests {
             })
             .map(|request| request.page_index)
             .collect()
+    }
+
+    fn representative_fixed_width_working_set_bytes(aspect_ratio: f32) -> usize {
+        const PROTECTED_CURRENT_SLIDES: usize = 5;
+        const NEXT_PREVIEWS: usize = 1;
+        const THUMBNAILS: usize = 17;
+
+        PROTECTED_CURRENT_SLIDES * estimated_render_bytes(CURRENT_RENDER_WIDTH, aspect_ratio)
+            + NEXT_PREVIEWS * estimated_render_bytes(PREVIEW_RENDER_WIDTH, aspect_ratio)
+            + THUMBNAILS * estimated_render_bytes(THUMBNAIL_RENDER_WIDTH, aspect_ratio)
     }
 
     #[test]
@@ -557,6 +572,71 @@ mod tests {
         assert_eq!(
             loaded_thumbnail_indices(&cache, 10, 240),
             HashSet::from([3])
+        );
+    }
+
+    #[test]
+    fn representative_fixed_width_working_sets_fit_default_byte_budget() {
+        let budget = CacheBudget::default();
+        let normal_16_by_9 = representative_fixed_width_working_set_bytes(16.0 / 9.0);
+        let large_4_by_3 = representative_fixed_width_working_set_bytes(4.0 / 3.0);
+
+        assert_eq!(
+            estimated_render_bytes(CURRENT_RENDER_WIDTH, 16.0 / 9.0),
+            5_760_000
+        );
+        assert_eq!(
+            estimated_render_bytes(CURRENT_RENDER_WIDTH, 4.0 / 3.0),
+            7_680_000
+        );
+        assert!(normal_16_by_9 < 30 * BYTES_PER_MIB);
+        assert!(large_4_by_3 < 40 * BYTES_PER_MIB);
+        assert!(large_4_by_3 < budget.max_estimated_bytes / 2);
+    }
+
+    #[test]
+    fn thumbnail_bursts_evict_background_pages_before_protected_slides() {
+        let mut cache = RenderCache::with_budget(CacheBudget {
+            max_entries: 8,
+            max_estimated_bytes: usize::MAX,
+        });
+        let context = CacheContext {
+            current_index: 4,
+            total_pages: 12,
+            presentation_radius: 2,
+        };
+
+        for page_index in 2..=6 {
+            cache.insert_with_context(
+                request(
+                    page_index,
+                    CURRENT_RENDER_WIDTH,
+                    RenderPurpose::CurrentSlide,
+                ),
+                rendered_page_with_bytes(16.0 / 9.0, 4),
+                Some(context),
+            );
+        }
+
+        for page_index in 0..10 {
+            cache.insert_with_context(
+                request(page_index, THUMBNAIL_RENDER_WIDTH, RenderPurpose::Thumbnail),
+                rendered_page_with_bytes(16.0 / 9.0, 4),
+                Some(context),
+            );
+        }
+
+        assert_eq!(cache.len(), 8);
+        for page_index in 2..=6 {
+            assert!(cache.pages.contains_key(&request(
+                page_index,
+                CURRENT_RENDER_WIDTH,
+                RenderPurpose::CurrentSlide
+            )));
+        }
+        assert_eq!(
+            loaded_thumbnail_indices(&cache, 12, THUMBNAIL_RENDER_WIDTH),
+            HashSet::from([7, 8, 9])
         );
     }
 
