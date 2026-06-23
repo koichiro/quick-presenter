@@ -29,6 +29,8 @@ Before publishing a release:
    macOS/Windows GUI smoke skip-reason reports from `Build Binaries`.
 7. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
    macOS, Windows, and Ubuntu Linux artifacts before publishing.
+8. Attach the completed manual GUI smoke reports to the GitHub release, or
+   document any platform-specific waiver in the release notes before publishing.
 
 `Build Binaries` still runs automatically for pull requests that change
 packaging-sensitive files, such as packaging scripts, installer metadata,
@@ -50,6 +52,12 @@ upload explicit GUI smoke skip-reason reports because hosted CI does not provide
 the normal desktop sessions needed for reliable platform GUI release gates. The
 GUI checklist remains the release gate for OS-owned title-bar, menu,
 keyboard-focus, shell integration, and readability behavior.
+
+Manual GUI smoke reports are release artifacts. For v1.0.0 and later releases,
+attach one report per supported platform to the GitHub release using the
+filenames and required metadata in [GUI_SMOKE_CHECKLIST.md](GUI_SMOKE_CHECKLIST.md).
+Each report must identify the exact tested package file and package SHA-256 so
+the result can be matched to the released DMG, MSI, or Debian package.
 
 ## Supported Release Artifacts
 
