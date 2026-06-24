@@ -733,8 +733,13 @@ jobs:
           if (-not (Test-Path $msix -PathType Leaf)) {
             throw "Missing Store MSIX artifact: $msix"
           }
-          if ((Get-Item $msix).Length -le 0) {
+          $msixSize = (Get-Item $msix).Length
+          if ($msixSize -le 0) {
             throw "Store MSIX artifact is empty: $msix"
+          }
+          $maxExpectedStoreMsixBytes = 1GB
+          if ($msixSize -gt $maxExpectedStoreMsixBytes) {
+            throw "Store MSIX artifact is unexpectedly large: $msixSize bytes"
           }
 
           $makeAppxCommand = Get-Command 'makeappx.exe' -ErrorAction SilentlyContinue
@@ -765,6 +770,49 @@ jobs:
 
           $manifest = Join-Path $extractDir 'AppxManifest.xml'
           $exe = Join-Path $extractDir 'quick-presenter.exe'
+          $pdfiumDir = Join-Path $extractDir 'pdfium'
+          $licenseDir = Join-Path $extractDir 'licenses'
+          $assetsDir = Join-Path $extractDir 'Assets'
+
+          if (-not (Test-Path $manifest -PathType Leaf)) {
+            throw "Unpacked Store MSIX layout is missing AppxManifest.xml"
+          }
+          if (-not (Test-Path $exe -PathType Leaf)) {
+            throw "Unpacked Store MSIX layout is missing quick-presenter.exe"
+          }
+          if (-not (Test-Path (Join-Path $pdfiumDir 'LICENSE') -PathType Leaf)) {
+            throw "Unpacked Store MSIX layout is missing bundled PDFium license"
+          }
+          if (-not (Test-Path (Join-Path $pdfiumDir 'licenses') -PathType Container)) {
+            throw "Unpacked Store MSIX layout is missing PDFium component licenses"
+          }
+          if (-not (Test-Path (Join-Path $licenseDir 'QuickPresenter-LICENSE.txt') -PathType Leaf)) {
+            throw "Unpacked Store MSIX layout is missing Quick Presenter license"
+          }
+          if (-not (Test-Path (Join-Path $licenseDir 'QuickPresenter-SOURCE-OFFER.txt') -PathType Leaf)) {
+            throw "Unpacked Store MSIX layout is missing Quick Presenter source offer"
+          }
+          if (-not (Test-Path (Join-Path $licenseDir 'PDFium-LICENSE.txt') -PathType Leaf)) {
+            throw "Unpacked Store MSIX layout is missing PDFium license copy"
+          }
+          if (-not (Test-Path (Join-Path $assetsDir 'Square44x44Logo.png') -PathType Leaf)) {
+            throw "Unpacked Store MSIX layout is missing Square44x44Logo.png"
+          }
+          if (-not (Test-Path (Join-Path $assetsDir 'Square150x150Logo.png') -PathType Leaf)) {
+            throw "Unpacked Store MSIX layout is missing Square150x150Logo.png"
+          }
+
+          $invalidPackageNames = @(Get-ChildItem $extractDir -Recurse -Force |
+            Where-Object {
+              $_.Name -match '[<>:"|?*]' -or
+              $_.Name -ne $_.Name.Trim() -or
+              ([System.IO.Path]::GetRelativePath($extractDir, $_.FullName)).Length -gt 240
+            })
+          if ($invalidPackageNames.Count -gt 0) {
+            $badNames = ($invalidPackageNames | ForEach-Object { [System.IO.Path]::GetRelativePath($extractDir, $_.FullName) }) -join ', '
+            throw "Store MSIX layout contains unsafe package paths: $badNames"
+          }
+
           $manifestText = Get-Content $manifest -Raw
           if ($manifestText -notmatch 'Name="KoichiroOhba\.QuickPresenter"') {
             throw "Store MSIX manifest has unexpected identity name"
@@ -774,6 +822,15 @@ jobs:
           }
           if ($manifestText -notmatch '<PublisherDisplayName>Koichiro Ohba</PublisherDisplayName>') {
             throw "Store MSIX manifest has unexpected publisher display name"
+          }
+          if ($manifestText -notmatch 'ProcessorArchitecture="x64"') {
+            throw "Store MSIX manifest has unexpected processor architecture"
+          }
+          if ($manifestText -notmatch 'Name="Windows\.Desktop"') {
+            throw "Store MSIX manifest is missing Windows.Desktop target family"
+          }
+          if ($manifestText -notmatch 'Executable="quick-presenter\.exe"') {
+            throw "Store MSIX manifest is missing quick-presenter.exe application entry"
           }
           if ($manifestText -notmatch 'Name="runFullTrust"') {
             throw "Store MSIX manifest is missing runFullTrust capability"

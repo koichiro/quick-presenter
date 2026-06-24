@@ -604,8 +604,12 @@ artifacts/quick-presenter-windows-store-x64/QuickPresenter-<version>.msix
 
 The `build-binaries.yml` workflow also creates and uploads a
 `quick-presenter-windows-store-x64` artifact on manual `workflow_dispatch` runs.
-Use that CI-produced Store artifact as the candidate package for real Windows
-machine validation and Store submission checks.
+It unpacks that Store MSIX and checks the Partner Center identity, `x64`
+architecture, Windows Desktop target family, `runFullTrust`, expected executable
+entry, required license/source-offer files, icon assets, conservative package
+size, package path sanity, and PDF smoke startup. Use that CI-produced Store
+artifact as the candidate package for real Windows machine validation and Store
+submission checks.
 
 The same values can be passed explicitly if Partner Center assigns replacements:
 
