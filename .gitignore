@@ -1,6 +1,9 @@
 # Rust build artifacts
 /target/
 
+# Website build artifacts
+/website/dist/
+
 # Locally downloaded PDFium binaries and licenses
 /pdfium/
 
