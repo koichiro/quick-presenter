@@ -13,6 +13,7 @@ except ImportError as exc:
 
 PNG_SIZES = (16, 24, 32, 48, 64, 128, 256, 512, 1024)
 WINDOWS_ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)
+MACOS_ARTWORK_SCALE = 0.84
 MACOS_ICONSET_ENTRIES = (
     ("icp4", 16),
     ("icp5", 32),
@@ -51,12 +52,21 @@ def generate_windows_ico(source: Image.Image, output_path: Path) -> None:
     images[-1].save(output_path, append_images=images[:-1])
 
 
+def macos_resized(source: Image.Image, size: int) -> Image.Image:
+    artwork_size = round(size * MACOS_ARTWORK_SCALE)
+    artwork = resized(source, artwork_size)
+    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    offset = ((size - artwork_size) // 2, (size - artwork_size) // 2)
+    canvas.alpha_composite(artwork, offset)
+    return canvas
+
+
 def generate_macos_icns(source: Image.Image, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     chunks: list[bytes] = []
     for type_code, size in MACOS_ICONSET_ENTRIES:
         buffer = io.BytesIO()
-        resized(source, size).save(buffer, format="PNG")
+        macos_resized(source, size).save(buffer, format="PNG")
         payload = buffer.getvalue()
         chunks.append(type_code.encode("ascii") + (len(payload) + 8).to_bytes(4, "big") + payload)
 
