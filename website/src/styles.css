@@ -96,6 +96,7 @@ main {
 .authoring,
 .scope,
 .oss,
+.support,
 .download {
   width: min(1160px, calc(100% - 40px));
   margin: 0 auto;
@@ -252,6 +253,7 @@ h3 {
 .authoring,
 .scope,
 .oss,
+.support,
 .download {
   padding: 78px 0;
 }
@@ -450,6 +452,41 @@ h3 {
   gap: 12px;
 }
 
+.support {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.42fr);
+  align-items: center;
+  gap: 42px;
+  border-top: 1px solid var(--line);
+}
+
+.support-copy p:not(.eyebrow) {
+  max-width: 760px;
+  color: var(--muted);
+  font-size: 1.08rem;
+}
+
+.store-links {
+  display: grid;
+  gap: 14px;
+  justify-content: end;
+}
+
+.store-links a {
+  display: block;
+  border-radius: 8px;
+}
+
+.store-links a:hover {
+  transform: translateY(-1px);
+}
+
+.store-links img {
+  width: min(252px, 100%);
+  border-radius: 8px;
+  box-shadow: 0 16px 34px rgba(23, 32, 38, 0.18);
+}
+
 .download {
   margin-bottom: 42px;
   padding: 56px;
@@ -514,6 +551,7 @@ h3 {
   .feature-large,
   .feature.split,
   .tool-grid,
+  .support,
   .oss {
     grid-template-columns: 1fr;
   }
@@ -525,6 +563,10 @@ h3 {
   .oss-actions {
     justify-content: flex-start;
   }
+
+  .store-links {
+    justify-content: start;
+  }
 }
 
 @media (max-width: 720px) {
@@ -535,6 +577,7 @@ h3 {
   .authoring,
   .scope,
   .oss,
+  .support,
   .download,
   .site-footer {
     width: min(100% - 28px, 1160px);
@@ -558,6 +601,7 @@ h3 {
   .authoring,
   .scope,
   .oss,
+  .support,
   .download {
     padding-top: 54px;
     padding-bottom: 54px;

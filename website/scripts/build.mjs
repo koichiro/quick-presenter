@@ -14,6 +14,8 @@ const files = [
   ["../docs/assets/slide-window-en.png", "assets/slide-window-en.png"],
   ["../docs/assets/quick-presenter-demo.gif", "assets/quick-presenter-demo.gif"],
   ["../assets/icons/png/quick-presenter-icon-256.png", "assets/quick-presenter-icon-256.png"],
+  ["src/assets/mac-app-store-badge.svg", "assets/mac-app-store-badge.svg"],
+  ["src/assets/microsoft-store-badge.svg", "assets/microsoft-store-badge.svg"],
 ];
 
 await rm(dist, { recursive: true, force: true });

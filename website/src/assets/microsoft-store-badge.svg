@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="252" height="74" viewBox="0 0 252 74" role="img" aria-labelledby="title desc">
+  <title id="title">Microsoft Store badge</title>
+  <desc id="desc">Get it from Microsoft Store</desc>
+  <rect width="252" height="74" rx="8" fill="#172026"/>
+  <rect x="1" y="1" width="250" height="72" rx="7" fill="none" stroke="#d8e2e7" stroke-opacity=".28"/>
+  <rect x="23" y="22" width="17" height="17" fill="#f35325"/>
+  <rect x="43" y="22" width="17" height="17" fill="#81bc06"/>
+  <rect x="23" y="42" width="17" height="17" fill="#05a6f0"/>
+  <rect x="43" y="42" width="17" height="17" fill="#ffba08"/>
+  <text x="76" y="28" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700">Get it from</text>
+  <text x="76" y="52" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800">Microsoft Store</text>
+</svg>
