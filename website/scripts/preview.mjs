@@ -14,6 +14,7 @@ const contentTypes = {
   ".gif": "image/gif",
   ".html": "text/html; charset=utf-8",
   ".png": "image/png",
+  ".svg": "image/svg+xml; charset=utf-8",
 };
 
 const server = createServer((request, response) => {
