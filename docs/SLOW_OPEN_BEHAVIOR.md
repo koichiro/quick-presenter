@@ -24,7 +24,7 @@ inside PDFium at the same time. Until a broader PDFium threading and process
 isolation design exists, the app should keep one render worker and use
 cooperative cancellation only at boundaries where the worker regains control.
 
-Instead, v1.0.0 should implement a delayed slow-open status message and keep the
+Instead, v1.0.0 implements a delayed slow-open status message and keeps the
 latest selected PDF as the deterministic winner.
 
 ## User-Facing Behavior
@@ -55,7 +55,7 @@ Slow open path:
 Repeated opens:
 
 - Selecting another PDF while an open is pending starts a new pending open
-  session and replaces `pending_open_path`.
+  session and replaces `pending_open`.
 - The newest selected PDF is the only pending open that UI state may commit.
 - If an older open succeeds or fails after it was superseded, its event is
   ignored by `RenderSessionTracker`.
@@ -74,8 +74,8 @@ Shutdown:
 
 ## State Design
 
-Keep the PDFium-owning document state in `src/render_scheduler.rs`. Add only UI
-progress state to `AppState`, for example:
+Keep the PDFium-owning document state in `src/render_scheduler.rs`. `AppState`
+stores only UI progress for the pending open:
 
 ```rust
 pub struct PendingOpenState {
@@ -86,15 +86,14 @@ pub struct PendingOpenState {
 }
 ```
 
-This state replaces or wraps the current `pending_open_path: Option<PathBuf>`.
-It should be updated only through `session_controller` helpers so tests can
+This state is updated only through `session_controller` helpers so tests can
 cover transitions without constructing Slint windows.
 
-Recommended helper shape:
+The helper shape is:
 
-- `begin_open_pdf_state(state, path, now)` creates a new session, stores pending
-  open progress, sets status to `Opening PDF...`, and preserves the committed
-  deck.
+- `begin_open_pdf_state_at(state, path, now)` creates a new session, stores
+  pending open progress, sets status to `Opening PDF...`, and preserves the
+  committed deck.
 - `mark_pending_open_slow(state, session_id, now, delay)` updates status only
   when the matching pending session is still open, the delay has elapsed, and
   the slow status was not already shown.
@@ -105,26 +104,12 @@ Recommended helper shape:
 - `commit_render_worker_failed_state(...)` clears matching pending state when
   the worker failure applies to the pending or committed session.
 
-If keeping `pending_open_path` separately is less disruptive, add
-`pending_open_started_at` and `pending_open_slow_status_shown` beside it. The
-important invariant is that all three fields are updated together for the same
-pending session.
-
 ## Timer Design
 
 Use a UI-thread `slint::Timer` for slow-open status because the render worker may
-be blocked and cannot emit progress events.
-
-The timer can be either:
-
-- a repeated timer, similar to the render-event and clock timers, that checks
-  pending open progress every 250 ms; or
-- a `Timer::single_shot(SLOW_OPEN_STATUS_DELAY, ...)` scheduled for each open.
-
-A repeated timer is slightly easier to make stale-safe because it reads the
-current pending session from `AppState` before updating the UI. A single-shot
-timer is also acceptable if it captures the session ID and calls a
-session-controller helper that rejects stale sessions.
+be blocked and cannot emit progress events. The implementation uses a repeated
+timer, similar to the render-event and clock timers, that checks pending open
+progress every 250 ms.
 
 When `mark_pending_open_slow` returns true, sync only the presenter status:
 
@@ -152,7 +137,7 @@ provide immediate cancellation inside PDFium.
 
 ## Test Plan
 
-Add or adjust unit tests in `src/session_controller.rs`:
+Unit tests in `src/session_controller.rs` cover:
 
 - starting an open records the pending session, path, request time, and
   `Opening PDF...` without clearing the current deck;
@@ -164,15 +149,14 @@ Add or adjust unit tests in `src/session_controller.rs`:
   pending session;
 - failed replacement open preserves the committed deck.
 
-Add or adjust unit tests in `src/render_scheduler.rs`:
+Unit tests in `src/render_scheduler.rs` cover:
 
 - pending `Open` commands still coalesce so the newest pending open wins;
 - a comment or test name makes clear that an in-progress synchronous open is not
   interrupted until the worker regains control.
 
-If the timer glue is factored into a pure helper in `src/main.rs`, add a small
-test around that helper. Avoid tests that require creating Slint windows for
-this behavior.
+The timer glue stays thin in `src/main.rs`; behavior is tested through the pure
+session-controller helpers rather than by constructing Slint windows.
 
 ## Future Options
 

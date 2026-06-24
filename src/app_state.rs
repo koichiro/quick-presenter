@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Instant};
 
 use crate::{
     black_screen::BlackScreenState,
@@ -8,6 +8,7 @@ use crate::{
     recent::RecentFileStore,
     recent::RecentFiles,
     render_scheduler::RenderScheduler,
+    render_scheduler::RenderSessionId,
     render_scheduler::RenderSessionTracker,
     rendering::{RenderCache, RenderedPage},
     timer::PresentationTimer,
@@ -24,7 +25,7 @@ pub struct AppState {
     pub render_sessions: RenderSessionTracker,
     pub render_scheduler: Option<RenderScheduler>,
     pub thumbnails: ThumbnailState,
-    pub pending_open_path: Option<PathBuf>,
+    pub pending_open: Option<PendingOpenState>,
     pub notes: SpeakerNotes,
     pub presentation: PresentationState,
     pub timer: PresentationTimer,
@@ -33,6 +34,14 @@ pub struct AppState {
     pub recent_menu_paths: Vec<PathBuf>,
     pub recent_store: Option<RecentFileStore>,
     pub status_text: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct PendingOpenState {
+    pub session_id: RenderSessionId,
+    pub path: PathBuf,
+    pub requested_at: Instant,
+    pub slow_status_shown: bool,
 }
 
 #[derive(Default)]
