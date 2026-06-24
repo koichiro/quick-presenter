@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="252" height="74" viewBox="0 0 252 74" role="img" aria-labelledby="mac-app-store-title mac-app-store-desc">
+  <title id="mac-app-store-title">Mac App Store badge</title>
+  <desc id="mac-app-store-desc">Download on the Mac App Store</desc>
+  <rect width="252" height="74" rx="8" fill="#172026"/>
+  <rect x="1" y="1" width="250" height="72" rx="7" fill="none" stroke="#d8e2e7" stroke-opacity=".28"/>
+  <circle cx="40" cy="37" r="19" fill="#fff"/>
+  <path d="M40 19l4.8 12.3 13.2.7-10.2 8.4 3.4 12.8L40 47.1l-11.2 7.1 3.4-12.8L22 33l13.2-.7L40 19z" fill="#172026"/>
+  <text x="76" y="28" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700">Download on the</text>
+  <text x="76" y="52" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800">Mac App Store</text>
+</svg>
