@@ -18,7 +18,9 @@
         <span>Quick Presenter</span>
       </a>
       <nav class="nav-links" aria-label="Primary navigation">
+        <a href="#audience">Who it helps</a>
         <a href="#features">Features</a>
+        <a href="#authoring">PDF workflow</a>
         <a href="#scope">Scope</a>
         <a href="#download">Download</a>
         <a href="https://github.com/koichiro/quick-presenter">GitHub</a>
@@ -65,6 +67,44 @@
             alt="Quick Presenter presenter window showing the current slide, next slide preview, speaker notes, timer, and page status."
           />
         </figure>
+      </section>
+
+      <section id="audience" class="audience" aria-labelledby="audience-title">
+        <div class="section-heading">
+          <p class="eyebrow">Who it helps</p>
+          <h2 id="audience-title">For speakers who already have the deck.</h2>
+          <p>
+            Quick Presenter is built for academic talks, research presentations,
+            technical conferences, and online sessions where the final slides are
+            exported to PDF before the talk.
+          </p>
+        </div>
+        <div class="audience-grid">
+          <article>
+            <span>Problem</span>
+            <h3>PDF viewers are general-purpose.</h3>
+            <p>
+              They open files well, but live talks need presenter context,
+              predictable navigation, and a clean audience output.
+            </p>
+          </article>
+          <article>
+            <span>Need</span>
+            <h3>The speaker must stay oriented.</h3>
+            <p>
+              Current slide, next slide, speaker notes, elapsed time, clock, and
+              page status should be visible without adding editing complexity.
+            </p>
+          </article>
+          <article>
+            <span>Value</span>
+            <h3>Prepared PDFs become presentation-ready.</h3>
+            <p>
+              Quick Presenter keeps the playback path compact so switching between
+              conference rooms, classrooms, and online meetings feels predictable.
+            </p>
+          </article>
+        </div>
       </section>
 
       <section class="positioning" aria-labelledby="positioning-title">
@@ -159,6 +199,44 @@
             </p>
           </div>
         </article>
+      </section>
+
+      <section id="authoring" class="authoring" aria-labelledby="authoring-title">
+        <div class="section-heading">
+          <p class="eyebrow">PDF authoring workflow</p>
+          <h2 id="authoring-title">Create slides anywhere. Present the exported PDF.</h2>
+          <p>
+            Quick Presenter does not create or edit slide decks. Keep using the
+            authoring tool that fits your workflow, then export the finished deck
+            to PDF for playback.
+          </p>
+        </div>
+        <div class="tool-grid" role="list">
+          <a href="https://www.apple.com/keynote/" role="listitem">
+            <span>Keynote</span>
+            <p>Export the final deck to PDF before presenting.</p>
+          </a>
+          <a href="https://www.microsoft.com/microsoft-365/powerpoint" role="listitem">
+            <span>PowerPoint</span>
+            <p>Use Quick Presenter with the exported PDF, not the source file.</p>
+          </a>
+          <a href="https://www.google.com/slides/about/" role="listitem">
+            <span>Google Slides</span>
+            <p>Download the prepared presentation as a PDF deck.</p>
+          </a>
+          <a href="https://marp.app/" role="listitem">
+            <span>Marp</span>
+            <p>OSS Markdown slide authoring with PDF speaker-note support.</p>
+          </a>
+          <a href="https://ctan.org/pkg/beamer" role="listitem">
+            <span>LaTeX Beamer</span>
+            <p>OSS LaTeX class for PDF-first academic and technical talks.</p>
+          </a>
+        </div>
+        <p class="authoring-note">
+          The supported input remains the exported PDF, not the source project
+          from any authoring tool.
+        </p>
       </section>
 
       <section id="scope" class="scope" aria-labelledby="scope-title">

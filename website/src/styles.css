@@ -90,8 +90,10 @@ main {
 }
 
 .hero,
+.audience,
 .positioning,
 .feature-stack,
+.authoring,
 .scope,
 .oss,
 .download {
@@ -246,10 +248,54 @@ h3 {
 
 .positioning,
 .feature-stack,
+.audience,
+.authoring,
 .scope,
 .oss,
 .download {
   padding: 78px 0;
+}
+
+.audience {
+  border-top: 1px solid var(--line);
+}
+
+.section-heading p:last-child {
+  max-width: 760px;
+  margin: 20px 0 0;
+  color: var(--muted);
+  font-size: 1.1rem;
+}
+
+.audience-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.audience-grid article {
+  min-height: 280px;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.audience-grid span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.audience-grid h3 {
+  margin-top: 18px;
 }
 
 .positioning-grid {
@@ -267,7 +313,9 @@ h3 {
 }
 
 .positioning-grid p,
+.audience-grid p,
 .feature-copy p,
+.authoring-note,
 .oss p,
 .download p,
 .scope-list p {
@@ -307,6 +355,46 @@ h3 {
 
 .feature-copy p:last-child {
   margin-bottom: 0;
+}
+
+.authoring {
+  border-top: 1px solid var(--line);
+}
+
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.tool-grid a {
+  min-height: 178px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+
+.tool-grid a:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.tool-grid span {
+  color: var(--ink);
+  font-size: 1.02rem;
+  font-weight: 820;
+}
+
+.tool-grid p {
+  margin: 16px 0 0;
+  color: var(--muted);
+}
+
+.authoring-note {
+  max-width: 760px;
+  margin: 24px 0 0;
+  font-weight: 650;
 }
 
 .scope {
@@ -425,6 +513,7 @@ h3 {
 
   .feature-large,
   .feature.split,
+  .tool-grid,
   .oss {
     grid-template-columns: 1fr;
   }
@@ -440,8 +529,10 @@ h3 {
 
 @media (max-width: 720px) {
   .hero,
+  .audience,
   .positioning,
   .feature-stack,
+  .authoring,
   .scope,
   .oss,
   .download,
@@ -450,6 +541,7 @@ h3 {
   }
 
   .hero-facts,
+  .audience-grid,
   .positioning-grid,
   .scope-list {
     grid-template-columns: 1fr;
@@ -462,6 +554,8 @@ h3 {
 
   .positioning,
   .feature-stack,
+  .audience,
+  .authoring,
   .scope,
   .oss,
   .download {
