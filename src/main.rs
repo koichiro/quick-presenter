@@ -62,7 +62,8 @@ use rendering::{thumbnail_window_indices, RenderPurpose, RenderRequest, Rendered
 use session_controller::{
     apply_session_command, begin_open_pdf_state, commit_page_render_failed_state,
     commit_page_rendered_state, commit_render_open_failed_state, commit_render_opened_state,
-    commit_render_worker_failed_state, commit_speaker_notes_loaded_state,
+    commit_render_worker_failed_state, commit_speaker_notes_loaded_state, mark_pending_open_slow,
+    pending_open_session_id, SLOW_OPEN_STATUS_TEXT,
 };
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode, Weak};
 use timer::PresentationTimer;
@@ -86,6 +87,8 @@ const PRESENTATION_CACHE_RADIUS: u32 = 2;
 const THUMBNAIL_CACHE_RADIUS: u32 = 8;
 const THUMBNAIL_SCROLL_LOOKAHEAD: u32 = 4;
 const RENDER_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(16);
+const PENDING_OPEN_STATUS_INTERVAL: Duration = Duration::from_millis(250);
+const SLOW_OPEN_STATUS_DELAY: Duration = Duration::from_secs(2);
 const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
 const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
 const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
@@ -129,6 +132,8 @@ fn main() -> Result<()> {
     wire_callbacks(&windows, windows.refs(), state.clone());
     let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
     let _render_event_timer = start_render_event_updates(windows.refs(), state.clone());
+    let _pending_open_status_timer =
+        start_pending_open_status_updates(windows.refs(), state.clone());
     update_recent_file_menu(&windows.refs().presenter, &state.borrow().recent_files);
     apply_app_metadata(&windows.presenter);
 
@@ -1315,6 +1320,42 @@ fn start_render_event_updates(windows: AppWindowRefs, state: Rc<RefCell<AppState
         let _ = drain_render_events(&windows, &state);
     });
     timer
+}
+
+fn start_pending_open_status_updates(
+    windows: AppWindowRefs,
+    state: Rc<RefCell<AppState>>,
+) -> Timer {
+    let timer = Timer::default();
+    timer.start(
+        TimerMode::Repeated,
+        PENDING_OPEN_STATUS_INTERVAL,
+        move || {
+            update_pending_open_status(&windows, &state, Instant::now());
+        },
+    );
+    timer
+}
+
+fn update_pending_open_status(
+    windows: &AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+    now: Instant,
+) {
+    let should_show = {
+        let mut state = state.borrow_mut();
+        let Some(session_id) = pending_open_session_id(&state) else {
+            return;
+        };
+        mark_pending_open_slow(&mut state, session_id, now, SLOW_OPEN_STATUS_DELAY)
+    };
+
+    if should_show {
+        set_presenter_message(
+            &windows.presenter,
+            PresenterMessage::new(SLOW_OPEN_STATUS_TEXT, errors::MessageSeverity::Info),
+        );
+    }
 }
 
 #[derive(Default)]

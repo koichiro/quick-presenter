@@ -59,6 +59,11 @@ new scheduler command.
 The worker repeats the same session cleanup for `Open` and `Shutdown` because
 commands may already have crossed the mailbox boundary.
 
+`Open` cancellation is cooperative. A newer `Open` replaces older pending open
+commands in the mailbox, but it cannot interrupt a worker that is already inside
+the synchronous `PdfDocumentState::open()` PDFium call. Slow-open presenter
+behavior is defined in [Slow PDF Open Behavior](SLOW_OPEN_BEHAVIOR.md).
+
 ## Worker lifecycle
 
 `RenderScheduler` owns the render worker thread handle and tracks its lifecycle

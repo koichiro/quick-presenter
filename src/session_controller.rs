@@ -1,7 +1,7 @@
 use std::{path::PathBuf, time::Instant};
 
 use crate::{
-    app_state::{AppState, ThumbnailState},
+    app_state::{AppState, PendingOpenState, ThumbnailState},
     input::{apply_presentation_command, PresentationCommand},
     notes::SpeakerNotes,
     presentation::{PageSnapshot, PresentationState},
@@ -9,6 +9,8 @@ use crate::{
     rendering::{CacheContext, RenderPurpose, RenderRequest, RenderedPage},
     timer::{timer_transition_for_page_change, TimerTransition},
 };
+
+pub const SLOW_OPEN_STATUS_TEXT: &str = "Still opening PDF. The current deck remains available.";
 
 pub struct SessionCommandOutcome {
     pub snapshot: Option<PageSnapshot>,
@@ -48,10 +50,59 @@ pub fn apply_session_command(
 }
 
 pub fn begin_open_pdf_state(state: &mut AppState, path: PathBuf) -> RenderSessionId {
+    begin_open_pdf_state_at(state, path, Instant::now())
+}
+
+pub fn begin_open_pdf_state_at(
+    state: &mut AppState,
+    path: PathBuf,
+    requested_at: Instant,
+) -> RenderSessionId {
     let session_id = state.render_sessions.begin_open_session();
-    state.pending_open_path = Some(path);
+    state.pending_open = Some(PendingOpenState {
+        session_id,
+        path,
+        requested_at,
+        slow_status_shown: false,
+    });
     state.status_text = "Opening PDF...".to_owned();
     session_id
+}
+
+pub fn pending_open_session_id(state: &AppState) -> Option<RenderSessionId> {
+    state
+        .pending_open
+        .as_ref()
+        .map(|pending| pending.session_id)
+}
+
+pub fn mark_pending_open_slow(
+    state: &mut AppState,
+    session_id: RenderSessionId,
+    now: Instant,
+    delay: std::time::Duration,
+) -> bool {
+    if !state.render_sessions.accepts_pending_open(session_id) {
+        return false;
+    }
+
+    let Some(pending_open) = state.pending_open.as_mut() else {
+        return false;
+    };
+    if pending_open.session_id != session_id || pending_open.slow_status_shown {
+        return false;
+    }
+    if now
+        .checked_duration_since(pending_open.requested_at)
+        .unwrap_or_default()
+        < delay
+    {
+        return false;
+    }
+
+    pending_open.slow_status_shown = true;
+    state.status_text = SLOW_OPEN_STATUS_TEXT.to_owned();
+    true
 }
 
 pub fn commit_render_opened_state(
@@ -77,10 +128,11 @@ pub fn commit_render_opened_state(
     state.black_screen.set_active(false);
     state.timer.reset();
     state.status_text = status_text;
+    let loaded_path = state.pending_open.take().map(|pending| pending.path);
 
     Some(OpenedSessionOutcome {
         snapshot: state.presentation.snapshot(),
-        loaded_path: state.pending_open_path.take(),
+        loaded_path,
     })
 }
 
@@ -95,7 +147,7 @@ pub fn commit_render_open_failed_state(state: &mut AppState, session_id: RenderS
     }
 
     state.status_text = "Could not open PDF. Choose another file.".to_owned();
-    state.pending_open_path = None;
+    state.pending_open = None;
     true
 }
 
@@ -205,7 +257,7 @@ pub fn commit_render_worker_failed_state(
         state.audience_slide.failed_current_page = Some(snapshot.current_index);
     }
     state.status_text = "Rendering stopped. Open the PDF again.".to_owned();
-    state.pending_open_path = None;
+    state.pending_open = None;
     true
 }
 
@@ -229,6 +281,7 @@ fn update_elapsed_timer_for_page_change(
 mod tests {
     use super::*;
     use crate::rendering::RenderedPage;
+    use std::time::Duration;
 
     fn rendered_page(aspect_ratio: f32) -> RenderedPage {
         RenderedPage {
@@ -254,6 +307,13 @@ mod tests {
         }
     }
 
+    fn pending_open_path(state: &AppState) -> Option<PathBuf> {
+        state
+            .pending_open
+            .as_ref()
+            .map(|pending_open| pending_open.path.clone())
+    }
+
     #[test]
     fn begin_open_pdf_state_tracks_pending_open_without_clearing_current_deck() {
         let mut state = AppState {
@@ -274,7 +334,107 @@ mod tests {
         assert_eq!(state.presentation.snapshot(), original_snapshot);
         assert!(state.black_screen.is_active());
         assert_eq!(state.status_text, "Opening PDF...");
-        assert_eq!(state.pending_open_path, Some(PathBuf::from("deck.pdf")));
+        assert_eq!(pending_open_path(&state), Some(PathBuf::from("deck.pdf")));
+        let pending_open = state
+            .pending_open
+            .as_ref()
+            .expect("pending open state should be stored");
+        assert_eq!(pending_open.session_id, session_id);
+        assert!(!pending_open.slow_status_shown);
+    }
+
+    #[test]
+    fn slow_open_status_waits_until_delay_elapses() {
+        let mut state = AppState::default();
+        let requested_at = Instant::now();
+        let session_id =
+            begin_open_pdf_state_at(&mut state, PathBuf::from("deck.pdf"), requested_at);
+
+        assert!(!mark_pending_open_slow(
+            &mut state,
+            session_id,
+            requested_at + Duration::from_millis(999),
+            Duration::from_secs(1),
+        ));
+
+        assert_eq!(state.status_text, "Opening PDF...");
+        assert_eq!(
+            state
+                .pending_open
+                .as_ref()
+                .map(|pending_open| pending_open.slow_status_shown),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn slow_open_status_is_marked_once_after_delay() {
+        let mut state = AppState::default();
+        let requested_at = Instant::now();
+        let session_id =
+            begin_open_pdf_state_at(&mut state, PathBuf::from("deck.pdf"), requested_at);
+
+        assert!(mark_pending_open_slow(
+            &mut state,
+            session_id,
+            requested_at + Duration::from_secs(1),
+            Duration::from_secs(1),
+        ));
+        assert_eq!(state.status_text, SLOW_OPEN_STATUS_TEXT);
+        assert_eq!(
+            state
+                .pending_open
+                .as_ref()
+                .map(|pending_open| pending_open.slow_status_shown),
+            Some(true)
+        );
+
+        assert!(!mark_pending_open_slow(
+            &mut state,
+            session_id,
+            requested_at + Duration::from_secs(2),
+            Duration::from_secs(1),
+        ));
+    }
+
+    #[test]
+    fn repeated_open_resets_slow_open_status_tracking() {
+        let mut state = AppState::default();
+        let requested_at = Instant::now();
+        let first_session =
+            begin_open_pdf_state_at(&mut state, PathBuf::from("old.pdf"), requested_at);
+        assert!(mark_pending_open_slow(
+            &mut state,
+            first_session,
+            requested_at + Duration::from_secs(2),
+            Duration::from_secs(1),
+        ));
+
+        let second_requested_at = requested_at + Duration::from_secs(3);
+        let second_session =
+            begin_open_pdf_state_at(&mut state, PathBuf::from("new.pdf"), second_requested_at);
+
+        assert_eq!(pending_open_path(&state), Some(PathBuf::from("new.pdf")));
+        assert_eq!(state.status_text, "Opening PDF...");
+        assert!(!mark_pending_open_slow(
+            &mut state,
+            first_session,
+            second_requested_at + Duration::from_secs(2),
+            Duration::from_secs(1),
+        ));
+        assert!(!mark_pending_open_slow(
+            &mut state,
+            second_session,
+            second_requested_at + Duration::from_millis(999),
+            Duration::from_secs(1),
+        ));
+        assert!(mark_pending_open_slow(
+            &mut state,
+            second_session,
+            second_requested_at + Duration::from_secs(1),
+            Duration::from_secs(1),
+        ));
+        assert_eq!(state.status_text, SLOW_OPEN_STATUS_TEXT);
     }
 
     #[test]
@@ -378,7 +538,7 @@ mod tests {
         assert_eq!(state.render_sessions.current_session(), None);
         assert!(state.render_sessions.accepts_pending_open(current_session));
         assert_eq!(state.presentation.snapshot(), None);
-        assert_eq!(state.pending_open_path, Some(PathBuf::from("new.pdf")));
+        assert_eq!(pending_open_path(&state), Some(PathBuf::from("new.pdf")));
     }
 
     #[test]
@@ -406,7 +566,7 @@ mod tests {
         assert!(state.notes.is_empty());
         assert_eq!(state.render_sessions.current_session(), Some(session_id));
         assert_eq!(outcome.loaded_path, Some(PathBuf::from("deck.pdf")));
-        assert_eq!(state.pending_open_path, None);
+        assert_eq!(state.pending_open, None);
     }
 
     #[test]
@@ -457,7 +617,7 @@ mod tests {
 
         assert!(commit_render_open_failed_state(&mut state, session_id));
 
-        assert_eq!(state.pending_open_path, None);
+        assert_eq!(state.pending_open, None);
         assert_eq!(
             state.status_text,
             "Could not open PDF. Choose another file."
@@ -491,7 +651,7 @@ mod tests {
         assert_eq!(state.presentation.snapshot(), original_snapshot);
         assert_eq!(state.notes.note_for_page_number(2), Some("Keep this note"));
         assert!(state.black_screen.is_active());
-        assert_eq!(state.pending_open_path, None);
+        assert_eq!(state.pending_open, None);
         assert_eq!(
             state.status_text,
             "Could not open PDF. Choose another file."
@@ -506,7 +666,7 @@ mod tests {
 
         assert!(!commit_render_open_failed_state(&mut state, stale_session));
 
-        assert_eq!(state.pending_open_path, Some(PathBuf::from("new.pdf")));
+        assert_eq!(pending_open_path(&state), Some(PathBuf::from("new.pdf")));
         assert_eq!(state.status_text, "Opening PDF...");
     }
 
@@ -786,7 +946,7 @@ mod tests {
         ));
 
         assert_eq!(state.status_text, "Rendering stopped. Open the PDF again.");
-        assert_eq!(state.pending_open_path, None);
+        assert_eq!(state.pending_open, None);
         assert_eq!(state.render_sessions.current_session(), None);
         assert_eq!(state.audience_slide.failed_current_page, Some(0));
     }
@@ -802,7 +962,7 @@ mod tests {
         ));
 
         assert_eq!(state.status_text, "Rendering stopped. Open the PDF again.");
-        assert_eq!(state.pending_open_path, None);
+        assert_eq!(state.pending_open, None);
         assert_eq!(state.render_sessions.current_session(), None);
         assert_eq!(state.audience_slide.failed_current_page, None);
     }
@@ -819,7 +979,7 @@ mod tests {
         ));
 
         assert_eq!(state.status_text, "Opening PDF...");
-        assert_eq!(state.pending_open_path, Some(PathBuf::from("new.pdf")));
+        assert_eq!(pending_open_path(&state), Some(PathBuf::from("new.pdf")));
     }
 
     #[test]
@@ -839,7 +999,7 @@ mod tests {
 
         assert_eq!(state.render_sessions.current_session(), None);
         assert!(!state.render_sessions.accepts_pending_open(pending_session));
-        assert_eq!(state.pending_open_path, None);
+        assert_eq!(state.pending_open, None);
         assert_eq!(state.status_text, "Rendering stopped. Open the PDF again.");
         assert_eq!(state.audience_slide.failed_current_page, Some(0));
     }
