@@ -570,6 +570,81 @@ certificate subject. Pass the same publisher value to
 SmartScreen reputation is not a CI gate; a technically valid signature may still
 show warnings until the publisher or app has sufficient reputation.
 
+#### Microsoft Store MSIX identity
+
+The Microsoft Store package identity is separate from the direct-download MSI
+and direct-download signed MSIX validation path above. Partner Center currently
+reserves the following identity values for Quick Presenter:
+
+- `Package/Identity/Name`: `KoichiroOhba.QuickPresenter`
+- `Package/Identity/Publisher`:
+  `CN=A3F64AFD-6298-42F8-BAC9-DB0AB1831F51`
+- `Package/Properties/PublisherDisplayName`: `Koichiro Ohba`
+- Package Family Name: `KoichiroOhba.QuickPresenter_pma9xfvs5bmmy`
+- Package SID:
+  `S-1-15-2-3584382830-573398947-3094020833-4050350411-3848101909-2718317264-1763490389`
+- Microsoft Store ID: `9N913S9NJ6D1`
+
+These values came from a Partner Center app name reservation and must be
+reconfirmed before Store submission if the reservation expires or is renewed.
+
+To build an MSIX with the current Store identity:
+
+```powershell
+python scripts/fetch_pdfium.py --clean
+cargo build --release --bin quick-presenter
+scripts/build_windows_msix.ps1 -StoreIdentity
+```
+
+By default, the Store-identity build writes:
+
+```text
+artifacts/quick-presenter-windows-store-x64/QuickPresenter-<version>.msix
+```
+
+The `build-binaries.yml` workflow also creates and uploads a
+`quick-presenter-windows-store-x64` artifact on manual `workflow_dispatch` runs.
+Use that CI-produced Store artifact as the candidate package for real Windows
+machine validation and Store submission checks.
+
+The same values can be passed explicitly if Partner Center assigns replacements:
+
+```powershell
+scripts/build_windows_msix.ps1 `
+  -PackageName "KoichiroOhba.QuickPresenter" `
+  -Publisher "CN=A3F64AFD-6298-42F8-BAC9-DB0AB1831F51" `
+  -PublisherDisplayName "Koichiro Ohba"
+```
+
+#### Microsoft Store package format
+
+Quick Presenter will use MSIX as the Microsoft Store submission package format.
+This keeps the Store path aligned with the existing MSIX packaging work and
+avoids introducing an MSI/EXE Store installer path for the first submission.
+
+The distribution paths are intentionally separate:
+
+- Direct Windows downloads use `QuickPresenter-<version>.msi`.
+- Direct signed MSIX builds are only a validation/signing path unless a release
+  explicitly promotes them.
+- Microsoft Store publication uses
+  `quick-presenter-windows-store-x64/QuickPresenter-<version>.msix` with the
+  Partner Center package identity.
+
+For the first Store submission, upload the single-architecture `.msix` package.
+Do not introduce `.msixupload`, `.appxupload`, or MSIX bundle generation until
+Quick Presenter has more than one Windows architecture package to submit.
+
+Microsoft Store package submission may use Store-managed signing after
+certification. MSI/EXE Store submissions are not the planned path; if that
+changes, the MSI/EXE installer must be Authenticode-signed by the publisher
+before submission because the Store does not manage-sign MSI/EXE installers in
+the same way as MSIX/AppX packages.
+
+Do not assume that a direct-download MSI, a directly signed MSIX, and a
+Store-managed MSIX can be installed over each other until that behavior has been
+validated on a clean Windows machine.
+
 #### Unsigned MSIX validation
 
 Quick Presenter also has an unsigned MSIX packaging path for CI layout
@@ -617,8 +692,8 @@ The `build-binaries.yml` workflow builds this unsigned MSIX on
 - `MakeAppx.exe unpack` succeeds,
 - the unpacked layout contains `AppxManifest.xml`, `quick-presenter.exe`, bundled PDFium,
   icon assets, license files, and the source offer,
-- the manifest contains the expected desktop identity, `quick-presenter.exe` application
-  entry, and `runFullTrust` capability,
+- the manifest contains the expected desktop identity, `quick-presenter.exe`
+  application entry, and `runFullTrust` capability,
 - the unpacked `quick-presenter.exe` can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`.
 

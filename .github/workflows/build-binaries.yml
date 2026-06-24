@@ -706,6 +706,93 @@ jobs:
             Pop-Location
           }
 
+      - name: Build Windows Store MSIX
+        if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          scripts/build_windows_msix.ps1 `
+            -ArtifactDir 'artifacts/quick-presenter-windows-store-x64' `
+            -Binary 'target/release/${{ matrix.binary-name }}' `
+            -StoreIdentity
+
+      - name: Verify Windows Store MSIX
+        if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          Remove-Item Env:PDFIUM_DYNAMIC_LIB_PATH -ErrorAction SilentlyContinue
+          Remove-Item Env:QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE -ErrorAction SilentlyContinue
+
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/quick-presenter-windows-store-x64'
+          $msix = Join-Path $artifactDir "QuickPresenter-$($env:PACKAGE_VERSION).msix"
+          $extractDir = Join-Path $env:RUNNER_TEMP 'quick-presenter-store-msix-unpacked'
+          $pdf = Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/marp-speaker-notes.pdf'
+
+          if (-not (Test-Path $msix -PathType Leaf)) {
+            throw "Missing Store MSIX artifact: $msix"
+          }
+          if ((Get-Item $msix).Length -le 0) {
+            throw "Store MSIX artifact is empty: $msix"
+          }
+
+          $makeAppxCommand = Get-Command 'makeappx.exe' -ErrorAction SilentlyContinue
+          if ($null -eq $makeAppxCommand) {
+            $makeAppxCommand = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" `
+              -Recurse `
+              -Filter 'makeappx.exe' `
+              -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -match '\\x64\\makeappx\.exe$' } |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1
+          }
+          if ($null -eq $makeAppxCommand) {
+            throw "Could not find makeappx.exe for Store MSIX verification"
+          }
+          $makeAppxPath = $makeAppxCommand.Source
+          if ([string]::IsNullOrWhiteSpace($makeAppxPath)) {
+            $makeAppxPath = $makeAppxCommand.FullName
+          }
+
+          Remove-Item -Recurse -Force $extractDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $extractDir | Out-Null
+
+          & $makeAppxPath unpack /p $msix /d $extractDir /o
+          if ($LASTEXITCODE -ne 0) {
+            throw "Store MSIX unpack failed with exit code $LASTEXITCODE"
+          }
+
+          $manifest = Join-Path $extractDir 'AppxManifest.xml'
+          $exe = Join-Path $extractDir 'quick-presenter.exe'
+          $manifestText = Get-Content $manifest -Raw
+          if ($manifestText -notmatch 'Name="KoichiroOhba\.QuickPresenter"') {
+            throw "Store MSIX manifest has unexpected identity name"
+          }
+          if ($manifestText -notmatch 'Publisher="CN=A3F64AFD-6298-42F8-BAC9-DB0AB1831F51"') {
+            throw "Store MSIX manifest has unexpected publisher"
+          }
+          if ($manifestText -notmatch '<PublisherDisplayName>Koichiro Ohba</PublisherDisplayName>') {
+            throw "Store MSIX manifest has unexpected publisher display name"
+          }
+          if ($manifestText -notmatch 'Name="runFullTrust"') {
+            throw "Store MSIX manifest is missing runFullTrust capability"
+          }
+
+          Push-Location $env:TEMP
+          try {
+            $smokeProcess = Start-Process `
+              -FilePath $exe `
+              -ArgumentList @('--smoke-open-pdf', $pdf) `
+              -Wait `
+              -PassThru
+            if ($smokeProcess.ExitCode -ne 0) {
+              throw "Unpacked Store MSIX smoke test failed with exit code $($smokeProcess.ExitCode)"
+            }
+          } finally {
+            Pop-Location
+          }
+
       - name: Sign Windows package artifacts
         if: runner.os == 'Windows' && steps.windows-signing.outputs.enabled == 'true'
         shell: pwsh
@@ -833,4 +920,12 @@ jobs:
         with:
           name: ${{ matrix.artifact-name }}
           path: artifacts/${{ matrix.artifact-name }}
+          if-no-files-found: error
+
+      - name: Upload Windows Store artifact
+        if: runner.os == 'Windows' && github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: quick-presenter-windows-store-x64
+          path: artifacts/quick-presenter-windows-store-x64
           if-no-files-found: error

@@ -99,6 +99,8 @@ files in the expected layout.
 The Windows artifact may include `QuickPresenter-<version>.msix` for layout validation.
 Unsigned MSIX packages are not a user-installable distribution artifact.
 Use the MSI unless a release explicitly identifies a signed MSIX as supported.
+Microsoft Store releases are a separate distribution path and use a
+Store-identity MSIX package rather than the direct-download MSI.
 
 ## macOS
 
