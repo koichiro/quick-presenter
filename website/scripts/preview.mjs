@@ -1,4 +1,4 @@
-import { createReadStream, existsSync } from "node:fs";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,9 +20,19 @@ const contentTypes = {
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
   const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
-  const requestedPath = normalize(join(dist, pathname));
+  let requestedPath = normalize(join(dist, pathname));
 
   if (!requestedPath.startsWith(dist) || !existsSync(requestedPath)) {
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("Not found");
+    return;
+  }
+
+  if (statSync(requestedPath).isDirectory()) {
+    requestedPath = join(requestedPath, "index.html");
+  }
+
+  if (!existsSync(requestedPath) || !statSync(requestedPath).isFile()) {
     response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     response.end("Not found");
     return;
@@ -31,7 +41,14 @@ const server = createServer((request, response) => {
   response.writeHead(200, {
     "content-type": contentTypes[extname(requestedPath)] ?? "application/octet-stream",
   });
-  createReadStream(requestedPath).pipe(response);
+  createReadStream(requestedPath)
+    .on("error", () => {
+      if (!response.headersSent) {
+        response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      }
+      response.end("Internal server error");
+    })
+    .pipe(response);
 });
 
 server.listen(port, host, () => {
