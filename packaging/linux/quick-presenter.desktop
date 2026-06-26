@@ -2,7 +2,7 @@
 Type=Application
 Name=Quick Presenter
 Comment=Present PDF slide decks with a presenter view
-Exec=quick-presenter --pdf %f
+Exec=quick-presenter %f
 Icon=quick-presenter
 Terminal=false
 Categories=Office;Presentation;
