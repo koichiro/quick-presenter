@@ -117,6 +117,7 @@ fn main() -> Result<()> {
     }
 
     let windows = AppWindows::new()?;
+    configure_linux_desktop_identity()?;
     configure_shortcut_modifiers(&windows);
     let recent_store = default_recent_file_store();
     let recent_files = load_recent_files(recent_store.as_ref());
@@ -164,6 +165,17 @@ fn configure_shortcut_modifiers(windows: &AppWindows) {
     windows
         .slide
         .set_use_physical_control_shortcuts(use_physical_control);
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn configure_linux_desktop_identity() -> Result<()> {
+    slint::set_xdg_app_id(app_metadata::LINUX_DESKTOP_APP_ID)?;
+    Ok(())
+}
+
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn configure_linux_desktop_identity() -> Result<()> {
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]

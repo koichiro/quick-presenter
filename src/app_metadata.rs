@@ -1,5 +1,6 @@
 pub const APP_NAME: &str = "Quick Presenter";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const LINUX_DESKTOP_APP_ID: &str = "quick-presenter";
 pub const APP_LICENSE_ID: &str = "GPL-3.0-or-later";
 pub const APP_LICENSE_SUMMARY: &str =
     "Quick Presenter is licensed under the GNU General Public License v3.0 or later.";
@@ -88,6 +89,11 @@ mod tests {
             .app_license_summary
             .contains("GNU General Public License v3.0 or later"));
         assert!(!metadata.app_license_summary.contains("MIT"));
+    }
+
+    #[test]
+    fn linux_desktop_app_id_matches_desktop_entry_basename() {
+        assert_eq!(LINUX_DESKTOP_APP_ID, "quick-presenter");
     }
 
     #[test]
