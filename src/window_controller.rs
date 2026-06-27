@@ -212,11 +212,11 @@ pub fn fitted_slide_window_size(
     max_width: f32,
     max_height: f32,
     aspect_ratio: f32,
-    titlebar_compensation_height: f32,
+    _titlebar_compensation_height: f32,
 ) -> LogicalSize {
     let size = crate::aspect::fitted_logical_size_within(max_width, max_height, aspect_ratio);
     let width = size.width.round();
-    let height = (size.height.round() - titlebar_compensation_height).max(1.0);
+    let height = size.height.round().max(1.0);
 
     LogicalSize::new(width, height)
 }
