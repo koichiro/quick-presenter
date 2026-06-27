@@ -573,7 +573,12 @@ It uses:
 Name=Quick Presenter
 Exec=quick-presenter --pdf %f
 Icon=quick-presenter
+StartupWMClass=quick-presenter
 ```
+
+The running Linux GUI sets the same desktop app ID, `quick-presenter`, before
+showing any Slint windows. On Wayland this becomes the window app ID; on X11 it
+maps to `WM_CLASS`, matching the installed desktop entry basename and icon name.
 
 The staged hicolor icon paths are:
 
@@ -610,7 +615,8 @@ artifacts/quick-presenter-ubuntu-x64/quick-presenter_<version>_amd64.deb
 The `build-binaries.yml` workflow runs the staging script for the Linux artifact
 and builds the Debian package. It validates:
 
-- the desktop entry exists and contains the expected `Name`, `Exec`, and `Icon`,
+- the desktop entry exists and contains the expected `Name`, `Exec`, `Icon`,
+  and `StartupWMClass`,
 - the desktop entry passes `desktop-file-validate`,
 - each expected hicolor icon file exists and is non-empty,
 - `gtk-update-icon-cache` can process the staged hicolor tree,

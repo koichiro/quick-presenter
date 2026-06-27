@@ -4,6 +4,7 @@ Name=Quick Presenter
 Comment=Present PDF slide decks with a presenter view
 Exec=quick-presenter --pdf %f
 Icon=quick-presenter
+StartupWMClass=quick-presenter
 Terminal=false
 Categories=Office;Presentation;
 MimeType=application/pdf;
