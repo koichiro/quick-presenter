@@ -1628,10 +1628,10 @@ mod tests {
     use anyhow::anyhow;
 
     #[test]
-    fn fitted_slide_window_content_size_subtracts_titlebar_compensation_from_height() {
+    fn fitted_slide_window_content_size_ignores_titlebar_compensation() {
         let (_, height) = fitted_slide_window_content_size(16.0 / 9.0, 28.0);
 
-        assert_eq!(height, 548.0);
+        assert_eq!(height, 576.0);
     }
 
     #[test]
