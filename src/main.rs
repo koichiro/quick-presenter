@@ -169,7 +169,7 @@ fn configure_shortcut_modifiers(windows: &AppWindows) {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 fn configure_linux_desktop_identity() -> Result<()> {
-    slint::platform::set_xdg_app_id(app_metadata::LINUX_DESKTOP_APP_ID)?;
+    slint::set_xdg_app_id(app_metadata::LINUX_DESKTOP_APP_ID)?;
     Ok(())
 }
 
