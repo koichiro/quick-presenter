@@ -169,6 +169,28 @@ The workflow uploads explicit skip-reason reports for macOS and Windows because
 hosted CI does not provide the normal desktop sessions needed to make platform
 GUI behavior a reliable release gate.
 
+## Optional Linux Cross Check
+
+macOS development builds should continue to use the default host target. Do not
+set a repository-wide Cargo default target or global shell profile variables for
+Linux sysroots or cross `pkg-config`; those settings can leak into macOS app
+bundle builds.
+
+For local Linux-only type checking from macOS, use the opt-in wrapper:
+
+```sh
+LINUX_SYSROOT_DIR=/path/to/linux-sysroot \
+  LINUX_CROSS_LINKER=x86_64-linux-gnu-gcc \
+  scripts/check_linux_cross.sh
+```
+
+The wrapper exports `PKG_CONFIG_ALLOW_CROSS`, `PKG_CONFIG_SYSROOT_DIR`,
+`PKG_CONFIG_PATH`, and an optional Cargo target linker only for that process,
+then runs `cargo check --target x86_64-unknown-linux-gnu`. It does not create or
+modify `.cargo/config.toml`, so regular `cargo build`, `cargo check`, and macOS
+packaging commands remain on the host target unless the caller explicitly asks
+for the Linux target.
+
 ## Application Icons
 
 The source icon assets are documented in `docs/ICONS.md`.
