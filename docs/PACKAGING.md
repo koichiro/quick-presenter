@@ -104,6 +104,21 @@ store terms against GPLv3 requirements, including source availability and any
 installation-information obligations for the target package type. This document
 is release engineering guidance, not legal advice.
 
+## Store Submission Checklist
+
+Use the following public URLs and notes when preparing store submissions:
+
+- Privacy policy URL:
+  `https://koichiro.github.io/quick-presenter/privacy/`
+- Project/source URL:
+  `https://github.com/koichiro/quick-presenter`
+- Quick Presenter does not add custom in-app telemetry, analytics, or crash
+  upload behavior. If Microsoft provides Store-managed crash or reliability
+  diagnostics for a submitted package, treat those diagnostics as
+  Microsoft-provided Partner Center reporting rather than app-side collection.
+- Store submission notes should identify how recipients can obtain the
+  corresponding source for the submitted binary, as described above.
+
 ## Packaged Artifact Smoke Tests
 
 Quick Presenter provides a non-interactive smoke mode for packaged artifact
@@ -555,8 +570,8 @@ The installed Debian package layout is:
 
 The bundled PDFium directory is installed next to the real application
 executable at `/usr/lib/quick-presenter/quick-presenter`, which is covered by the runtime
-lookup order documented above. The `/usr/bin/quick-presenter` entry is a symlink so shell
-launches and the desktop entry use the same GUI executable name.
+lookup order documented above. The `/usr/bin/quick-presenter` entry is a symlink
+so shell launches and the desktop entry use the same installed command path.
 
 Linux binary artifacts also stage desktop metadata with
 `scripts/stage_linux_desktop_assets.sh`. The staged layout includes a desktop
@@ -571,7 +586,7 @@ It uses:
 
 ```ini
 Name=Quick Presenter
-Exec=quick-presenter --pdf %f
+Exec=/usr/bin/quick-presenter %f
 Icon=quick-presenter
 StartupWMClass=quick-presenter
 ```

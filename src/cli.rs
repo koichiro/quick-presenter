@@ -99,7 +99,18 @@ where
             continue;
         }
 
-        bail!("unknown command-line option: {}", arg.to_string_lossy());
+        if arg.to_string_lossy().starts_with('-') {
+            bail!("unknown command-line option: {}", arg.to_string_lossy());
+        }
+
+        if options.pdf_path.is_some()
+            || options.smoke_open_pdf_path.is_some()
+            || options.gui_smoke.is_some()
+        {
+            bail!("PDF path cannot be combined with startup options");
+        }
+
+        options.pdf_path = Some(PathBuf::from(arg));
     }
 
     Ok(StartupRequest::Run(options))
@@ -110,7 +121,7 @@ pub fn help_text(program_name: &str) -> String {
         "\
 Quick Presenter
 
-Usage: {program_name} [OPTIONS]
+Usage: {program_name} [OPTIONS] [PDF_PATH]
 
 Options:
   --pdf <PATH>              Open a PDF at startup
@@ -158,6 +169,20 @@ mod tests {
     #[test]
     fn pdf_option_sets_startup_pdf_path() {
         let options = parse_startup_options(["--pdf", "deck.pdf"]).unwrap();
+
+        assert_eq!(
+            options,
+            StartupRequest::Run(StartupOptions {
+                pdf_path: Some(PathBuf::from("deck.pdf")),
+                smoke_open_pdf_path: None,
+                gui_smoke: None,
+            })
+        );
+    }
+
+    #[test]
+    fn positional_pdf_path_sets_startup_pdf_path() {
+        let options = parse_startup_options(["deck.pdf"]).unwrap();
 
         assert_eq!(
             options,
@@ -245,7 +270,7 @@ mod tests {
         let help = help_text("quick-presenter");
 
         assert!(help.contains("Quick Presenter"));
-        assert!(help.contains("Usage: quick-presenter [OPTIONS]"));
+        assert!(help.contains("Usage: quick-presenter [OPTIONS] [PDF_PATH]"));
         assert!(help.contains("--pdf <PATH>"));
         assert!(help.contains("--smoke-open-pdf <PATH>"));
         assert!(help.contains("--gui-smoke <PATH>"));
@@ -272,6 +297,20 @@ mod tests {
         let err = parse_startup_options(["--pdf", "a.pdf", "--pdf", "b.pdf"]).unwrap_err();
 
         assert!(err.to_string().contains("only be provided once"));
+    }
+
+    #[test]
+    fn pdf_option_and_positional_pdf_path_cannot_be_combined() {
+        let err = parse_startup_options(["--pdf", "a.pdf", "b.pdf"]).unwrap_err();
+
+        assert!(err.to_string().contains("cannot be combined"));
+    }
+
+    #[test]
+    fn smoke_open_pdf_option_and_positional_pdf_path_cannot_be_combined() {
+        let err = parse_startup_options(["--smoke-open-pdf", "a.pdf", "b.pdf"]).unwrap_err();
+
+        assert!(err.to_string().contains("cannot be combined"));
     }
 
     #[test]

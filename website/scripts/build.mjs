@@ -8,6 +8,7 @@ const dist = join(root, "dist");
 
 const files = [
   ["src/index.html", "index.html"],
+  ["src/privacy/index.html", "privacy/index.html"],
   ["src/styles.css", "styles.css"],
   ["../docs/assets/presenter-window-en.png", "assets/presenter-window-en.png"],
   ["../docs/assets/slide-window-title-en.png", "assets/slide-window-title-en.png"],
