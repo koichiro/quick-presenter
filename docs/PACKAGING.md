@@ -570,8 +570,8 @@ The installed Debian package layout is:
 
 The bundled PDFium directory is installed next to the real application
 executable at `/usr/lib/quick-presenter/quick-presenter`, which is covered by the runtime
-lookup order documented above. The `/usr/bin/quick-presenter` entry is a symlink so shell
-launches and the desktop entry use the same GUI executable name.
+lookup order documented above. The `/usr/bin/quick-presenter` entry is a symlink
+so shell launches and the desktop entry use the same installed command path.
 
 Linux binary artifacts also stage desktop metadata with
 `scripts/stage_linux_desktop_assets.sh`. The staged layout includes a desktop
@@ -586,7 +586,7 @@ It uses:
 
 ```ini
 Name=Quick Presenter
-Exec=quick-presenter --pdf %f
+Exec=/usr/bin/quick-presenter %f
 Icon=quick-presenter
 ```
 
