@@ -367,6 +367,7 @@ export component PresenterWindow inherits Window {
     in property <string> notes-text: "";
     in property <bool> slide-fullscreen: false;
     in property <bool> use-physical-control-shortcuts: false;
+    in property <bool> use-native-menu-bar: true;
     in property <string> clock-time-label: "--:--";
     in property <string> elapsed-time-label: "00:00";
     in property <string> status-text: "Open a PDF to start";
@@ -424,7 +425,7 @@ export component PresenterWindow inherits Window {
     background: #202124;
     forward-focus: presenter-focus;
 
-    MenuBar {
+    if root.use-native-menu-bar: MenuBar {
         Menu {
             title: "File";
 
