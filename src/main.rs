@@ -119,6 +119,7 @@ fn main() -> Result<()> {
     let windows = AppWindows::new()?;
     configure_linux_desktop_identity()?;
     configure_shortcut_modifiers(&windows);
+    configure_presenter_menu_bar(&windows);
     let recent_store = default_recent_file_store();
     let recent_files = load_recent_files(recent_store.as_ref());
     let recent_menu_paths = recent_files.paths().to_vec();
@@ -165,6 +166,22 @@ fn configure_shortcut_modifiers(windows: &AppWindows) {
     windows
         .slide
         .set_use_physical_control_shortcuts(use_physical_control);
+}
+
+fn configure_presenter_menu_bar(windows: &AppWindows) {
+    windows
+        .presenter
+        .set_use_native_menu_bar(use_native_presenter_menu_bar());
+}
+
+#[cfg(target_os = "linux")]
+fn use_native_presenter_menu_bar() -> bool {
+    false
+}
+
+#[cfg(not(target_os = "linux"))]
+fn use_native_presenter_menu_bar() -> bool {
+    true
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
