@@ -1,5 +1,8 @@
 use std::{path::PathBuf, time::Instant};
 
+#[cfg(target_os = "linux")]
+use std::sync::mpsc::Receiver;
+
 use crate::{
     black_screen::BlackScreenState,
     fullscreen::FullscreenState,
@@ -33,6 +36,7 @@ pub struct AppState {
     pub recent_files: RecentFiles,
     pub recent_menu_paths: Vec<PathBuf>,
     pub recent_store: Option<RecentFileStore>,
+    pub file_dialog: FileDialogState,
     pub status_text: String,
 }
 
@@ -53,4 +57,11 @@ pub struct AudienceSlideState {
 #[derive(Default)]
 pub struct ThumbnailState {
     pub total_pages: u32,
+}
+
+#[derive(Default)]
+pub struct FileDialogState {
+    pub open: bool,
+    #[cfg(target_os = "linux")]
+    pub result_receiver: Option<Receiver<Option<PathBuf>>>,
 }

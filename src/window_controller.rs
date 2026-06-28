@@ -1,4 +1,4 @@
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows", test))]
 use std::time::Duration;
 
 use anyhow::Result;
@@ -11,6 +11,12 @@ use crate::{PresenterWindow, SlideWindow};
 
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
 const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
+#[cfg(any(target_os = "linux", test))]
+const LINUX_PRESENTER_INPUT_RECOVERY_DELAYS: [Duration; 3] = [
+    Duration::from_millis(0),
+    Duration::from_millis(50),
+    Duration::from_millis(200),
+];
 #[cfg(any(target_os = "macos", test))]
 const SLIDE_TITLEBAR_COMPENSATION_HEIGHT: f32 = 28.0;
 #[cfg(target_os = "macos")]
@@ -160,6 +166,31 @@ pub fn show_presenter_window(windows: &AppWindowRefs) {
     }
 }
 
+#[cfg(target_os = "linux")]
+pub fn restore_presenter_input_after_transient_ui(windows: AppWindowRefs) {
+    for delay in presenter_input_recovery_delays() {
+        let windows = windows.clone();
+        Timer::single_shot(delay, move || restore_presenter_input_now(&windows));
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn restore_presenter_input_after_transient_ui(_windows: AppWindowRefs) {}
+
+#[cfg(target_os = "linux")]
+fn restore_presenter_input_now(windows: &AppWindowRefs) {
+    show_presenter_window(windows);
+
+    if let Some(presenter) = windows.presenter.upgrade() {
+        presenter.invoke_focus();
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn presenter_input_recovery_delays() -> [Duration; 3] {
+    LINUX_PRESENTER_INPUT_RECOVERY_DELAYS
+}
+
 pub fn show_slide_window(windows: &AppWindowRefs) {
     #[cfg(target_os = "macos")]
     if let Some(slide) = windows.slide.upgrade() {
@@ -242,5 +273,17 @@ mod tests {
             }
         );
         assert_eq!(slide_titlebar_compensation_height(true), 0.0);
+    }
+
+    #[test]
+    fn presenter_input_recovery_retries_immediately_and_after_transient_ui_focus_settles() {
+        assert_eq!(
+            presenter_input_recovery_delays(),
+            [
+                Duration::from_millis(0),
+                Duration::from_millis(50),
+                Duration::from_millis(200)
+            ]
+        );
     }
 }

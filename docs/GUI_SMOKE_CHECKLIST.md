@@ -180,6 +180,8 @@ normal presenter workflow.
 | Scenario | Expected result |
 | --- | --- |
 | Give focus to the presenter window and press next, previous, first, and last keyboard shortcuts from `docs/KEYBOARD.md`. | Both windows update together, and page navigation clamps at the document bounds. |
+| Open a PDF from the file picker, then immediately press presenter keyboard navigation shortcuts without clicking either Quick Presenter window. | The presenter window receives keyboard input and both windows advance or go back as expected. |
+| Open a PDF from the Recent PDF menu, then immediately press presenter keyboard navigation shortcuts without clicking either Quick Presenter window. | The presenter window receives keyboard input and both windows advance or go back as expected. |
 | Give focus to the slide window and press next, previous, first, and last keyboard shortcuts from `docs/KEYBOARD.md`. | Both windows update together even when the audience-facing window has focus. |
 | Enter slide fullscreen from the presenter controls, switch focus away from Quick Presenter, then return to Quick Presenter. | The presenter window remains reachable, and the slide window stays fullscreen until a documented exit control is used. |
 | Enter slide fullscreen from the slide window with `F5` or `F`, then exit with `Escape`. | The slide window returns to windowed mode without changing pages. |
