@@ -67,4 +67,6 @@ Desktop Portal or fallback dialog response while the Slint/winit event loop is
 not being serviced. Quick Presenter therefore opens Linux file dialogs on a
 short-lived worker thread and polls the selected path back on the UI thread. The
 UI thread remains the only place that mutates `AppState` or schedules the PDF
-open, while the worker thread owns only the blocking dialog call.
+open, while the worker thread owns only the blocking dialog call. The Linux
+dialog is still built on the UI thread so it can capture the presenter window as
+its native parent before the blocking picker work moves to the worker thread.

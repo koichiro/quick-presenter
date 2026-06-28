@@ -708,7 +708,7 @@ fn bring_slide_window_to_front(windows: &AppWindowRefs, state: &Rc<RefCell<AppSt
 }
 
 #[cfg(target_os = "linux")]
-fn request_pdf_file_open(_windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
+fn request_pdf_file_open(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
     let (sender, receiver) = mpsc::channel();
 
     {
@@ -719,8 +719,9 @@ fn request_pdf_file_open(_windows: AppWindowRefs, state: Rc<RefCell<AppState>>) 
         state.file_dialog.result_receiver = Some(receiver);
     }
 
+    let dialog = pdf_file_dialog_for_presenter(&windows);
     std::thread::spawn(move || {
-        let _ = sender.send(pick_pdf_file());
+        let _ = sender.send(dialog.pick_file());
     });
 }
 
@@ -750,11 +751,25 @@ fn finish_file_dialog_request(state: &mut AppState) {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn pick_pdf_file() -> Option<PathBuf> {
+    pdf_file_dialog().pick_file()
+}
+
+fn pdf_file_dialog() -> rfd::FileDialog {
     rfd::FileDialog::new()
         .add_filter("PDF", &["pdf"])
         .set_title("Open PDF")
-        .pick_file()
+}
+
+#[cfg(target_os = "linux")]
+fn pdf_file_dialog_for_presenter(windows: &AppWindowRefs) -> rfd::FileDialog {
+    let dialog = pdf_file_dialog();
+    let Some(presenter) = windows.presenter.upgrade() else {
+        return dialog;
+    };
+
+    dialog.set_parent(&presenter.window().window_handle())
 }
 
 fn load_startup_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, path: PathBuf) {
