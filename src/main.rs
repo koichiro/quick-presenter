@@ -37,6 +37,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(target_os = "linux")]
+use std::sync::mpsc;
+
 use anyhow::{bail, Result};
 use app_metadata::about_metadata;
 use app_state::AppState;
@@ -88,6 +91,8 @@ const THUMBNAIL_CACHE_RADIUS: u32 = 8;
 const THUMBNAIL_SCROLL_LOOKAHEAD: u32 = 4;
 const RENDER_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(16);
 const PENDING_OPEN_STATUS_INTERVAL: Duration = Duration::from_millis(250);
+#[cfg(target_os = "linux")]
+const FILE_DIALOG_RESULT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const SLOW_OPEN_STATUS_DELAY: Duration = Duration::from_secs(2);
 const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
 const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
@@ -135,6 +140,7 @@ fn main() -> Result<()> {
     let _render_event_timer = start_render_event_updates(windows.refs(), state.clone());
     let _pending_open_status_timer =
         start_pending_open_status_updates(windows.refs(), state.clone());
+    let _file_dialog_result_timer = start_file_dialog_result_updates(windows.refs(), state.clone());
     update_recent_file_menu(&windows.refs().presenter, &state.borrow().recent_files);
     apply_app_metadata(&windows.presenter);
 
@@ -313,14 +319,7 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let window_refs = refs.clone();
     let state_for_open = state.clone();
     app.on_open_pdf(move || {
-        if let Some(path) = pick_pdf_file() {
-            schedule_open_pdf(
-                window_refs.clone(),
-                state_for_open.clone(),
-                path,
-                "failed to open and render PDF",
-            );
-        }
+        request_pdf_file_open(window_refs.clone(), state_for_open.clone());
     });
 
     wire_recent_file_callbacks(app, refs.clone(), state.clone());
@@ -706,6 +705,49 @@ fn bring_slide_window_to_front(windows: &AppWindowRefs, state: &Rc<RefCell<AppSt
         state.window_menu.set_slide_visible(true);
     }
     show_slide_window(windows);
+}
+
+#[cfg(target_os = "linux")]
+fn request_pdf_file_open(_windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
+    let (sender, receiver) = mpsc::channel();
+
+    {
+        let mut state = state.borrow_mut();
+        if !begin_file_dialog_request(&mut state) {
+            return;
+        }
+        state.file_dialog.result_receiver = Some(receiver);
+    }
+
+    std::thread::spawn(move || {
+        let _ = sender.send(pick_pdf_file());
+    });
+}
+
+#[cfg(not(target_os = "linux"))]
+fn request_pdf_file_open(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
+    if let Some(path) = pick_pdf_file() {
+        schedule_open_pdf(windows, state, path, "failed to open and render PDF");
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn begin_file_dialog_request(state: &mut AppState) -> bool {
+    if state.file_dialog.open {
+        return false;
+    }
+
+    state.file_dialog.open = true;
+    true
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn finish_file_dialog_request(state: &mut AppState) {
+    state.file_dialog.open = false;
+    #[cfg(target_os = "linux")]
+    {
+        state.file_dialog.result_receiver = None;
+    }
 }
 
 fn pick_pdf_file() -> Option<PathBuf> {
@@ -1349,6 +1391,58 @@ fn start_pending_open_status_updates(
     timer
 }
 
+#[cfg(target_os = "linux")]
+fn start_file_dialog_result_updates(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
+    let timer = Timer::default();
+    timer.start(
+        TimerMode::Repeated,
+        FILE_DIALOG_RESULT_POLL_INTERVAL,
+        move || {
+            update_file_dialog_result(&windows, &state);
+        },
+    );
+    timer
+}
+
+#[cfg(not(target_os = "linux"))]
+fn start_file_dialog_result_updates(
+    _windows: AppWindowRefs,
+    _state: Rc<RefCell<AppState>>,
+) -> Timer {
+    Timer::default()
+}
+
+#[cfg(target_os = "linux")]
+fn update_file_dialog_result(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+    let selected_path = {
+        let mut state = state.borrow_mut();
+        let Some(receiver) = state.file_dialog.result_receiver.as_ref() else {
+            return;
+        };
+
+        match receiver.try_recv() {
+            Ok(path) => {
+                finish_file_dialog_request(&mut state);
+                path
+            }
+            Err(mpsc::TryRecvError::Empty) => return,
+            Err(mpsc::TryRecvError::Disconnected) => {
+                finish_file_dialog_request(&mut state);
+                None
+            }
+        }
+    };
+
+    if let Some(path) = selected_path {
+        schedule_open_pdf(
+            windows.clone(),
+            state.clone(),
+            path,
+            "failed to open and render PDF",
+        );
+    }
+}
+
 fn update_pending_open_status(
     windows: &AppWindowRefs,
     state: &Rc<RefCell<AppState>>,
@@ -1748,6 +1842,28 @@ mod tests {
                 .lifecycle(),
             RenderWorkerLifecycle::ShutdownRequested
         );
+    }
+
+    #[test]
+    fn file_dialog_request_marks_dialog_open_once() {
+        let mut state = AppState::default();
+
+        assert!(begin_file_dialog_request(&mut state));
+        assert!(state.file_dialog.open);
+
+        assert!(!begin_file_dialog_request(&mut state));
+        assert!(state.file_dialog.open);
+    }
+
+    #[test]
+    fn finishing_file_dialog_request_clears_open_state() {
+        let mut state = AppState::default();
+
+        assert!(begin_file_dialog_request(&mut state));
+        finish_file_dialog_request(&mut state);
+
+        assert!(!state.file_dialog.open);
+        assert!(begin_file_dialog_request(&mut state));
     }
 
     #[test]

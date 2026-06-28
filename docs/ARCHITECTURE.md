@@ -54,3 +54,17 @@ thread-safety strategy. Any parallel rendering change must make an explicit
 decision about PDFium's thread-safety guarantees, whether documents are opened
 per worker or shared behind a synchronization boundary, how cancellation works
 across workers, and how rendered pages are merged back into the shared cache.
+
+## Native file dialogs
+
+The macOS and Windows open-file paths intentionally keep using the synchronous
+native `rfd::FileDialog` API from the UI callback. Those platforms already
+provide modal dialog behavior that integrates with the desktop environment
+without triggering the Linux-specific not-responding warning.
+
+Linux is different: the synchronous `rfd::FileDialog` path can wait for an XDG
+Desktop Portal or fallback dialog response while the Slint/winit event loop is
+not being serviced. Quick Presenter therefore opens Linux file dialogs on a
+short-lived worker thread and polls the selected path back on the UI thread. The
+UI thread remains the only place that mutates `AppState` or schedules the PDF
+open, while the worker thread owns only the blocking dialog call.

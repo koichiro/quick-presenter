@@ -169,6 +169,53 @@ The workflow uploads explicit skip-reason reports for macOS and Windows because
 hosted CI does not provide the normal desktop sessions needed to make platform
 GUI behavior a reliable release gate.
 
+## Optional Linux Cross Check
+
+macOS development builds should continue to use the default host target. Do not
+set a repository-wide Cargo default target or global shell profile variables for
+Linux sysroots or cross `pkg-config`; those settings can leak into macOS app
+bundle builds.
+
+For the easiest local Linux check from macOS, use the Docker wrapper:
+
+```sh
+scripts/check_linux_cross_docker.sh
+```
+
+The wrapper builds a local `linux/amd64` Docker image when needed, mounts the
+repository read-only, stores Cargo registry and build output in Docker-managed
+volumes, and runs:
+
+```sh
+cargo check --locked --target x86_64-unknown-linux-gnu
+```
+
+This keeps Linux development dependencies, `pkg-config`, and target libraries
+inside Docker. It does not create or modify `.cargo/config.toml`, does not set a
+repository-wide default target, and does not affect regular macOS app builds.
+
+To rebuild the local image after changing the Dockerfile or base image:
+
+```sh
+scripts/check_linux_cross_docker.sh --rebuild
+```
+
+For host-managed Linux sysroots, the lower-level opt-in wrapper is still
+available:
+
+```sh
+LINUX_SYSROOT_DIR=/path/to/linux-sysroot \
+  LINUX_CROSS_LINKER=x86_64-linux-gnu-gcc \
+  scripts/check_linux_cross.sh
+```
+
+The wrapper exports `PKG_CONFIG_ALLOW_CROSS`, `PKG_CONFIG_SYSROOT_DIR`,
+`PKG_CONFIG_PATH`, and an optional Cargo target linker only for that process,
+then runs `cargo check --target x86_64-unknown-linux-gnu`. It does not create or
+modify `.cargo/config.toml`, so regular `cargo build`, `cargo check`, and macOS
+packaging commands remain on the host target unless the caller explicitly asks
+for the Linux target.
+
 ## Application Icons
 
 The source icon assets are documented in `docs/ICONS.md`.
