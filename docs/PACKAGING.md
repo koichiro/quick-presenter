@@ -176,7 +176,32 @@ set a repository-wide Cargo default target or global shell profile variables for
 Linux sysroots or cross `pkg-config`; those settings can leak into macOS app
 bundle builds.
 
-For local Linux-only type checking from macOS, use the opt-in wrapper:
+For the easiest local Linux check from macOS, use the Docker wrapper:
+
+```sh
+scripts/check_linux_cross_docker.sh
+```
+
+The wrapper builds a local `linux/amd64` Docker image when needed, mounts the
+repository read-only, stores Cargo registry and build output in Docker-managed
+volumes, and runs:
+
+```sh
+cargo check --locked --target x86_64-unknown-linux-gnu
+```
+
+This keeps Linux development dependencies, `pkg-config`, and target libraries
+inside Docker. It does not create or modify `.cargo/config.toml`, does not set a
+repository-wide default target, and does not affect regular macOS app builds.
+
+To rebuild the local image after changing the Dockerfile or base image:
+
+```sh
+scripts/check_linux_cross_docker.sh --rebuild
+```
+
+For host-managed Linux sysroots, the lower-level opt-in wrapper is still
+available:
 
 ```sh
 LINUX_SYSROOT_DIR=/path/to/linux-sysroot \
