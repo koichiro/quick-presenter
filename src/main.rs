@@ -79,9 +79,9 @@ use view_sync::{
 use view_sync::{black_slide_image, presenter_status_text};
 use window_controller::{
     apply_macos_slide_window_chrome, fitted_slide_window_size, hide_slide_window,
-    set_slide_fullscreen, show_presenter_window, show_slide_window,
-    slide_titlebar_compensation_height, start_slide_chrome_sync, sync_slide_chrome, AppWindowRefs,
-    AppWindows,
+    restore_presenter_input_after_transient_ui, set_slide_fullscreen, show_presenter_window,
+    show_slide_window, slide_titlebar_compensation_height, start_slide_chrome_sync,
+    sync_slide_chrome, AppWindowRefs, AppWindows,
 };
 
 slint::include_modules!();
@@ -995,6 +995,8 @@ fn open_recent_pdf(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, index
         return;
     };
 
+    restore_presenter_input_after_transient_ui(windows.clone());
+
     schedule_open_pdf(
         windows.clone(),
         state.clone(),
@@ -1447,6 +1449,8 @@ fn update_file_dialog_result(windows: &AppWindowRefs, state: &Rc<RefCell<AppStat
             }
         }
     };
+
+    restore_presenter_input_after_transient_ui(windows.clone());
 
     if let Some(path) = selected_path {
         schedule_open_pdf(
