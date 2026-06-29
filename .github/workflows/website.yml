@@ -41,7 +41,7 @@ jobs:
         run: npm run build
 
       - name: Upload website artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: quick-presenter-website
           path: website/dist
