@@ -27,6 +27,8 @@ pub fn apply_opening_state_to_windows(windows: &AppWindowRefs, title: &str) {
         presenter.set_next_page_aspect_ratio(placeholder.aspect_ratio);
         presenter.set_status_text("Opening PDF...".into());
         presenter.set_current_page_index(0);
+        presenter.set_has_slide_progress(false);
+        presenter.set_slide_progress_value(0.0);
         presenter.set_thumbnails(ModelRc::new(Rc::new(VecModel::from(
             Vec::<ThumbnailItem>::new(),
         ))));
@@ -77,6 +79,8 @@ pub fn apply_snapshot_to_windows(
         presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
         presenter.set_status_text(presenter_status_text_for_snapshot(state, snapshot).into());
+        presenter.set_has_slide_progress(true);
+        presenter.set_slide_progress_value(snapshot.progress_fraction());
         presenter.set_current_page_index(thumbnail_current_row_index(
             snapshot.total_pages,
             snapshot.current_index,

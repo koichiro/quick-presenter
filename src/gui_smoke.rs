@@ -90,6 +90,13 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
     );
 
     crate::begin_open_pdf(&window_refs, &state, options.pdf_path.clone());
+    report.check(
+        "slide progress indicator is hidden while opening without a deck",
+        !windows.presenter.get_has_slide_progress()
+            && windows.presenter.get_slide_progress_value() == 0.0,
+        "presenter progress indicator is empty",
+        "presenter progress indicator was unexpectedly visible",
+    );
     wait_for_async_open(&window_refs, &state)
         .context("failed to open and render PDF through async render scheduler")?;
 
@@ -137,6 +144,12 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
     report_state(report, &state, "speaker notes were checked", |state| {
         state.status_text == "Ready" || state.status_text.contains("notes")
     });
+    report_presenter_progress(
+        report,
+        &windows,
+        &state,
+        "slide progress indicator matches the first page",
+    );
 
     run_command(
         &window_refs,
@@ -145,6 +158,12 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         "next page command advances",
         PresentationCommand::NextPage,
         |state| current_page_index(state) == Some(1),
+    );
+    report_presenter_progress(
+        report,
+        &windows,
+        &state,
+        "slide progress indicator updates after next page",
     );
     run_command(
         &window_refs,
@@ -166,6 +185,12 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
                 .snapshot()
                 .is_some_and(|snapshot| snapshot.current_index + 1 == snapshot.total_pages)
         },
+    );
+    report_presenter_progress(
+        report,
+        &windows,
+        &state,
+        "slide progress indicator reaches the final page",
     );
     run_command(
         &window_refs,
@@ -259,6 +284,33 @@ fn report_state(
 ) {
     let state = state.borrow();
     report.check(name, verify(&state), "state matched", "state did not match");
+}
+
+fn report_presenter_progress(
+    report: &mut GuiSmokeReport,
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    name: &'static str,
+) {
+    let expected_progress = state
+        .borrow()
+        .presentation
+        .snapshot()
+        .map(|snapshot| snapshot.progress_fraction());
+    let actual_progress = windows.presenter.get_slide_progress_value();
+    let progress_matches = expected_progress.is_some_and(|expected_progress| {
+        (actual_progress - expected_progress).abs() < f32::EPSILON
+    });
+
+    report.check(
+        name,
+        windows.presenter.get_has_slide_progress() && progress_matches,
+        "presenter progress indicator matched page state",
+        format!(
+            "presenter progress indicator mismatch: expected {:?}, got {}",
+            expected_progress, actual_progress
+        ),
+    );
 }
 
 fn current_page_index(state: &AppState) -> Option<u32> {

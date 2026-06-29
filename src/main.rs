@@ -1182,6 +1182,8 @@ fn apply_rendered_pages_to_windows(
         presenter.set_clock_time_label(current_clock_label().into());
         presenter.set_elapsed_time_label(state.timer.elapsed_label_at(Instant::now()).into());
         presenter.set_status_text(presenter_status_text(state).into());
+        presenter.set_has_slide_progress(true);
+        presenter.set_slide_progress_value(snapshot.progress_fraction());
         presenter.set_thumbnails(thumbnail_model(
             &state.thumbnails,
             &state.render_cache,
