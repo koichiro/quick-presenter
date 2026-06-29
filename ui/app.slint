@@ -291,6 +291,7 @@ component ThumbnailPane inherits Rectangle {
     callback request-thumbnail-range(int, int);
 
     background: transparent;
+    private property <length> scrollbar-gutter-width: 12px;
     private property <length> tile-height: 98px;
     private property <length> current-item-y: scroll-view.viewport-y + root.current-page-index * root.tile-height;
     private property <int> visible-start-index: max(0, round(-scroll-view.viewport-y / root.tile-height));
@@ -336,12 +337,12 @@ component ThumbnailPane inherits Rectangle {
     }
 
     scroll-view := ScrollView {
-        width: parent.width;
+        width: parent.width + root.scrollbar-gutter-width;
         height: parent.height;
         viewport-width: parent.width;
 
         VerticalBox {
-            width: parent.width;
+            width: root.width;
             spacing: 6px;
 
             for thumbnail in root.thumbnails: ThumbnailTile {
