@@ -16,6 +16,7 @@ pub struct StartupOptions {
     pub pdf_path: Option<PathBuf>,
     pub smoke_open_pdf_path: Option<PathBuf>,
     pub gui_smoke: Option<GuiSmokeOptions>,
+    pub log_file_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -30,6 +31,7 @@ impl StartupOptions {
             pdf_path: None,
             smoke_open_pdf_path: None,
             gui_smoke: None,
+            log_file_path: None,
         }
     }
 }
@@ -99,6 +101,15 @@ where
             continue;
         }
 
+        if arg == OsStr::new("--log-file") {
+            if options.log_file_path.is_some() {
+                bail!("--log-file can only be provided once");
+            }
+
+            options.log_file_path = Some(required_path_arg(&mut args, "--log-file")?);
+            continue;
+        }
+
         if arg.to_string_lossy().starts_with('-') {
             bail!("unknown command-line option: {}", arg.to_string_lossy());
         }
@@ -128,6 +139,7 @@ Options:
   --smoke-open-pdf <PATH>   Open and render the first page, then exit
   --gui-smoke <PATH>        Open a PDF in Slint windows and run GUI smoke checks
   --gui-smoke-report <PATH> Write the GUI smoke report to a file
+  --log-file <PATH>         Write diagnostic logs to a specific file
   -h, --help                Print help
 "
     )
@@ -138,11 +150,11 @@ where
     I: Iterator<Item = OsString>,
 {
     let Some(path) = args.next() else {
-        bail!("{option} requires a PDF path");
+        bail!("{option} requires a path");
     };
 
     if path.as_os_str().is_empty() {
-        bail!("{option} requires a non-empty PDF path");
+        bail!("{option} requires a non-empty path");
     }
 
     Ok(PathBuf::from(path))
@@ -162,6 +174,7 @@ mod tests {
                 pdf_path: None,
                 smoke_open_pdf_path: None,
                 gui_smoke: None,
+                log_file_path: None,
             })
         );
     }
@@ -176,6 +189,7 @@ mod tests {
                 pdf_path: Some(PathBuf::from("deck.pdf")),
                 smoke_open_pdf_path: None,
                 gui_smoke: None,
+                log_file_path: None,
             })
         );
     }
@@ -190,6 +204,7 @@ mod tests {
                 pdf_path: Some(PathBuf::from("deck.pdf")),
                 smoke_open_pdf_path: None,
                 gui_smoke: None,
+                log_file_path: None,
             })
         );
     }
@@ -204,6 +219,7 @@ mod tests {
                 pdf_path: None,
                 smoke_open_pdf_path: Some(PathBuf::from("deck.pdf")),
                 gui_smoke: None,
+                log_file_path: None,
             })
         );
     }
@@ -221,6 +237,7 @@ mod tests {
                     pdf_path: PathBuf::from("deck.pdf"),
                     report_path: None,
                 }),
+                log_file_path: None,
             })
         );
     }
@@ -240,6 +257,57 @@ mod tests {
                     pdf_path: PathBuf::from("deck.pdf"),
                     report_path: Some(PathBuf::from("out.txt")),
                 }),
+                log_file_path: None,
+            })
+        );
+    }
+
+    #[test]
+    fn log_file_option_sets_diagnostic_log_path() {
+        let options = parse_startup_options(["--log-file", "quick-presenter.log"]).unwrap();
+
+        assert_eq!(
+            options,
+            StartupRequest::Run(StartupOptions {
+                pdf_path: None,
+                smoke_open_pdf_path: None,
+                gui_smoke: None,
+                log_file_path: Some(PathBuf::from("quick-presenter.log")),
+            })
+        );
+    }
+
+    #[test]
+    fn log_file_option_can_be_combined_with_pdf_startup() {
+        let options =
+            parse_startup_options(["--log-file", "app.log", "--pdf", "deck.pdf"]).unwrap();
+
+        assert_eq!(
+            options,
+            StartupRequest::Run(StartupOptions {
+                pdf_path: Some(PathBuf::from("deck.pdf")),
+                smoke_open_pdf_path: None,
+                gui_smoke: None,
+                log_file_path: Some(PathBuf::from("app.log")),
+            })
+        );
+    }
+
+    #[test]
+    fn log_file_option_can_be_combined_with_smoke_modes() {
+        let options =
+            parse_startup_options(["--gui-smoke", "deck.pdf", "--log-file", "app.log"]).unwrap();
+
+        assert_eq!(
+            options,
+            StartupRequest::Run(StartupOptions {
+                pdf_path: None,
+                smoke_open_pdf_path: None,
+                gui_smoke: Some(GuiSmokeOptions {
+                    pdf_path: PathBuf::from("deck.pdf"),
+                    report_path: None,
+                }),
+                log_file_path: Some(PathBuf::from("app.log")),
             })
         );
     }
@@ -275,6 +343,7 @@ mod tests {
         assert!(help.contains("--smoke-open-pdf <PATH>"));
         assert!(help.contains("--gui-smoke <PATH>"));
         assert!(help.contains("--gui-smoke-report <PATH>"));
+        assert!(help.contains("--log-file <PATH>"));
         assert!(help.contains("-h, --help"));
     }
 
@@ -282,7 +351,7 @@ mod tests {
     fn pdf_option_requires_value() {
         let err = parse_startup_options(["--pdf"]).unwrap_err();
 
-        assert!(err.to_string().contains("requires a PDF path"));
+        assert!(err.to_string().contains("requires a path"));
     }
 
     #[test]
@@ -317,7 +386,7 @@ mod tests {
     fn smoke_open_pdf_option_requires_value() {
         let err = parse_startup_options(["--smoke-open-pdf"]).unwrap_err();
 
-        assert!(err.to_string().contains("requires a PDF path"));
+        assert!(err.to_string().contains("requires a path"));
     }
 
     #[test]
@@ -347,7 +416,7 @@ mod tests {
     fn gui_smoke_option_requires_value() {
         let err = parse_startup_options(["--gui-smoke"]).unwrap_err();
 
-        assert!(err.to_string().contains("requires a PDF path"));
+        assert!(err.to_string().contains("requires a path"));
     }
 
     #[test]
@@ -369,6 +438,28 @@ mod tests {
     fn duplicate_gui_smoke_option_is_rejected() {
         let err =
             parse_startup_options(["--gui-smoke", "a.pdf", "--gui-smoke", "b.pdf"]).unwrap_err();
+
+        assert!(err.to_string().contains("only be provided once"));
+    }
+
+    #[test]
+    fn log_file_option_requires_value() {
+        let err = parse_startup_options(["--log-file"]).unwrap_err();
+
+        assert!(err.to_string().contains("requires a path"));
+    }
+
+    #[test]
+    fn log_file_option_rejects_empty_value() {
+        let err = parse_startup_options(["--log-file", ""]).unwrap_err();
+
+        assert!(err.to_string().contains("non-empty"));
+    }
+
+    #[test]
+    fn duplicate_log_file_option_is_rejected() {
+        let err =
+            parse_startup_options(["--log-file", "a.log", "--log-file", "b.log"]).unwrap_err();
 
         assert!(err.to_string().contains("only be provided once"));
     }

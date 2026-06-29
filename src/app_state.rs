@@ -36,6 +36,7 @@ pub struct AppState {
     pub recent_files: RecentFiles,
     pub recent_menu_paths: Vec<PathBuf>,
     pub recent_store: Option<RecentFileStore>,
+    pub diagnostics_log_path: Option<PathBuf>,
     pub file_dialog: FileDialogState,
     pub status_text: String,
 }
