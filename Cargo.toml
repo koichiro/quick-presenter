@@ -15,7 +15,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rfd = "0.17"
 slint = { version = "1.17", features = ["raw-window-handle-06"] }
-pdfium-render = "=0.9.1"
+pdfium-render = "=0.9.2"
 
 [build-dependencies]
 slint-build = "1.17"
