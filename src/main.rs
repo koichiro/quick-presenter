@@ -9,6 +9,7 @@ pub mod aspect;
 pub mod black_screen;
 pub mod cli;
 pub mod clock;
+pub mod diagnostics;
 pub mod errors;
 pub mod fullscreen;
 pub mod gui_smoke;
@@ -46,6 +47,7 @@ use app_state::AppState;
 use app_state::ThumbnailState;
 use cli::{help_text, parse_startup_options, GuiSmokeOptions, StartupRequest};
 use clock::current_clock_label;
+use diagnostics::init_diagnostics;
 use errors::PresenterMessage;
 use input::PresentationCommand;
 use notes::SpeakerNotes;
@@ -71,7 +73,6 @@ use session_controller::{
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode, Weak};
 use timer::PresentationTimer;
 use tracing::warn;
-use tracing_subscriber::EnvFilter;
 use view_sync::{
     apply_opening_state_to_windows, apply_snapshot_to_windows, set_presenter_message,
     thumbnail_current_row_index, thumbnail_model,
@@ -107,13 +108,10 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("info".parse()?))
-        .init();
-
     let StartupRequest::Run(startup_options) = startup_request else {
         unreachable!("help requests return before app startup");
     };
+    let diagnostics = init_diagnostics(startup_options.log_file_path.clone())?;
     if let Some(path) = startup_options.smoke_open_pdf_path {
         return smoke_open_pdf(path);
     }
@@ -133,6 +131,7 @@ fn main() -> Result<()> {
         recent_files,
         recent_menu_paths,
         recent_store,
+        diagnostics_log_path: diagnostics.log_path().map(PathBuf::from),
         ..AppState::default()
     }));
 
@@ -1727,12 +1726,10 @@ fn handle_render_worker_failed(
     if !accepted {
         return;
     }
+    let diagnostic_log_path = state.borrow().diagnostics_log_path.clone();
     set_presenter_message(
         &windows.presenter,
-        PresenterMessage::new(
-            "Rendering stopped. Open the PDF again.",
-            errors::MessageSeverity::Error,
-        ),
+        errors::render_worker_failed_message(diagnostic_log_path.as_deref()),
     );
 }
 

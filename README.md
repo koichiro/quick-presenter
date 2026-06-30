@@ -113,6 +113,8 @@ The Cargo package and GUI executable are both named `quick-presenter`. The short
 Keyboard controls are documented in [docs/KEYBOARD.md](docs/KEYBOARD.md).
 Recent-file privacy behavior is documented in
 [docs/PRIVACY.md](docs/PRIVACY.md).
+Packaged app diagnostic logs are documented in
+[docs/PACKAGING.md](docs/PACKAGING.md#diagnostic-logs).
 
 ## Build and Development
 

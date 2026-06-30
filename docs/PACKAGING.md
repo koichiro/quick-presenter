@@ -169,6 +169,34 @@ The workflow uploads explicit skip-reason reports for macOS and Windows because
 hosted CI does not provide the normal desktop sessions needed to make platform
 GUI behavior a reliable release gate.
 
+## Diagnostic Logs
+
+Packaged apps write diagnostic logs to a predictable per-user location so users
+and maintainers can retrieve details after an unexpected GUI error. The default
+paths are:
+
+| Platform | Default log file |
+| --- | --- |
+| macOS | `~/Library/Logs/Quick Presenter/quick-presenter.log` |
+| Windows | `%LOCALAPPDATA%\Quick Presenter\Logs\quick-presenter.log` |
+| Linux | `$XDG_STATE_HOME/quick-presenter/quick-presenter.log`, or `~/.local/state/quick-presenter/quick-presenter.log` when `XDG_STATE_HOME` is unset |
+
+For support sessions and packaged smoke validation, the path can be overridden:
+
+```sh
+quick-presenter --log-file /tmp/quick-presenter.log
+```
+
+`--log-file` can be combined with normal startup, `--smoke-open-pdf`, and
+`--gui-smoke`. This is useful on Windows release builds because the GUI
+subsystem does not create a console window.
+
+Logs are for local diagnostics only. Quick Presenter does not upload logs, and
+logs should not include PDF contents, rendered pixels, speaker notes, or full
+file dumps. Diagnostic entries may include file paths, page numbers, platform
+lookup decisions, and error chains needed to debug startup and rendering
+failures.
+
 ## Optional Linux Cross Check
 
 macOS development builds should continue to use the default host target. Do not
