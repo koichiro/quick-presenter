@@ -91,6 +91,16 @@ pub struct PageSnapshot {
     pub page_label: String,
 }
 
+impl PageSnapshot {
+    pub fn progress_fraction(&self) -> f32 {
+        if self.total_pages == 0 {
+            0.0
+        } else {
+            self.current_number as f32 / self.total_pages as f32
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 struct PageCursor {
     current_index: u32,
@@ -191,6 +201,19 @@ mod tests {
                 page_label: "1 / 3".to_owned(),
             })
         );
+    }
+
+    #[test]
+    fn progress_fraction_tracks_first_middle_and_last_pages() {
+        let mut state = PresentationState::open_document("Deck", 4);
+
+        assert_eq!(state.snapshot().unwrap().progress_fraction(), 0.25);
+
+        state.jump_to_page_index(1);
+        assert_eq!(state.snapshot().unwrap().progress_fraction(), 0.5);
+
+        state.last_page();
+        assert_eq!(state.snapshot().unwrap().progress_fraction(), 1.0);
     }
 
     #[test]
