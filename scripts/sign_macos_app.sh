@@ -70,7 +70,8 @@ if [[ ! -x "$app_bundle/Contents/MacOS/quick-presenter" ]]; then
   exit 1
 fi
 
-if ! security find-identity -v -p codesigning | grep -F "$identity" >/dev/null; then
+available_identities="$(security find-identity -v -p codesigning)"
+if ! grep -F "$identity" >/dev/null <<<"$available_identities"; then
   echo "Signing identity is not available to codesign: $identity" >&2
   exit 1
 fi
