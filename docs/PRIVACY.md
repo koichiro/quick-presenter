@@ -22,6 +22,11 @@ The recent-file list is stored under the platform configuration directory:
   or `~/.config/quick-presenter/recent-files.txt` when `XDG_CONFIG_HOME` is not
   set
 
+On Unix-like platforms, Quick Presenter saves `recent-files.txt` with owner-only
+read/write permissions. Existing files with broader permissions are repaired the
+next time the recent-file list is saved. On Windows, access control is delegated
+to the user's `%APPDATA%` directory ACLs.
+
 Use File > Clear Recent Files to remove the saved list.
 
 ## Development Override
@@ -29,4 +34,6 @@ Use File > Clear Recent Files to remove the saved list.
 `QP_RECENT_FILES_PATH` overrides the recent-file storage path. This is intended
 for tests and development workflows, not as a packaged-app privacy feature. If
 it is set, Quick Presenter reads and writes the recent-file list at that exact
-path.
+path. On Unix-like platforms, the same owner-only file permissions are applied
+when saving through this override, but parent directory permissions depend on the
+chosen path.

@@ -6,6 +6,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(unix)]
+use std::os::unix::{fs::OpenOptionsExt, fs::PermissionsExt};
+
 use anyhow::{Context, Result};
 
 pub const MAX_RECENT_FILES: usize = 5;
@@ -116,8 +119,15 @@ fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
+            .recent_file_permissions()
             .open(&temp_path)
             .with_context(|| format!("failed to create temporary file: {}", temp_path.display()))?;
+        restrict_recent_file_permissions(&temp_path).with_context(|| {
+            format!(
+                "failed to restrict temporary file permissions: {}",
+                temp_path.display()
+            )
+        })?;
         file.write_all(contents)
             .with_context(|| format!("failed to write temporary file: {}", temp_path.display()))?;
         file.sync_all()
@@ -140,6 +150,32 @@ fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
     }
 
     write_result
+}
+
+trait RecentFileOpenOptionsExt {
+    fn recent_file_permissions(&mut self) -> &mut Self;
+}
+
+impl RecentFileOpenOptionsExt for OpenOptions {
+    #[cfg(unix)]
+    fn recent_file_permissions(&mut self) -> &mut Self {
+        self.mode(0o600)
+    }
+
+    #[cfg(not(unix))]
+    fn recent_file_permissions(&mut self) -> &mut Self {
+        self
+    }
+}
+
+#[cfg(unix)]
+fn restrict_recent_file_permissions(path: &Path) -> std::io::Result<()> {
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+}
+
+#[cfg(not(unix))]
+fn restrict_recent_file_permissions(_path: &Path) -> std::io::Result<()> {
+    Ok(())
 }
 
 fn temporary_sibling_path(path: &Path) -> PathBuf {
@@ -365,6 +401,38 @@ mod tests {
         let _ = fs::remove_file(path);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn saving_creates_owner_only_recent_file_on_unix() {
+        let path = temp_recent_path("owner-only");
+        let _ = fs::remove_file(&path);
+        let store = RecentFileStore::new(path.clone());
+        let recent = RecentFiles::from_paths([PathBuf::from("deck.pdf")]);
+
+        store.save(&recent).unwrap();
+
+        assert_eq!(file_mode(&path), 0o600);
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn saving_repairs_broad_existing_recent_file_permissions_on_unix() {
+        let path = temp_recent_path("repair-permissions");
+        fs::write(&path, "old.pdf\n").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        let store = RecentFileStore::new(path.clone());
+        let recent = RecentFiles::from_paths([PathBuf::from("new.pdf")]);
+
+        store.save(&recent).unwrap();
+
+        assert_eq!(store.load().unwrap(), recent);
+        assert_eq!(file_mode(&path), 0o600);
+
+        let _ = fs::remove_file(path);
+    }
+
     fn temp_recent_path(label: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -396,5 +464,10 @@ mod tests {
                     .unwrap_or(false)
             })
             .collect()
+    }
+
+    #[cfg(unix)]
+    fn file_mode(path: &Path) -> u32 {
+        fs::metadata(path).unwrap().permissions().mode() & 0o777
     }
 }
