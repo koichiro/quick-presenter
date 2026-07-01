@@ -89,6 +89,11 @@ if [[ ! -s "pdfium/LICENSE" ]]; then
   exit 1
 fi
 
+if [[ ! -s "pdfium/VERSION" ]]; then
+  echo "Missing PDFium version file: pdfium/VERSION" >&2
+  exit 1
+fi
+
 if [[ ! -d "pdfium/licenses" ]]; then
   echo "Missing PDFium component licenses directory: pdfium/licenses" >&2
   exit 1

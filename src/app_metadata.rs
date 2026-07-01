@@ -5,7 +5,6 @@ pub const APP_LICENSE_ID: &str = "GPL-3.0-or-later";
 pub const APP_LICENSE_SUMMARY: &str =
     "Quick Presenter is licensed under the GNU General Public License v3.0 or later.";
 pub const PDFIUM_VERSION_UNKNOWN_LABEL: &str = "PDFium version: unknown";
-pub const PDFIUM_VERSION_FILE: &str = "pdfium/VERSION";
 
 pub const PDFIUM_LICENSE_SUMMARY: &str = "\
 PDFium is distributed under the PDFium/BSD-style license and includes \
@@ -22,13 +21,13 @@ pub struct AboutMetadata {
     pub pdfium_license_summary: &'static str,
 }
 
-pub fn about_metadata() -> AboutMetadata {
+pub fn about_metadata(pdfium_version_label: impl Into<String>) -> AboutMetadata {
     AboutMetadata {
         app_name: APP_NAME,
         app_version_label: about_version_label(),
         app_license_id: APP_LICENSE_ID,
         app_license_summary: APP_LICENSE_SUMMARY,
-        pdfium_version_label: pdfium_version_label_from_path(PDFIUM_VERSION_FILE),
+        pdfium_version_label: pdfium_version_label.into(),
         pdfium_license_summary: PDFIUM_LICENSE_SUMMARY,
     }
 }
@@ -37,7 +36,7 @@ pub fn about_version_label() -> String {
     format!("Version {APP_VERSION}")
 }
 
-fn pdfium_version_label_from_path(path: impl AsRef<std::path::Path>) -> String {
+pub(crate) fn pdfium_version_label_from_path(path: impl AsRef<std::path::Path>) -> String {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|contents| parse_pdfium_version(&contents))
@@ -75,14 +74,14 @@ mod tests {
     #[test]
     fn about_metadata_uses_cargo_package_version() {
         assert_eq!(
-            about_metadata().app_version_label,
+            about_metadata(PDFIUM_VERSION_UNKNOWN_LABEL).app_version_label,
             format!("Version {}", env!("CARGO_PKG_VERSION"))
         );
     }
 
     #[test]
     fn about_metadata_uses_gplv3_or_later_license() {
-        let metadata = about_metadata();
+        let metadata = about_metadata(PDFIUM_VERSION_UNKNOWN_LABEL);
 
         assert_eq!(metadata.app_license_id, "GPL-3.0-or-later");
         assert!(metadata
@@ -151,7 +150,7 @@ mod tests {
 
     #[test]
     fn pdfium_license_summary_mentions_full_license_files() {
-        let metadata = about_metadata();
+        let metadata = about_metadata(PDFIUM_VERSION_UNKNOWN_LABEL);
 
         assert!(metadata.pdfium_license_summary.contains("PDFium"));
         assert!(metadata.pdfium_license_summary.contains("license files"));

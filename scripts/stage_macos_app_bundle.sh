@@ -48,6 +48,11 @@ if [[ ! -s "pdfium/LICENSE" ]]; then
   exit 1
 fi
 
+if [[ ! -s "pdfium/VERSION" ]]; then
+  echo "Missing PDFium version file: pdfium/VERSION" >&2
+  exit 1
+fi
+
 if [[ ! -s "packaging/SOURCE-OFFER.txt" ]]; then
   echo "Missing source offer file: packaging/SOURCE-OFFER.txt" >&2
   exit 1

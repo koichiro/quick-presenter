@@ -263,6 +263,7 @@ jobs:
           test -s "$plist"
           test -s "$resources/QuickPresenter.icns"
           test -s "$resources/pdfium/LICENSE"
+          test -s "$resources/pdfium/VERSION"
           test -d "$resources/pdfium/licenses"
           test -s "$resources/licenses/QuickPresenter-LICENSE.txt"
           test -s "$resources/licenses/PDFium-LICENSE.txt"
@@ -315,6 +316,7 @@ jobs:
           test -s "$app/Contents/Info.plist"
           test -s "$resources/QuickPresenter.icns"
           test -s "$resources/pdfium/LICENSE"
+          test -s "$resources/pdfium/VERSION"
           test -d "$resources/pdfium/licenses"
           test -s "$resources/licenses/QuickPresenter-LICENSE.txt"
           test -s "$resources/licenses/PDFium-LICENSE.txt"
@@ -389,6 +391,7 @@ jobs:
           grep -F "./usr/bin/quick-presenter" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
           grep -F "./usr/lib/quick-presenter/quick-presenter" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
           grep -F "./usr/lib/quick-presenter/pdfium/LICENSE" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
+          grep -F "./usr/lib/quick-presenter/pdfium/VERSION" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
           grep -F "./usr/lib/quick-presenter/pdfium/licenses/" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
           grep -F "./usr/lib/quick-presenter/licenses/QuickPresenter-LICENSE.txt" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
           grep -F "./usr/lib/quick-presenter/licenses/QuickPresenter-SOURCE-OFFER.txt" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
@@ -403,6 +406,7 @@ jobs:
           test -x "$extract_dir/usr/lib/quick-presenter/quick-presenter"
           test -L "$extract_dir/usr/bin/quick-presenter"
           test -s "$extract_dir/usr/lib/quick-presenter/pdfium/LICENSE"
+          test -s "$extract_dir/usr/lib/quick-presenter/pdfium/VERSION"
           test -d "$extract_dir/usr/lib/quick-presenter/pdfium/licenses"
           test -s "$extract_dir/usr/lib/quick-presenter/licenses/QuickPresenter-LICENSE.txt"
           test -s "$extract_dir/usr/lib/quick-presenter/licenses/QuickPresenter-SOURCE-OFFER.txt"
@@ -528,6 +532,9 @@ jobs:
           if (-not (Test-Path (Join-Path $pdfiumDir 'LICENSE') -PathType Leaf)) {
             throw "Extracted MSI layout is missing bundled PDFium license"
           }
+          if (-not (Test-Path (Join-Path $pdfiumDir 'VERSION') -PathType Leaf)) {
+            throw "Extracted MSI layout is missing bundled PDFium version file"
+          }
           if (-not (Test-Path (Join-Path $pdfiumDir 'licenses') -PathType Container)) {
             throw "Extracted MSI layout is missing PDFium component licenses"
           }
@@ -624,6 +631,9 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $pdfiumDir 'LICENSE') -PathType Leaf)) {
             throw "Unpacked MSIX layout is missing bundled PDFium license"
+          }
+          if (-not (Test-Path (Join-Path $pdfiumDir 'VERSION') -PathType Leaf)) {
+            throw "Unpacked MSIX layout is missing bundled PDFium version file"
           }
           if (-not (Test-Path (Join-Path $pdfiumDir 'licenses') -PathType Container)) {
             throw "Unpacked MSIX layout is missing PDFium component licenses"

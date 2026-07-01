@@ -51,7 +51,7 @@ use diagnostics::init_diagnostics;
 use errors::PresenterMessage;
 use input::PresentationCommand;
 use notes::SpeakerNotes;
-use pdf::PdfDocumentState;
+use pdf::{pdfium_runtime_version_label, PdfDocumentState};
 use presentation::PageSnapshot;
 use presentation::PresentationState;
 use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
@@ -543,7 +543,7 @@ fn wire_presenter_close_request(windows: &AppWindows) {
 }
 
 fn apply_app_metadata(app: &PresenterWindow) {
-    let metadata = about_metadata();
+    let metadata = about_metadata(pdfium_runtime_version_label());
 
     app.set_about_app_name(metadata.app_name.into());
     app.set_about_version_label(metadata.app_version_label.into());

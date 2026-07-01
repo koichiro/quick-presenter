@@ -11,6 +11,7 @@ use pdfium_render::prelude::*;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 use tracing::debug;
 
+use crate::app_metadata::{pdfium_version_label_from_path, PDFIUM_VERSION_UNKNOWN_LABEL};
 use crate::aspect::sanitize_aspect_ratio;
 use crate::notes::{is_pdf_speaker_note_annotation, SpeakerNotes};
 
@@ -172,15 +173,33 @@ impl PdfDocumentState {
     }
 }
 
+struct PdfiumRuntime {
+    pdfium: Pdfium,
+    version_label: String,
+}
+
+pub fn pdfium_runtime_version_label() -> String {
+    shared_pdfium_runtime()
+        .map(|runtime| runtime.version_label.clone())
+        .unwrap_or_else(|error| {
+            debug!(error = ?error, "PDFium runtime version is unavailable");
+            PDFIUM_VERSION_UNKNOWN_LABEL.to_string()
+        })
+}
+
 fn shared_pdfium() -> Result<&'static Pdfium> {
-    static PDFIUM: std::sync::OnceLock<Pdfium> = std::sync::OnceLock::new();
+    Ok(&shared_pdfium_runtime()?.pdfium)
+}
+
+fn shared_pdfium_runtime() -> Result<&'static PdfiumRuntime> {
+    static PDFIUM: std::sync::OnceLock<PdfiumRuntime> = std::sync::OnceLock::new();
 
     if let Some(pdfium) = PDFIUM.get() {
         return Ok(pdfium);
     }
 
-    let pdfium = create_pdfium()?;
-    let _ = PDFIUM.set(pdfium);
+    let runtime = create_pdfium()?;
+    let _ = PDFIUM.set(runtime);
 
     Ok(PDFIUM
         .get()
@@ -225,7 +244,7 @@ fn preflight_pdf_input(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn create_pdfium() -> Result<Pdfium> {
+fn create_pdfium() -> Result<PdfiumRuntime> {
     let policy = default_pdfium_load_policy();
 
     if let Ok(path) = std::env::var(PDFIUM_DYNAMIC_LIB_PATH_ENV) {
@@ -237,8 +256,13 @@ fn create_pdfium() -> Result<Pdfium> {
                 "PDFium dynamic override ignored without explicit packaged-build guard"
             );
         } else {
-            return new_or_reuse(Pdfium::bind_to_library(&path))
-                .context("failed to bind PDFium from PDFIUM_DYNAMIC_LIB_PATH");
+            let library_path = PathBuf::from(path);
+            let pdfium = new_or_reuse(Pdfium::bind_to_library(&library_path))
+                .context("failed to bind PDFium from PDFIUM_DYNAMIC_LIB_PATH")?;
+            return Ok(PdfiumRuntime {
+                pdfium,
+                version_label: pdfium_version_label_for_library(&library_path),
+            });
         }
     }
 
@@ -251,8 +275,12 @@ fn create_pdfium() -> Result<Pdfium> {
     }
 
     if policy == PdfiumLoadPolicy::Development {
-        return new_or_reuse(Pdfium::bind_to_system_library())
-            .context("failed to bind system PDFium");
+        let pdfium = new_or_reuse(Pdfium::bind_to_system_library())
+            .context("failed to bind system PDFium")?;
+        return Ok(PdfiumRuntime {
+            pdfium,
+            version_label: PDFIUM_VERSION_UNKNOWN_LABEL.to_string(),
+        });
     }
 
     bail!("failed to bind bundled PDFium: no packaged PDFium library found")
@@ -326,7 +354,7 @@ fn packaged_pdfium_library_candidates(current_exe: Option<&Path>) -> Vec<PathBuf
     candidates
 }
 
-fn bind_first_existing_pdfium_candidate(candidates: Vec<PathBuf>) -> Result<Option<Pdfium>> {
+fn bind_first_existing_pdfium_candidate(candidates: Vec<PathBuf>) -> Result<Option<PdfiumRuntime>> {
     for candidate in candidates {
         if !candidate.exists() {
             debug!(
@@ -336,12 +364,33 @@ fn bind_first_existing_pdfium_candidate(candidates: Vec<PathBuf>) -> Result<Opti
             continue;
         }
 
-        return new_or_reuse(Pdfium::bind_to_library(&candidate))
-            .with_context(|| format!("failed to bind bundled PDFium: {}", candidate.display()))
-            .map(Some);
+        let pdfium = new_or_reuse(Pdfium::bind_to_library(&candidate))
+            .with_context(|| format!("failed to bind bundled PDFium: {}", candidate.display()))?;
+        let version_label = pdfium_version_label_for_library(&candidate);
+
+        return Ok(Some(PdfiumRuntime {
+            pdfium,
+            version_label,
+        }));
     }
 
     Ok(None)
+}
+
+fn pdfium_version_label_for_library(library_path: &Path) -> String {
+    pdfium_version_file_for_library(library_path)
+        .map(pdfium_version_label_from_path)
+        .unwrap_or_else(|| PDFIUM_VERSION_UNKNOWN_LABEL.to_string())
+}
+
+fn pdfium_version_file_for_library(library_path: &Path) -> Option<PathBuf> {
+    let library_dir = library_path.parent()?;
+    let pdfium_dir = match library_dir.file_name().and_then(|name| name.to_str()) {
+        Some("lib" | "bin") => library_dir.parent()?,
+        _ => library_dir,
+    };
+
+    Some(pdfium_dir.join("VERSION"))
 }
 
 fn push_pdfium_layout_candidates(candidates: &mut Vec<PathBuf>, pdfium_dir: &Path) {
@@ -463,6 +512,51 @@ mod tests {
             .count();
 
         assert_eq!(unique_count, 1);
+    }
+
+    #[test]
+    fn pdfium_version_file_matches_library_layouts() {
+        assert_eq!(
+            pdfium_version_file_for_library(&platform_library_at("/app/pdfium/lib")),
+            Some(PathBuf::from("/app/pdfium/VERSION"))
+        );
+        assert_eq!(
+            pdfium_version_file_for_library(&platform_library_at("/app/pdfium/bin")),
+            Some(PathBuf::from("/app/pdfium/VERSION"))
+        );
+        assert_eq!(
+            pdfium_version_file_for_library(&platform_library_at("/app/pdfium")),
+            Some(PathBuf::from("/app/pdfium/VERSION"))
+        );
+    }
+
+    #[test]
+    fn pdfium_version_label_reads_version_next_to_bound_library() {
+        let pdfium_dir = temp_test_path("pdfium-version-dir");
+        let library_dir = pdfium_dir.join("lib");
+        fs::create_dir_all(&library_dir).expect("test library directory should be creatable");
+        fs::write(
+            pdfium_dir.join("VERSION"),
+            "MAJOR=151\nMINOR=0\nBUILD=7891\nPATCH=0\n",
+        )
+        .expect("test VERSION should be writable");
+
+        assert_eq!(
+            pdfium_version_label_for_library(&platform_library_at(&library_dir)),
+            "PDFium version: 151.0.7891.0"
+        );
+
+        fs::remove_dir_all(pdfium_dir).expect("test PDFium directory should be removable");
+    }
+
+    #[test]
+    fn pdfium_version_label_falls_back_when_bound_library_has_no_version_file() {
+        let library_dir = temp_test_path("pdfium-version-missing").join("lib");
+
+        assert_eq!(
+            pdfium_version_label_for_library(&platform_library_at(&library_dir)),
+            PDFIUM_VERSION_UNKNOWN_LABEL
+        );
     }
 
     #[test]
