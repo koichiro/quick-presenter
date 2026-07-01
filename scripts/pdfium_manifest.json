@@ -1,24 +1,24 @@
 {
-  "version": "chromium/7891",
-  "base_url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7891",
+  "version": "chromium/7920",
+  "base_url": "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/7920",
   "assets": {
     "pdfium-linux-arm64.tgz": {
-      "sha256": "727cff9203e18a1861b1b2c107aee7f981a96e690b628f7f36ff4a84d1a992a4"
+      "sha256": "00551476a77fbc1a31c37573eadc9b63f1c366f65ad727539326927da083bb4d"
     },
     "pdfium-linux-x64.tgz": {
-      "sha256": "e21257c643592dc8eaf284f5f54cd7eca5e1694ff35a5b2158a351931bea107f"
+      "sha256": "49ab3afbd4e6c1e284b5f2898129c8bb8a10fd785c1c5392c8c1fc70242f9ced"
     },
     "pdfium-mac-arm64.tgz": {
-      "sha256": "95d44263629eb8d0f6a619d5443da1ed449d4f916b26f4df1878ad4d5a64b0fc"
+      "sha256": "c032aa59be58b0f12e41e76a8ef707e347b9841b0426446f646b2568d350ec4f"
     },
     "pdfium-mac-x64.tgz": {
-      "sha256": "785c4fce5ca1d7bbd4c2d07fcb3f5adb1dcd1ceba37e1e1fd0b2fd70875481d6"
+      "sha256": "0c78b8d55a4c97e02c9bb516997253cb972739373009cf29554c959a2f6b194a"
     },
     "pdfium-win-x64.tgz": {
-      "sha256": "1a5b95fde0eb446a5709ffc4a2e6691fa2b5ace224cee20dddd16c110c5ce60e"
+      "sha256": "bf25149815b34b00042f48a886653d469c817529dd9cccabb4b509b6465a9526"
     },
     "pdfium-win-x86.tgz": {
-      "sha256": "0310fc16ae4a835304b1d2c72a9822eac5b691d09ff5fe46c50c739526bf4b1b"
+      "sha256": "0193d92cce593485cc877b3034462ba7444287cf58995591adab45c37ac19c41"
     }
   }
 }
