@@ -37,10 +37,13 @@ non-debug builds, it is ignored unless `QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE=1`
 is also set. This keeps release startup deterministic by default while
 preserving an explicit troubleshooting escape hatch.
 
-Package builders must keep the bundled `pdfium/` directory and its license files
-with the installed application. This applies to the macOS app bundle, Windows
-installer, Linux package artifacts, and packaged artifact smoke tests tracked by
-#87, #94, #96, and #88.
+Package builders must keep the bundled `pdfium/` directory with the installed
+application, including `VERSION`, `LICENSE`, and component license files. The
+About dialog reads `pdfium/VERSION` from the bundled PDFium directory selected at
+runtime, so dropping that file makes the displayed PDFium version fall back to
+`unknown`. This applies to the macOS app bundle, Windows installer, Linux
+package artifacts, and packaged artifact smoke tests tracked by #87, #94, #96,
+and #88.
 
 ## PDFium Version Updates
 
@@ -74,6 +77,8 @@ python3 scripts/fetch_pdfium.py --clean
 
 Review the manifest diff, confirm the fetched `pdfium/VERSION`, and run the
 normal Rust verification before opening the release-engineering pull request.
+When `VERSION` changes, the About dialog should display the same
+`MAJOR.MINOR.BUILD.PATCH` value from the PDFium bundle used at runtime.
 
 ## Source Code for Binary Releases
 
@@ -267,6 +272,9 @@ Quick Presenter.app/
     Resources/
       QuickPresenter.icns
       pdfium/
+        VERSION
+        LICENSE
+        licenses/
       licenses/
         QuickPresenter-LICENSE.txt
         QuickPresenter-SOURCE-OFFER.txt
@@ -437,6 +445,9 @@ The installed layout is:
 Quick Presenter/
   quick-presenter.exe
   pdfium/
+    VERSION
+    LICENSE
+    licenses/
   licenses/
     QuickPresenter-LICENSE.txt
     QuickPresenter-SOURCE-OFFER.txt
@@ -573,6 +584,9 @@ QuickPresenter-<version>.msix
   AppxManifest.xml
   quick-presenter.exe
   pdfium/
+    VERSION
+    LICENSE
+    licenses/
   licenses/
     QuickPresenter-LICENSE.txt
     QuickPresenter-SOURCE-OFFER.txt
@@ -631,6 +645,9 @@ The installed Debian package layout is:
 /usr/lib/quick-presenter/
   quick-presenter
   pdfium/
+    VERSION
+    LICENSE
+    licenses/
   licenses/
     QuickPresenter-LICENSE.txt
     QuickPresenter-SOURCE-OFFER.txt

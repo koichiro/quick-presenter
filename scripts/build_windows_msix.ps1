@@ -125,6 +125,7 @@ $pdfiumPath = Resolve-RepoPath "pdfium"
 $licensePath = Resolve-RepoPath "LICENSE"
 $sourceOfferPath = Resolve-RepoPath "packaging/SOURCE-OFFER.txt"
 $pdfiumLicensePath = Resolve-RepoPath "pdfium/LICENSE"
+$pdfiumVersionPath = Resolve-RepoPath "pdfium/VERSION"
 $sourceIconPath = Resolve-RepoPath "assets/icons/source/quick-presenter-icon-1024.png"
 $manifestTemplatePath = Resolve-RepoPath "packaging/windows/AppxManifest.xml.in"
 $cargoVersion = Read-CargoVersion
@@ -149,6 +150,9 @@ if (-not (Test-Path $sourceOfferPath -PathType Leaf)) {
 }
 if (-not (Test-Path $pdfiumLicensePath -PathType Leaf)) {
     throw "Missing PDFium license file: $pdfiumLicensePath"
+}
+if (-not (Test-Path $pdfiumVersionPath -PathType Leaf)) {
+    throw "Missing PDFium version file: $pdfiumVersionPath"
 }
 if (-not (Test-Path $sourceIconPath -PathType Leaf)) {
     throw "Missing source icon file: $sourceIconPath"

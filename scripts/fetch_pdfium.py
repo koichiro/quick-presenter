@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Download and verify a pinned PDFium binary archive.
 
-The script intentionally vendors only the native library into ./pdfium/.
-It is meant for local development, CI, and release packaging.
+The script vendors the native library plus the PDFium metadata and license files
+needed by local development, CI, release packaging, and the About dialog.
 """
 from __future__ import annotations
 
