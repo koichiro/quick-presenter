@@ -413,6 +413,20 @@ jobs:
           test -s "$extract_dir/usr/lib/quick-presenter/licenses/PDFium-LICENSE.txt"
           test -s "$extract_dir/usr/share/doc/quick-presenter/QuickPresenter-SOURCE-OFFER.txt"
 
+          test "$(stat -c '%a' "$extract_dir/usr/lib/quick-presenter/quick-presenter")" = "755"
+          test "$(stat -c '%a' "$extract_dir/usr/lib/quick-presenter")" = "755"
+          test "$(stat -c '%a' "$extract_dir/usr/share/icons/hicolor/256x256/apps")" = "755"
+          test "$(stat -c '%a' "$extract_dir/usr/share/applications/quick-presenter.desktop")" = "644"
+          test "$(stat -c '%a' "$extract_dir/usr/share/icons/hicolor/256x256/apps/quick-presenter.png")" = "644"
+          test "$(stat -c '%a' "$extract_dir/usr/lib/quick-presenter/licenses/QuickPresenter-LICENSE.txt")" = "644"
+          test "$(stat -c '%a' "$extract_dir/usr/lib/quick-presenter/licenses/QuickPresenter-SOURCE-OFFER.txt")" = "644"
+
+          if find "$extract_dir" \( -type f -o -type d \) -perm /020 -print -quit | grep -q .; then
+            echo "Debian package contains group-writable files or directories" >&2
+            find "$extract_dir" \( -type f -o -type d \) -perm /020 -ls >&2
+            exit 1
+          fi
+
           grep -Fx "Exec=/usr/bin/quick-presenter %f" "$extract_dir/usr/share/applications/quick-presenter.desktop"
           grep -Fx "StartupWMClass=quick-presenter" "$extract_dir/usr/share/applications/quick-presenter.desktop"
           desktop-file-validate "$extract_dir/usr/share/applications/quick-presenter.desktop"
