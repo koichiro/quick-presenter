@@ -152,6 +152,10 @@ To open a PDF directly from a shell:
 quick-presenter --pdf path/to/slides.pdf
 ```
 
+The Linux desktop entry advertises Quick Presenter as an available handler for
+PDF files, so supported desktop environments can show it in "Open With" flows.
+Installing the package does not make Quick Presenter the default PDF viewer.
+
 The current Linux package targets Ubuntu x64. Other Debian-based distributions
 may work, but they are not the first supported release target. RPM, AppImage,
 and Flatpak packages are not part of the current artifact set.
@@ -197,8 +201,9 @@ running a raw binary without the bundled `pdfium/` directory.
 - Quick Presenter opens prepared PDF decks only. Editing slides, creating
   slides, and managing document libraries are outside the product scope.
 - Linux desktop integration can vary by desktop environment. Package validation
-  checks the installed layout, desktop metadata, and smoke startup, but cannot
-  cover every launcher, dock, and app switcher behavior.
+  checks the installed layout, desktop metadata, PDF handler registration, and
+  smoke startup, but cannot cover every launcher, dock, app switcher, or
+  "Open With" behavior.
 
 ## Licenses
 

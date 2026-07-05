@@ -681,11 +681,19 @@ Name=Quick Presenter
 Exec=/usr/bin/quick-presenter %f
 Icon=quick-presenter
 StartupWMClass=quick-presenter
+MimeType=application/pdf;
 ```
 
 The running Linux GUI sets the same desktop app ID, `quick-presenter`, before
 showing any Slint windows. On Wayland this becomes the window app ID; on X11 it
 maps to `WM_CLASS`, matching the installed desktop entry basename and icon name.
+
+The Debian package advertises Quick Presenter as an available handler for
+`application/pdf` files so desktop environments can show it in "Open With" flows.
+It does not set Quick Presenter as the default PDF viewer and does not call
+`xdg-mime default`. Desktop MIME and icon cache refreshes are handled through the
+standard dpkg trigger paths provided by the `desktop-file-utils` and
+`hicolor-icon-theme` package dependencies.
 
 The staged hicolor icon paths are:
 
@@ -723,18 +731,23 @@ The `build-binaries.yml` workflow runs the staging script for the Linux artifact
 and builds the Debian package. It validates:
 
 - the desktop entry exists and contains the expected `Name`, `Exec`, `Icon`,
-  and `StartupWMClass`,
+  `StartupWMClass`, and `MimeType`,
 - the desktop entry passes `desktop-file-validate`,
 - each expected hicolor icon file exists and is non-empty,
 - `gtk-update-icon-cache` can process the staged hicolor tree,
 - the Debian package exists and exposes expected package metadata,
+- the Debian package depends on `desktop-file-utils` and `hicolor-icon-theme`
+  so dpkg triggers refresh desktop MIME and icon caches,
 - the extracted Debian package contains `quick-presenter`, the bundled `pdfium/` directory,
   license files, the source offer, the desktop entry, and hicolor icons,
 - the extracted `quick-presenter` binary can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`,
 - the extracted `/usr/bin/quick-presenter` symlink can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`,
-- the Debian package can be installed with `apt`, smoke-tested, and removed.
+- the Debian package can be installed with `apt`, registers
+  `quick-presenter.desktop` in the desktop MIME cache for `application/pdf`,
+  can be smoke-tested, and is removed from the desktop MIME cache after package
+  removal,
 - the staged `quick-presenter` binary can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`.
 
@@ -771,3 +784,8 @@ sudo apt-get remove quick-presenter
   `PDFIUM_DYNAMIC_LIB_PATH`.
 - Confirm the icon appears in launcher search, app switcher, and the desktop
   environment's dock, taskbar, or panel.
+- Confirm Quick Presenter appears as an available handler for PDF files in the
+  desktop environment's "Open With" UI.
+- Confirm installing the package does not make Quick Presenter the default PDF
+  viewer unless the tester explicitly chooses that setting in the desktop
+  environment.

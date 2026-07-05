@@ -150,7 +150,7 @@ Priority: optional
 Architecture: $deb_arch
 Maintainer: Quick Presenter Maintainers <koichiro@users.noreply.github.com>
 Installed-Size: $installed_size
-Depends: libc6, libgcc-s1, libstdc++6, libfontconfig1, libx11-6, libxcb1, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libwayland-cursor0, libwayland-egl1, libegl1, libgl1, libgtk-3-0
+Depends: libc6, libgcc-s1, libstdc++6, libfontconfig1, libx11-6, libxcb1, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libwayland-cursor0, libwayland-egl1, libegl1, libgl1, libgtk-3-0, desktop-file-utils, hicolor-icon-theme
 Homepage: https://github.com/koichiro/quick-presenter
 Description: Presenter-focused PDF slide deck playback
  Quick Presenter is a lightweight presenter tool for prepared PDF slide decks.

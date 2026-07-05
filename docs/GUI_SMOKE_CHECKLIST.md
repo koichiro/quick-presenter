@@ -240,6 +240,11 @@ sudo apt-get install ./quick-presenter_<version>_amd64.deb
 - Launch `Quick Presenter` from the desktop launcher.
 - Confirm the app name and icon appear in launcher search, the app switcher, and
   the desktop environment's dock, taskbar, or panel.
+- Confirm Quick Presenter appears as an available PDF handler in the desktop
+  environment's "Open With" UI, without becoming the default PDF viewer unless
+  the tester explicitly chooses it.
+- Open the test PDF through the desktop environment's "Open With" UI and confirm
+  it loads in Quick Presenter.
 - Confirm `File > Open PDF...` opens the file picker and can load the test PDF.
 - Confirm window show, hide, or bring-to-front menu actions work where present,
   and that the presenter window cannot be hidden from the app menu.
