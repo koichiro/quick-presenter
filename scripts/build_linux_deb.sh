@@ -122,6 +122,12 @@ if [[ -z "$output_deb" ]]; then
   output_deb="$artifact_dir/quick-presenter_${version}_${deb_arch}.deb"
 fi
 
+normalize_deb_package_modes() {
+  find "$package_root" -type d -exec chmod 755 {} +
+  find "$package_root" -type f -exec chmod 644 {} +
+  chmod 755 "$install_dir/quick-presenter"
+}
+
 rm -rf "$package_root"
 mkdir -p "$debian_dir" "$install_dir" "$bin_dir" "$runtime_license_dir" "$doc_dir"
 
@@ -139,6 +145,8 @@ cp "packaging/SOURCE-OFFER.txt" "$doc_dir/QuickPresenter-SOURCE-OFFER.txt"
 cp "pdfium/LICENSE" "$doc_dir/PDFium-LICENSE.txt"
 
 scripts/stage_linux_desktop_assets.sh "$package_root/usr"
+
+normalize_deb_package_modes
 
 installed_size="$(du -ks "$package_root/usr" | awk '{ print $1 }')"
 

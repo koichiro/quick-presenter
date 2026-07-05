@@ -730,6 +730,9 @@ and builds the Debian package. It validates:
 - the Debian package exists and exposes expected package metadata,
 - the extracted Debian package contains `quick-presenter`, the bundled `pdfium/` directory,
   license files, the source offer, the desktop entry, and hicolor icons,
+- the extracted Debian package uses normalized modes for key paths: directories
+  are `755`, regular data files are `644`, the executable is `755`, and no
+  regular files or directories are group-writable,
 - the extracted `quick-presenter` binary can run `--smoke-open-pdf` without
   `PDFIUM_DYNAMIC_LIB_PATH`,
 - the extracted `/usr/bin/quick-presenter` symlink can run `--smoke-open-pdf` without
