@@ -356,6 +356,7 @@ jobs:
           grep -Fx "Exec=/usr/bin/quick-presenter %f" "$desktop_file"
           grep -Fx "Icon=quick-presenter" "$desktop_file"
           grep -Fx "StartupWMClass=quick-presenter" "$desktop_file"
+          grep -Fx "MimeType=application/pdf;" "$desktop_file"
 
           desktop-file-validate "$desktop_file"
 
@@ -386,6 +387,8 @@ jobs:
 
           test -s "$deb"
           dpkg-deb --info "$deb"
+          dpkg-deb --field "$deb" Depends | grep -F "desktop-file-utils"
+          dpkg-deb --field "$deb" Depends | grep -F "hicolor-icon-theme"
           dpkg-deb --contents "$deb" | tee "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
 
           grep -F "./usr/bin/quick-presenter" "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
@@ -429,6 +432,7 @@ jobs:
 
           grep -Fx "Exec=/usr/bin/quick-presenter %f" "$extract_dir/usr/share/applications/quick-presenter.desktop"
           grep -Fx "StartupWMClass=quick-presenter" "$extract_dir/usr/share/applications/quick-presenter.desktop"
+          grep -Fx "MimeType=application/pdf;" "$extract_dir/usr/share/applications/quick-presenter.desktop"
           desktop-file-validate "$extract_dir/usr/share/applications/quick-presenter.desktop"
           gtk-update-icon-cache --ignore-theme-index --force "$extract_dir/usr/share/icons/hicolor"
 
@@ -446,6 +450,8 @@ jobs:
 
           sudo apt-get install -y "$deb"
           trap 'sudo apt-get remove -y quick-presenter || true' EXIT
+          test -s /usr/share/applications/mimeinfo.cache
+          grep -F "application/pdf=" /usr/share/applications/mimeinfo.cache | grep -F "quick-presenter.desktop"
           (
             cd /tmp
             env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE quick-presenter --smoke-open-pdf "$pdf"
@@ -461,6 +467,10 @@ jobs:
                 --gui-smoke-report "$artifact_dir/gui-smoke/ubuntu-deb-installed.txt"
           )
           sudo apt-get remove -y quick-presenter
+          test ! -e /usr/share/applications/quick-presenter.desktop
+          if [[ -f /usr/share/applications/mimeinfo.cache ]]; then
+            ! grep -F "quick-presenter.desktop" /usr/share/applications/mimeinfo.cache
+          fi
           trap - EXIT
 
       - name: Verify Windows executable icon
