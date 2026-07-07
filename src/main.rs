@@ -100,6 +100,8 @@ const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
 const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 const FILE_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
+#[cfg(target_os = "linux")]
+const INITIAL_LINUX_WINDOW_SHOW_DELAY: Duration = Duration::from_millis(120);
 
 fn main() -> Result<()> {
     let startup_request = parse_startup_options(std::env::args_os().skip(1))?;
@@ -122,6 +124,7 @@ fn main() -> Result<()> {
     let windows = AppWindows::new()?;
     configure_linux_desktop_identity()?;
     configure_shortcut_modifiers(&windows);
+    configure_presenter_menu_bar(&windows);
     let recent_store = default_recent_file_store();
     let recent_files = load_recent_files(recent_store.as_ref());
     let recent_menu_paths = recent_files.paths().to_vec();
@@ -144,14 +147,10 @@ fn main() -> Result<()> {
     apply_app_metadata(&windows.presenter);
 
     windows.apply_initial_positions();
-    windows.slide.show()?;
-    let window_refs = windows.refs();
-    apply_macos_slide_window_chrome(&window_refs);
-    sync_slide_chrome(&window_refs);
-    windows.presenter.show()?;
+    let window_refs = show_initial_windows(&windows)?;
     set_application_icon();
     remove_macos_native_about_menu_item();
-    let _slide_chrome_sync_timer = start_slide_chrome_sync(window_refs);
+    let _slide_chrome_sync_timer = start_slide_chrome_sync(window_refs.clone());
 
     if let Some(path) = startup_options.pdf_path {
         load_startup_pdf(&windows.refs(), &state, path);
@@ -159,6 +158,61 @@ fn main() -> Result<()> {
 
     slint::run_event_loop()?;
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn show_initial_windows(windows: &AppWindows) -> Result<AppWindowRefs> {
+    let refs = windows.refs();
+    let deferred_refs = refs.clone();
+    Timer::single_shot(INITIAL_LINUX_WINDOW_SHOW_DELAY, move || {
+        if let Err(err) = show_initial_windows_from_refs(&deferred_refs) {
+            eprintln!("failed to show initial windows: {err:?}");
+        }
+    });
+    Ok(refs)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn show_initial_windows(windows: &AppWindows) -> Result<AppWindowRefs> {
+    windows.slide.show()?;
+    let refs = windows.refs();
+    apply_macos_slide_window_chrome(&refs);
+    sync_slide_chrome(&refs);
+    windows.presenter.show()?;
+    Ok(refs)
+}
+
+#[cfg(target_os = "linux")]
+fn show_initial_windows_from_refs(windows: &AppWindowRefs) -> Result<()> {
+    if let Some(slide) = windows.slide.upgrade() {
+        slide.show()?;
+    }
+    sync_slide_chrome(windows);
+    if let Some(presenter) = windows.presenter.upgrade() {
+        presenter.show()?;
+    }
+    stabilize_initial_presenter_layout(windows.clone());
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn stabilize_initial_presenter_layout(windows: AppWindowRefs) {
+    for delay in [
+        Duration::from_millis(0),
+        Duration::from_millis(50),
+        Duration::from_millis(150),
+        Duration::from_millis(300),
+    ] {
+        let windows = windows.clone();
+        Timer::single_shot(delay, move || {
+            if let Some(presenter) = windows.presenter.upgrade() {
+                let window = presenter.window();
+                let size = window.size();
+                window.set_size(size);
+                window.request_redraw();
+            }
+        });
+    }
 }
 
 fn configure_shortcut_modifiers(windows: &AppWindows) {
@@ -170,6 +224,22 @@ fn configure_shortcut_modifiers(windows: &AppWindows) {
     windows
         .slide
         .set_use_physical_control_shortcuts(use_physical_control);
+}
+
+fn configure_presenter_menu_bar(windows: &AppWindows) {
+    windows
+        .presenter
+        .set_use_native_menu_bar(use_native_presenter_menu_bar());
+}
+
+#[cfg(target_os = "linux")]
+fn use_native_presenter_menu_bar() -> bool {
+    false
+}
+
+#[cfg(not(target_os = "linux"))]
+fn use_native_presenter_menu_bar() -> bool {
+    true
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]

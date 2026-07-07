@@ -127,6 +127,58 @@ component NotesView inherits Rectangle {
     }
 }
 
+component PresenterMenuButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> active: false;
+    callback clicked();
+
+    width: 72px;
+    height: 28px;
+    background: root.active ? #d6e3f8 : (touch.has-hover ? #e8eef8 : #f1f3f4);
+
+    Text {
+        x: 10px;
+        width: parent.width - 20px;
+        height: parent.height;
+        text: root.text;
+        color: #202124;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component PresenterMenuItem inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    height: 28px;
+    background: root.enabled && touch.has-hover ? #d6e3f8 : #f8f9fa;
+
+    Text {
+        x: 10px;
+        width: parent.width - 20px;
+        height: parent.height;
+        text: root.text;
+        color: root.enabled ? #202124 : #8a8f95;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
 component KeyboardBindingsPanel inherits Rectangle {
     background: #111315;
     border-color: #3c4043;
@@ -425,6 +477,7 @@ export component PresenterWindow inherits Window {
     in property <string> notes-text: "";
     in property <bool> slide-fullscreen: false;
     in property <bool> use-physical-control-shortcuts: false;
+    in property <bool> use-native-menu-bar: true;
     in property <string> clock-time-label: "--:--";
     in property <string> elapsed-time-label: "00:00";
     in property <string> status-text: "Open a PDF to start";
@@ -450,6 +503,8 @@ export component PresenterWindow inherits Window {
     in property <[ThumbnailItem]> thumbnails: [];
     in property <int> current-page-index: 0;
     property <bool> about-visible: false;
+    property <int> active-menu-index: -1;
+    property <length> inline-menu-height: root.use-native-menu-bar ? 0px : 28px;
     property <float> safe-next-page-aspect-ratio: root.next-page-aspect-ratio > 0 ? root.next-page-aspect-ratio : 16.0 / 9.0;
     property <length> next-preview-natural-height: 260px / root.safe-next-page-aspect-ratio;
     property <length> next-preview-height: root.next-preview-natural-height > 190px ? 190px : root.next-preview-natural-height;
@@ -484,7 +539,8 @@ export component PresenterWindow inherits Window {
     background: #202124;
     forward-focus: presenter-focus;
 
-    MenuBar {
+    // BEGIN_NATIVE_MENU_BAR
+    if root.use-native-menu-bar: MenuBar {
         Menu {
             title: "File";
 
@@ -645,6 +701,7 @@ export component PresenterWindow inherits Window {
             }
         }
     }
+    // END_NATIVE_MENU_BAR
 
     presenter-focus := FocusScope {
         width: root.width;
@@ -790,7 +847,7 @@ export component PresenterWindow inherits Window {
 
             HorizontalBox {
                 x: 12px;
-                y: 12px;
+                y: root.inline-menu-height + 12px;
                 width: parent.width - 24px;
                 height: 36px;
                 spacing: 8px;
@@ -861,9 +918,9 @@ export component PresenterWindow inherits Window {
 
             HorizontalBox {
                 x: 12px;
-                y: 54px;
+                y: root.inline-menu-height + 54px;
                 width: parent.width - 24px;
-                height: max(0px, parent.height - 96px);
+                height: max(0px, parent.height - root.inline-menu-height - 96px);
                 horizontal-stretch: 1;
                 spacing: 10px;
 
@@ -996,6 +1053,128 @@ export component PresenterWindow inherits Window {
                 height: 24px;
                 vertical-alignment: center;
                 overflow: elide;
+            }
+
+            Rectangle {
+                y: 0px;
+                width: parent.width;
+                height: root.inline-menu-height;
+                visible: !root.use-native-menu-bar;
+                background: #f1f3f4;
+
+                PresenterMenuButton {
+                    x: 0px;
+                    width: 56px;
+                    text: "File";
+                    active: root.active-menu-index == 0;
+                    clicked => { root.active-menu-index = root.active-menu-index == 0 ? -1 : 0; }
+                }
+
+                PresenterMenuButton {
+                    x: 56px;
+                    width: 92px;
+                    text: "Navigate";
+                    active: root.active-menu-index == 1;
+                    clicked => { root.active-menu-index = root.active-menu-index == 1 ? -1 : 1; }
+                }
+
+                PresenterMenuButton {
+                    x: 148px;
+                    width: 64px;
+                    text: "View";
+                    active: root.active-menu-index == 2;
+                    clicked => { root.active-menu-index = root.active-menu-index == 2 ? -1 : 2; }
+                }
+
+                PresenterMenuButton {
+                    x: 212px;
+                    width: 86px;
+                    text: "Window";
+                    active: root.active-menu-index == 3;
+                    clicked => { root.active-menu-index = root.active-menu-index == 3 ? -1 : 3; }
+                }
+
+                PresenterMenuButton {
+                    x: 298px;
+                    width: 64px;
+                    text: "Help";
+                    active: root.active-menu-index == 4;
+                    clicked => { root.active-menu-index = root.active-menu-index == 4 ? -1 : 4; }
+                }
+            }
+
+            if !root.use-native-menu-bar && root.active-menu-index == 0: Rectangle {
+                x: 0px;
+                y: root.inline-menu-height;
+                width: 220px;
+                height: 196px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+
+                PresenterMenuItem { y: 0px; width: parent.width; text: "Open PDF..."; clicked => { root.active-menu-index = -1; root.open-pdf(); } }
+                PresenterMenuItem { y: 28px; width: parent.width; text: root.recent-file-label-0; enabled: root.recent-file-0-enabled; clicked => { root.active-menu-index = -1; root.open-recent-file(0); } }
+                PresenterMenuItem { y: 56px; width: parent.width; text: root.recent-file-label-1; enabled: root.recent-file-1-enabled; clicked => { root.active-menu-index = -1; root.open-recent-file(1); } }
+                PresenterMenuItem { y: 84px; width: parent.width; text: root.recent-file-label-2; enabled: root.recent-file-2-enabled; clicked => { root.active-menu-index = -1; root.open-recent-file(2); } }
+                PresenterMenuItem { y: 112px; width: parent.width; text: root.recent-file-label-3; enabled: root.recent-file-3-enabled; clicked => { root.active-menu-index = -1; root.open-recent-file(3); } }
+                PresenterMenuItem { y: 140px; width: parent.width; text: root.recent-file-label-4; enabled: root.recent-file-4-enabled; clicked => { root.active-menu-index = -1; root.open-recent-file(4); } }
+                PresenterMenuItem { y: 168px; width: parent.width; text: "Clear Recent Files"; enabled: root.has-recent-files; clicked => { root.active-menu-index = -1; root.clear-recent-files(); } }
+            }
+
+            if !root.use-native-menu-bar && root.active-menu-index == 1: Rectangle {
+                x: 56px;
+                y: root.inline-menu-height;
+                width: 180px;
+                height: 112px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+
+                PresenterMenuItem { y: 0px; width: parent.width; text: "Previous Page"; clicked => { root.active-menu-index = -1; root.previous-page(); } }
+                PresenterMenuItem { y: 28px; width: parent.width; text: "Next Page"; clicked => { root.active-menu-index = -1; root.next-page(); } }
+                PresenterMenuItem { y: 56px; width: parent.width; text: "First Page"; clicked => { root.active-menu-index = -1; root.first-page(); } }
+                PresenterMenuItem { y: 84px; width: parent.width; text: "Last Page"; clicked => { root.active-menu-index = -1; root.last-page(); } }
+            }
+
+            if !root.use-native-menu-bar && root.active-menu-index == 2: Rectangle {
+                x: 148px;
+                y: root.inline-menu-height;
+                width: 210px;
+                height: 56px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+
+                PresenterMenuItem { y: 0px; width: parent.width; text: "Toggle Slide Fullscreen"; clicked => { root.active-menu-index = -1; root.toggle-slide-fullscreen(); } }
+                PresenterMenuItem { y: 28px; width: parent.width; text: "Toggle Black Screen"; clicked => { root.active-menu-index = -1; root.toggle-black-screen(); } }
+            }
+
+            if !root.use-native-menu-bar && root.active-menu-index == 3: Rectangle {
+                x: 212px;
+                y: root.inline-menu-height;
+                width: 240px;
+                height: 140px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+
+                PresenterMenuItem { y: 0px; width: parent.width; text: "Show Presenter Window"; clicked => { root.active-menu-index = -1; root.show-presenter-window(); } }
+                PresenterMenuItem { y: 28px; width: parent.width; text: "Show Slide Window"; clicked => { root.active-menu-index = -1; root.show-slide-window(); } }
+                PresenterMenuItem { y: 56px; width: parent.width; text: "Hide Slide Window"; clicked => { root.active-menu-index = -1; root.hide-slide-window(); } }
+                PresenterMenuItem { y: 84px; width: parent.width; text: "Bring Presenter Window to Front"; clicked => { root.active-menu-index = -1; root.bring-presenter-window-to-front(); } }
+                PresenterMenuItem { y: 112px; width: parent.width; text: "Bring Slide Window to Front"; clicked => { root.active-menu-index = -1; root.bring-slide-window-to-front(); } }
+            }
+
+            if !root.use-native-menu-bar && root.active-menu-index == 4: Rectangle {
+                x: 298px;
+                y: root.inline-menu-height;
+                width: 210px;
+                height: 28px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+
+                PresenterMenuItem { width: parent.width; text: "About Quick Presenter"; clicked => { root.active-menu-index = -1; root.about-visible = true; } }
             }
         }
 
