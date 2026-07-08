@@ -44,6 +44,23 @@ output_dmg="$2"
 identity="${3:-${MACOS_SIGNING_IDENTITY:-}}"
 keychain_profile="${4:-${NOTARYTOOL_KEYCHAIN_PROFILE:-}}"
 
+strip_surrounding_quotes() {
+  local value="$1"
+
+  if [[ ${#value} -ge 2 ]]; then
+    if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+      value="${value:1:${#value}-2}"
+    elif [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+  fi
+
+  printf '%s' "$value"
+}
+
+identity="$(strip_surrounding_quotes "$identity")"
+keychain_profile="$(strip_surrounding_quotes "$keychain_profile")"
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "notarize_macos_dmg.sh is only supported on macOS." >&2
   exit 1
@@ -65,6 +82,12 @@ for tool in codesign hdiutil mktemp spctl xcrun; do
     exit 1
   fi
 done
+
+available_identities="$(security find-identity -v -p codesigning)"
+if [[ "$available_identities" != *"$identity"* ]]; then
+  echo "Signing identity is not available to codesign: $identity" >&2
+  exit 1
+fi
 
 if [[ ! -d "$app_bundle" ]]; then
   echo "Missing app bundle: $app_bundle" >&2

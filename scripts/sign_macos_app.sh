@@ -30,6 +30,22 @@ fi
 app_bundle="$1"
 identity="${2:-${MACOS_SIGNING_IDENTITY:-}}"
 
+strip_surrounding_quotes() {
+  local value="$1"
+
+  if [[ ${#value} -ge 2 ]]; then
+    if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+      value="${value:1:${#value}-2}"
+    elif [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+  fi
+
+  printf '%s' "$value"
+}
+
+identity="$(strip_surrounding_quotes "$identity")"
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "sign_macos_app.sh is only supported on macOS." >&2
   exit 1
@@ -71,7 +87,7 @@ if [[ ! -x "$app_bundle/Contents/MacOS/quick-presenter" ]]; then
 fi
 
 available_identities="$(security find-identity -v -p codesigning)"
-if ! grep -F "$identity" >/dev/null <<<"$available_identities"; then
+if [[ "$available_identities" != *"$identity"* ]]; then
   echo "Signing identity is not available to codesign: $identity" >&2
   exit 1
 fi
