@@ -102,6 +102,8 @@ const FILE_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 #[cfg(target_os = "linux")]
 const INITIAL_LINUX_WINDOW_SHOW_DELAY: Duration = Duration::from_millis(120);
+#[cfg(target_os = "linux")]
+const INITIAL_LINUX_PRESENTER_FRONT_DELAY: Duration = Duration::from_millis(80);
 
 fn main() -> Result<()> {
     let startup_request = parse_startup_options(std::env::args_os().skip(1))?;
@@ -147,6 +149,7 @@ fn main() -> Result<()> {
     apply_app_metadata(&windows.presenter);
 
     windows.apply_initial_positions();
+    initialize_slide_window_size(&windows.refs());
     let window_refs = show_initial_windows(&windows)?;
     set_application_icon();
     remove_macos_native_about_menu_item();
@@ -188,10 +191,23 @@ fn show_initial_windows_from_refs(windows: &AppWindowRefs) -> Result<()> {
         slide.show()?;
     }
     sync_slide_chrome(windows);
+
+    let presenter_refs = windows.clone();
+    Timer::single_shot(INITIAL_LINUX_PRESENTER_FRONT_DELAY, move || {
+        if let Err(err) = show_initial_presenter_from_refs(&presenter_refs) {
+            eprintln!("failed to show initial presenter window: {err:?}");
+        }
+    });
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn show_initial_presenter_from_refs(windows: &AppWindowRefs) -> Result<()> {
     if let Some(presenter) = windows.presenter.upgrade() {
         presenter.show()?;
     }
     stabilize_initial_presenter_layout(windows.clone());
+    restore_presenter_input_after_transient_ui(windows.clone());
     Ok(())
 }
 
@@ -213,6 +229,24 @@ fn stabilize_initial_presenter_layout(windows: AppWindowRefs) {
             }
         });
     }
+}
+
+fn initialize_slide_window_size(windows: &AppWindowRefs) {
+    if let Some(slide) = windows.slide.upgrade() {
+        let size = default_slide_window_size();
+        slide.set_slide_window_width(size.width);
+        slide.set_slide_window_height(size.height);
+        slide.window().set_size(size);
+    }
+}
+
+fn default_slide_window_size() -> slint::LogicalSize {
+    fitted_slide_window_size(
+        SLIDE_WINDOW_MAX_WIDTH,
+        SLIDE_WINDOW_MAX_HEIGHT,
+        aspect::DEFAULT_SLIDE_ASPECT_RATIO,
+        0.0,
+    )
 }
 
 fn configure_shortcut_modifiers(windows: &AppWindows) {
@@ -1833,6 +1867,14 @@ mod tests {
         let (_, height) = fitted_slide_window_content_size(16.0 / 9.0, 0.0);
 
         assert_eq!(height, 576.0);
+    }
+
+    #[test]
+    fn default_slide_window_size_uses_standard_widescreen_aspect_ratio() {
+        let size = default_slide_window_size();
+
+        assert_eq!(size.width, 1024.0);
+        assert_eq!(size.height, 576.0);
     }
 
     #[test]
