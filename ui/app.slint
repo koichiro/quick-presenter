@@ -10,9 +10,10 @@ export struct ThumbnailItem {
 component SlideView inherits Rectangle {
     in property <image> page-image;
     in property <float> page-aspect-ratio: 16.0 / 9.0;
+    in property <bool> align-page-to-top: false;
     out property <length> page-surface-width: root.surface-width;
     out property <length> page-surface-height: root.surface-height;
-    out property <length> page-surface-y: (root.height - root.surface-height) / 2;
+    out property <length> page-surface-y: root.align-page-to-top ? 0px : (root.height - root.surface-height) / 2;
 
     background: transparent;
     property <float> safe-page-aspect-ratio: root.page-aspect-ratio > 0 ? root.page-aspect-ratio : 16.0 / 9.0;
@@ -22,7 +23,7 @@ component SlideView inherits Rectangle {
 
     Rectangle {
         x: (root.width - self.width) / 2;
-        y: (root.height - self.height) / 2;
+        y: root.page-surface-y;
         width: root.surface-width;
         height: root.surface-height;
         background: #111315;
@@ -31,7 +32,7 @@ component SlideView inherits Rectangle {
 
         Image {
             source: root.page-image;
-            image-fit: contain;
+            image-fit: fill;
             width: parent.width;
             height: parent.height;
         }
@@ -75,12 +76,14 @@ component CurrentSlideWithProgress inherits Rectangle {
     out property <length> page-surface-width: current-slide.page-surface-width;
 
     background: transparent;
+    property <length> progress-height: root.has-progress ? 4px : 0px;
 
     current-slide := SlideView {
         page-image: root.page-image;
         page-aspect-ratio: root.page-aspect-ratio;
+        align-page-to-top: true;
         width: parent.width;
-        height: parent.height;
+        height: max(0px, parent.height - root.progress-height);
     }
 
     SlideProgressIndicator {
@@ -123,6 +126,58 @@ component NotesView inherits Rectangle {
             key-released(event) => {
                 reject
             }
+        }
+    }
+}
+
+component PresenterMenuButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> active: false;
+    callback clicked();
+
+    width: 72px;
+    height: 28px;
+    background: root.active ? #d6e3f8 : (touch.has-hover ? #e8eef8 : #f1f3f4);
+
+    Text {
+        x: 10px;
+        width: parent.width - 20px;
+        height: parent.height;
+        text: root.text;
+        color: #202124;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component PresenterMenuItem inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    height: 28px;
+    background: root.enabled && touch.has-hover ? #d6e3f8 : #f8f9fa;
+
+    Text {
+        x: 10px;
+        width: parent.width - 20px;
+        height: parent.height;
+        text: root.text;
+        color: root.enabled ? #202124 : #8a8f95;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.clicked();
         }
     }
 }
@@ -451,6 +506,11 @@ export component PresenterWindow inherits Window {
     in property <[ThumbnailItem]> thumbnails: [];
     in property <int> current-page-index: 0;
     property <bool> about-visible: false;
+    property <int> active-menu-index: -1;
+    property <length> inline-menu-height: root.use-native-menu-bar ? 0px : 28px;
+    property <length> presenter-main-height: max(0px, root.height - root.inline-menu-height - 96px);
+    property <length> presenter-bottom-section-height: 180px;
+    property <float> safe-current-page-aspect-ratio: root.current-page-aspect-ratio > 0 ? root.current-page-aspect-ratio : 16.0 / 9.0;
     property <float> safe-next-page-aspect-ratio: root.next-page-aspect-ratio > 0 ? root.next-page-aspect-ratio : 16.0 / 9.0;
     property <length> next-preview-natural-height: 260px / root.safe-next-page-aspect-ratio;
     property <length> next-preview-height: root.next-preview-natural-height > 190px ? 190px : root.next-preview-natural-height;
@@ -485,6 +545,7 @@ export component PresenterWindow inherits Window {
     background: #202124;
     forward-focus: presenter-focus;
 
+    // BEGIN_NATIVE_MENU_BAR
     if root.use-native-menu-bar: MenuBar {
         Menu {
             title: "File";
@@ -646,10 +707,11 @@ export component PresenterWindow inherits Window {
             }
         }
     }
+    // END_NATIVE_MENU_BAR
 
     presenter-focus := FocusScope {
-        width: parent.width;
-        height: parent.height;
+        width: root.width;
+        height: root.height;
 
         KeyBinding {
             keys: @keys(Space);
@@ -784,11 +846,15 @@ export component PresenterWindow inherits Window {
             }
         }
 
-        VerticalBox {
-            padding: 12px;
-            spacing: 10px;
+        Rectangle {
+            width: root.width;
+            height: root.height;
+            background: #202124;
 
             HorizontalBox {
+                x: 12px;
+                y: root.inline-menu-height + 12px;
+                width: parent.width - 24px;
                 height: 36px;
                 spacing: 8px;
 
@@ -856,84 +922,99 @@ export component PresenterWindow inherits Window {
                 }
             }
 
-            VerticalBox {
-                vertical-stretch: 1;
-                spacing: 2px;
+            main-area := Rectangle {
+                x: 12px;
+                y: root.inline-menu-height + 54px;
+                width: parent.width - 24px;
+                height: root.presenter-main-height;
+                property <length> column-gap: 10px;
+                property <length> next-column-width: 260px;
+                property <length> thumbnail-column-width: 128px;
+                property <length> left-column-width: max(0px, main-area.width - main-area.next-column-width - main-area.thumbnail-column-width - main-area.column-gap * 2);
+                property <length> current-slide-natural-height: main-area.left-column-width / root.safe-current-page-aspect-ratio + (root.has-slide-progress ? 4px : 0px);
+                property <length> top-section-height: min(main-area.current-slide-natural-height, max(0px, main-area.height - root.presenter-bottom-section-height - 34px));
+                property <length> lower-section-y: main-area.top-section-height;
 
-                HorizontalBox {
-                    horizontal-stretch: 1;
-                    vertical-stretch: 1;
-                    spacing: 10px;
+                Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: main-area.left-column-width;
+                    height: parent.height;
 
-                    VerticalBox {
-                        horizontal-stretch: 3;
-                        vertical-stretch: 1;
-                        spacing: 6px;
+                    current-slide-with-progress := CurrentSlideWithProgress {
+                        x: 0px;
+                        y: 0px;
+                        page-image: root.current-page-image;
+                        page-aspect-ratio: root.current-page-aspect-ratio;
+                        has-progress: root.has-slide-progress;
+                        progress-value: root.slide-progress-value;
+                        width: parent.width;
+                        height: main-area.top-section-height;
+                    }
 
-                        current-slide-with-progress := CurrentSlideWithProgress {
-                            page-image: root.current-page-image;
-                            page-aspect-ratio: root.current-page-aspect-ratio;
-                            has-progress: root.has-slide-progress;
-                            progress-value: root.slide-progress-value;
-                            horizontal-stretch: 1;
-                            vertical-stretch: 4;
-                        }
+                    Rectangle {
+                        y: main-area.lower-section-y + 6px;
+                        height: 22px;
+                        width: parent.width;
 
-                        Rectangle {
-                            height: 22px;
-                            horizontal-stretch: 1;
-
-                            Text {
-                                x: (parent.width - self.width) / 2;
-                                width: current-slide-with-progress.page-surface-width;
-                                height: parent.height;
-                                text: "Notes";
-                                color: #d9dce0;
-                                vertical-alignment: center;
-                            }
-                        }
-
-                        Rectangle {
-                            horizontal-stretch: 1;
-                            vertical-stretch: 2;
-
-                            NotesView {
-                                x: (parent.width - self.width) / 2;
-                                width: current-slide-with-progress.page-surface-width;
-                                height: parent.height;
-                                has-notes: root.has-notes;
-                                notes-text: root.notes-text;
-                            }
+                        Text {
+                            x: (parent.width - self.width) / 2;
+                            width: current-slide-with-progress.page-surface-width;
+                            height: parent.height;
+                            text: "Notes";
+                            color: #d9dce0;
+                            vertical-alignment: center;
                         }
                     }
 
-                    VerticalBox {
-                        width: 260px;
-                        vertical-stretch: 1;
-                        spacing: 6px;
+                    Rectangle {
+                        y: main-area.lower-section-y + 34px;
+                        width: parent.width;
+                        height: max(0px, parent.height - self.y);
 
-                        Text {
-                            text: "Next";
-                            color: #d9dce0;
-                            height: 22px;
-                            vertical-alignment: center;
+                        NotesView {
+                            x: (parent.width - self.width) / 2;
+                            width: current-slide-with-progress.page-surface-width;
+                            height: parent.height;
+                            has-notes: root.has-notes;
+                            notes-text: root.notes-text;
                         }
+                    }
+                }
+
+                Rectangle {
+                    x: main-area.left-column-width + main-area.column-gap;
+                    y: 0px;
+                    width: main-area.next-column-width;
+                    height: parent.height;
+                    property <length> preview-height: min(root.next-preview-height, main-area.top-section-height);
+
+                    next-preview-slot := Rectangle {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.width;
+                        height: parent.preview-height;
 
                         SlideView {
+                            x: 0px;
+                            y: 0px;
                             page-image: root.next-page-image;
                             page-aspect-ratio: root.next-page-aspect-ratio;
+                            align-page-to-top: true;
                             visible: root.has-next-page;
-                            height: root.next-preview-height;
-                            horizontal-stretch: 1;
+                            width: parent.width;
+                            height: parent.height;
                         }
 
                         Rectangle {
+                            x: 0px;
+                            y: 0px;
                             visible: !root.has-next-page;
                             background: #111315;
                             border-color: #3c4043;
                             border-width: 1px;
-                            height: root.next-preview-height;
-                            horizontal-stretch: 1;
+                            width: parent.width;
+                            height: parent.height;
 
                             Text {
                                 text: "No next slide";
@@ -944,56 +1025,183 @@ export component PresenterWindow inherits Window {
                                 height: parent.height;
                             }
                         }
-
-                        Text {
-                            text: "Keys";
-                            color: #d9dce0;
-                            height: 22px;
-                            vertical-alignment: center;
-                        }
-
-                        KeyboardBindingsPanel {
-                            height: 166px;
-                            horizontal-stretch: 1;
-                        }
                     }
 
-                    VerticalBox {
-                        width: 128px;
-                        vertical-stretch: 1;
-                        spacing: 6px;
+                    Text {
+                        x: 0px;
+                        y: main-area.lower-section-y + 6px;
+                        text: "Keys";
+                        color: #d9dce0;
+                        width: parent.width;
+                        height: 22px;
+                        vertical-alignment: center;
+                        horizontal-alignment: left;
+                    }
 
-                        Text {
-                            text: "Slides";
-                            color: #d9dce0;
-                            height: 22px;
-                            vertical-alignment: center;
-                        }
-
-                        ThumbnailPane {
-                            thumbnails: root.thumbnails;
-                            current-page-index: root.current-page-index;
-                            horizontal-stretch: 1;
-                            vertical-stretch: 1;
-                            jump-to-page(page-index) => {
-                                root.jump-to-page(page-index);
-                            }
-                            request-thumbnail-range(first-index, last-index) => {
-                                root.request-thumbnail-range(first-index, last-index);
-                            }
-                        }
+                    KeyboardBindingsPanel {
+                        y: main-area.lower-section-y + 34px;
+                        width: parent.width;
+                        height: max(0px, parent.height - self.y);
                     }
                 }
 
-                Text {
-                    text: root.status-text;
-                    color: #d9dce0;
-                    height: 24px;
-                    vertical-alignment: center;
-                    overflow: elide;
+                Rectangle {
+                    x: main-area.left-column-width + main-area.column-gap + main-area.next-column-width + main-area.column-gap;
+                    y: 0px;
+                    width: main-area.thumbnail-column-width;
+                    height: parent.height;
+
+                    ThumbnailPane {
+                        x: 0px;
+                        y: 0px;
+                        thumbnails: root.thumbnails;
+                        current-page-index: root.current-page-index;
+                        width: parent.width;
+                        height: parent.height;
+                        jump-to-page(page-index) => {
+                            root.jump-to-page(page-index);
+                        }
+                        request-thumbnail-range(first-index, last-index) => {
+                            root.request-thumbnail-range(first-index, last-index);
+                        }
+                    }
                 }
             }
+
+            Text {
+                x: 12px;
+                y: max(0px, parent.height - 36px);
+                width: parent.width - 24px;
+                text: root.status-text;
+                color: #d9dce0;
+                height: 24px;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            Rectangle {
+                y: 0px;
+                width: parent.width;
+                height: root.inline-menu-height;
+                visible: !root.use-native-menu-bar;
+                background: #f1f3f4;
+
+                PresenterMenuButton {
+                    x: 0px;
+                    width: 56px;
+                    text: "File";
+                    active: root.active-menu-index == 0;
+                    clicked => { root.active-menu-index = root.active-menu-index == 0 ? -1 : 0; }
+                }
+
+                PresenterMenuButton {
+                    x: 56px;
+                    width: 92px;
+                    text: "Navigate";
+                    active: root.active-menu-index == 1;
+                    clicked => { root.active-menu-index = root.active-menu-index == 1 ? -1 : 1; }
+                }
+
+                PresenterMenuButton {
+                    x: 148px;
+                    width: 64px;
+                    text: "View";
+                    active: root.active-menu-index == 2;
+                    clicked => { root.active-menu-index = root.active-menu-index == 2 ? -1 : 2; }
+                }
+
+                PresenterMenuButton {
+                    x: 212px;
+                    width: 86px;
+                    text: "Window";
+                    active: root.active-menu-index == 3;
+                    clicked => { root.active-menu-index = root.active-menu-index == 3 ? -1 : 3; }
+                }
+
+                PresenterMenuButton {
+                    x: 298px;
+                    width: 64px;
+                    text: "Help";
+                    active: root.active-menu-index == 4;
+                    clicked => { root.active-menu-index = root.active-menu-index == 4 ? -1 : 4; }
+                }
+            }
+
+            if !root.use-native-menu-bar && root.active-menu-index == 0: Rectangle {
+                x: 0px;
+                y: root.inline-menu-height;
+                width: 220px;
+                height: 196px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+
+                PresenterMenuItem { y: 0px; width: parent.width; text: "Open PDF..."; clicked => { root.active-menu-index = -1; root.open-pdf(); } }
+                PresenterMenuItem { y: 28px; width: parent.width; text: root.recent-file-label-0; enabled: root.recent-file-0-enabled; clicked => { root.active-menu-index = -1; root.open-recent-file(0); } }
+                PresenterMenuItem { y: 56px; width: parent.width; text: root.recent-file-label-1; enabled: root.recent-file-1-enabled; clicked => { root.active-menu-index = -1; root.open-recent-file(1); } }
+                PresenterMenuItem { y: 84px; width: parent.width; text: root.recent-file-label-2; enabled: root.recent-file-2-enabled; clicked => { root.active-menu-index = -1; root.open-recent-file(2); } }
+                PresenterMenuItem { y: 112px; width: parent.width; text: root.recent-file-label-3; enabled: root.recent-file-3-enabled; clicked => { root.active-menu-index = -1; root.open-recent-file(3); } }
+                PresenterMenuItem { y: 140px; width: parent.width; text: root.recent-file-label-4; enabled: root.recent-file-4-enabled; clicked => { root.active-menu-index = -1; root.open-recent-file(4); } }
+                PresenterMenuItem { y: 168px; width: parent.width; text: "Clear Recent Files"; enabled: root.has-recent-files; clicked => { root.active-menu-index = -1; root.clear-recent-files(); } }
+            }
+
+            if !root.use-native-menu-bar && root.active-menu-index == 1: Rectangle {
+                x: 56px;
+                y: root.inline-menu-height;
+                width: 180px;
+                height: 112px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+
+                PresenterMenuItem { y: 0px; width: parent.width; text: "Previous Page"; clicked => { root.active-menu-index = -1; root.previous-page(); } }
+                PresenterMenuItem { y: 28px; width: parent.width; text: "Next Page"; clicked => { root.active-menu-index = -1; root.next-page(); } }
+                PresenterMenuItem { y: 56px; width: parent.width; text: "First Page"; clicked => { root.active-menu-index = -1; root.first-page(); } }
+                PresenterMenuItem { y: 84px; width: parent.width; text: "Last Page"; clicked => { root.active-menu-index = -1; root.last-page(); } }
+            }
+
+            if !root.use-native-menu-bar && root.active-menu-index == 2: Rectangle {
+                x: 148px;
+                y: root.inline-menu-height;
+                width: 210px;
+                height: 56px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+
+                PresenterMenuItem { y: 0px; width: parent.width; text: "Toggle Slide Fullscreen"; clicked => { root.active-menu-index = -1; root.toggle-slide-fullscreen(); } }
+                PresenterMenuItem { y: 28px; width: parent.width; text: "Toggle Black Screen"; clicked => { root.active-menu-index = -1; root.toggle-black-screen(); } }
+            }
+
+            if !root.use-native-menu-bar && root.active-menu-index == 3: Rectangle {
+                x: 212px;
+                y: root.inline-menu-height;
+                width: 240px;
+                height: 140px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+
+                PresenterMenuItem { y: 0px; width: parent.width; text: "Show Presenter Window"; clicked => { root.active-menu-index = -1; root.show-presenter-window(); } }
+                PresenterMenuItem { y: 28px; width: parent.width; text: "Show Slide Window"; clicked => { root.active-menu-index = -1; root.show-slide-window(); } }
+                PresenterMenuItem { y: 56px; width: parent.width; text: "Hide Slide Window"; clicked => { root.active-menu-index = -1; root.hide-slide-window(); } }
+                PresenterMenuItem { y: 84px; width: parent.width; text: "Bring Presenter Window to Front"; clicked => { root.active-menu-index = -1; root.bring-presenter-window-to-front(); } }
+                PresenterMenuItem { y: 112px; width: parent.width; text: "Bring Slide Window to Front"; clicked => { root.active-menu-index = -1; root.bring-slide-window-to-front(); } }
+            }
+
+            if !root.use-native-menu-bar && root.active-menu-index == 4: Rectangle {
+                x: 298px;
+                y: root.inline-menu-height;
+                width: 210px;
+                height: 28px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+
+                PresenterMenuItem { width: parent.width; text: "About Quick Presenter"; clicked => { root.active-menu-index = -1; root.about-visible = true; } }
+            }
         }
+
     }
 
     if root.about-visible : Rectangle {
@@ -1128,6 +1336,8 @@ export component SlideWindow inherits Window {
     preferred-height: root.slide-window-height;
     min-width: 640px;
     min-height: 360px;
+    max-width: root.slide-window-width;
+    max-height: root.slide-window-height;
     background: #111315;
     forward-focus: slide-focus;
 

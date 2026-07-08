@@ -100,6 +100,10 @@ const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
 const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 const FILE_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
+#[cfg(target_os = "linux")]
+const INITIAL_LINUX_WINDOW_SHOW_DELAY: Duration = Duration::from_millis(120);
+#[cfg(target_os = "linux")]
+const INITIAL_LINUX_PRESENTER_FRONT_DELAY: Duration = Duration::from_millis(80);
 
 fn main() -> Result<()> {
     let startup_request = parse_startup_options(std::env::args_os().skip(1))?;
@@ -145,14 +149,11 @@ fn main() -> Result<()> {
     apply_app_metadata(&windows.presenter);
 
     windows.apply_initial_positions();
-    windows.slide.show()?;
-    let window_refs = windows.refs();
-    apply_macos_slide_window_chrome(&window_refs);
-    sync_slide_chrome(&window_refs);
-    windows.presenter.show()?;
+    initialize_slide_window_size(&windows.refs());
+    let window_refs = show_initial_windows(&windows)?;
     set_application_icon();
     remove_macos_native_about_menu_item();
-    let _slide_chrome_sync_timer = start_slide_chrome_sync(window_refs);
+    let _slide_chrome_sync_timer = start_slide_chrome_sync(window_refs.clone());
 
     if let Some(path) = startup_options.pdf_path {
         load_startup_pdf(&windows.refs(), &state, path);
@@ -160,6 +161,92 @@ fn main() -> Result<()> {
 
     slint::run_event_loop()?;
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn show_initial_windows(windows: &AppWindows) -> Result<AppWindowRefs> {
+    let refs = windows.refs();
+    let deferred_refs = refs.clone();
+    Timer::single_shot(INITIAL_LINUX_WINDOW_SHOW_DELAY, move || {
+        if let Err(err) = show_initial_windows_from_refs(&deferred_refs) {
+            eprintln!("failed to show initial windows: {err:?}");
+        }
+    });
+    Ok(refs)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn show_initial_windows(windows: &AppWindows) -> Result<AppWindowRefs> {
+    windows.slide.show()?;
+    let refs = windows.refs();
+    apply_macos_slide_window_chrome(&refs);
+    sync_slide_chrome(&refs);
+    windows.presenter.show()?;
+    Ok(refs)
+}
+
+#[cfg(target_os = "linux")]
+fn show_initial_windows_from_refs(windows: &AppWindowRefs) -> Result<()> {
+    if let Some(slide) = windows.slide.upgrade() {
+        slide.show()?;
+    }
+    sync_slide_chrome(windows);
+
+    let presenter_refs = windows.clone();
+    Timer::single_shot(INITIAL_LINUX_PRESENTER_FRONT_DELAY, move || {
+        if let Err(err) = show_initial_presenter_from_refs(&presenter_refs) {
+            eprintln!("failed to show initial presenter window: {err:?}");
+        }
+    });
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn show_initial_presenter_from_refs(windows: &AppWindowRefs) -> Result<()> {
+    if let Some(presenter) = windows.presenter.upgrade() {
+        presenter.show()?;
+    }
+    stabilize_initial_presenter_layout(windows.clone());
+    restore_presenter_input_after_transient_ui(windows.clone());
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn stabilize_initial_presenter_layout(windows: AppWindowRefs) {
+    for delay in [
+        Duration::from_millis(0),
+        Duration::from_millis(50),
+        Duration::from_millis(150),
+        Duration::from_millis(300),
+    ] {
+        let windows = windows.clone();
+        Timer::single_shot(delay, move || {
+            if let Some(presenter) = windows.presenter.upgrade() {
+                let window = presenter.window();
+                let size = window.size();
+                window.set_size(size);
+                window.request_redraw();
+            }
+        });
+    }
+}
+
+fn initialize_slide_window_size(windows: &AppWindowRefs) {
+    if let Some(slide) = windows.slide.upgrade() {
+        let size = default_slide_window_size();
+        slide.set_slide_window_width(size.width);
+        slide.set_slide_window_height(size.height);
+        slide.window().set_size(size);
+    }
+}
+
+fn default_slide_window_size() -> slint::LogicalSize {
+    fitted_slide_window_size(
+        SLIDE_WINDOW_MAX_WIDTH,
+        SLIDE_WINDOW_MAX_HEIGHT,
+        aspect::DEFAULT_SLIDE_ASPECT_RATIO,
+        0.0,
+    )
 }
 
 fn configure_shortcut_modifiers(windows: &AppWindows) {
@@ -1780,6 +1867,14 @@ mod tests {
         let (_, height) = fitted_slide_window_content_size(16.0 / 9.0, 0.0);
 
         assert_eq!(height, 576.0);
+    }
+
+    #[test]
+    fn default_slide_window_size_uses_standard_widescreen_aspect_ratio() {
+        let size = default_slide_window_size();
+
+        assert_eq!(size.width, 1024.0);
+        assert_eq!(size.height, 576.0);
     }
 
     #[test]
