@@ -987,35 +987,43 @@ export component PresenterWindow inherits Window {
                     y: 0px;
                     width: main-area.next-column-width;
                     height: parent.height;
+                    property <length> preview-height: min(root.next-preview-height, main-area.top-section-height);
 
-                    SlideView {
+                    next-preview-slot := Rectangle {
                         x: 0px;
                         y: 0px;
-                        page-image: root.next-page-image;
-                        page-aspect-ratio: root.next-page-aspect-ratio;
-                        align-page-to-top: true;
-                        visible: root.has-next-page;
                         width: parent.width;
-                        height: min(root.next-preview-height, main-area.top-section-height);
-                    }
+                        height: parent.preview-height;
 
-                    Rectangle {
-                        x: 0px;
-                        y: 0px;
-                        visible: !root.has-next-page;
-                        background: #111315;
-                        border-color: #3c4043;
-                        border-width: 1px;
-                        width: parent.width;
-                        height: min(root.next-preview-height, main-area.top-section-height);
-
-                        Text {
-                            text: "No next slide";
-                            color: #9aa0a6;
-                            vertical-alignment: center;
-                            horizontal-alignment: center;
+                        SlideView {
+                            x: 0px;
+                            y: 0px;
+                            page-image: root.next-page-image;
+                            page-aspect-ratio: root.next-page-aspect-ratio;
+                            align-page-to-top: true;
+                            visible: root.has-next-page;
                             width: parent.width;
                             height: parent.height;
+                        }
+
+                        Rectangle {
+                            x: 0px;
+                            y: 0px;
+                            visible: !root.has-next-page;
+                            background: #111315;
+                            border-color: #3c4043;
+                            border-width: 1px;
+                            width: parent.width;
+                            height: parent.height;
+
+                            Text {
+                                text: "No next slide";
+                                color: #9aa0a6;
+                                vertical-alignment: center;
+                                horizontal-alignment: center;
+                                width: parent.width;
+                                height: parent.height;
+                            }
                         }
                     }
 
