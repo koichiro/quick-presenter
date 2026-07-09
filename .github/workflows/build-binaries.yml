@@ -671,6 +671,9 @@ jobs:
           if (-not (Test-Path (Join-Path $assetsDir 'Square44x44Logo.png') -PathType Leaf)) {
             throw "Unpacked MSIX layout is missing Square44x44Logo.png"
           }
+          if (-not (Test-Path (Join-Path $assetsDir 'StoreLogo.png') -PathType Leaf)) {
+            throw "Unpacked MSIX layout is missing StoreLogo.png"
+          }
           if (-not (Test-Path (Join-Path $assetsDir 'Square150x150Logo.png') -PathType Leaf)) {
             throw "Unpacked MSIX layout is missing Square150x150Logo.png"
           }
@@ -684,6 +687,9 @@ jobs:
           }
           if ($manifestText -notmatch 'Name="Windows\.Desktop"') {
             throw "MSIX manifest is missing Windows.Desktop target family"
+          }
+          if ($manifestText -notmatch '<Logo>Assets\\StoreLogo\.png</Logo>') {
+            throw "MSIX manifest is missing StoreLogo.png package logo"
           }
           if ($manifestText -notmatch 'Executable="quick-presenter\.exe"') {
             throw "MSIX manifest is missing quick-presenter.exe application entry"
@@ -798,6 +804,9 @@ jobs:
           if (-not (Test-Path (Join-Path $assetsDir 'Square44x44Logo.png') -PathType Leaf)) {
             throw "Unpacked Store MSIX layout is missing Square44x44Logo.png"
           }
+          if (-not (Test-Path (Join-Path $assetsDir 'StoreLogo.png') -PathType Leaf)) {
+            throw "Unpacked Store MSIX layout is missing StoreLogo.png"
+          }
           if (-not (Test-Path (Join-Path $assetsDir 'Square150x150Logo.png') -PathType Leaf)) {
             throw "Unpacked Store MSIX layout is missing Square150x150Logo.png"
           }
@@ -828,6 +837,9 @@ jobs:
           }
           if ($manifestText -notmatch 'Name="Windows\.Desktop"') {
             throw "Store MSIX manifest is missing Windows.Desktop target family"
+          }
+          if ($manifestText -notmatch '<Logo>Assets\\StoreLogo\.png</Logo>') {
+            throw "Store MSIX manifest is missing StoreLogo.png package logo"
           }
           if ($manifestText -notmatch 'Executable="quick-presenter\.exe"') {
             throw "Store MSIX manifest is missing quick-presenter.exe application entry"

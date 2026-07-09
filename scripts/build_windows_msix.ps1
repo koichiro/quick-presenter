@@ -205,6 +205,7 @@ Copy-Item $sourceOfferPath (Join-Path $licenseDir "QuickPresenter-SOURCE-OFFER.t
 Copy-Item $pdfiumLicensePath (Join-Path $licenseDir "PDFium-LICENSE.txt")
 
 Copy-ResizedPng -Source $sourceIconPath -Output (Join-Path $assetDir "Square44x44Logo.png") -Size 44
+Copy-ResizedPng -Source $sourceIconPath -Output (Join-Path $assetDir "StoreLogo.png") -Size 50
 Copy-ResizedPng -Source $sourceIconPath -Output (Join-Path $assetDir "Square150x150Logo.png") -Size 150
 
 $manifest = Get-Content $manifestTemplatePath -Raw

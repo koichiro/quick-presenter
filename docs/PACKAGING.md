@@ -611,6 +611,9 @@ size, package path sanity, and PDF smoke startup. Use that CI-produced Store
 artifact as the candidate package for real Windows machine validation and Store
 submission checks.
 
+`Properties/Logo` uses the 50x50 `Assets\StoreLogo.png` asset. The larger
+`Square150x150Logo.png` remains the app tile logo under `uap:VisualElements`.
+
 The same values can be passed explicitly if Partner Center assigns replacements:
 
 ```powershell
@@ -672,6 +675,7 @@ QuickPresenter-<version>.msix
     PDFium-LICENSE.txt
   Assets/
     Square44x44Logo.png
+    StoreLogo.png
     Square150x150Logo.png
 ```
 

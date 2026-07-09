@@ -13,7 +13,7 @@
   <Properties>
     <DisplayName>Quick Presenter</DisplayName>
     <PublisherDisplayName>{{PUBLISHER_DISPLAY_NAME}}</PublisherDisplayName>
-    <Logo>Assets\Square150x150Logo.png</Logo>
+    <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
 
   <Dependencies>
