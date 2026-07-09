@@ -467,9 +467,15 @@ jobs:
                 --gui-smoke-report "$artifact_dir/gui-smoke/ubuntu-deb-installed.txt"
           )
           sudo apt-get remove -y quick-presenter
-          test ! -e /usr/share/applications/quick-presenter.desktop
+          if test -e /usr/share/applications/quick-presenter.desktop; then
+            echo "Debian package removal left quick-presenter.desktop behind" >&2
+            exit 1
+          fi
           if [[ -f /usr/share/applications/mimeinfo.cache ]]; then
-            ! grep -F "quick-presenter.desktop" /usr/share/applications/mimeinfo.cache
+            if grep -F "quick-presenter.desktop" /usr/share/applications/mimeinfo.cache; then
+              echo "Debian package removal left quick-presenter.desktop in mimeinfo.cache" >&2
+              exit 1
+            fi
           fi
           trap - EXIT
 
