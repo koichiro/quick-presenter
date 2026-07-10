@@ -2,8 +2,11 @@ param(
     [string]$ArtifactDir = "artifacts/quick-presenter-windows-x64",
     [string]$Binary = "target/release/quick-presenter.exe",
     [string]$OutputMsix = "",
+    [string]$PackageName = "QuickPresenter.QuickPresenter",
     [string]$Publisher = "CN=Quick Presenter",
+    [string]$PublisherDisplayName = "Quick Presenter",
     [string]$MakeAppxCommand = "",
+    [switch]$StoreIdentity,
     [switch]$KeepWorkDir
 )
 
@@ -118,7 +121,31 @@ function Copy-ResizedPng {
     }
 }
 
+function Assert-NonEmpty {
+    param(
+        [string]$Value,
+        [string]$Name
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        throw "$Name must not be empty"
+    }
+}
+
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+if ($StoreIdentity) {
+    $PackageName = "KoichiroOhba.QuickPresenter"
+    $Publisher = "CN=A3F64AFD-6298-42F8-BAC9-DB0AB1831F51"
+    $PublisherDisplayName = "Koichiro Ohba"
+    if ($ArtifactDir -eq "artifacts/quick-presenter-windows-x64") {
+        $ArtifactDir = "artifacts/quick-presenter-windows-store-x64"
+    }
+}
+
+Assert-NonEmpty -Value $PackageName -Name "MSIX package name"
+Assert-NonEmpty -Value $Publisher -Name "MSIX publisher"
+Assert-NonEmpty -Value $PublisherDisplayName -Name "MSIX publisher display name"
+
 $artifactDirPath = Resolve-RepoPath $ArtifactDir
 $binaryPath = Resolve-RepoPath $Binary
 $pdfiumPath = Resolve-RepoPath "pdfium"
@@ -160,9 +187,6 @@ if (-not (Test-Path $sourceIconPath -PathType Leaf)) {
 if (-not (Test-Path $manifestTemplatePath -PathType Leaf)) {
     throw "Missing MSIX manifest template: $manifestTemplatePath"
 }
-if ([string]::IsNullOrWhiteSpace($Publisher)) {
-    throw "MSIX publisher must not be empty"
-}
 
 $makeAppx = Resolve-MakeAppx $MakeAppxCommand
 $version = Convert-ToMsixVersion $cargoVersion
@@ -181,11 +205,14 @@ Copy-Item $sourceOfferPath (Join-Path $licenseDir "QuickPresenter-SOURCE-OFFER.t
 Copy-Item $pdfiumLicensePath (Join-Path $licenseDir "PDFium-LICENSE.txt")
 
 Copy-ResizedPng -Source $sourceIconPath -Output (Join-Path $assetDir "Square44x44Logo.png") -Size 44
+Copy-ResizedPng -Source $sourceIconPath -Output (Join-Path $assetDir "StoreLogo.png") -Size 50
 Copy-ResizedPng -Source $sourceIconPath -Output (Join-Path $assetDir "Square150x150Logo.png") -Size 150
 
 $manifest = Get-Content $manifestTemplatePath -Raw
+$manifest = $manifest.Replace("{{PACKAGE_NAME}}", [System.Security.SecurityElement]::Escape($PackageName))
 $manifest = $manifest.Replace("{{PACKAGE_VERSION}}", $version)
 $manifest = $manifest.Replace("{{PUBLISHER}}", [System.Security.SecurityElement]::Escape($Publisher))
+$manifest = $manifest.Replace("{{PUBLISHER_DISPLAY_NAME}}", [System.Security.SecurityElement]::Escape($PublisherDisplayName))
 Set-Content -Path $manifestPath -Value $manifest -Encoding UTF8
 
 Remove-Item -Force $OutputMsix -ErrorAction SilentlyContinue
