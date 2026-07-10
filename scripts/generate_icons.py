@@ -11,7 +11,7 @@ try:
 except ImportError as exc:
     raise SystemExit("Pillow is required. Install it with: python3 -m pip install Pillow") from exc
 
-PNG_SIZES = (16, 24, 32, 48, 64, 128, 256, 512, 1024)
+PNG_SIZES = (16, 24, 32, 48, 64, 128, 256, 512, 1024, 1080)
 WINDOWS_ICO_SIZES = (16, 24, 32, 48, 64, 128, 256)
 MACOS_ARTWORK_SCALE = 0.84
 MACOS_ICONSET_ENTRIES = (
