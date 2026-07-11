@@ -597,6 +597,51 @@ mod tests {
     }
 
     #[test]
+    fn preflight_accepts_supported_authoring_tool_fixtures() {
+        let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let fixtures = [
+            "google-slide.pdf",
+            "keynote-15-macos.pdf",
+            "latex-beamer.pdf",
+            "marp-speaker-notes.pdf",
+            "power-point-16-macos.pdf",
+        ];
+
+        for fixture in fixtures {
+            let path = fixture_dir.join(fixture);
+            preflight_pdf_input(&path)
+                .unwrap_or_else(|error| panic!("{fixture} should pass preflight: {error:#}"));
+        }
+    }
+
+    #[test]
+    fn supported_authoring_tool_fixtures_open_and_render() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+
+        if !local_pdfium_available() {
+            return;
+        }
+
+        let fixture_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let fixtures = [
+            ("google-slide.pdf", 2),
+            ("keynote-15-macos.pdf", 2),
+            ("latex-beamer.pdf", 2),
+            ("marp-speaker-notes.pdf", 3),
+            ("power-point-16-macos.pdf", 2),
+        ];
+
+        for (fixture, expected_pages) in fixtures {
+            let document = PdfDocumentState::open(fixture_dir.join(fixture))
+                .unwrap_or_else(|error| panic!("{fixture} should open: {error:#}"));
+            assert_eq!(document.page_count(), expected_pages, "{fixture}");
+            document
+                .render_page_pixels(0, 320)
+                .unwrap_or_else(|error| panic!("{fixture} should render: {error:#}"));
+        }
+    }
+
+    #[test]
     fn preflight_rejects_missing_path() {
         let path = temp_test_path("missing.pdf");
 

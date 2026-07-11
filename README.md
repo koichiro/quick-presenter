@@ -70,7 +70,8 @@ exported from authoring tools such as:
 | [LaTeX Beamer](https://ctan.org/pkg/beamer) | OSS LaTeX class for PDF-first slide decks. |
 
 The supported input remains the exported PDF, not the source project from any
-authoring tool.
+authoring tool. Representative exports from these tools are covered by the
+[PDF export compatibility fixtures](docs/PDF_COMPATIBILITY.md).
 
 ## Current Capabilities
 
