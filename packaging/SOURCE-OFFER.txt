@@ -1,7 +1,7 @@
 Quick Presenter Corresponding Source
 ====================================
 
-Quick Presenter is licensed under the GNU General Public License v3.0 or later.
+Quick Presenter is licensed under the GNU General Public License v3.0 only.
 
 For official binary releases, the corresponding source code is available from
 the same GitHub release page as the binary artifact. Use the source archive or
@@ -16,7 +16,7 @@ https://github.com/koichiro/quick-presenter/releases/tag/vVERSION
 Replace VERSION with the application version shown in the About dialog or in
 the package metadata. If a binary was provided outside an official GitHub
 release, the distributor must provide the corresponding source code for that
-binary under the GPLv3 terms.
+binary under the GPL 3.0 terms.
 
 The release source archive includes Cargo.lock. Unmodified Rust dependency
 source code is available from the crate sources identified by that lockfile.
