@@ -67,11 +67,42 @@ exported from authoring tools such as:
 | PowerPoint | Export the finished deck to PDF before presenting. |
 | Google Slides | Export the finished deck to PDF before presenting. |
 | [Marp](https://marp.app/) | OSS Markdown-based slide authoring; exported PDF speaker notes are supported in the presenter window. |
-| [LaTeX Beamer](https://ctan.org/pkg/beamer) | OSS LaTeX class for PDF-first slide decks. |
+| [LaTeX Beamer](https://ctan.org/pkg/beamer) | OSS LaTeX class for PDF-first slide decks; `pdfcomment` annotations can provide speaker notes in the presenter window. |
 
 The supported input remains the exported PDF, not the source project from any
 authoring tool. Representative exports from these tools are covered by the
 [PDF export compatibility fixtures](docs/PDF_COMPATIBILITY.md).
+
+### Beamer speaker notes
+
+Beamer's native `\note` command typesets separate note pages or a second-screen
+layout; it does not store notes as metadata on the original slide page. To make
+the same note available to Quick Presenter, add a transparent PDF `Text`
+annotation with the [`pdfcomment`](https://ctan.org/pkg/pdfcomment) package:
+
+```tex
+\usepackage{pdfcomment}
+
+\newcommand{\presenternote}[1]{%
+  \note{#1}%
+  \pdfcomment[icon=Note,opacity=0,author={Quick Presenter}]{#1}%
+}
+```
+
+Use `\presenternote` inside a frame in place of `\note`:
+
+```tex
+\begin{frame}{Example}
+  Slide content.
+  \presenternote{Explain the important point on this slide.}
+\end{frame}
+```
+
+Quick Presenter reads the annotation text into the presenter window and does
+not render its icon onto the audience slide. A tested source and generated PDF
+are available in
+[`tests/fixtures/latex-beamer.tex`](tests/fixtures/latex-beamer.tex) and the
+[PDF compatibility notes](docs/PDF_COMPATIBILITY.md).
 
 ## Current Capabilities
 
