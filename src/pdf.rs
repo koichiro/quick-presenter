@@ -779,6 +779,28 @@ mod tests {
     }
 
     #[test]
+    fn pdf_document_state_extracts_beamer_speaker_notes() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+
+        if !local_pdfium_available() {
+            return;
+        }
+
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/latex-beamer.pdf");
+        let document = PdfDocumentState::open(path).expect("Beamer fixture PDF should open");
+        let notes = document
+            .speaker_notes()
+            .expect("Beamer fixture speaker notes should be readable");
+
+        assert_eq!(notes.note_for_page_number(1), None);
+        assert_eq!(
+            notes.note_for_page_number(2),
+            Some("Beamer speaker note stored as a PDF text annotation.")
+        );
+    }
+
+    #[test]
     fn pdf_document_state_can_cancel_speaker_notes_extraction() {
         let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
 
