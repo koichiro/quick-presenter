@@ -208,7 +208,7 @@ Useful starting points:
 
 ## License
 
-Quick Presenter is licensed under the GNU General Public License v3.0 or later.
+Quick Presenter is licensed under the GNU General Public License v3.0 only.
 See [LICENSE](LICENSE).
 
 Paid distribution is allowed under the GPL, but every binary distribution must

@@ -82,7 +82,7 @@ When `VERSION` changes, the About dialog should display the same
 
 ## Source Code for Binary Releases
 
-Quick Presenter is licensed under `GPL-3.0-or-later`. Paid distribution is
+Quick Presenter is licensed under `GPL-3.0-only`. Paid distribution is
 allowed, including paid store distribution, but every binary distribution must
 preserve the recipient's GPL freedoms and provide the corresponding source code
 for that exact build.
@@ -105,7 +105,7 @@ flows. Future Linux package formats tracked by #96 must include the same notice
 next to the Quick Presenter and PDFium license files.
 
 Before submitting App Store or Microsoft Store builds, re-check the current
-store terms against GPLv3 requirements, including source availability and any
+store terms against GPL 3.0 requirements, including source availability and any
 installation-information obligations for the target package type. This document
 is release engineering guidance, not legal advice.
 

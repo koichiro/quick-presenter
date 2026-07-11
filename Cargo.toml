@@ -2,7 +2,7 @@
 name = "quick-presenter"
 version = "0.7.2"
 edition = "2021"
-license = "GPL-3.0-or-later"
+license = "GPL-3.0-only"
 
 [[bin]]
 name = "quick-presenter"

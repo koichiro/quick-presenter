@@ -209,7 +209,7 @@ running a raw binary without the bundled `pdfium/` directory.
 
 ## Licenses
 
-Quick Presenter is licensed under `GPL-3.0-or-later`. See the repository
+Quick Presenter is licensed under `GPL-3.0-only`. See the repository
 [LICENSE](../LICENSE).
 
 Packaged builds that bundle PDFium must include PDFium and third-party
