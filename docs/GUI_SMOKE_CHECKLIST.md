@@ -201,7 +201,7 @@ recording requirements in [ACCESSIBILITY.md](ACCESSIBILITY.md).
 | Starting with no PDF open, use only the keyboard to open the File menu and file picker, then open the known-good PDF. | The PDF opens and focus returns to a Quick Presenter window without requiring a pointer click. |
 | Use `Tab` and `Shift+Tab` through presenter controls. | Each focused custom control has a visible focus border, and focus does not become trapped or disappear. |
 | With an inline menu heading focused, press `Return` or `Space`, then activate an enabled menu item from the keyboard. | The menu opens and the requested action runs once. Disabled recent-file items cannot be activated. |
-| Focus a non-current thumbnail and press `Return` or `Space`. | Both windows jump to that slide, the selected state moves to it, and the visible `CURRENT` label follows it. |
+| Focus the thumbnail pane, then press the up and down arrow keys repeatedly in both directions. | Every key press selects the adjacent slide, the pane retains focus after each model refresh, both windows stay synchronized, and the visible `CURRENT` label follows the selected slide. |
 | Inspect custom menu headings, menu items, the thumbnail list, and thumbnail items with the platform accessibility inspector or screen reader. | Controls have meaningful roles and names; enabled, expanded, item-count, and selected/current states are exposed where supported. |
 | Read the speaker notes with the platform screen reader. | The notes region is announced as `Speaker notes`, and the current note or `No speaker notes` is available. |
 | Complete previous, next, first, last, fullscreen, and black-screen actions without a mouse. | The primary presentation workflow remains operable and both windows stay synchronized. |

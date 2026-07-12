@@ -406,12 +406,13 @@ component KeyboardBindingsPanel inherits Rectangle {
 
 component ThumbnailTile inherits Rectangle {
     in property <ThumbnailItem> thumbnail;
+    in property <bool> pane-has-focus: false;
     callback clicked(int);
 
     height: 92px;
     background: root.thumbnail.is_current ? #23395d : #111315;
-    border-color: thumbnail-focus.has-focus ? #fbbc04 : (root.thumbnail.is_current ? #8ab4f8 : #3c4043);
-    border-width: thumbnail-focus.has-focus || root.thumbnail.is_current ? 2px : 1px;
+    border-color: root.pane-has-focus && root.thumbnail.is_current ? #fbbc04 : (root.thumbnail.is_current ? #8ab4f8 : #3c4043);
+    border-width: root.thumbnail.is_current ? 2px : 1px;
     accessible-role: list-item;
     accessible-label: root.thumbnail.is_current ? root.thumbnail.page_label + ", current slide" : root.thumbnail.page_label;
     accessible-enabled: true;
@@ -420,24 +421,12 @@ component ThumbnailTile inherits Rectangle {
     accessible-action-default => {
         root.clicked(root.thumbnail.page_index);
     }
-    forward-focus: thumbnail-focus;
 
     TouchArea {
         width: parent.width;
         height: parent.height;
         clicked => {
             root.clicked(root.thumbnail.page_index);
-        }
-    }
-
-    thumbnail-focus := FocusScope {
-        key-pressed(event) => {
-            if event.text == Key.Return || event.text == Key.Space {
-                root.clicked(root.thumbnail.page_index);
-                return accept;
-            }
-
-            return reject;
         }
     }
 
@@ -474,6 +463,7 @@ component ThumbnailPane inherits Rectangle {
     accessible-role: list;
     accessible-label: "Slide thumbnails";
     accessible-item-count: root.thumbnails.length;
+    forward-focus: pane-focus;
     private property <length> scrollbar-gutter-width: 12px;
     private property <length> tile-height: 98px;
     private property <length> current-item-y: scroll-view.viewport-y + root.current-page-index * root.tile-height;
@@ -502,6 +492,14 @@ component ThumbnailPane inherits Rectangle {
         root.request-thumbnail-range(root.visible-start-index, root.visible-end-index);
     }
 
+    function jump-to-index(index: int) {
+        if index < 0 || index >= root.thumbnails.length {
+            return;
+        }
+
+        root.jump-to-page(root.thumbnails[index].page_index);
+    }
+
     changed current-page-index => {
         root.bring-current-into-view();
         root.request-visible-thumbnails();
@@ -519,6 +517,29 @@ component ThumbnailPane inherits Rectangle {
         root.request-visible-thumbnails();
     }
 
+    pane-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.DownArrow || event.text == Key.RightArrow || event.text == Key.PageDown {
+                root.jump-to-index(min(root.thumbnails.length - 1, root.current-page-index + 1));
+                return accept;
+            } else if event.text == Key.UpArrow || event.text == Key.LeftArrow || event.text == Key.PageUp {
+                root.jump-to-index(max(0, root.current-page-index - 1));
+                return accept;
+            } else if event.text == Key.Home {
+                root.jump-to-index(0);
+                return accept;
+            } else if event.text == Key.End {
+                root.jump-to-index(root.thumbnails.length - 1);
+                return accept;
+            } else if event.text == Key.Return || event.text == Key.Space {
+                root.jump-to-index(root.current-page-index);
+                return accept;
+            }
+
+            return reject;
+        }
+    }
+
     scroll-view := ScrollView {
         width: parent.width + root.scrollbar-gutter-width;
         height: parent.height;
@@ -530,6 +551,7 @@ component ThumbnailPane inherits Rectangle {
 
             for thumbnail in root.thumbnails: ThumbnailTile {
                 thumbnail: thumbnail;
+                pane-has-focus: pane-focus.has-focus;
                 width: parent.width;
                 clicked(page-index) => {
                     root.jump-to-page(page-index);

@@ -19,9 +19,11 @@ The presenter must be able to complete these actions without a mouse:
 - reach and read speaker notes.
 
 The existing presentation shortcuts remain available whenever an interactive
-presenter control does not consume the key. When a custom control has keyboard
-focus, `Return` or `Space` performs its default action. `Tab` and `Shift+Tab`
-move between focusable controls.
+presenter control does not consume the key. When the thumbnail pane has focus,
+arrow and page keys select the adjacent slide, while `Home` and `End` select the
+first and last slide. When another custom control has keyboard focus, `Return`
+or `Space` performs its default action. `Tab` and `Shift+Tab` move between
+focusable controls.
 
 See [KEYBOARD.md](KEYBOARD.md) for presentation shortcuts.
 
@@ -37,8 +39,12 @@ Custom presenter controls expose the following Slint accessibility semantics:
 | Thumbnail tile | `list-item` | Page label | Selectable, selected/current state, and default activation |
 | Speaker notes | `groupbox` | `Speaker notes` | Note text as its description |
 
-The current thumbnail also includes a visible `CURRENT` label. Keyboard focus
-uses a high-contrast border, so neither state relies on color alone.
+The current thumbnail also includes a visible `CURRENT` label. When the
+thumbnail pane has keyboard focus, that thumbnail uses a high-contrast border,
+so neither state relies on color alone. The pane is one stable tab stop rather
+than giving every dynamically generated tile a separate focus scope; this
+preserves focus when the thumbnail model refreshes after navigation or
+rendering.
 
 ## Platform Limitations
 

@@ -9,12 +9,16 @@ the presenter and slide windows together.
 
 - Move to the next presenter control: `Tab`
 - Move to the previous presenter control: `Shift+Tab`
-- Activate a focused inline menu heading, menu item, or thumbnail: `Return` or
-  `Space`
+- Activate a focused inline menu heading or menu item: `Return` or `Space`
+- With the thumbnail pane focused, select the adjacent slide: arrow keys,
+  `Page Up`, or `Page Down`
+- With the thumbnail pane focused, select the first or last slide: `Home` or
+  `End`
 
-When a presenter control consumes `Return` or `Space`, it activates that
-control instead of advancing the presentation. Presentation shortcuts continue
-to use the shared command path when no focused control consumes the key.
+When a presenter control consumes a key, it performs the control-specific
+action instead of also invoking the window-level shortcut. Presentation
+shortcuts continue to use the shared command path when no focused control
+consumes the key.
 
 ## Page Navigation
 
