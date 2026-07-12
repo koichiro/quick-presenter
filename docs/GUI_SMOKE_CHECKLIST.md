@@ -190,6 +190,28 @@ normal presenter workflow.
 | Cover or background each Quick Presenter window, then use the Window menu to bring the presenter and slide windows back to front. | Each window can be recovered without reopening the PDF or restarting the app. |
 | After accidental focus changes, recover to a normal presenter state: presenter window visible, slide window visible or fullscreen, keyboard navigation working in the focused Quick Presenter window. | The presenter can continue the deck without losing page position, black-screen state, or fullscreen state. |
 
+## Accessibility Checks
+
+Run the full keyboard path and inspect the accessibility tree on every platform
+where the relevant assistive technology is available. Follow the baseline and
+recording requirements in [ACCESSIBILITY.md](ACCESSIBILITY.md).
+
+| Check | Expected result |
+| --- | --- |
+| Starting with no PDF open, use only the keyboard to open the File menu and file picker, then open the known-good PDF. | The PDF opens and focus returns to a Quick Presenter window without requiring a pointer click. |
+| Use `Tab` and `Shift+Tab` through presenter controls. | Each focused custom control has a visible focus border, and focus does not become trapped or disappear. |
+| With an inline menu heading focused, press `Return` or `Space`, then activate an enabled menu item from the keyboard. | The menu opens and the requested action runs once. Disabled recent-file items cannot be activated. |
+| Focus a non-current thumbnail and press `Return` or `Space`. | Both windows jump to that slide, the selected state moves to it, and the visible `CURRENT` label follows it. |
+| Inspect custom menu headings, menu items, the thumbnail list, and thumbnail items with the platform accessibility inspector or screen reader. | Controls have meaningful roles and names; enabled, expanded, item-count, and selected/current states are exposed where supported. |
+| Read the speaker notes with the platform screen reader. | The notes region is announced as `Speaker notes`, and the current note or `No speaker notes` is available. |
+| Complete previous, next, first, last, fullscreen, and black-screen actions without a mouse. | The primary presentation workflow remains operable and both windows stay synchronized. |
+| Repeat the shared presenter workflow at 125%, 150%, and 200% display scaling. | Text, focus borders, current-state labels, menus, thumbnails, notes, and dialogs remain visible and usable without overlap or clipping. |
+
+Use Windows Narrator and Accessibility Insights, macOS VoiceOver and
+Accessibility Inspector, and Linux Orca over AT-SPI where feasible. Record any
+Slint backend or platform limitation rather than treating an untested state as
+verified.
+
 ## macOS
 
 Test on a normal signed-in desktop session, not a headless CI session.

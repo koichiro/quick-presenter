@@ -102,6 +102,9 @@ component NotesView inherits Rectangle {
     background: #111315;
     border-color: #3c4043;
     border-width: 1px;
+    accessible-role: groupbox;
+    accessible-label: "Speaker notes";
+    accessible-description: root.has-notes ? root.notes-text : "No speaker notes";
 
     scroll-view := ScrollView {
         x: 10px;
@@ -138,6 +141,17 @@ component PresenterMenuButton inherits Rectangle {
     width: 72px;
     height: 28px;
     background: root.active ? #d6e3f8 : (touch.has-hover ? #e8eef8 : #f1f3f4);
+    border-color: menu-focus.has-focus ? #185abc : transparent;
+    border-width: menu-focus.has-focus ? 2px : 0px;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: true;
+    accessible-expandable: true;
+    accessible-expanded: root.active;
+    accessible-action-default => {
+        root.clicked();
+    }
+    forward-focus: menu-focus;
 
     Text {
         x: 10px;
@@ -154,6 +168,17 @@ component PresenterMenuButton inherits Rectangle {
             root.clicked();
         }
     }
+
+    menu-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == Key.Space {
+                root.clicked();
+                return accept;
+            }
+
+            return reject;
+        }
+    }
 }
 
 component PresenterMenuItem inherits Rectangle {
@@ -163,6 +188,17 @@ component PresenterMenuItem inherits Rectangle {
 
     height: 28px;
     background: root.enabled && touch.has-hover ? #d6e3f8 : #f8f9fa;
+    border-color: item-focus.has-focus ? #185abc : transparent;
+    border-width: item-focus.has-focus ? 2px : 0px;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+    forward-focus: item-focus;
 
     Text {
         x: 10px;
@@ -178,6 +214,18 @@ component PresenterMenuItem inherits Rectangle {
         enabled: root.enabled;
         clicked => {
             root.clicked();
+        }
+    }
+
+    item-focus := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if root.enabled && (event.text == Key.Return || event.text == Key.Space) {
+                root.clicked();
+                return accept;
+            }
+
+            return reject;
         }
     }
 }
@@ -362,14 +410,34 @@ component ThumbnailTile inherits Rectangle {
 
     height: 92px;
     background: root.thumbnail.is_current ? #23395d : #111315;
-    border-color: root.thumbnail.is_current ? #8ab4f8 : #3c4043;
-    border-width: root.thumbnail.is_current ? 2px : 1px;
+    border-color: thumbnail-focus.has-focus ? #fbbc04 : (root.thumbnail.is_current ? #8ab4f8 : #3c4043);
+    border-width: thumbnail-focus.has-focus || root.thumbnail.is_current ? 2px : 1px;
+    accessible-role: list-item;
+    accessible-label: root.thumbnail.is_current ? root.thumbnail.page_label + ", current slide" : root.thumbnail.page_label;
+    accessible-enabled: true;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.thumbnail.is_current;
+    accessible-action-default => {
+        root.clicked(root.thumbnail.page_index);
+    }
+    forward-focus: thumbnail-focus;
 
     TouchArea {
         width: parent.width;
         height: parent.height;
         clicked => {
             root.clicked(root.thumbnail.page_index);
+        }
+    }
+
+    thumbnail-focus := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Return || event.text == Key.Space {
+                root.clicked(root.thumbnail.page_index);
+                return accept;
+            }
+
+            return reject;
         }
     }
 
@@ -383,7 +451,7 @@ component ThumbnailTile inherits Rectangle {
     }
 
     Text {
-        text: root.thumbnail.page_label;
+        text: root.thumbnail.is_current ? "CURRENT  " + root.thumbnail.page_label : root.thumbnail.page_label;
         color: root.thumbnail.is_current ? #f1f3f4 : #d9dce0;
         x: 6px;
         y: 69px;
@@ -403,6 +471,9 @@ component ThumbnailPane inherits Rectangle {
     callback request-thumbnail-range(int, int);
 
     background: transparent;
+    accessible-role: list;
+    accessible-label: "Slide thumbnails";
+    accessible-item-count: root.thumbnails.length;
     private property <length> scrollbar-gutter-width: 12px;
     private property <length> tile-height: 98px;
     private property <length> current-item-y: scroll-view.viewport-y + root.current-page-index * root.tile-height;

@@ -5,6 +5,17 @@ window has keyboard focus. The Rust input layer maps key callbacks to a shared
 presentation command path, so button navigation and keyboard navigation update
 the presenter and slide windows together.
 
+## Presenter Control Focus
+
+- Move to the next presenter control: `Tab`
+- Move to the previous presenter control: `Shift+Tab`
+- Activate a focused inline menu heading, menu item, or thumbnail: `Return` or
+  `Space`
+
+When a presenter control consumes `Return` or `Space`, it activates that
+control instead of advancing the presentation. Presentation shortcuts continue
+to use the shared command path when no focused control consumes the key.
+
 ## Page Navigation
 
 - Next page: `Space`, `Return`, `Right Arrow`, `Down Arrow`, `Page Down`
