@@ -831,6 +831,7 @@ fn request_pdf_file_open(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
 #[cfg(not(target_os = "linux"))]
 fn request_pdf_file_open(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
     if let Some(path) = pick_pdf_file() {
+        restore_presenter_input_after_transient_ui(windows.clone());
         schedule_open_pdf(windows, state, path, "failed to open and render PDF");
     }
 }

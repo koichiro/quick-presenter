@@ -25,6 +25,10 @@ first and last slide. When another custom control has keyboard focus, `Return`
 or `Space` performs its default action. `Tab` and `Shift+Tab` move between
 focusable controls.
 
+After a PDF file picker closes, keyboard focus returns to the presenter
+window's presentation shortcut scope. The thumbnail pane receives focus only
+after the user explicitly reaches it with keyboard focus navigation.
+
 See [KEYBOARD.md](KEYBOARD.md) for presentation shortcuts.
 
 ## Exposed Semantics

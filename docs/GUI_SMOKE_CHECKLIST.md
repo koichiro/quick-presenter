@@ -198,7 +198,7 @@ recording requirements in [ACCESSIBILITY.md](ACCESSIBILITY.md).
 
 | Check | Expected result |
 | --- | --- |
-| Starting with no PDF open, use only the keyboard to open the File menu and file picker, then open the known-good PDF. | The PDF opens and focus returns to a Quick Presenter window without requiring a pointer click. |
+| Starting with no PDF open, use only the keyboard to open the File menu and file picker, then open the known-good PDF. | The PDF opens and focus returns to the presenter window's presentation shortcut scope without requiring a pointer click; the thumbnail pane is not focused until the user navigates to it. |
 | Use `Tab` and `Shift+Tab` through presenter controls. | Each focused custom control has a visible focus border, and focus does not become trapped or disappear. |
 | With an inline menu heading focused, press `Return` or `Space`, then activate an enabled menu item from the keyboard. | The menu opens and the requested action runs once. Disabled recent-file items cannot be activated. |
 | Focus the thumbnail pane, then press the up and down arrow keys repeatedly in both directions. | Every key press selects the adjacent slide, the pane retains focus after each model refresh, both windows stay synchronized, and the visible `CURRENT` label follows the selected slide. |

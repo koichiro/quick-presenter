@@ -175,7 +175,11 @@ pub fn restore_presenter_input_after_transient_ui(windows: AppWindowRefs) {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub fn restore_presenter_input_after_transient_ui(_windows: AppWindowRefs) {}
+pub fn restore_presenter_input_after_transient_ui(windows: AppWindowRefs) {
+    if let Some(presenter) = windows.presenter.upgrade() {
+        presenter.invoke_focus();
+    }
+}
 
 #[cfg(target_os = "linux")]
 fn restore_presenter_input_now(windows: &AppWindowRefs) {
