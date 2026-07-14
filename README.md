@@ -26,15 +26,23 @@ document management app.
 
 ### Presenter Window
 
-![Presenter window with an English sample slide and speaker notes](docs/assets/presenter-window-en.png)
+![Windows presenter window with an English sample slide and speaker notes](docs/assets/presenter-window-en-windows.png)
+
+![macOS presenter window with an English sample slide and speaker notes](docs/assets/presenter-window-en-macos.png)
 
 ### Slide Window
 
-![Slide window with an English title slide](docs/assets/slide-window-title-en.png)
+![Windows slide window with an English title slide](docs/assets/slide-window-title-en-windows.png)
 
-![Slide window with an English sample workflow slide](docs/assets/slide-window-en.png)
+![Windows slide window with an English sample workflow slide](docs/assets/slide-window-en-windows.png)
 
-![Slide window with a Japanese sample slide](docs/assets/slide-window-ja.png)
+![Windows slide window with a Japanese sample slide](docs/assets/slide-window-ja-windows.png)
+
+![macOS slide window with an English title slide](docs/assets/slide-window-title-en-macos.png)
+
+![macOS slide window with an English sample workflow slide](docs/assets/slide-window-en-macos.png)
+
+![macOS slide window with a Japanese sample slide](docs/assets/slide-window-ja-macos.png)
 
 The screenshots use the repository-owned sample deck in
 [docs/samples/quick-presenter-demo.md](docs/samples/quick-presenter-demo.md).
