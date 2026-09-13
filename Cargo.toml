@@ -15,11 +15,11 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rfd = "0.17"
-slint = { version = "1.17", features = ["raw-window-handle-06"] }
+slint = { version = "1.17.1", features = ["raw-window-handle-06"] }
 pdfium-render = "=0.9.1"
 
 [build-dependencies]
-slint-build = "1.17"
+slint-build = "1.17.1"
 winresource = { version = "0.1.31", default-features = false }
 
 [target.'cfg(target_os = "macos")'.dependencies]
