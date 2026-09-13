@@ -47,12 +47,13 @@ Slint 側にビジネスロジックを寄せず、PDF の状態、ページ番�
 - GitHub への Issue、PR、コメントなどの投稿や編集では、基本的に本文を一時ファイルに作成してから `--body-file` や同等の方法で渡す。シェルの引用やコマンド置換による本文破損を避けるため、長文を直接コマンドライン引数に埋め込まない。
 - Pull requests created by Codex should use the `codex` label instead of adding `[codex]` to the PR title.
 - ユーザーとの対話は日本語で行う。
-- 既存の日本語ドキュメントは必要に応じて段階的に英語へ移行する。新規に追加するリポジトリ内のテキストは英語を優先する。
+- Prefer English for new repository text and passages changed as part of the requested task. Translate entire existing documents only when requested.
 - Rust 側は `cargo fmt` と `cargo check` が通る状態を保つ。
 - UI 変更時は Slint の責務を表示とイベントに限定し、状態遷移や PDF 操作は Rust に置く。
 - PDFium のライフタイム、動的リンク、プラットフォーム差分は慎重に扱う。
 - エラーは握りつぶさず、発表者に必要な情報を短く表示できる形で上位へ返す。
 - ページレンダリングは将来的なキャッシュ、プリロード、解像度調整を見据えて設計する。
+- Implement future features or supporting abstractions only when needed for the requested change; the priorities below are context, not additional tasks.
 - ファイル選択、フルスクリーン、マルチモニター、キーボード入力など OS 依存になりやすい機能は抽象化境界を作る。
 - `target/` などのビルド成果物は編集対象にしない。
 - 生成済み PDFium バイナリやライセンスファイルを変更する場合は、配布ライセンスと更新手順を確認する。
@@ -64,7 +65,7 @@ Slint 側にビジネスロジックを寄せず、PDF の状態、ページ番�
 - 外部から見た API や複数モジュールをまたぐ振る舞いは、必要に応じて `tests/` 配下の統合テストで検証する。
 - PDFium、ファイルダイアログ、OS 固有 API など外部環境に依存する処理は、テストしやすい境界を作り、純粋な状態遷移や変換ロジックを優先してユニットテストする。
 - ページ番号計算、ページ遷移、キャッシュ方針、エラー変換、表示用ラベル生成など、本番中の操作安定性に関わるロジックは重点的にテストする。
-- フルテスト時にはカバレッジ 80% 以上を目標とする。カバレッジは目的ではなく、本番で壊れてほしくないロジックを守るための指標として扱う。
+- Use coverage to protect presentation-critical behavior, not as a goal in itself. See the validation section for when to measure it and the required threshold.
 
 ## 優先したい機能
 
@@ -80,7 +81,7 @@ Slint 側にビジネスロジックを寄せず、PDF の状態、ページ番�
 
 ## 検証コマンド
 
-通常の変更後は、少なくとも次を実行してください。
+For changes affecting Rust, Slint, or build configuration, run:
 
 ```sh
 cargo fmt --check
@@ -88,9 +89,9 @@ cargo check
 cargo test
 ```
 
-フルテスト時は、利用するカバレッジツールを決めたうえで 80% 以上を目標に確認してください。Rust では `cargo llvm-cov` などの標準的なツールを候補にします。
+Skip Cargo checks for documentation-only changes. After checks pass, rerun only when further changes or new evidence warrant it. Fix failures caused by the requested change; report unrelated failures without expanding the task.
 
-このプロジェクトでは、カバレッジ確認に `cargo-llvm-cov` を使います。導入されていない場合は次を実行してください。
+Run coverage only when explicitly requested or required by CI. Use `cargo-llvm-cov`; install it only when coverage is needed and the tool is missing:
 
 ```sh
 cargo install cargo-llvm-cov
