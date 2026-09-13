@@ -2,15 +2,4 @@
 # Advisory exceptions must include a reason, impact summary, tracking issue,
 # and review date. Keep this list empty unless maintainers explicitly accept
 # the release risk.
-#
-# RUSTSEC-2026-0194 and RUSTSEC-2026-0195 are accepted for the internal v0.7.1
-# release only. Quick Presenter does not depend on quick-xml directly; the
-# exposure is through Linux GUI stack transitive dependencies
-# (wayland-scanner/zbus_xml via Slint/accesskit), and the app's supported input
-# path remains PDF files rather than XML documents. Upstream tracking:
-# https://github.com/koichiro/quick-presenter/issues/329. Release tracking:
-# https://github.com/koichiro/quick-presenter/issues/333. Reviewed 2026-07-08.
-ignore = [
-    "RUSTSEC-2026-0194",
-    "RUSTSEC-2026-0195",
-]
+ignore = []
