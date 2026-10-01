@@ -16,21 +16,25 @@ every source-only pull request.
 
 Before publishing a release:
 
-1. Confirm `CI` passes on the release branch.
-2. Confirm the scheduled `Dependency Audit` workflow has passed recently, then
+1. Set the release version in `Cargo.toml`, refresh `Cargo.lock`, and confirm
+   both files contain the intended version. The About dialog and package
+   builders read this Cargo package version.
+2. Confirm `CI` passes on the release branch.
+3. Confirm the scheduled `Dependency Audit` workflow has passed recently, then
    run `scripts/audit_deps.sh` locally and resolve dependency advisories, or
    document any explicitly accepted advisory in `.cargo/audit.toml`.
-3. Run `Build Binaries` manually with `workflow_dispatch`, or push a release
+4. Run `Build Binaries` manually with `workflow_dispatch`, or push a release
    tag matching `v*`.
-4. Record the successful `Build Binaries` workflow run URL in the release
+5. Record the successful `Build Binaries` workflow run URL in the release
    checklist.
-5. Confirm the Linux, macOS, and Windows artifacts are uploaded and their package
-   smoke tests pass.
-6. Review the uploaded `quick-presenter-ubuntu-x64-gui-smoke` report and the
+6. Confirm the Linux, macOS, and Windows artifacts use the intended release
+   version and their package smoke tests pass. For Linux, verify the Debian file
+   name and the `Version` reported by `dpkg-deb --field <package> Version`.
+7. Review the uploaded `quick-presenter-ubuntu-x64-gui-smoke` report and the
    macOS/Windows GUI smoke skip-reason reports from `Build Binaries`.
-7. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
+8. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
    macOS, Windows, and Ubuntu Linux artifacts before publishing.
-8. Attach the completed manual GUI smoke reports to the GitHub release, or
+9. Attach the completed manual GUI smoke reports to the GitHub release, or
    document any platform-specific waiver in the release notes before publishing.
 
 `Build Binaries` still runs automatically for pull requests that change
