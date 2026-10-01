@@ -2,8 +2,8 @@
 
 ## Status
 
-This document defines the v1.0.0 design for bounding diagnostic log storage.
-Implementation is tracked by issue #340.
+This document defines the implemented v1.0.0 policy for bounding diagnostic log
+storage.
 
 ## Goals
 
@@ -16,7 +16,7 @@ Implementation is tracked by issue #340.
 
 ## Retention policy
 
-Quick Presenter will keep two files per configured log path:
+Quick Presenter keeps two files per configured log path:
 
 - the active log at the configured path, such as `quick-presenter.log`;
 - one previous generation at `<configured-path>.1`, such as
@@ -92,8 +92,8 @@ available and the process follows the default or explicit-path behavior above.
 ## Implementation boundary
 
 Rotation belongs in `src/diagnostics.rs`, behind the existing diagnostics
-initialization boundary. A single writer owned by `tracing_appender` will own
-the active file and perform byte accounting and rotation. Callers and Slint UI
+initialization boundary. A single writer owned by `tracing_appender` owns
+the active file and performs byte accounting and rotation. Callers and Slint UI
 code will not manage log files or retention state.
 
 The implementation should isolate filesystem operations behind a small internal
@@ -121,4 +121,3 @@ cargo fmt --check
 cargo check
 cargo test
 ```
-
