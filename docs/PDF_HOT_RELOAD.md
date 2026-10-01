@@ -2,7 +2,7 @@
 
 ## Status
 
-This document proposes the implementation design for
+This document defines the implementation design for
 [GitHub issue #347](https://github.com/koichiro/quick-presenter/issues/347).
 
 PDF hot reload is always active while a document is open. It is not a user

@@ -13,6 +13,7 @@ pub mod diagnostics;
 pub mod errors;
 pub mod fullscreen;
 pub mod gui_smoke;
+pub mod hot_reload;
 pub mod input;
 #[cfg(target_os = "macos")]
 pub mod macos_window;
@@ -49,6 +50,10 @@ use cli::{help_text, parse_startup_options, GuiSmokeOptions, StartupRequest};
 use clock::current_clock_label;
 use diagnostics::init_diagnostics;
 use errors::PresenterMessage;
+use hot_reload::{
+    HotReloadPhase, PdfWatcher, PreparationOutcome, WatchSignal, WatchTarget,
+    HOT_RELOAD_EVENT_POLL_INTERVAL,
+};
 use input::PresentationCommand;
 use notes::SpeakerNotes;
 use pdf::{pdfium_runtime_version_label, PdfDocumentState};
@@ -65,10 +70,11 @@ use rendering::presentation_preload_order;
 use rendering::RenderCache;
 use rendering::{thumbnail_window_indices, RenderPurpose, RenderRequest, RenderedPage};
 use session_controller::{
-    apply_session_command, begin_open_pdf_state, commit_page_render_failed_state,
-    commit_page_rendered_state, commit_render_open_failed_state, commit_render_opened_state,
-    commit_render_worker_failed_state, commit_speaker_notes_loaded_state, mark_pending_open_slow,
-    pending_open_session_id, SLOW_OPEN_STATUS_TEXT,
+    apply_session_command, begin_open_pdf_state, clear_render_reload_state,
+    commit_page_render_failed_state, commit_page_rendered_state, commit_render_open_failed_state,
+    commit_render_opened_state, commit_render_reloaded_state, commit_render_worker_failed_state,
+    commit_speaker_notes_loaded_state, mark_pending_open_slow, pending_open_session_id,
+    SLOW_OPEN_STATUS_TEXT,
 };
 use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode, Weak};
 use timer::PresentationTimer;
@@ -130,8 +136,20 @@ fn main() -> Result<()> {
     let recent_store = default_recent_file_store();
     let recent_files = load_recent_files(recent_store.as_ref());
     let recent_menu_paths = recent_files.paths().to_vec();
+    let now = Instant::now();
+    let mut watcher_recovery = hot_reload::WatcherRecoveryState::default();
+    let pdf_watcher = match PdfWatcher::new() {
+        Ok(watcher) => Some(watcher),
+        Err(error) => {
+            warn!(error = ?error, "PDF watcher is unavailable at startup");
+            watcher_recovery.record_failure(now);
+            None
+        }
+    };
     let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState {
         render_scheduler: Some(RenderScheduler::start()),
+        pdf_watcher,
+        watcher_recovery,
         recent_files,
         recent_menu_paths,
         recent_store,
@@ -144,6 +162,7 @@ fn main() -> Result<()> {
     let _render_event_timer = start_render_event_updates(windows.refs(), state.clone());
     let _pending_open_status_timer =
         start_pending_open_status_updates(windows.refs(), state.clone());
+    let _hot_reload_timer = start_hot_reload_updates(windows.refs(), state.clone());
     let _file_dialog_result_timer = start_file_dialog_result_updates(windows.refs(), state.clone());
     update_recent_file_menu(&windows.refs().presenter, &state.borrow().recent_files);
     apply_app_metadata(&windows.presenter);
@@ -898,6 +917,7 @@ pub(crate) fn begin_open_pdf(
             return;
         }
 
+        state.hot_reload.begin_manual_open();
         let session_id = begin_open_pdf_state(&mut state, path.clone());
         state
             .render_scheduler
@@ -1513,6 +1533,148 @@ fn start_pending_open_status_updates(
     timer
 }
 
+fn start_hot_reload_updates(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
+    let timer = Timer::default();
+    timer.start(
+        TimerMode::Repeated,
+        HOT_RELOAD_EVENT_POLL_INTERVAL,
+        move || update_hot_reload(&windows, &state, Instant::now()),
+    );
+    timer
+}
+
+fn update_hot_reload(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, now: Instant) {
+    let signals = state
+        .borrow()
+        .pdf_watcher
+        .as_ref()
+        .map(PdfWatcher::drain)
+        .unwrap_or_default();
+
+    let mut refresh_snapshot = None;
+    let mut presenter_message = None;
+    {
+        let mut state = state.borrow_mut();
+        let mut watcher_failed = false;
+        for signal in signals {
+            if let WatchSignal::Failed(message) = &signal {
+                warn!(error = %message, "PDF watcher failed");
+                watcher_failed = true;
+            } else {
+                state.hot_reload.observe(&signal, now);
+            }
+        }
+
+        if watcher_failed {
+            state.pdf_watcher = None;
+            state.watcher_recovery.record_failure(now);
+            state.hot_reload.clear_success_notice();
+            if state.active_document_path.is_some()
+                && state.status_text != "Automatic reload is temporarily unavailable."
+            {
+                state.status_text = "Automatic reload is temporarily unavailable.".to_owned();
+                presenter_message = Some(PresenterMessage::new(
+                    "Automatic reload is temporarily unavailable.",
+                    errors::MessageSeverity::Warning,
+                ));
+            }
+        }
+
+        if state.pdf_watcher.is_none() && state.watcher_recovery.retry_is_due(now) {
+            let target = state.hot_reload.target().cloned();
+            match create_watcher_for_target(target) {
+                Ok(watcher) => {
+                    state.pdf_watcher = Some(watcher);
+                    state.watcher_recovery.record_success();
+                    if state.status_text == "Automatic reload is temporarily unavailable." {
+                        state.status_text = "Ready".to_owned();
+                        refresh_snapshot = state.presentation.snapshot();
+                    }
+                }
+                Err(error) => {
+                    warn!(error = ?error, "failed to recover PDF watcher");
+                    state.watcher_recovery.record_failure(now);
+                }
+            }
+        }
+
+        if let Some(revision) = state.hot_reload.due_revision(now) {
+            let reload = state.presentation.snapshot().and_then(|snapshot| {
+                state
+                    .active_document_path
+                    .clone()
+                    .map(|path| (snapshot.current_index, path))
+            });
+            if let Some((current_page_index, path)) = reload {
+                if state.render_scheduler.is_some() {
+                    let session_id = state.render_sessions.begin_reload_session();
+                    if state.hot_reload.begin_preparing(session_id, revision, now) {
+                        state.render_scheduler.as_ref().unwrap().prepare_reload(
+                            session_id,
+                            path,
+                            current_page_index,
+                            CURRENT_RENDER_WIDTH,
+                        );
+                    }
+                }
+            }
+        }
+
+        if state.hot_reload.mark_preparing_slow(now) {
+            state.status_text = "Reloading PDF; the current version remains visible.".to_owned();
+            presenter_message = Some(PresenterMessage::new(
+                "Reloading PDF; the current version remains visible.",
+                errors::MessageSeverity::Info,
+            ));
+        }
+
+        if state.hot_reload.take_expired_success_notice(now) && state.status_text == "PDF reloaded."
+        {
+            state.status_text = "Ready".to_owned();
+            refresh_snapshot = state.presentation.snapshot();
+        }
+    }
+
+    if let Some(message) = presenter_message {
+        set_presenter_message(&windows.presenter, message);
+    }
+    if let Some(snapshot) = refresh_snapshot {
+        apply_snapshot_to_windows(windows, &state.borrow(), &snapshot);
+    }
+}
+
+fn create_watcher_for_target(target: Option<WatchTarget>) -> Result<PdfWatcher> {
+    let mut watcher = PdfWatcher::new()?;
+    watcher.replace_target(target)?;
+    Ok(watcher)
+}
+
+fn replace_hot_reload_target(state: &mut AppState, path: PathBuf, now: Instant) -> Result<()> {
+    let target = WatchTarget::new(path.clone())?;
+    state.active_document_path = Some(path);
+    state.hot_reload.replace_target(target.clone());
+
+    let result = if let Some(watcher) = state.pdf_watcher.as_mut() {
+        watcher.replace_target(Some(target))
+    } else {
+        create_watcher_for_target(Some(target)).map(|watcher| {
+            state.pdf_watcher = Some(watcher);
+        })
+    };
+
+    match result {
+        Ok(()) => {
+            state.watcher_recovery.record_success();
+            Ok(())
+        }
+        Err(error) => {
+            state.pdf_watcher = None;
+            state.watcher_recovery.record_failure(now);
+            Err(error)
+        }
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn start_file_dialog_result_updates(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
     let timer = Timer::default();
@@ -1616,7 +1778,10 @@ pub(crate) fn drain_render_events(
             RenderEvent::OpenFailed { .. } => drain.open_failed = true,
             RenderEvent::PageFailed { .. } => drain.page_failed = true,
             RenderEvent::WorkerFailed { .. } => drain.worker_failed = true,
-            RenderEvent::Opened { .. } | RenderEvent::PageRendered { .. } => {}
+            RenderEvent::Opened { .. }
+            | RenderEvent::PageRendered { .. }
+            | RenderEvent::ReloadPrepared { .. }
+            | RenderEvent::ReloadPrepareFailed { .. } => {}
         }
         handle_render_event(windows, state, event);
     }
@@ -1656,6 +1821,136 @@ fn handle_render_event(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, e
             session_id,
             message,
         } => handle_render_worker_failed(windows, state, session_id, message),
+        RenderEvent::ReloadPrepared {
+            session_id,
+            title,
+            page_count,
+            current_page_index,
+            current_page,
+        } => handle_reload_prepared(
+            windows,
+            state,
+            session_id,
+            title,
+            page_count,
+            current_page_index,
+            current_page.into(),
+        ),
+        RenderEvent::ReloadPrepareFailed {
+            session_id,
+            message,
+        } => handle_reload_prepare_failed(windows, state, session_id, message),
+    }
+}
+
+fn handle_reload_prepared(
+    windows: &AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+    session_id: render_scheduler::RenderSessionId,
+    title: String,
+    page_count: u32,
+    current_page_index: u32,
+    current_page: RenderedPage,
+) {
+    let now = Instant::now();
+    let snapshot = {
+        let mut state = state.borrow_mut();
+        let revision = match state.hot_reload.phase() {
+            HotReloadPhase::Preparing {
+                session_id: pending_session,
+                revision,
+            } if pending_session == session_id => revision,
+            _ => {
+                if let Some(scheduler) = state.render_scheduler.as_ref() {
+                    scheduler.discard_reload(session_id);
+                }
+                clear_render_reload_state(&mut state, session_id);
+                return;
+            }
+        };
+
+        if !state.hot_reload.accepts_prepared(session_id, revision) {
+            if let Some(scheduler) = state.render_scheduler.as_ref() {
+                scheduler.discard_reload(session_id);
+            }
+            clear_render_reload_state(&mut state, session_id);
+            state
+                .hot_reload
+                .finish_preparing(session_id, revision, true, now);
+            return;
+        }
+
+        let Some(snapshot) = commit_render_reloaded_state(
+            &mut state,
+            session_id,
+            title,
+            page_count,
+            current_page_index,
+            current_page,
+            PRESENTATION_CACHE_RADIUS,
+        ) else {
+            if let Some(scheduler) = state.render_scheduler.as_ref() {
+                scheduler.discard_reload(session_id);
+            }
+            state
+                .hot_reload
+                .finish_preparing(session_id, revision, true, now);
+            return;
+        };
+
+        state
+            .hot_reload
+            .finish_preparing(session_id, revision, true, now);
+        state.hot_reload.start_success_notice(now);
+        if let Some(scheduler) = state.render_scheduler.as_ref() {
+            scheduler.commit_reload(session_id);
+            scheduler.extract_speaker_notes(session_id);
+        }
+        apply_snapshot_to_windows(windows, &state, &snapshot);
+        enqueue_visible_page_renders(&state, &snapshot);
+        snapshot
+    };
+
+    schedule_presentation_preload(state.clone(), snapshot.clone());
+    schedule_thumbnail_render(windows.clone(), state.clone());
+}
+
+fn handle_reload_prepare_failed(
+    windows: &AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+    session_id: render_scheduler::RenderSessionId,
+    message: String,
+) {
+    let now = Instant::now();
+    let outcome = {
+        let mut state = state.borrow_mut();
+        let revision = match state.hot_reload.phase() {
+            HotReloadPhase::Preparing {
+                session_id: pending_session,
+                revision,
+            } if pending_session == session_id => revision,
+            _ => return,
+        };
+        clear_render_reload_state(&mut state, session_id);
+        let outcome = state
+            .hot_reload
+            .finish_preparing(session_id, revision, false, now);
+        if outcome == PreparationOutcome::Failed {
+            warn!(error = %message, "failed to reload PDF; keeping previous document");
+            state.hot_reload.clear_success_notice();
+            state.status_text = "Reload failed; showing the previous version.".to_owned();
+        }
+        outcome
+    };
+
+    if outcome == PreparationOutcome::Failed {
+        set_presenter_message(
+            &windows.presenter,
+            PresenterMessage::new(
+                "Reload failed; showing the previous version.",
+                errors::MessageSeverity::Warning,
+            ),
+        );
     }
 }
 
@@ -1685,6 +1980,27 @@ fn handle_render_opened(
     };
 
     if let Some(path) = outcome.loaded_path {
+        let watcher_failed = {
+            let mut state = state.borrow_mut();
+            match replace_hot_reload_target(&mut state, path.clone(), Instant::now()) {
+                Ok(()) => false,
+                Err(error) => {
+                    warn!(error = ?error, "failed to watch active PDF");
+                    state.hot_reload.finish_manual_open_without_replacement();
+                    state.status_text = "Automatic reload is temporarily unavailable.".to_owned();
+                    true
+                }
+            }
+        };
+        if watcher_failed {
+            set_presenter_message(
+                &windows.presenter,
+                PresenterMessage::new(
+                    "Automatic reload is temporarily unavailable.",
+                    errors::MessageSeverity::Warning,
+                ),
+            );
+        }
         record_recent_pdf(&windows.presenter, state, path);
     }
 
@@ -1702,6 +2018,15 @@ fn handle_speaker_notes_loaded(
     status_text: String,
 ) {
     let mut state = state.borrow_mut();
+    let status_text =
+        if status_text == "Ready" && state.hot_reload.success_notice_active(Instant::now()) {
+            state.status_text.clone()
+        } else {
+            if status_text != "Ready" {
+                state.hot_reload.clear_success_notice();
+            }
+            status_text
+        };
     if !commit_speaker_notes_loaded_state(&mut state, session_id, notes, status_text) {
         return;
     }
@@ -1732,6 +2057,10 @@ fn handle_render_open_failed(
     if !accepted {
         return;
     }
+    state
+        .borrow_mut()
+        .hot_reload
+        .finish_manual_open_without_replacement();
     set_presenter_message(&windows.presenter, presenter_message);
 }
 
@@ -1786,7 +2115,11 @@ fn handle_page_render_failed(
 
     let should_show_message = {
         let mut state = state.borrow_mut();
-        commit_page_render_failed_state(&mut state, session_id, request)
+        let should_show = commit_page_render_failed_state(&mut state, session_id, request);
+        if should_show {
+            state.hot_reload.clear_success_notice();
+        }
+        should_show
     };
     if !should_show_message {
         return;
@@ -1809,7 +2142,13 @@ fn handle_render_worker_failed(
     warn!(error = %message, "render worker failed");
     let accepted = {
         let mut state = state.borrow_mut();
-        commit_render_worker_failed_app_state(&mut state, session_id)
+        let accepted = commit_render_worker_failed_app_state(&mut state, session_id);
+        if accepted {
+            state.hot_reload.clear_success_notice();
+            state.hot_reload.cancel_pending_reload();
+            state.hot_reload.finish_manual_open_without_replacement();
+        }
+        accepted
     };
     if !accepted {
         return;

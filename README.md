@@ -115,6 +115,8 @@ are available in
 ## Current Capabilities
 
 - Open prepared PDF slide decks from the UI or at startup.
+- Automatically reload the active PDF after a valid external file change while
+  keeping the last good version visible during incomplete or failed saves.
 - Present with separate speaker-facing and audience-facing windows.
 - Keep presenter context visible through page status, next-slide preview,
   speaker notes, timer, and clock.
@@ -146,6 +148,10 @@ The README screenshot deck can also be opened directly:
 ```sh
 cargo run --bin quick-presenter -- --pdf docs/samples/quick-presenter-demo.pdf
 ```
+
+The active PDF is watched automatically. Saving it in place or replacing it
+atomically refreshes the deck while preserving the current page when possible.
+No hot reload setting is required.
 
 The Cargo package and GUI executable are both named `quick-presenter`. The short
 `qp` command name is reserved for a future automation-oriented CLI entrypoint.

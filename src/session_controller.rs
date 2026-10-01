@@ -141,6 +141,54 @@ pub struct OpenedSessionOutcome {
     pub loaded_path: Option<PathBuf>,
 }
 
+pub fn commit_render_reloaded_state(
+    state: &mut AppState,
+    session_id: RenderSessionId,
+    title: String,
+    page_count: u32,
+    current_page_index: u32,
+    current_page: RenderedPage,
+    presentation_cache_radius: u32,
+) -> Option<PageSnapshot> {
+    if page_count == 0 {
+        return None;
+    }
+    if !state.render_sessions.commit_pending_reload(session_id) {
+        return None;
+    }
+
+    state.render_generation = state.render_generation.wrapping_add(1);
+    state.render_cache.clear();
+    state.notes = SpeakerNotes::empty();
+    state.presentation = PresentationState::open_document_at(title, page_count, current_page_index);
+    let snapshot = state.presentation.snapshot()?;
+    let current_page_index = snapshot.current_index;
+    state.thumbnails = ThumbnailState {
+        total_pages: page_count,
+    };
+    state.audience_slide.last_good_current = Some(current_page.clone());
+    state.audience_slide.failed_current_page = None;
+    state.render_cache.insert_with_context(
+        RenderRequest {
+            page_index: current_page_index,
+            width: crate::render_controller::CURRENT_RENDER_WIDTH,
+            purpose: RenderPurpose::CurrentSlide,
+        },
+        current_page,
+        Some(CacheContext {
+            current_index: current_page_index,
+            total_pages: page_count,
+            presentation_radius: presentation_cache_radius,
+        }),
+    );
+    state.status_text = "PDF reloaded.".to_owned();
+    Some(snapshot)
+}
+
+pub fn clear_render_reload_state(state: &mut AppState, session_id: RenderSessionId) -> bool {
+    state.render_sessions.clear_pending_reload(session_id)
+}
+
 pub fn commit_render_open_failed_state(
     state: &mut AppState,
     session_id: RenderSessionId,
@@ -316,6 +364,80 @@ mod tests {
             .pending_open
             .as_ref()
             .map(|pending_open| pending_open.path.clone())
+    }
+
+    #[test]
+    fn reloaded_document_preserves_page_and_presentation_runtime_state() {
+        let started_at = Instant::now();
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 5),
+            notes: SpeakerNotes::from_page_notes([(4, "Old note".to_owned())]),
+            ..AppState::default()
+        };
+        state.presentation.jump_to_page_index(3);
+        state.black_screen.set_active(true);
+        state.fullscreen.set_slide_fullscreen(true);
+        state.timer.start(started_at);
+        let current = state.render_sessions.begin_open_session();
+        assert!(state.render_sessions.commit_pending_open(current));
+        let reload = state.render_sessions.begin_reload_session();
+
+        let snapshot = commit_render_reloaded_state(
+            &mut state,
+            reload,
+            "Deck".to_owned(),
+            6,
+            3,
+            rendered_page(4.0 / 3.0),
+            2,
+        )
+        .unwrap();
+
+        assert_eq!(snapshot.current_index, 3);
+        assert!(state.black_screen.is_active());
+        assert!(state.fullscreen.is_slide_fullscreen());
+        assert!(state.timer.is_running());
+        assert!(state.notes.is_empty());
+        assert_eq!(state.status_text, "PDF reloaded.");
+        assert!(state.render_cache.peek(current_slide_request(3)).is_some());
+        assert!(state.audience_slide.last_good_current.is_some());
+    }
+
+    #[test]
+    fn reloaded_document_clamps_page_and_rejects_stale_session() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 5),
+            ..AppState::default()
+        };
+        state.presentation.jump_to_page_index(4);
+        let current = state.render_sessions.begin_open_session();
+        assert!(state.render_sessions.commit_pending_open(current));
+        let stale = state.render_sessions.begin_reload_session();
+        let latest = state.render_sessions.begin_reload_session();
+
+        assert!(commit_render_reloaded_state(
+            &mut state,
+            stale,
+            "Stale".to_owned(),
+            2,
+            1,
+            rendered_page(1.0),
+            2,
+        )
+        .is_none());
+        let snapshot = commit_render_reloaded_state(
+            &mut state,
+            latest,
+            "Deck".to_owned(),
+            2,
+            99,
+            rendered_page(1.0),
+            2,
+        )
+        .unwrap();
+
+        assert_eq!(snapshot.current_index, 1);
+        assert_eq!(snapshot.total_pages, 2);
     }
 
     #[test]

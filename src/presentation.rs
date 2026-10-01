@@ -9,14 +9,24 @@ impl PresentationState {
     }
 
     pub fn open_document(title: impl Into<String>, total_pages: u32) -> Self {
+        Self::open_document_at(title, total_pages, 0)
+    }
+
+    pub fn open_document_at(
+        title: impl Into<String>,
+        total_pages: u32,
+        current_index: u32,
+    ) -> Self {
         if total_pages == 0 {
             return Self::empty();
         }
 
+        let mut pages = PageCursor::new(total_pages);
+        pages.jump_to_index(current_index);
         Self {
             document: Some(PresentationDocument {
                 title: title.into(),
-                pages: PageCursor::new(total_pages),
+                pages,
             }),
         }
     }
@@ -201,6 +211,15 @@ mod tests {
                 page_label: "1 / 3".to_owned(),
             })
         );
+    }
+
+    #[test]
+    fn opened_document_at_preserves_or_clamps_requested_page() {
+        let preserved = PresentationState::open_document_at("Deck", 5, 3);
+        let clamped = PresentationState::open_document_at("Deck", 2, 3);
+
+        assert_eq!(preserved.snapshot().unwrap().current_index, 3);
+        assert_eq!(clamped.snapshot().unwrap().current_index, 1);
     }
 
     #[test]
