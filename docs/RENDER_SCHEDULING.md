@@ -49,15 +49,26 @@ Control commands are not part of the bounded render-work capacity:
 - `Shutdown` wins over all pending commands and clears pending work.
 - After `Shutdown` is queued, later commands are ignored except another
   `Shutdown`.
-- `Open` clears pending work and replaces pending non-shutdown control commands.
+- `PrepareReload` opens and renders a replacement candidate without changing the
+  active document or session. A newer preparation replaces older pending
+  prepare/discard commands.
+- `CommitReload` activates a matching prepared candidate. It remains ordered
+  ahead of a later `Open`, so the UI and worker cannot disagree after the UI has
+  accepted the candidate.
+- `DiscardReload` removes a matching stale candidate without affecting the
+  active document.
+- `Open` clears pending work and replaces pending control commands except
+  `Shutdown` and an already queued `CommitReload`.
 
 There is no standalone close command in the supported scheduler contract. The
 app replaces decks with `Open` and stops the worker with `Shutdown`; a future
 user-facing "Close PDF" action should define app-state cleanup before adding a
 new scheduler command.
 
-The worker repeats the same session cleanup for `Open` and `Shutdown` because
-commands may already have crossed the mailbox boundary.
+The worker repeats session cleanup when opening, committing, or shutting down
+because commands may already have crossed the mailbox boundary. A prepared
+reload owns at most one candidate document on the same worker, preserving the
+single-threaded PDFium ownership model.
 
 `Open` cancellation is cooperative. A newer `Open` replaces older pending open
 commands in the mailbox, but it cannot interrupt a worker that is already inside
@@ -93,15 +104,17 @@ Rendered events are also bounded while the UI waits to drain them. Event deliver
 coalesces by event identity:
 
 - Open success and failure replace earlier open results for the same session.
+- Reload prepare success and failure replace earlier reload results for the same
+  session.
 - Speaker-note results replace earlier speaker-note results for the same session.
 - Page render success and failure replace earlier page results for the same
   `(session_id, RenderRequest)`.
 
 When the event mailbox is full, it drops the least protected event. The most
-protected events are worker failures, then open results, speaker-note results,
-current-slide results, next-preview results, and thumbnails. Thumbnail events are
-the easiest to regenerate; worker failure and open results are needed to keep the
-presenter state understandable.
+protected events are worker failures, then open and reload results, speaker-note
+results, current-slide results, next-preview results, and thumbnails. Thumbnail
+events are the easiest to regenerate; worker failure and document-transition
+results are needed to keep the presenter state understandable.
 
 ## Cache budgets
 
