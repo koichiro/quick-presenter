@@ -181,6 +181,9 @@ window. Keyboard controls are documented in [KEYBOARD.md](KEYBOARD.md).
 
 If opening a PDF fails, try a known-good PDF first. Quick Presenter reports
 short presenter-facing errors and does not attempt to repair invalid PDFs.
+Password-protected and encrypted PDFs are not supported in v1.0.0. Export an
+unprotected PDF before opening it in Quick Presenter; the app does not prompt
+for or store PDF passwords.
 
 ## Bundled PDFium
 
