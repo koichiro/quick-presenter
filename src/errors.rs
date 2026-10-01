@@ -1,6 +1,21 @@
-use std::path::Path;
+use std::{fmt, path::Path};
 
 use anyhow::Error;
+
+pub const PDF_OPEN_ERROR_MESSAGE: &str = "Could not open PDF. Choose another file.";
+pub const PROTECTED_PDF_ERROR_MESSAGE: &str =
+    "Password-protected PDFs are not supported. Export an unprotected PDF and try again.";
+
+#[derive(Debug)]
+pub struct ProtectedPdfError;
+
+impl fmt::Display for ProtectedPdfError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("password-protected or encrypted PDF is unsupported")
+    }
+}
+
+impl std::error::Error for ProtectedPdfError {}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum MessageSeverity {
@@ -38,6 +53,12 @@ pub fn presenter_error_message(
 ) -> PresenterMessage {
     let chain = error_chain_text(error);
 
+    if error.downcast_ref::<ProtectedPdfError>().is_some()
+        || chain.contains("password-protected or encrypted PDF is unsupported")
+    {
+        return PresenterMessage::new(PROTECTED_PDF_ERROR_MESSAGE, MessageSeverity::Error);
+    }
+
     if contains_any(
         &chain,
         &[
@@ -55,10 +76,7 @@ pub fn presenter_error_message(
     }
 
     if chain.contains("failed to open PDF") {
-        return PresenterMessage::new(
-            "Could not open PDF. Choose another file.",
-            MessageSeverity::Error,
-        );
+        return PresenterMessage::new(PDF_OPEN_ERROR_MESSAGE, MessageSeverity::Error);
     }
 
     if contains_any(&chain, &["failed to load page", "failed to render page"]) {
@@ -135,7 +153,28 @@ mod tests {
 
         let message = presenter_error_message(&error, Some(Path::new("/tmp/quick-presenter.log")));
 
-        assert_eq!(message.text(), "Could not open PDF. Choose another file.");
+        assert_eq!(message.text(), PDF_OPEN_ERROR_MESSAGE);
+    }
+
+    #[test]
+    fn protected_pdf_errors_are_actionable() {
+        let error = Error::new(ProtectedPdfError).context("failed to open PDF: /tmp/protected.pdf");
+
+        let message = presenter_error_message(&error, None);
+
+        assert_eq!(message.text(), PROTECTED_PDF_ERROR_MESSAGE);
+        assert_eq!(message.severity(), MessageSeverity::Error);
+    }
+
+    #[test]
+    fn serialized_protected_pdf_errors_remain_actionable() {
+        let error = anyhow!(
+            "failed to open PDF: /tmp/protected.pdf: password-protected or encrypted PDF is unsupported"
+        );
+
+        let message = presenter_error_message(&error, None);
+
+        assert_eq!(message.text(), PROTECTED_PDF_ERROR_MESSAGE);
     }
 
     #[test]

@@ -13,6 +13,7 @@ use tracing::debug;
 
 use crate::app_metadata::{pdfium_version_label_from_path, PDFIUM_VERSION_UNKNOWN_LABEL};
 use crate::aspect::sanitize_aspect_ratio;
+use crate::errors::ProtectedPdfError;
 use crate::notes::{is_pdf_speaker_note_annotation, SpeakerNotes};
 
 const PDFIUM_DYNAMIC_LIB_PATH_ENV: &str = "PDFIUM_DYNAMIC_LIB_PATH";
@@ -46,9 +47,19 @@ impl PdfDocumentState {
             .with_context(|| format!("failed to open PDF: {}", path.display()))?;
 
         let pdfium = shared_pdfium()?;
-        let document = pdfium
-            .load_pdf_from_file(&path, None)
-            .with_context(|| format!("failed to open PDF: {}", path.display()))?;
+        let document = match pdfium.load_pdf_from_file(&path, None) {
+            Ok(document) => document,
+            Err(PdfiumError::PdfiumLibraryInternalError(
+                PdfiumInternalError::PasswordError | PdfiumInternalError::SecurityError,
+            )) => {
+                return Err(anyhow::Error::new(ProtectedPdfError))
+                    .with_context(|| format!("failed to open PDF: {}", path.display()));
+            }
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("failed to open PDF: {}", path.display()));
+            }
+        };
 
         let page_count = document.pages().len();
 
@@ -639,6 +650,24 @@ mod tests {
                 .render_page_pixels(0, 320)
                 .unwrap_or_else(|error| panic!("{fixture} should render: {error:#}"));
         }
+    }
+
+    #[test]
+    fn password_protected_pdf_is_reported_as_unsupported() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+
+        if !local_pdfium_available() {
+            return;
+        }
+
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/password-protected.pdf");
+        let error = match PdfDocumentState::open(path) {
+            Ok(_) => panic!("protected PDF should not open"),
+            Err(error) => error,
+        };
+
+        assert!(error.downcast_ref::<ProtectedPdfError>().is_some());
     }
 
     #[test]

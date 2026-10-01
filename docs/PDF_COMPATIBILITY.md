@@ -4,6 +4,18 @@ Quick Presenter accepts PDF files exported by common slide-authoring tools. The
 input preflight currently requires the `%PDF-` header to begin at byte zero.
 This document records representative exports used to validate that policy.
 
+## Password-protected and encrypted PDFs
+
+Quick Presenter v1.0.0 does not support password entry. If PDFium identifies a
+PDF as password-protected or rejects it because of its security settings, the
+presenter is asked to export an unprotected PDF and try again. A failed open
+does not replace the deck that is already loaded.
+
+Quick Presenter never stores or requests a PDF password. Passwords are not
+written to recent files, diagnostics, command-line arguments, or persistent
+settings. A small encrypted fixture verifies the v1.0.0 error mapping when the
+local PDFium library is available.
+
 ## Compatibility fixtures
 
 | Authoring tool | Fixture | Export details | Pages | Header offset | Result |

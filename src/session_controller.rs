@@ -189,12 +189,16 @@ pub fn clear_render_reload_state(state: &mut AppState, session_id: RenderSession
     state.render_sessions.clear_pending_reload(session_id)
 }
 
-pub fn commit_render_open_failed_state(state: &mut AppState, session_id: RenderSessionId) -> bool {
+pub fn commit_render_open_failed_state(
+    state: &mut AppState,
+    session_id: RenderSessionId,
+    status_text: String,
+) -> bool {
     if !state.render_sessions.clear_pending_open(session_id) {
         return false;
     }
 
-    state.status_text = "Could not open PDF. Choose another file.".to_owned();
+    state.status_text = status_text;
     state.pending_open = None;
     true
 }
@@ -737,7 +741,11 @@ mod tests {
         let mut state = AppState::default();
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("broken.pdf"));
 
-        assert!(commit_render_open_failed_state(&mut state, session_id));
+        assert!(commit_render_open_failed_state(
+            &mut state,
+            session_id,
+            crate::errors::PDF_OPEN_ERROR_MESSAGE.to_owned(),
+        ));
 
         assert_eq!(state.pending_open, None);
         assert_eq!(
@@ -764,7 +772,11 @@ mod tests {
 
         let pending_session = begin_open_pdf_state(&mut state, PathBuf::from("broken.pdf"));
 
-        assert!(commit_render_open_failed_state(&mut state, pending_session));
+        assert!(commit_render_open_failed_state(
+            &mut state,
+            pending_session,
+            crate::errors::PROTECTED_PDF_ERROR_MESSAGE.to_owned(),
+        ));
 
         assert_eq!(
             state.render_sessions.current_session(),
@@ -776,7 +788,7 @@ mod tests {
         assert_eq!(state.pending_open, None);
         assert_eq!(
             state.status_text,
-            "Could not open PDF. Choose another file."
+            crate::errors::PROTECTED_PDF_ERROR_MESSAGE
         );
     }
 
@@ -786,7 +798,11 @@ mod tests {
         let stale_session = begin_open_pdf_state(&mut state, PathBuf::from("old.pdf"));
         begin_open_pdf_state(&mut state, PathBuf::from("new.pdf"));
 
-        assert!(!commit_render_open_failed_state(&mut state, stale_session));
+        assert!(!commit_render_open_failed_state(
+            &mut state,
+            stale_session,
+            crate::errors::PDF_OPEN_ERROR_MESSAGE.to_owned(),
+        ));
 
         assert_eq!(pending_open_path(&state), Some(PathBuf::from("new.pdf")));
         assert_eq!(state.status_text, "Opening PDF...");

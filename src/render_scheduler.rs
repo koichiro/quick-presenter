@@ -1354,7 +1354,7 @@ fn open_document_on_worker<D: RenderWorkerDocument>(
         Err(err) => {
             event_mailbox.send(RenderEvent::OpenFailed {
                 session_id,
-                message: err.to_string(),
+                message: format!("{err:#}"),
             });
         }
     }

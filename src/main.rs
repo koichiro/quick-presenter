@@ -2043,9 +2043,16 @@ fn handle_render_open_failed(
     message: String,
 ) {
     warn!(error = %message, "failed to open PDF on render worker");
+    let presenter_message = {
+        let state = state.borrow();
+        errors::presenter_error_message(
+            &anyhow::anyhow!(message),
+            state.diagnostics_log_path.as_deref(),
+        )
+    };
     let accepted = {
         let mut state = state.borrow_mut();
-        commit_render_open_failed_state(&mut state, session_id)
+        commit_render_open_failed_state(&mut state, session_id, presenter_message.text().to_owned())
     };
     if !accepted {
         return;
@@ -2054,13 +2061,7 @@ fn handle_render_open_failed(
         .borrow_mut()
         .hot_reload
         .finish_manual_open_without_replacement();
-    set_presenter_message(
-        &windows.presenter,
-        PresenterMessage::new(
-            "Could not open PDF. Choose another file.",
-            errors::MessageSeverity::Error,
-        ),
-    );
+    set_presenter_message(&windows.presenter, presenter_message);
 }
 
 fn handle_page_rendered(
