@@ -36,7 +36,7 @@ decisions, and error chains. They do not contain PDF contents, rendered slide
 images, speaker notes, or full file dumps, and Quick Presenter does not upload
 them.
 
-The v1.0.0 design keeps an active log and one previous generation, with a 10 MiB
+The v1.0.0 policy keeps an active log and one previous generation, with a 10 MiB
 limit per generation. On Unix-like platforms, both files use owner-only mode
 `0600`. See [Diagnostic Log Retention](DIAGNOSTIC_LOG_RETENTION.md) for the full
 rotation, custom-path, and failure-handling policy.
