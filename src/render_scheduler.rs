@@ -47,6 +47,18 @@ pub enum RenderCommand {
         session_id: RenderSessionId,
         path: PathBuf,
     },
+    PrepareReload {
+        session_id: RenderSessionId,
+        path: PathBuf,
+        requested_page_index: u32,
+        target_width: i32,
+    },
+    CommitReload {
+        session_id: RenderSessionId,
+    },
+    DiscardReload {
+        session_id: RenderSessionId,
+    },
     RenderPage {
         session_id: RenderSessionId,
         request: RenderRequest,
@@ -72,6 +84,17 @@ pub enum RenderEvent {
         status_text: String,
     },
     OpenFailed {
+        session_id: RenderSessionId,
+        message: String,
+    },
+    ReloadPrepared {
+        session_id: RenderSessionId,
+        title: String,
+        page_count: u32,
+        current_page_index: u32,
+        current_page: RenderedPagePixels,
+    },
+    ReloadPrepareFailed {
         session_id: RenderSessionId,
         message: String,
     },
@@ -105,16 +128,14 @@ impl RenderSchedulingPolicy {
         controls
             .iter()
             .position(|command| matches!(command, RenderCommand::Shutdown))
-            .or_else(|| {
-                controls
-                    .iter()
-                    .position(|command| matches!(command, RenderCommand::Open { .. }))
-            })
             .or_else(|| (!controls.is_empty()).then_some(0))
     }
 
     fn open_retains_control(command: &RenderCommand) -> bool {
-        matches!(command, RenderCommand::Shutdown)
+        matches!(
+            command,
+            RenderCommand::Shutdown | RenderCommand::CommitReload { .. }
+        )
     }
 
     fn work_priority_for_key(key: QueueKey, requested: RenderPriority) -> RenderPriority {
@@ -140,6 +161,10 @@ impl RenderSchedulingPolicy {
         match event {
             RenderEvent::Opened { session_id, .. } | RenderEvent::OpenFailed { session_id, .. } => {
                 Some(RenderEventKey::Open(*session_id))
+            }
+            RenderEvent::ReloadPrepared { session_id, .. }
+            | RenderEvent::ReloadPrepareFailed { session_id, .. } => {
+                Some(RenderEventKey::Reload(*session_id))
             }
             RenderEvent::SpeakerNotesLoaded { session_id, .. } => {
                 Some(RenderEventKey::SpeakerNotes(*session_id))
@@ -171,7 +196,10 @@ impl RenderSchedulingPolicy {
                 }
             }
             RenderEvent::SpeakerNotesLoaded { .. } => 2,
-            RenderEvent::Opened { .. } | RenderEvent::OpenFailed { .. } => 1,
+            RenderEvent::Opened { .. }
+            | RenderEvent::OpenFailed { .. }
+            | RenderEvent::ReloadPrepared { .. }
+            | RenderEvent::ReloadPrepareFailed { .. } => 1,
             RenderEvent::WorkerFailed { .. } => 0,
         }
     }
@@ -182,6 +210,7 @@ pub struct RenderSessionTracker {
     next_session: u64,
     committed_session: Option<RenderSessionId>,
     pending_open_session: Option<RenderSessionId>,
+    pending_reload_session: Option<RenderSessionId>,
 }
 
 impl RenderSessionTracker {
@@ -189,6 +218,14 @@ impl RenderSessionTracker {
         self.next_session = self.next_session.wrapping_add(1);
         let session_id = RenderSessionId(self.next_session);
         self.pending_open_session = Some(session_id);
+        self.pending_reload_session = None;
+        session_id
+    }
+
+    pub fn begin_reload_session(&mut self) -> RenderSessionId {
+        self.next_session = self.next_session.wrapping_add(1);
+        let session_id = RenderSessionId(self.next_session);
+        self.pending_reload_session = Some(session_id);
         session_id
     }
 
@@ -223,11 +260,35 @@ impl RenderSessionTracker {
         true
     }
 
+    pub fn accepts_pending_reload(&self, session_id: RenderSessionId) -> bool {
+        self.pending_reload_session == Some(session_id)
+    }
+
+    pub fn commit_pending_reload(&mut self, session_id: RenderSessionId) -> bool {
+        if !self.accepts_pending_reload(session_id) {
+            return false;
+        }
+
+        self.committed_session = Some(session_id);
+        self.pending_reload_session = None;
+        true
+    }
+
+    pub fn clear_pending_reload(&mut self, session_id: RenderSessionId) -> bool {
+        if !self.accepts_pending_reload(session_id) {
+            return false;
+        }
+
+        self.pending_reload_session = None;
+        true
+    }
+
     pub fn mark_worker_failed(&mut self, session_id: Option<RenderSessionId>) -> bool {
         let failure_matches = match session_id {
             Some(session_id) => {
                 self.committed_session == Some(session_id)
                     || self.pending_open_session == Some(session_id)
+                    || self.pending_reload_session == Some(session_id)
             }
             None => true,
         };
@@ -238,6 +299,7 @@ impl RenderSessionTracker {
 
         self.committed_session = None;
         self.pending_open_session = None;
+        self.pending_reload_session = None;
         true
     }
 }
@@ -420,6 +482,33 @@ impl PendingRenderCommands {
                 self.controls
                     .push_back(RenderCommand::Open { session_id, path });
             }
+            RenderCommand::PrepareReload {
+                session_id,
+                path,
+                requested_page_index,
+                target_width,
+            } => {
+                self.controls.retain(|command| {
+                    !matches!(
+                        command,
+                        RenderCommand::PrepareReload { .. } | RenderCommand::DiscardReload { .. }
+                    )
+                });
+                self.controls.push_back(RenderCommand::PrepareReload {
+                    session_id,
+                    path,
+                    requested_page_index,
+                    target_width,
+                });
+            }
+            RenderCommand::CommitReload { session_id } => {
+                self.controls
+                    .push_back(RenderCommand::CommitReload { session_id });
+            }
+            RenderCommand::DiscardReload { session_id } => {
+                self.controls
+                    .push_back(RenderCommand::DiscardReload { session_id });
+            }
             RenderCommand::RenderPage {
                 session_id,
                 request,
@@ -587,6 +676,7 @@ impl RenderCommandMailbox {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum RenderEventKey {
     Open(RenderSessionId),
+    Reload(RenderSessionId),
     SpeakerNotes(RenderSessionId),
     Page {
         session_id: RenderSessionId,
@@ -753,8 +843,14 @@ struct SpeakerNotesExtraction {
     page_notes: Vec<(u32, String)>,
 }
 
+struct PreparedWorkerDocument<D> {
+    session_id: RenderSessionId,
+    document: D,
+}
+
 struct RenderWorkerState<D> {
     document: Option<D>,
+    prepared_document: Option<PreparedWorkerDocument<D>>,
     active_session: Option<RenderSessionId>,
     notes_extraction: Option<SpeakerNotesExtraction>,
     queue: RenderQueue,
@@ -765,6 +861,7 @@ impl<D> Default for RenderWorkerState<D> {
     fn default() -> Self {
         Self {
             document: None,
+            prepared_document: None,
             active_session: None,
             notes_extraction: None,
             queue: RenderQueue::default(),
@@ -819,6 +916,29 @@ impl RenderScheduler {
 
     pub fn open(&self, session_id: RenderSessionId, path: PathBuf) {
         self.send(RenderCommand::Open { session_id, path });
+    }
+
+    pub fn prepare_reload(
+        &self,
+        session_id: RenderSessionId,
+        path: PathBuf,
+        requested_page_index: u32,
+        target_width: i32,
+    ) {
+        self.send(RenderCommand::PrepareReload {
+            session_id,
+            path,
+            requested_page_index,
+            target_width,
+        });
+    }
+
+    pub fn commit_reload(&self, session_id: RenderSessionId) {
+        self.send(RenderCommand::CommitReload { session_id });
+    }
+
+    pub fn discard_reload(&self, session_id: RenderSessionId) {
+        self.send(RenderCommand::DiscardReload { session_id });
     }
 
     pub fn render_page(
@@ -1080,6 +1200,7 @@ fn handle_command<D: RenderWorkerDocument>(
         RenderCommand::Open { session_id, path } => {
             state.queue.clear();
             state.notes_extraction = None;
+            state.prepared_document = None;
             open_document_on_worker(
                 session_id,
                 path,
@@ -1088,6 +1209,32 @@ fn handle_command<D: RenderWorkerDocument>(
                 cancellation,
                 open_document,
             );
+        }
+        RenderCommand::PrepareReload {
+            session_id,
+            path,
+            requested_page_index,
+            target_width,
+        } => prepare_reload_on_worker(
+            session_id,
+            path,
+            requested_page_index,
+            target_width,
+            state,
+            event_mailbox,
+            open_document,
+        ),
+        RenderCommand::CommitReload { session_id } => {
+            commit_reload_on_worker(session_id, state, cancellation);
+        }
+        RenderCommand::DiscardReload { session_id } => {
+            if state
+                .prepared_document
+                .as_ref()
+                .is_some_and(|prepared| prepared.session_id == session_id)
+            {
+                state.prepared_document = None;
+            }
         }
         RenderCommand::RenderPage {
             session_id,
@@ -1103,9 +1250,83 @@ fn handle_command<D: RenderWorkerDocument>(
             cancellation.shutdown();
             state.shutdown = true;
             state.notes_extraction = None;
+            state.prepared_document = None;
             state.queue.clear();
         }
     }
+}
+
+fn prepare_reload_on_worker<D: RenderWorkerDocument>(
+    session_id: RenderSessionId,
+    path: PathBuf,
+    requested_page_index: u32,
+    target_width: i32,
+    state: &mut RenderWorkerState<D>,
+    event_mailbox: &RenderEventMailbox,
+    open_document: fn(PathBuf) -> anyhow::Result<D>,
+) {
+    state.prepared_document = None;
+    let prepared = (|| {
+        let document = open_document(path)?;
+        let title = document.title();
+        let page_count = document.page_count();
+        anyhow::ensure!(page_count > 0, "PDF contains no pages");
+        let current_page_index = requested_page_index.min(page_count.saturating_sub(1));
+        let current_page = document.render_page_pixels(RenderRequest {
+            page_index: current_page_index,
+            width: target_width,
+            purpose: RenderPurpose::CurrentSlide,
+        })?;
+        Ok((
+            document,
+            title,
+            page_count,
+            current_page_index,
+            current_page,
+        ))
+    })();
+
+    match prepared {
+        Ok((document, title, page_count, current_page_index, current_page)) => {
+            state.prepared_document = Some(PreparedWorkerDocument {
+                session_id,
+                document,
+            });
+            event_mailbox.send(RenderEvent::ReloadPrepared {
+                session_id,
+                title,
+                page_count,
+                current_page_index,
+                current_page,
+            });
+        }
+        Err(error) => {
+            event_mailbox.send(RenderEvent::ReloadPrepareFailed {
+                session_id,
+                message: error.to_string(),
+            });
+        }
+    }
+}
+
+fn commit_reload_on_worker<D>(
+    session_id: RenderSessionId,
+    state: &mut RenderWorkerState<D>,
+    cancellation: &RenderCancellation,
+) {
+    let Some(prepared) = state.prepared_document.take() else {
+        return;
+    };
+    if prepared.session_id != session_id {
+        state.prepared_document = Some(prepared);
+        return;
+    }
+
+    state.queue.clear();
+    state.notes_extraction = None;
+    state.document = Some(prepared.document);
+    state.active_session = Some(session_id);
+    cancellation.activate(session_id);
 }
 
 fn open_document_on_worker<D: RenderWorkerDocument>(
@@ -1364,6 +1585,18 @@ mod tests {
                 render_fails: true,
                 notes: FakeNotes::Empty,
             }),
+            "replacement.pdf" => Ok(FakeDocument {
+                title: "replacement.pdf".to_owned(),
+                page_count: 2,
+                render_fails: false,
+                notes: FakeNotes::Empty,
+            }),
+            "empty.pdf" => Ok(FakeDocument {
+                title: "empty.pdf".to_owned(),
+                page_count: 0,
+                render_fails: false,
+                notes: FakeNotes::Empty,
+            }),
             "notes.pdf" => Ok(FakeDocument {
                 title: "notes.pdf".to_owned(),
                 page_count: 3,
@@ -1491,6 +1724,35 @@ mod tests {
 
         assert_eq!(tracker.current_session(), None);
         assert!(!tracker.accepts_pending_open(pending));
+    }
+
+    #[test]
+    fn session_tracker_commits_only_latest_pending_reload() {
+        let mut tracker = RenderSessionTracker::default();
+        let current = tracker.begin_open_session();
+        assert!(tracker.commit_pending_open(current));
+        let first = tracker.begin_reload_session();
+        let second = tracker.begin_reload_session();
+
+        assert!(!tracker.commit_pending_reload(first));
+        assert!(tracker.accepts_pending_reload(second));
+        assert!(tracker.commit_pending_reload(second));
+        assert!(tracker.accepts(second));
+        assert!(!tracker.accepts(current));
+    }
+
+    #[test]
+    fn manual_open_invalidates_pending_reload() {
+        let mut tracker = RenderSessionTracker::default();
+        let current = tracker.begin_open_session();
+        assert!(tracker.commit_pending_open(current));
+        let reload = tracker.begin_reload_session();
+
+        let pending_open = tracker.begin_open_session();
+
+        assert!(!tracker.accepts_pending_reload(reload));
+        assert!(tracker.accepts_pending_open(pending_open));
+        assert!(tracker.accepts(current));
     }
 
     #[test]
@@ -1746,6 +2008,30 @@ mod tests {
             other => panic!("expected open command, got {other:?}"),
         }
         assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn command_mailbox_preserves_reload_commit_before_later_open() {
+        let reload_session = RenderSessionId(2);
+        let open_session = RenderSessionId(3);
+        let mut pending = PendingRenderCommands::new(8);
+
+        pending.push(RenderCommand::CommitReload {
+            session_id: reload_session,
+        });
+        pending.push(RenderCommand::Open {
+            session_id: open_session,
+            path: PathBuf::from("next.pdf"),
+        });
+
+        assert!(matches!(
+            pending.pop().unwrap(),
+            RenderCommand::CommitReload { session_id } if session_id == reload_session
+        ));
+        assert!(matches!(
+            pending.pop().unwrap(),
+            RenderCommand::Open { session_id, .. } if session_id == open_session
+        ));
     }
 
     #[test]
@@ -2272,6 +2558,161 @@ mod tests {
             }
             other => panic!("expected page rendered event, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn reload_prepare_keeps_active_document_until_commit_and_clamps_page() {
+        let current_session = RenderSessionId(1);
+        let reload_session = RenderSessionId(2);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: current_session,
+                path: PathBuf::from("deck.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        event_mailbox.drain();
+
+        handle_fake_command(
+            RenderCommand::PrepareReload {
+                session_id: reload_session,
+                path: PathBuf::from("replacement.pdf"),
+                requested_page_index: 99,
+                target_width: 320,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert_eq!(state.active_session, Some(current_session));
+        assert_eq!(state.document.as_ref().unwrap().title, "deck.pdf");
+        assert_eq!(
+            state.prepared_document.as_ref().unwrap().session_id,
+            reload_session
+        );
+        match drain_single_event(&event_mailbox) {
+            RenderEvent::ReloadPrepared {
+                session_id,
+                title,
+                page_count,
+                current_page_index,
+                current_page,
+            } => {
+                assert_eq!(session_id, reload_session);
+                assert_eq!(title, "replacement.pdf");
+                assert_eq!(page_count, 2);
+                assert_eq!(current_page_index, 1);
+                assert_eq!(current_page.pixels.width(), 320);
+            }
+            other => panic!("expected prepared reload event, got {other:?}"),
+        }
+
+        handle_fake_command(
+            RenderCommand::CommitReload {
+                session_id: reload_session,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert_eq!(state.active_session, Some(reload_session));
+        assert_eq!(state.document.as_ref().unwrap().title, "replacement.pdf");
+        assert!(state.prepared_document.is_none());
+        assert!(cancellation.is_cancelled(current_session));
+        assert!(!cancellation.is_cancelled(reload_session));
+    }
+
+    #[test]
+    fn reload_prepare_failure_keeps_active_document_and_session() {
+        let current_session = RenderSessionId(1);
+        let reload_session = RenderSessionId(2);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: current_session,
+                path: PathBuf::from("deck.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        event_mailbox.drain();
+
+        handle_fake_command(
+            RenderCommand::PrepareReload {
+                session_id: reload_session,
+                path: PathBuf::from("render-fail.pdf"),
+                requested_page_index: 1,
+                target_width: 320,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+
+        assert_eq!(state.active_session, Some(current_session));
+        assert_eq!(state.document.as_ref().unwrap().title, "deck.pdf");
+        assert!(state.prepared_document.is_none());
+        assert!(!cancellation.is_cancelled(current_session));
+        assert!(matches!(
+            drain_single_event(&event_mailbox),
+            RenderEvent::ReloadPrepareFailed { session_id, .. } if session_id == reload_session
+        ));
+    }
+
+    #[test]
+    fn reload_discard_drops_only_matching_candidate() {
+        let current_session = RenderSessionId(1);
+        let reload_session = RenderSessionId(2);
+        let (mut state, event_mailbox, cancellation) = fake_worker_parts();
+        handle_fake_command(
+            RenderCommand::Open {
+                session_id: current_session,
+                path: PathBuf::from("deck.pdf"),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        event_mailbox.drain();
+        handle_fake_command(
+            RenderCommand::PrepareReload {
+                session_id: reload_session,
+                path: PathBuf::from("replacement.pdf"),
+                requested_page_index: 0,
+                target_width: 320,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        event_mailbox.drain();
+
+        handle_fake_command(
+            RenderCommand::DiscardReload {
+                session_id: RenderSessionId(99),
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        assert!(state.prepared_document.is_some());
+
+        handle_fake_command(
+            RenderCommand::DiscardReload {
+                session_id: reload_session,
+            },
+            &mut state,
+            &event_mailbox,
+            &cancellation,
+        );
+        assert!(state.prepared_document.is_none());
+        assert_eq!(state.active_session, Some(current_session));
     }
 
     #[test]

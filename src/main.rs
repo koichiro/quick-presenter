@@ -1617,7 +1617,10 @@ pub(crate) fn drain_render_events(
             RenderEvent::OpenFailed { .. } => drain.open_failed = true,
             RenderEvent::PageFailed { .. } => drain.page_failed = true,
             RenderEvent::WorkerFailed { .. } => drain.worker_failed = true,
-            RenderEvent::Opened { .. } | RenderEvent::PageRendered { .. } => {}
+            RenderEvent::Opened { .. }
+            | RenderEvent::PageRendered { .. }
+            | RenderEvent::ReloadPrepared { .. }
+            | RenderEvent::ReloadPrepareFailed { .. } => {}
         }
         handle_render_event(windows, state, event);
     }
@@ -1657,6 +1660,7 @@ fn handle_render_event(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, e
             session_id,
             message,
         } => handle_render_worker_failed(windows, state, session_id, message),
+        RenderEvent::ReloadPrepared { .. } | RenderEvent::ReloadPrepareFailed { .. } => {}
     }
 }
 
