@@ -6,7 +6,7 @@ use std::{
     rc::Rc,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use pdfium_render::prelude::*;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 use tracing::debug;
@@ -102,8 +102,8 @@ impl PdfDocumentState {
         let rgba = image.to_rgba8();
         let width = rgba.width();
         let height = rgba.height();
-        let buffer =
-            SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(rgba.as_raw(), width, height);
+        let buffer = rgba_pixel_buffer(rgba.as_raw(), width, height)
+            .with_context(|| format!("invalid rendered pixel data for page {page_number}"))?;
 
         Ok(buffer)
     }
@@ -182,6 +182,31 @@ impl PdfDocumentState {
 
         Ok(Some(notes))
     }
+}
+
+fn rgba_pixel_buffer(
+    pixels: &[u8],
+    width: u32,
+    height: u32,
+) -> Result<SharedPixelBuffer<Rgba8Pixel>> {
+    let expected_len = usize::try_from(width)
+        .ok()
+        .and_then(|width| {
+            usize::try_from(height)
+                .ok()
+                .and_then(|height| width.checked_mul(height))
+        })
+        .and_then(|pixel_count| pixel_count.checked_mul(4))
+        .context("RGBA buffer dimensions overflow the platform address space")?;
+    ensure!(
+        pixels.len() == expected_len,
+        "RGBA buffer length {} does not match {width}x{height} (expected {expected_len})",
+        pixels.len()
+    );
+
+    Ok(SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
+        pixels, width, height,
+    ))
 }
 
 struct PdfiumRuntime {
@@ -443,6 +468,23 @@ mod tests {
         sync::{Mutex, OnceLock},
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    #[test]
+    fn rgba_pixel_buffer_accepts_exact_dimensions() {
+        let pixels = [0_u8; 2 * 3 * 4];
+
+        let buffer = rgba_pixel_buffer(&pixels, 2, 3).expect("valid RGBA dimensions");
+
+        assert_eq!(buffer.width(), 2);
+        assert_eq!(buffer.height(), 3);
+    }
+
+    #[test]
+    fn rgba_pixel_buffer_rejects_mismatched_dimensions() {
+        let error = rgba_pixel_buffer(&[0_u8; 7], 2, 1).expect_err("invalid RGBA dimensions");
+
+        assert!(error.to_string().contains("expected 8"));
+    }
 
     #[test]
     fn document_title_uses_file_name() {

@@ -108,8 +108,8 @@ component NotesView inherits Rectangle {
         y: 10px;
         width: parent.width - 20px;
         height: parent.height - 20px;
-        viewport-width: self.visible-width;
-        viewport-height: max(self.visible-height, notes-input.preferred-height + 10px);
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, notes-input.preferred-height + 10px);
         vertical-scrollbar-policy: root.has-notes ? ScrollBarPolicy.always-on : ScrollBarPolicy.as-needed;
 
         notes-input := TextInput {
@@ -405,9 +405,9 @@ component ThumbnailPane inherits Rectangle {
     background: transparent;
     private property <length> scrollbar-gutter-width: 12px;
     private property <length> tile-height: 98px;
-    private property <length> current-item-y: scroll-view.viewport-y + root.current-page-index * root.tile-height;
-    private property <int> visible-start-index: max(0, round(-scroll-view.viewport-y / root.tile-height));
-    private property <int> visible-end-index: min(root.thumbnails.length - 1, max(0, round((-scroll-view.viewport-y + scroll-view.visible-height) / root.tile-height) + 1));
+    private property <length> current-item-y: scroll-view.content-y + root.current-page-index * root.tile-height;
+    private property <int> visible-start-index: max(0, round(-scroll-view.content-y / root.tile-height));
+    private property <int> visible-end-index: min(root.thumbnails.length - 1, max(0, round((-scroll-view.content-y + scroll-view.visible-height) / root.tile-height) + 1));
 
     function bring-current-into-view() {
         if root.current-page-index < 0 || root.current-page-index >= root.thumbnails.length {
@@ -415,11 +415,11 @@ component ThumbnailPane inherits Rectangle {
         }
 
         if current-item-y < 0px {
-            scroll-view.viewport-y += 0px - current-item-y;
+            scroll-view.content-y += 0px - current-item-y;
         }
 
         if current-item-y + tile-height > scroll-view.visible-height {
-            scroll-view.viewport-y -= current-item-y + tile-height - scroll-view.visible-height;
+            scroll-view.content-y -= current-item-y + tile-height - scroll-view.visible-height;
         }
     }
 
@@ -451,7 +451,7 @@ component ThumbnailPane inherits Rectangle {
     scroll-view := ScrollView {
         width: parent.width + root.scrollbar-gutter-width;
         height: parent.height;
-        viewport-width: parent.width;
+        content-width: parent.width;
 
         VerticalBox {
             width: root.width;
