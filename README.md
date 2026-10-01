@@ -18,6 +18,14 @@ Quick Presenter focuses on one job: open a PDF slide deck and help the speaker
 present it reliably. It is not a slide editor, a deck authoring tool, or a
 document management app.
 
+## Core Components
+
+- [PDFium](https://pdfium.googlesource.com/pdfium/), accessed through
+  [`pdfium-render`](https://crates.io/crates/pdfium-render), loads and renders
+  PDF slide decks.
+- [Slint](https://slint.dev/) provides the cross-platform user interface for
+  presenter controls and slide output.
+
 ## Demo
 
 ![Quick Presenter demo showing PDF navigation in the presenter window](docs/assets/quick-presenter-demo.gif)
