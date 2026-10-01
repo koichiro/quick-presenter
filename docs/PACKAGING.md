@@ -202,6 +202,9 @@ file dumps. Diagnostic entries may include file paths, page numbers, platform
 lookup decisions, and error chains needed to debug startup and rendering
 failures.
 
+The v1.0.0 size, rotation, permission, custom-path, and failure-handling policy
+is defined in [Diagnostic Log Retention](DIAGNOSTIC_LOG_RETENTION.md).
+
 ## Optional Linux Cross Check
 
 macOS development builds should continue to use the default host target. Do not
