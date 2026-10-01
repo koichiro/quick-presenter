@@ -70,3 +70,11 @@ UI thread remains the only place that mutates `AppState` or schedules the PDF
 open, while the worker thread owns only the blocking dialog call. The Linux
 dialog is still built on the UI thread so it can capture the presenter window as
 its native parent before the blocking picker work moves to the worker thread.
+
+## PDF hot reload
+
+The active PDF is automatically watched for external changes. Reload candidates
+must be opened and have their current page rendered on the existing PDFium
+worker before they can replace the last good document. The watcher boundary,
+debounce and retry policy, worker transaction, cache invalidation, and platform
+verification plan are defined in [PDF Hot Reload](PDF_HOT_RELOAD.md).
