@@ -381,12 +381,13 @@ jobs:
           set -euo pipefail
 
           artifact_dir="$GITHUB_WORKSPACE/artifacts/${{ matrix.artifact-name }}"
-          deb="$(find "$artifact_dir" -maxdepth 1 -name 'quick-presenter_*_*.deb' -print -quit)"
+          deb="$artifact_dir/quick-presenter_${PACKAGE_VERSION}_amd64.deb"
           extract_dir="$RUNNER_TEMP/quick-presenter-deb-extract"
           pdf="$GITHUB_WORKSPACE/tests/fixtures/marp-speaker-notes.pdf"
 
           test -s "$deb"
           dpkg-deb --info "$deb"
+          test "$(dpkg-deb --field "$deb" Version)" = "$PACKAGE_VERSION"
           dpkg-deb --field "$deb" Depends | grep -F "desktop-file-utils"
           dpkg-deb --field "$deb" Depends | grep -F "hicolor-icon-theme"
           dpkg-deb --contents "$deb" | tee "$RUNNER_TEMP/quick-presenter-deb-contents.txt"
