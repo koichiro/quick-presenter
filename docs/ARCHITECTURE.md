@@ -16,6 +16,11 @@ PDFium native library
 
 The app should keep PDF rendering, page caching, file IO, and presentation state in Rust. Slint should stay focused on UI layout, events, and display.
 
+Diagnostic file creation, permissions, byte accounting, and rotation remain in
+the Rust diagnostics boundary. The v1.0.0 retention design is documented in
+[Diagnostic Log Retention](DIAGNOSTIC_LOG_RETENTION.md); Slint and presentation
+state do not manage log lifecycle.
+
 ## PDFium ownership
 
 `src/pdf.rs` keeps PDFium initialization behind a process-global `OnceLock<Pdfium>`.
