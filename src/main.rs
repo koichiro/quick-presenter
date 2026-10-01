@@ -13,6 +13,7 @@ pub mod diagnostics;
 pub mod errors;
 pub mod fullscreen;
 pub mod gui_smoke;
+pub mod hot_reload;
 pub mod input;
 #[cfg(target_os = "macos")]
 pub mod macos_window;
