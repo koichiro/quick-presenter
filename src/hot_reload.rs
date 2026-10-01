@@ -1,6 +1,10 @@
 use std::{
     path::{Component, Path, PathBuf},
-    sync::mpsc::{self, Receiver, SyncSender, TryRecvError},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver, SyncSender, TrySendError},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 
@@ -12,6 +16,13 @@ use crate::render_scheduler::RenderSessionId;
 pub const HOT_RELOAD_DEBOUNCE: Duration = Duration::from_millis(300);
 pub const HOT_RELOAD_EVENT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 pub const HOT_RELOAD_SLOW_DELAY: Duration = Duration::from_secs(2);
+pub const HOT_RELOAD_SUCCESS_NOTICE: Duration = Duration::from_secs(2);
+pub const HOT_RELOAD_RETRY_DELAYS: [Duration; 4] = [
+    Duration::from_millis(100),
+    Duration::from_millis(250),
+    Duration::from_millis(500),
+    Duration::from_secs(1),
+];
 pub const WATCHER_RECOVERY_DELAYS: [Duration; 5] = [
     Duration::from_secs(1),
     Duration::from_secs(2),
@@ -68,7 +79,9 @@ fn absolute_lexical_path(path: PathBuf) -> Result<PathBuf> {
         match component {
             Component::CurDir => {}
             Component::ParentDir => {
-                normalized.pop();
+                if normalized.file_name().is_some() {
+                    normalized.pop();
+                }
             }
             other => normalized.push(other.as_os_str()),
         }
@@ -88,7 +101,12 @@ enum WatchBackend {
     Poll(PollWatcher),
 }
 
-impl WatchBackend {
+trait PdfWatchBackend {
+    fn watch(&mut self, path: &Path) -> notify::Result<()>;
+    fn unwatch(&mut self, path: &Path) -> notify::Result<()>;
+}
+
+impl PdfWatchBackend for WatchBackend {
     fn watch(&mut self, path: &Path) -> notify::Result<()> {
         match self {
             Self::Native(watcher) => watcher.watch(path, RecursiveMode::NonRecursive),
@@ -105,31 +123,45 @@ impl WatchBackend {
 }
 
 pub struct PdfWatcher {
-    backend: WatchBackend,
+    backend: Box<dyn PdfWatchBackend>,
     receiver: Receiver<WatchSignal>,
+    overflowed: Arc<AtomicBool>,
     target: Option<WatchTarget>,
 }
 
 impl PdfWatcher {
     pub fn new() -> Result<Self> {
         let (sender, receiver) = mpsc::sync_channel(WATCH_EVENT_CAPACITY);
-        let backend = create_native_watcher(sender.clone())
+        let overflowed = Arc::new(AtomicBool::new(false));
+        let backend = create_native_watcher(sender.clone(), Arc::clone(&overflowed))
             .map(WatchBackend::Native)
             .or_else(|native_error| {
-                create_poll_watcher(sender).map(WatchBackend::Poll).map_err(
-                    |poll_error| {
+                create_poll_watcher(sender, Arc::clone(&overflowed))
+                    .map(WatchBackend::Poll)
+                    .map_err(|poll_error| {
                         anyhow::anyhow!(
                             "native watcher failed: {native_error}; polling watcher failed: {poll_error}"
                         )
-                    },
-                )
+                    })
             })?;
 
         Ok(Self {
-            backend,
+            backend: Box::new(backend),
             receiver,
+            overflowed,
             target: None,
         })
+    }
+
+    #[cfg(test)]
+    fn with_backend_for_test(backend: Box<dyn PdfWatchBackend>) -> Self {
+        let (_sender, receiver) = mpsc::sync_channel(WATCH_EVENT_CAPACITY);
+        Self {
+            backend,
+            receiver,
+            overflowed: Arc::new(AtomicBool::new(false)),
+            target: None,
+        }
     }
 
     pub fn replace_target(&mut self, target: Option<WatchTarget>) -> Result<()> {
@@ -159,38 +191,47 @@ impl PdfWatcher {
 
     pub fn drain(&self) -> Vec<WatchSignal> {
         let mut signals = Vec::new();
-        loop {
-            match self.receiver.try_recv() {
-                Ok(signal) => signals.push(signal),
-                Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
-            }
+        while let Ok(signal) = self.receiver.try_recv() {
+            signals.push(signal);
+        }
+        if self.overflowed.swap(false, Ordering::AcqRel) {
+            signals.push(WatchSignal::Reconcile);
         }
         signals
     }
 }
 
-fn create_native_watcher(sender: SyncSender<WatchSignal>) -> notify::Result<RecommendedWatcher> {
-    RecommendedWatcher::new(event_handler(sender), Config::default())
+fn create_native_watcher(
+    sender: SyncSender<WatchSignal>,
+    overflowed: Arc<AtomicBool>,
+) -> notify::Result<RecommendedWatcher> {
+    RecommendedWatcher::new(event_handler(sender, overflowed), Config::default())
 }
 
-fn create_poll_watcher(sender: SyncSender<WatchSignal>) -> notify::Result<PollWatcher> {
+fn create_poll_watcher(
+    sender: SyncSender<WatchSignal>,
+    overflowed: Arc<AtomicBool>,
+) -> notify::Result<PollWatcher> {
     PollWatcher::new(
-        event_handler(sender),
+        event_handler(sender, overflowed),
         Config::default().with_poll_interval(POLL_INTERVAL),
     )
 }
 
 fn event_handler(
     sender: SyncSender<WatchSignal>,
+    overflowed: Arc<AtomicBool>,
 ) -> impl FnMut(notify::Result<Event>) + Send + 'static {
     move |event| {
         let signal = match event {
+            Ok(event) if event.need_rescan() || event.paths.is_empty() => WatchSignal::Reconcile,
             Ok(event) if matches!(event.kind, EventKind::Access(_)) => return,
-            Ok(event) if event.paths.is_empty() => WatchSignal::Reconcile,
             Ok(event) => WatchSignal::Paths(event.paths),
             Err(error) => WatchSignal::Failed(error.to_string()),
         };
-        let _ = sender.try_send(signal);
+        if matches!(sender.try_send(signal), Err(TrySendError::Full(_))) {
+            overflowed.store(true, Ordering::Release);
+        }
     }
 }
 
@@ -207,6 +248,38 @@ pub enum HotReloadPhase {
     },
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum PreparationOutcome {
+    Ignored,
+    Succeeded,
+    RetryScheduled,
+    Failed,
+    Superseded,
+}
+
+#[derive(Debug, Default)]
+pub struct WatcherRecoveryState {
+    attempts: usize,
+    next_retry_at: Option<Instant>,
+}
+
+impl WatcherRecoveryState {
+    pub fn record_failure(&mut self, now: Instant) {
+        let delay = WATCHER_RECOVERY_DELAYS[self.attempts.min(WATCHER_RECOVERY_DELAYS.len() - 1)];
+        self.attempts = self.attempts.saturating_add(1);
+        self.next_retry_at = Some(now + delay);
+    }
+
+    pub fn retry_is_due(&self, now: Instant) -> bool {
+        self.next_retry_at.is_some_and(|deadline| now >= deadline)
+    }
+
+    pub fn record_success(&mut self) {
+        self.attempts = 0;
+        self.next_retry_at = None;
+    }
+}
+
 #[derive(Debug)]
 pub struct HotReloadState {
     target: Option<WatchTarget>,
@@ -214,6 +287,10 @@ pub struct HotReloadState {
     phase: HotReloadPhase,
     deadline: Option<Instant>,
     manual_open_pending: bool,
+    retry_attempt: usize,
+    success_notice_until: Option<Instant>,
+    preparing_started_at: Option<Instant>,
+    slow_status_shown: bool,
 }
 
 impl Default for HotReloadState {
@@ -224,6 +301,10 @@ impl Default for HotReloadState {
             phase: HotReloadPhase::Idle,
             deadline: None,
             manual_open_pending: false,
+            retry_attempt: 0,
+            success_notice_until: None,
+            preparing_started_at: None,
+            slow_status_shown: false,
         }
     }
 }
@@ -243,6 +324,10 @@ impl HotReloadState {
         self.phase = HotReloadPhase::Idle;
         self.deadline = None;
         self.manual_open_pending = false;
+        self.retry_attempt = 0;
+        self.success_notice_until = None;
+        self.preparing_started_at = None;
+        self.slow_status_shown = false;
     }
 
     pub fn begin_manual_open(&mut self) {
@@ -250,10 +335,21 @@ impl HotReloadState {
         self.revision = self.revision.wrapping_add(1);
         self.phase = HotReloadPhase::Idle;
         self.deadline = None;
+        self.success_notice_until = None;
+        self.preparing_started_at = None;
+        self.slow_status_shown = false;
     }
 
     pub fn finish_manual_open_without_replacement(&mut self) {
         self.manual_open_pending = false;
+    }
+
+    pub fn cancel_pending_reload(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
+        self.phase = HotReloadPhase::Idle;
+        self.deadline = None;
+        self.preparing_started_at = None;
+        self.slow_status_shown = false;
     }
 
     pub fn observe(&mut self, signal: &WatchSignal, now: Instant) -> bool {
@@ -262,6 +358,7 @@ impl HotReloadState {
         }
 
         self.revision = self.revision.wrapping_add(1);
+        self.retry_attempt = 0;
         if !matches!(self.phase, HotReloadPhase::Preparing { .. }) {
             self.phase = HotReloadPhase::Debouncing;
             self.deadline = Some(now + HOT_RELOAD_DEBOUNCE);
@@ -275,7 +372,12 @@ impl HotReloadState {
         .then_some(self.revision)
     }
 
-    pub fn begin_preparing(&mut self, session_id: RenderSessionId, revision: u64) -> bool {
+    pub fn begin_preparing(
+        &mut self,
+        session_id: RenderSessionId,
+        revision: u64,
+        now: Instant,
+    ) -> bool {
         if self.phase != HotReloadPhase::Debouncing || self.revision != revision {
             return false;
         }
@@ -284,6 +386,23 @@ impl HotReloadState {
             revision,
         };
         self.deadline = None;
+        self.preparing_started_at = Some(now);
+        self.slow_status_shown = false;
+        true
+    }
+
+    pub fn mark_preparing_slow(&mut self, now: Instant) -> bool {
+        if !matches!(self.phase, HotReloadPhase::Preparing { .. }) || self.slow_status_shown {
+            return false;
+        }
+        if now
+            .checked_duration_since(self.preparing_started_at.unwrap_or(now))
+            .unwrap_or_default()
+            < HOT_RELOAD_SLOW_DELAY
+        {
+            return false;
+        }
+        self.slow_status_shown = true;
         true
     }
 
@@ -303,27 +422,62 @@ impl HotReloadState {
         revision: u64,
         succeeded: bool,
         now: Instant,
-    ) -> bool {
+    ) -> PreparationOutcome {
         if self.phase
             != (HotReloadPhase::Preparing {
                 session_id,
                 revision,
             })
         {
-            return false;
+            return PreparationOutcome::Ignored;
         }
+
+        self.preparing_started_at = None;
+        self.slow_status_shown = false;
 
         if self.revision != revision {
             self.phase = HotReloadPhase::Debouncing;
             self.deadline = Some(now + HOT_RELOAD_DEBOUNCE);
+            PreparationOutcome::Superseded
         } else if succeeded {
             self.phase = HotReloadPhase::Idle;
             self.deadline = None;
+            self.retry_attempt = 0;
+            PreparationOutcome::Succeeded
+        } else if let Some(delay) = HOT_RELOAD_RETRY_DELAYS.get(self.retry_attempt).copied() {
+            self.retry_attempt = self.retry_attempt.saturating_add(1);
+            self.phase = HotReloadPhase::Debouncing;
+            self.deadline = Some(now + delay);
+            PreparationOutcome::RetryScheduled
         } else {
             self.phase = HotReloadPhase::Failed { revision };
             self.deadline = None;
+            PreparationOutcome::Failed
         }
+    }
+
+    pub fn start_success_notice(&mut self, now: Instant) {
+        self.success_notice_until = Some(now + HOT_RELOAD_SUCCESS_NOTICE);
+    }
+
+    pub fn success_notice_active(&self, now: Instant) -> bool {
+        self.success_notice_until
+            .is_some_and(|deadline| now < deadline)
+    }
+
+    pub fn take_expired_success_notice(&mut self, now: Instant) -> bool {
+        if !self
+            .success_notice_until
+            .is_some_and(|deadline| now >= deadline)
+        {
+            return false;
+        }
+        self.success_notice_until = None;
         true
+    }
+
+    pub fn clear_success_notice(&mut self) {
+        self.success_notice_until = None;
     }
 
     fn is_relevant(&self, signal: &WatchSignal) -> bool {
@@ -341,21 +495,106 @@ impl HotReloadState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{cell::RefCell, rc::Rc};
 
-    fn target() -> WatchTarget {
-        WatchTarget::new(PathBuf::from("/slides/deck.pdf")).unwrap()
+    #[derive(Debug, Clone, Eq, PartialEq)]
+    enum WatchOperation {
+        Watch(PathBuf),
+        Unwatch(PathBuf),
     }
 
-    fn changed(path: &str) -> WatchSignal {
-        WatchSignal::Paths(vec![PathBuf::from(path)])
+    struct FakeWatchBackend {
+        operations: Rc<RefCell<Vec<WatchOperation>>>,
+    }
+
+    impl PdfWatchBackend for FakeWatchBackend {
+        fn watch(&mut self, path: &Path) -> notify::Result<()> {
+            self.operations
+                .borrow_mut()
+                .push(WatchOperation::Watch(path.to_path_buf()));
+            Ok(())
+        }
+
+        fn unwatch(&mut self, path: &Path) -> notify::Result<()> {
+            self.operations
+                .borrow_mut()
+                .push(WatchOperation::Unwatch(path.to_path_buf()));
+            Ok(())
+        }
+    }
+
+    fn fake_watcher() -> (PdfWatcher, Rc<RefCell<Vec<WatchOperation>>>) {
+        let operations = Rc::new(RefCell::new(Vec::new()));
+        let watcher = PdfWatcher::with_backend_for_test(Box::new(FakeWatchBackend {
+            operations: Rc::clone(&operations),
+        }));
+        (watcher, operations)
+    }
+
+    fn target() -> WatchTarget {
+        WatchTarget::new(slides_dir().join("deck.pdf")).unwrap()
+    }
+
+    fn slides_dir() -> PathBuf {
+        absolute_lexical_path(std::env::temp_dir().join("quick-presenter-hot-reload-slides"))
+            .unwrap()
+    }
+
+    fn other_dir() -> PathBuf {
+        absolute_lexical_path(std::env::temp_dir().join("quick-presenter-hot-reload-other"))
+            .unwrap()
+    }
+
+    fn changed(path: PathBuf) -> WatchSignal {
+        WatchSignal::Paths(vec![path])
+    }
+
+    fn changed_target() -> WatchSignal {
+        changed(slides_dir().join("deck.pdf"))
     }
 
     #[test]
     fn target_normalizes_relative_components_without_resolving_the_file() {
-        let target = WatchTarget::new(PathBuf::from("/slides/work/../deck.pdf")).unwrap();
+        let target = WatchTarget::new(slides_dir().join("work/../deck.pdf")).unwrap();
 
-        assert_eq!(target.path(), Path::new("/slides/deck.pdf"));
-        assert_eq!(target.parent(), Path::new("/slides"));
+        assert_eq!(target.path(), slides_dir().join("deck.pdf"));
+        assert_eq!(target.parent(), slides_dir());
+    }
+
+    #[test]
+    fn watcher_reuses_parent_when_only_target_file_changes() {
+        let (mut watcher, operations) = fake_watcher();
+        watcher.replace_target(Some(target())).unwrap();
+        watcher
+            .replace_target(Some(
+                WatchTarget::new(slides_dir().join("other.pdf")).unwrap(),
+            ))
+            .unwrap();
+
+        assert_eq!(
+            operations.borrow().as_slice(),
+            &[WatchOperation::Watch(slides_dir())]
+        );
+    }
+
+    #[test]
+    fn watcher_registers_new_parent_before_removing_old_parent() {
+        let (mut watcher, operations) = fake_watcher();
+        watcher.replace_target(Some(target())).unwrap();
+        watcher
+            .replace_target(Some(
+                WatchTarget::new(other_dir().join("deck.pdf")).unwrap(),
+            ))
+            .unwrap();
+
+        assert_eq!(
+            operations.borrow().as_slice(),
+            &[
+                WatchOperation::Watch(slides_dir()),
+                WatchOperation::Watch(other_dir()),
+                WatchOperation::Unwatch(slides_dir()),
+            ]
+        );
     }
 
     #[test]
@@ -364,7 +603,7 @@ mod tests {
         let mut state = HotReloadState::default();
         state.replace_target(target());
 
-        assert!(state.observe(&changed("/slides/deck.pdf"), now));
+        assert!(state.observe(&changed_target(), now));
         assert_eq!(state.phase(), HotReloadPhase::Debouncing);
         assert_eq!(state.due_revision(now), None);
         assert_eq!(state.due_revision(now + HOT_RELOAD_DEBOUNCE), Some(2));
@@ -375,7 +614,7 @@ mod tests {
         let mut state = HotReloadState::default();
         state.replace_target(target());
 
-        assert!(!state.observe(&changed("/slides/notes.txt"), Instant::now()));
+        assert!(!state.observe(&changed(slides_dir().join("notes.txt")), Instant::now()));
         assert_eq!(state.phase(), HotReloadPhase::Idle);
     }
 
@@ -384,11 +623,8 @@ mod tests {
         let now = Instant::now();
         let mut state = HotReloadState::default();
         state.replace_target(target());
-        state.observe(&changed("/slides/deck.pdf"), now);
-        state.observe(
-            &changed("/slides/deck.pdf"),
-            now + Duration::from_millis(200),
-        );
+        state.observe(&changed_target(), now);
+        state.observe(&changed_target(), now + Duration::from_millis(200));
 
         assert_eq!(state.due_revision(now + HOT_RELOAD_DEBOUNCE), None);
         assert_eq!(
@@ -410,41 +646,109 @@ mod tests {
         let now = Instant::now();
         let mut state = HotReloadState::default();
         state.replace_target(target());
-        state.observe(&changed("/slides/deck.pdf"), now);
+        state.observe(&changed_target(), now);
         let revision = state.due_revision(now + HOT_RELOAD_DEBOUNCE).unwrap();
-        assert!(state.begin_preparing(RenderSessionId(3), revision));
+        assert!(state.begin_preparing(RenderSessionId(3), revision, now));
 
-        state.observe(&changed("/slides/deck.pdf"), now + HOT_RELOAD_DEBOUNCE);
+        state.observe(&changed_target(), now + HOT_RELOAD_DEBOUNCE);
 
         assert!(!state.accepts_prepared(RenderSessionId(3), revision));
-        assert!(state.finish_preparing(
-            RenderSessionId(3),
-            revision,
-            true,
-            now + HOT_RELOAD_DEBOUNCE
-        ));
+        assert_eq!(
+            state.finish_preparing(
+                RenderSessionId(3),
+                revision,
+                true,
+                now + HOT_RELOAD_DEBOUNCE
+            ),
+            PreparationOutcome::Superseded
+        );
         assert_eq!(state.phase(), HotReloadPhase::Debouncing);
     }
 
     #[test]
-    fn failed_prepare_waits_for_later_event() {
+    fn failed_prepare_retries_then_waits_for_later_event() {
         let now = Instant::now();
         let mut state = HotReloadState::default();
         state.replace_target(target());
-        state.observe(&changed("/slides/deck.pdf"), now);
-        let revision = state.due_revision(now + HOT_RELOAD_DEBOUNCE).unwrap();
-        state.begin_preparing(RenderSessionId(4), revision);
+        state.observe(&changed_target(), now);
+        let mut attempt_at = now + HOT_RELOAD_DEBOUNCE;
+        let revision = state.due_revision(attempt_at).unwrap();
 
-        assert!(state.finish_preparing(
-            RenderSessionId(4),
-            revision,
-            false,
-            now + HOT_RELOAD_DEBOUNCE
-        ));
+        for (attempt, delay) in HOT_RELOAD_RETRY_DELAYS.iter().enumerate() {
+            let session = RenderSessionId(4 + attempt as u64);
+            assert!(state.begin_preparing(session, revision, attempt_at));
+            assert_eq!(
+                state.finish_preparing(session, revision, false, attempt_at),
+                PreparationOutcome::RetryScheduled
+            );
+            attempt_at += *delay;
+            assert_eq!(state.due_revision(attempt_at), Some(revision));
+        }
+
+        let final_session = RenderSessionId(99);
+        assert!(state.begin_preparing(final_session, revision, attempt_at));
+        assert_eq!(
+            state.finish_preparing(final_session, revision, false, attempt_at),
+            PreparationOutcome::Failed
+        );
         assert_eq!(state.phase(), HotReloadPhase::Failed { revision });
 
-        assert!(state.observe(&changed("/slides/deck.pdf"), now + Duration::from_secs(1)));
+        assert!(state.observe(&changed_target(), now + Duration::from_secs(1)));
         assert_eq!(state.phase(), HotReloadPhase::Debouncing);
+    }
+
+    #[test]
+    fn success_notice_expires_once() {
+        let now = Instant::now();
+        let mut state = HotReloadState::default();
+        state.start_success_notice(now);
+
+        assert!(state.success_notice_active(now));
+        assert!(!state.take_expired_success_notice(now));
+        assert!(state.take_expired_success_notice(now + HOT_RELOAD_SUCCESS_NOTICE));
+        assert!(!state.take_expired_success_notice(now + HOT_RELOAD_SUCCESS_NOTICE));
+    }
+
+    #[test]
+    fn slow_prepare_status_is_marked_once_after_delay() {
+        let now = Instant::now();
+        let mut state = HotReloadState::default();
+        state.replace_target(target());
+        state.observe(&changed_target(), now);
+        let due = now + HOT_RELOAD_DEBOUNCE;
+        let revision = state.due_revision(due).unwrap();
+        assert!(state.begin_preparing(RenderSessionId(7), revision, due));
+
+        assert!(!state.mark_preparing_slow(due));
+        assert!(state.mark_preparing_slow(due + HOT_RELOAD_SLOW_DELAY));
+        assert!(!state.mark_preparing_slow(due + HOT_RELOAD_SLOW_DELAY));
+    }
+
+    #[test]
+    fn watcher_recovery_uses_bounded_backoff_and_resets() {
+        let now = Instant::now();
+        let mut recovery = WatcherRecoveryState::default();
+
+        recovery.record_failure(now);
+        assert!(!recovery.retry_is_due(now));
+        assert!(recovery.retry_is_due(now + WATCHER_RECOVERY_DELAYS[0]));
+
+        recovery.record_success();
+        assert!(!recovery.retry_is_due(now + Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn full_callback_channel_requests_reconciliation() {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let overflowed = Arc::new(AtomicBool::new(false));
+        let mut handler = event_handler(sender, Arc::clone(&overflowed));
+        let event = || Ok(Event::new(EventKind::Any).add_path(slides_dir().join("deck.pdf")));
+
+        handler(event());
+        handler(event());
+
+        assert!(receiver.try_recv().is_ok());
+        assert!(overflowed.load(Ordering::Acquire));
     }
 
     #[test]
@@ -453,9 +757,24 @@ mod tests {
         state.replace_target(target());
         state.begin_manual_open();
 
-        assert!(!state.observe(&changed("/slides/deck.pdf"), Instant::now()));
+        assert!(!state.observe(&changed_target(), Instant::now()));
 
         state.finish_manual_open_without_replacement();
-        assert!(state.observe(&changed("/slides/deck.pdf"), Instant::now()));
+        assert!(state.observe(&changed_target(), Instant::now()));
+    }
+
+    #[test]
+    fn cancelling_pending_reload_invalidates_its_revision() {
+        let now = Instant::now();
+        let mut state = HotReloadState::default();
+        state.replace_target(target());
+        assert!(state.observe(&changed_target(), now));
+        let revision = state.due_revision(now + HOT_RELOAD_DEBOUNCE).unwrap();
+        assert!(state.begin_preparing(RenderSessionId(7), revision, now + HOT_RELOAD_DEBOUNCE));
+
+        state.cancel_pending_reload();
+
+        assert_eq!(state.phase(), HotReloadPhase::Idle);
+        assert!(!state.accepts_prepared(RenderSessionId(7), revision));
     }
 }

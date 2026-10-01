@@ -6,6 +6,7 @@ use std::sync::mpsc::Receiver;
 use crate::{
     black_screen::BlackScreenState,
     fullscreen::FullscreenState,
+    hot_reload::{HotReloadState, PdfWatcher, WatcherRecoveryState},
     notes::SpeakerNotes,
     presentation::PresentationState,
     recent::RecentFileStore,
@@ -23,6 +24,10 @@ pub struct AppState {
     pub audience_slide: AudienceSlideState,
     pub black_screen: BlackScreenState,
     pub fullscreen: FullscreenState,
+    pub hot_reload: HotReloadState,
+    pub pdf_watcher: Option<PdfWatcher>,
+    pub watcher_recovery: WatcherRecoveryState,
+    pub active_document_path: Option<PathBuf>,
     pub render_cache: RenderCache,
     pub render_generation: u64,
     pub render_sessions: RenderSessionTracker,
