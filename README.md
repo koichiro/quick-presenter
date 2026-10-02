@@ -261,6 +261,8 @@ Useful starting points:
 
 - Read [AGENTS.md](AGENTS.md) for repository conventions.
 - Read the architecture notes in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- Read the current and target PDFium trust boundaries in
+  [docs/PDF_RENDERING_SECURITY.md](docs/PDF_RENDERING_SECURITY.md).
 - Check keyboard behavior in [docs/KEYBOARD.md](docs/KEYBOARD.md).
 - Check speaker-note behavior in [docs/NOTES.md](docs/NOTES.md).
 - Run `cargo fmt --check`, `cargo check`, and `cargo test` before submitting a

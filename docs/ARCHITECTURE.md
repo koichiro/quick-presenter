@@ -2,15 +2,20 @@
 
 ## Layers
 
+Current runtime:
+
 ```text
-Slint UI
-  ↓ callbacks
-Rust app state
-  ↓ render requests
-pdfium-render
-  ↓ dynamic linking
-PDFium native library
+Slint UI -> Rust app state -> in-process render worker -> pdfium-render -> PDFium
 ```
+
+Target isolated runtime:
+
+```text
+Slint UI -> Rust broker state -> bounded IPC -> renderer helper -> PDFium
+```
+
+The current and target trust boundaries, failure guarantees, and rollout stages
+are defined in [PDF Rendering Security and Isolation Policy](PDF_RENDERING_SECURITY.md).
 
 ## Design direction
 
@@ -59,6 +64,12 @@ thread-safety strategy. Any parallel rendering change must make an explicit
 decision about PDFium's thread-safety guarantees, whether documents are opened
 per worker or shared behind a synchronization boundary, how cancellation works
 across workers, and how rendered pages are merged back into the shared cache.
+
+The approved direction is process isolation rather than multiple PDFium threads
+inside the UI process. The UI process remains the broker and owns scheduling,
+session acceptance, caches, and Slint objects. A supervised helper owns PDFium;
+per-platform sandboxing is a separate layer. Until #372 replaces the production
+path, the single-worker description above remains the implemented architecture.
 
 ## Native file dialogs
 

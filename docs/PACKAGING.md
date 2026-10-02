@@ -52,6 +52,14 @@ PDFium downloads are pinned in
 stores the bblanchon/pdfium-binaries release tag and SHA256 for each supported
 asset.
 
+Review available PDFium builds at least monthly and before every Quick Presenter
+release. Adopt a validated current build at least once per minor release or once
+per quarter unless a tracked compatibility blocker explains the retained pin.
+Relevant disclosed security fixes require triage within two business days and a
+candidate update within seven calendar days when a usable upstream build is
+available. The complete escalation, validation, and release policy is in
+[PDF Rendering Security and Isolation Policy](PDF_RENDERING_SECURITY.md).
+
 `scripts/fetch_pdfium.py` verifies the pinned archive checksum and rejects unsafe
 archive member paths before extraction. The extraction target must still be a
 clean or trusted directory, because pre-existing files or symlinks can affect the
@@ -79,6 +87,11 @@ Review the manifest diff, confirm the fetched `pdfium/VERSION`, and run the
 normal Rust verification before opening the release-engineering pull request.
 When `VERSION` changes, the About dialog should display the same
 `MAJOR.MINOR.BUILD.PATCH` value from the PDFium bundle used at runtime.
+
+The update record must also identify the previous pin, latest reviewed build,
+relevant parser/rendering/security changes, compatibility evidence, and any
+reason for deferring adoption. Checksums authenticate the selected artifact;
+they are not evidence that the native library is free of vulnerabilities.
 
 ## Source Code for Binary Releases
 

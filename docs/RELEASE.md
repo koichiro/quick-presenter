@@ -23,23 +23,27 @@ Before publishing a release:
 3. Confirm the scheduled `Dependency Audit` workflow has passed recently, then
    run `scripts/audit_deps.sh` locally and resolve dependency advisories, or
    document any explicitly accepted advisory in `.cargo/audit.toml`.
-4. Run `Build Binaries` manually with `workflow_dispatch`, or push a release
+4. Confirm the monthly and pre-release PDFium review is recorded, the pinned
+   build satisfies the adoption or documented-deferral policy, and no relevant
+   native security update is awaiting expedited validation. See
+   [PDF Rendering Security and Isolation Policy](PDF_RENDERING_SECURITY.md).
+5. Run `Build Binaries` manually with `workflow_dispatch`, or push a release
    tag matching `v*`.
-5. Record the successful `Build Binaries` workflow run URL in the release
+6. Record the successful `Build Binaries` workflow run URL in the release
    checklist.
-6. Confirm the Linux and macOS packages use the intended release version and
+7. Confirm the Linux and macOS packages use the intended release version and
    their package smoke tests pass. For Linux, verify the Debian file name and
    the `Version` reported by `dpkg-deb --field <package> Version`. Confirm the
    existing Microsoft Store listing remains publicly reachable; the v1.0.0
    Store update is verified after the GitHub release as described below.
-7. Review the uploaded `quick-presenter-ubuntu-x64-gui-smoke` report and the
+8. Review the uploaded `quick-presenter-ubuntu-x64-gui-smoke` report and the
    macOS/Windows GUI smoke skip-reason reports from `Build Binaries`.
-8. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
+9. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
    macOS and Ubuntu Linux artifacts and the existing public Microsoft Store
    build before publishing. Rerun the Windows checks on v1.0.0 after its Store
    update is certified.
-9. Complete the platform trust checks in the v1.0.0 policy below.
-10. Attach the completed manual GUI smoke reports to the GitHub release, or
+10. Complete the platform trust checks in the v1.0.0 policy below.
+11. Attach the completed manual GUI smoke reports to the GitHub release, or
     document any platform-specific waiver in the release notes before publishing.
 
 ### v1.0.0 distribution and trust policy

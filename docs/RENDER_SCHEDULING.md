@@ -4,6 +4,11 @@ Quick Presenter keeps PDFium document access on one render worker. Rendering is
 scheduled in two stages so the UI can remain responsive under backlog while the
 worker keeps a stable, deduplicated view of pending work.
 
+This is the current in-process implementation, not a native-crash or security
+boundary. The target helper-process transport must preserve the scheduling and
+session semantics in this document while applying the hostile IPC and recovery
+contract in [PDF Rendering Security and Isolation Policy](PDF_RENDERING_SECURITY.md).
+
 ## Two-stage model
 
 The UI thread sends `RenderCommand` values through the command mailbox. The
@@ -97,6 +102,11 @@ be inside a long-running PDFium call.
 Shutdown and session changes use cooperative cancellation. The app does not try
 to forcefully interrupt PDFium; if a PDFium call is slow, the old worker remains
 the only worker until it reaches the cancellation boundary and exits.
+
+A future helper process may be forcefully terminated by its broker after a hard
+deadline. That process-level termination must not be implemented as cancellation
+of a PDFium thread, and it must follow the bounded restart policy rather than
+silently replaying failed work.
 
 ## Render events
 
