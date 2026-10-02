@@ -1,15 +1,15 @@
-# Renderer IPC Protocol v1
+# Renderer IPC Protocol v2
 
-`src/renderer_protocol.rs` defines the transport and broker adapter for #371.
-Production rendering still uses the existing in-process thread. Process launch,
-supervision, deadlines, and OS sandboxing are implemented separately in #372
-through #376.
+`src/renderer_protocol.rs` defines the transport and broker adapter from #371;
+`src/renderer_helper.rs` connects it to production subprocesses in #372. Version
+2 adds page-scoped notes to retain priority scheduling between pages. Deadlines,
+resource budgets, and OS sandboxing remain #373 through #376.
 
 ## Framing and compatibility
 
 Each direction is an ordered byte stream over an anonymous pipe. The helper's
-standard error is reserved for bounded diagnostics; it must never carry protocol
-traffic. `Framed<T>` uses the standard `Read` and `Write` traits, permitting
+standard error is disconnected by the broker; stdout carries protocol only.
+`Framed<T>` uses the standard `Read` and `Write` traits, permitting
 in-memory and fault-injection tests without launching PDFium or Slint windows.
 
 Every frame contains, in order:
@@ -17,7 +17,7 @@ Every frame contains, in order:
 | Field | Encoding |
 | --- | --- |
 | Magic | 4 bytes: `QPRP` |
-| Protocol version | little-endian u16: `1` |
+| Protocol version | little-endian u16: `2` |
 | Control length | little-endian u32, nonzero |
 | Pixel payload length | little-endian u32 |
 | Control message | UTF-8 JSON, exactly control length bytes |
@@ -36,7 +36,8 @@ in-process fallback. Version changes require an explicit protocol revision.
 
 EOF before any header byte is clean stream closure (`Ok(None)`); EOF after the
 first byte of a frame is a truncation error. Whether clean closure is expected
-depends on the process lifecycle (#372). After any framing, validation, or IO
+depends on the process lifecycle: EOF during an exchange is a helper failure,
+while parent-input EOF terminates the helper. After any framing, validation, or IO
 error, discard the connection; do not attempt to resynchronize or reuse it.
 Short reads/writes and interrupted reads are handled by the codec.
 
@@ -53,6 +54,7 @@ nonzero; `Hello`, `Ready`, `Shutdown`, and `Stopped` use session zero.
 | Open | Opened | Native path; response title and page count |
 | Render | Pixels | Zero-based page index and target width; RGBA8 dimensions |
 | Notes | NotesLoaded | Sorted, unique one-based page numbers and note text |
+| NotesPage | NotesLoaded | Zero-based requested page; only that page's notes |
 | Close | Closed | Release the active document |
 | Shutdown | Stopped | Stop the helper |
 
@@ -103,7 +105,9 @@ One `Broker` belongs to one helper/document session. `command()` maps `Open`,
 purpose, priority, and job identity remain broker-local: priority is resolved by
 the scheduler before dispatch, and the original request/job is retained for the
 matching `PageRendered` or `PageFailed` event. `close()` is an internal lifecycle
-operation, not a new user-facing scheduler close action.
+operation, not a new user-facing scheduler close action. Production uses
+`notes_page()` instead of whole-document `Notes`, retaining the existing batched
+background extraction. The broker rejects notes for any other page.
 
 Close requires all document work to finish first. Shutdown has a reserved slot
 even when document requests fill the backlog; no new work is accepted while a
@@ -117,10 +121,12 @@ after validation; Slint images are still constructed by the existing UI path.
 
 Reload prepare/commit/discard are broker transactions across active and
 candidate helpers rather than wire commands sharing a PDFium process. The
-adapter explicitly rejects those commands. #372 must prepare a candidate
-through its own broker, validate its initial render, then commit or discard it
+adapter explicitly rejects those commands. The scheduler prepares a candidate
+through its own broker, validates its initial render, then commits or discards it
 through the existing session controller.
 
 Tests cover every message variant, native paths, concatenated frames, all
 truncated prefixes, short IO, header limits, unknown metadata, field limits,
 dimensions, notes, broker correlation, and deterministic byte mutations.
+Executable-level tests additionally cover real PDF open/render/notes, native
+abort, EOF, version mismatch, candidate isolation, and parent-pipe cleanup.

@@ -9,11 +9,13 @@ use std::{
     thread::{self, JoinHandle},
 };
 
+#[cfg(test)]
+use crate::rendering::actual_render_bytes;
 use crate::{
     errors::speaker_notes_warning,
     notes::SpeakerNotes,
-    pdf::PdfDocumentState,
-    rendering::{actual_render_bytes, RenderPurpose, RenderRequest, RenderedPagePixels},
+    renderer_helper::{ProcessGroup, RemoteDocument},
+    rendering::{RenderPurpose, RenderRequest, RenderedPagePixels},
 };
 
 const MAX_PENDING_RENDER_COMMANDS: usize = 64;
@@ -656,10 +658,10 @@ impl RenderCommandMailbox {
             .pending
             .lock()
             .expect("render command mailbox poisoned");
-        while pending.is_empty() {
-            pending = self
+        if pending.is_empty() {
+            (pending, _) = self
                 .available
-                .wait(pending)
+                .wait_timeout(pending, std::time::Duration::from_millis(250))
                 .expect("render command mailbox poisoned");
         }
         pending.pop()
@@ -775,6 +777,7 @@ impl RenderEventMailbox {
 
 #[derive(Debug, Default)]
 struct RenderCancellation {
+    failure: Mutex<Option<String>>,
     active_session: AtomicU64,
     shutdown: AtomicBool,
 }
@@ -804,6 +807,9 @@ impl RenderCancellation {
 }
 
 trait RenderWorkerDocument {
+    fn prepare_initial(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
     fn title(&self) -> String;
     fn page_count(&self) -> u32;
     fn render_page_pixels(&self, request: RenderRequest) -> anyhow::Result<RenderedPagePixels>;
@@ -814,7 +820,10 @@ trait RenderWorkerDocument {
     ) -> anyhow::Result<Option<Vec<(u32, String)>>>;
 }
 
-impl RenderWorkerDocument for PdfDocumentState {
+impl RenderWorkerDocument for RemoteDocument {
+    fn prepare_initial(&self) -> anyhow::Result<()> {
+        self.prepare_initial()
+    }
     fn title(&self) -> String {
         self.title()
     }
@@ -824,7 +833,7 @@ impl RenderWorkerDocument for PdfDocumentState {
     }
 
     fn render_page_pixels(&self, request: RenderRequest) -> anyhow::Result<RenderedPagePixels> {
-        render_page_pixels(self, request)
+        self.render(request)
     }
 
     fn speaker_notes_for_page_cancellable(
@@ -832,7 +841,11 @@ impl RenderWorkerDocument for PdfDocumentState {
         page_index: u32,
         is_cancelled: &dyn Fn() -> bool,
     ) -> anyhow::Result<Option<Vec<(u32, String)>>> {
-        self.speaker_notes_for_page_cancellable(page_index, is_cancelled)
+        if is_cancelled() {
+            return Ok(None);
+        }
+        let notes = self.notes_page(page_index)?;
+        Ok((!is_cancelled()).then_some(notes))
     }
 }
 
@@ -841,6 +854,7 @@ struct SpeakerNotesExtraction {
     next_page_index: u32,
     page_count: u32,
     page_notes: Vec<(u32, String)>,
+    note_bytes: usize,
 }
 
 struct PreparedWorkerDocument<D> {
@@ -870,13 +884,13 @@ impl<D> Default for RenderWorkerState<D> {
     }
 }
 
-/// Serializes PDFium document access through one render worker.
+/// Schedules serialized IPC work on a broker thread, never PDFium calls.
 ///
 /// The UI thread owns this scheduler handle and communicates through command and
-/// event mailboxes. The loaded `PdfDocumentState` remains worker-local so current
-/// slide rendering, next-page previews, thumbnails, preloading, and speaker-note
-/// extraction do not access PDFium concurrently.
+/// event mailboxes. Helpers own native documents; the broker keeps at most one
+/// active helper and one candidate and validates pixels before the UI sees them.
 pub struct RenderScheduler {
+    process_group: Arc<ProcessGroup>,
     command_mailbox: Arc<RenderCommandMailbox>,
     event_mailbox: Arc<RenderEventMailbox>,
     cancellation: Arc<RenderCancellation>,
@@ -887,6 +901,8 @@ pub struct RenderScheduler {
 impl RenderScheduler {
     /// Starts the single render worker that owns PDFium document access.
     pub fn start() -> Self {
+        let process_group = Arc::new(ProcessGroup::default());
+        let worker_process_group = Arc::clone(&process_group);
         let command_mailbox = Arc::new(RenderCommandMailbox::default());
         let event_mailbox = Arc::new(RenderEventMailbox::default());
         let cancellation = Arc::new(RenderCancellation::default());
@@ -901,11 +917,14 @@ impl RenderScheduler {
                 worker_event_mailbox,
                 worker_cancellation,
                 worker_lifecycle,
-                render_worker,
+                |commands, events, cancellation| {
+                    render_worker(commands, events, cancellation, worker_process_group)
+                },
             )
         });
 
         Self {
+            process_group,
             command_mailbox,
             event_mailbox,
             cancellation,
@@ -981,6 +1000,7 @@ impl RenderScheduler {
 
         if should_send_shutdown {
             self.cancellation.shutdown();
+            self.process_group.shutdown();
             self.command_mailbox.send(RenderCommand::Shutdown);
         }
     }
@@ -1024,6 +1044,7 @@ impl RenderScheduler {
     #[cfg(test)]
     pub(crate) fn without_worker_with_lifecycle_for_test(lifecycle: RenderWorkerLifecycle) -> Self {
         Self {
+            process_group: Arc::new(ProcessGroup::default()),
             command_mailbox: Arc::new(RenderCommandMailbox::default()),
             event_mailbox: Arc::new(RenderEventMailbox::default()),
             cancellation: Arc::new(RenderCancellation::default()),
@@ -1078,7 +1099,12 @@ fn run_render_worker_guarded(
     }
 
     let message = match result {
-        Ok(()) => "Render worker stopped unexpectedly.".to_owned(),
+        Ok(()) => cancellation
+            .failure
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+            .unwrap_or_else(|| "Render worker stopped unexpectedly.".to_owned()),
         Err(payload) => panic_payload_message(payload.as_ref())
             .map(|message| format!("Render worker failed: {message}"))
             .unwrap_or_else(|| "Render worker failed unexpectedly.".to_owned()),
@@ -1102,10 +1128,11 @@ fn render_worker(
     command_mailbox: Arc<RenderCommandMailbox>,
     event_mailbox: Arc<RenderEventMailbox>,
     cancellation: Arc<RenderCancellation>,
+    process_group: Arc<ProcessGroup>,
 ) {
-    // Keep the PDF document worker-local. Render events carry only metadata,
-    // pixels, and errors back to the UI thread.
-    let mut state = RenderWorkerState::<PdfDocumentState>::default();
+    // Only remote document proxies live here; all native calls run in helpers.
+    let mut state = RenderWorkerState::<RemoteDocument>::default();
+    let open_document = |path| RemoteDocument::open(path, &process_group);
 
     while !state.shutdown {
         if let Some(command) = command_mailbox.recv() {
@@ -1114,7 +1141,7 @@ fn render_worker(
                 &mut state,
                 &event_mailbox,
                 &cancellation,
-                PdfDocumentState::open,
+                open_document,
             );
         }
 
@@ -1123,11 +1150,18 @@ fn render_worker(
             &mut state,
             &event_mailbox,
             &cancellation,
-            PdfDocumentState::open,
+            open_document,
         );
 
         while !state.shutdown {
             if !process_next_work(&mut state, &event_mailbox, &cancellation) {
+                break;
+            }
+            if state
+                .document
+                .as_ref()
+                .is_some_and(RemoteDocument::has_failed)
+            {
                 break;
             }
 
@@ -1136,8 +1170,22 @@ fn render_worker(
                 &mut state,
                 &event_mailbox,
                 &cancellation,
-                PdfDocumentState::open,
+                open_document,
             );
+        }
+        if state
+            .document
+            .as_ref()
+            .is_some_and(RemoteDocument::has_failed)
+        {
+            *cancellation
+                .failure
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = state
+                .document
+                .as_ref()
+                .and_then(RemoteDocument::failure_message);
+            return;
         }
     }
 }
@@ -1179,7 +1227,7 @@ fn drain_pending_commands<D: RenderWorkerDocument>(
     state: &mut RenderWorkerState<D>,
     event_mailbox: &RenderEventMailbox,
     cancellation: &Arc<RenderCancellation>,
-    open_document: fn(PathBuf) -> anyhow::Result<D>,
+    open_document: impl Fn(PathBuf) -> anyhow::Result<D> + Copy,
 ) {
     while let Some(command) = command_mailbox.try_recv() {
         handle_command(command, state, event_mailbox, cancellation, open_document);
@@ -1194,7 +1242,7 @@ fn handle_command<D: RenderWorkerDocument>(
     state: &mut RenderWorkerState<D>,
     event_mailbox: &RenderEventMailbox,
     cancellation: &Arc<RenderCancellation>,
-    open_document: fn(PathBuf) -> anyhow::Result<D>,
+    open_document: impl Fn(PathBuf) -> anyhow::Result<D> + Copy,
 ) {
     match command {
         RenderCommand::Open { session_id, path } => {
@@ -1263,7 +1311,7 @@ fn prepare_reload_on_worker<D: RenderWorkerDocument>(
     target_width: i32,
     state: &mut RenderWorkerState<D>,
     event_mailbox: &RenderEventMailbox,
-    open_document: fn(PathBuf) -> anyhow::Result<D>,
+    open_document: impl Fn(PathBuf) -> anyhow::Result<D> + Copy,
 ) {
     state.prepared_document = None;
     let prepared = (|| {
@@ -1335,9 +1383,12 @@ fn open_document_on_worker<D: RenderWorkerDocument>(
     state: &mut RenderWorkerState<D>,
     event_mailbox: &RenderEventMailbox,
     cancellation: &Arc<RenderCancellation>,
-    open_document: fn(PathBuf) -> anyhow::Result<D>,
+    open_document: impl Fn(PathBuf) -> anyhow::Result<D> + Copy,
 ) {
-    match open_document(path) {
+    match open_document(path).and_then(|doc| {
+        doc.prepare_initial()?;
+        Ok(doc)
+    }) {
         Ok(doc) => {
             let title = doc.title();
             let page_count = doc.page_count();
@@ -1421,6 +1472,7 @@ fn process_speaker_notes_batch_on_worker<D: RenderWorkerDocument>(
             next_page_index: 0,
             page_count,
             page_notes: Vec::new(),
+            note_bytes: 0,
         });
     }
 
@@ -1459,6 +1511,29 @@ fn process_speaker_notes_batch_on_worker<D: RenderWorkerDocument>(
         return;
     };
 
+    let note_bytes = page_notes
+        .iter()
+        .try_fold(extraction.note_bytes, |total, (_, text)| {
+            total.checked_add(text.len())
+        });
+    let Some(note_bytes) =
+        note_bytes.filter(|total| *total <= crate::renderer_protocol::MAX_DOCUMENT_NOTE_BYTES)
+    else {
+        state.notes_extraction = None;
+        if !cancellation.is_cancelled(session_id) {
+            event_mailbox.send(RenderEvent::SpeakerNotesLoaded {
+                session_id,
+                notes: SpeakerNotes::empty(),
+                status_text: speaker_notes_warning(&anyhow::anyhow!(
+                    "document notes exceed protocol limit"
+                ))
+                .text()
+                .to_owned(),
+            });
+        }
+        return;
+    };
+    extraction.note_bytes = note_bytes;
     extraction.page_notes.extend(page_notes);
     extraction.next_page_index = extraction.next_page_index.saturating_add(1);
 
@@ -1493,20 +1568,6 @@ fn finish_speaker_notes_extraction<D>(
     }
 }
 
-fn render_page_pixels(
-    document: &PdfDocumentState,
-    request: RenderRequest,
-) -> anyhow::Result<RenderedPagePixels> {
-    let aspect_ratio = document.page_aspect_ratio(request.page_index)?;
-    let pixels = document.render_page_pixels(request.page_index, request.width)?;
-
-    Ok(RenderedPagePixels {
-        estimated_bytes: actual_render_bytes(&pixels),
-        pixels,
-        aspect_ratio,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1530,6 +1591,12 @@ mod tests {
     }
 
     impl RenderWorkerDocument for FakeDocument {
+        fn prepare_initial(&self) -> Result<()> {
+            if self.render_fails {
+                bail!("fake initial render failed");
+            }
+            Ok(())
+        }
         fn title(&self) -> String {
             self.title.clone()
         }
@@ -2357,6 +2424,7 @@ mod tests {
             cancellation: Arc::clone(&cancellation),
             lifecycle: Arc::clone(&lifecycle),
             worker: Mutex::new(None),
+            process_group: Arc::new(ProcessGroup::default()),
         };
 
         drop(scheduler);
@@ -2561,6 +2629,53 @@ mod tests {
     }
 
     #[test]
+    fn initial_render_failure_keeps_active_document_and_session() {
+        let (mut state, events, cancellation) = fake_worker_parts();
+        for (session_id, path) in [
+            (RenderSessionId(1), "deck.pdf"),
+            (RenderSessionId(2), "render-fail.pdf"),
+        ] {
+            handle_fake_command(
+                RenderCommand::Open {
+                    session_id,
+                    path: path.into(),
+                },
+                &mut state,
+                &events,
+                &cancellation,
+            );
+        }
+        assert_eq!(state.active_session, Some(RenderSessionId(1)));
+        assert_eq!(state.document.as_ref().unwrap().title, "deck.pdf");
+        assert!(!cancellation.is_cancelled(RenderSessionId(1)));
+        assert!(events.drain().iter().any(|event| matches!(
+            event,
+            RenderEvent::OpenFailed {
+                session_id: RenderSessionId(2),
+                ..
+            }
+        )));
+        handle_fake_command(
+            RenderCommand::RenderPage {
+                session_id: RenderSessionId(1),
+                request: request(0, RenderPurpose::CurrentSlide),
+                priority: RenderPriority::BlockingVisible,
+            },
+            &mut state,
+            &events,
+            &cancellation,
+        );
+        assert!(process_next_work(&mut state, &events, &cancellation));
+        assert!(matches!(
+            drain_single_event(&events),
+            RenderEvent::PageRendered {
+                session_id: RenderSessionId(1),
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn reload_prepare_keeps_active_document_until_commit_and_clamps_page() {
         let current_session = RenderSessionId(1);
         let reload_session = RenderSessionId(2);
@@ -2713,6 +2828,38 @@ mod tests {
         );
         assert!(state.prepared_document.is_none());
         assert_eq!(state.active_session, Some(current_session));
+    }
+
+    #[test]
+    fn paged_notes_preserve_document_byte_limit() {
+        let session = RenderSessionId(1);
+        let (mut state, events, cancellation) = fake_worker_parts();
+        let text = "n".repeat(crate::renderer_protocol::MAX_NOTE_BYTES);
+        state.document = Some(FakeDocument {
+            title: "notes.pdf".into(),
+            page_count: 9,
+            render_fails: false,
+            notes: FakeNotes::Loaded(SpeakerNotes::from_page_notes(
+                (1..=9).map(|page| (page, text.clone())),
+            )),
+        });
+        state.active_session = Some(session);
+        cancellation.activate(session);
+        state.queue.push_speaker_notes(session);
+        for _ in 0..9 {
+            assert!(process_next_work(&mut state, &events, &cancellation));
+        }
+        assert!(state.notes_extraction.is_none());
+        match drain_single_event(&events) {
+            RenderEvent::SpeakerNotesLoaded {
+                notes, status_text, ..
+            } => {
+                assert!(notes.note_for_page_index(0).is_none());
+                assert_eq!(status_text, "Ready. Speaker notes unavailable.");
+            }
+            other => panic!("expected notes warning, got {other:?}"),
+        }
+        assert!(!process_next_work(&mut state, &events, &cancellation));
     }
 
     #[test]

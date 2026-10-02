@@ -146,8 +146,9 @@ validation:
 quick-presenter --smoke-open-pdf tests/fixtures/marp-speaker-notes.pdf
 ```
 
-This mode does not create Slint windows. It opens the PDF through the same
-PDFium lookup path as normal startup, renders the first page at a small size, and
+This mode does not create Slint windows. It launches the same installed executable
+with the internal `--renderer-helper` argument, opens the PDF through the normal
+helper PDFium lookup path, renders the first page at a small size, extracts notes, and
 exits with status `0` on success. It is intended for CI and package validation,
 not for end-user presentation playback.
 
@@ -160,7 +161,12 @@ The `build-binaries.yml` workflow runs this smoke mode from outside the
 repository working directory against the staged artifacts with
 `PDFIUM_DYNAMIC_LIB_PATH` and `QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE` unset.
 This catches missing executables, missing bundled PDFium files, and broken
-relative PDFium lookup.
+relative PDFium lookup in the child process. No extra helper binary is shipped:
+the helper uses the signed/installed application executable and its existing
+PDFium layout, resolved relative to the executable rather than the working
+directory. On Windows the child is launched without a console window. The
+workflow also runs process-level protocol/failure tests on macOS, Windows, and
+Linux before building release packages.
 
 This smoke mode is not a GUI validation path. Before publishing v1.0.0 or later
 release artifacts, run the interactive

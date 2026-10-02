@@ -13,7 +13,7 @@ use std::{
     path::PathBuf,
 };
 
-pub const VERSION: u16 = 1;
+pub const VERSION: u16 = 2;
 pub const MAX_CONTROL_BYTES: usize = 1024 * 1024;
 pub const MAX_PIXEL_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_DIMENSION: u32 = 16_384;
@@ -46,6 +46,9 @@ pub enum Message {
         width: u32,
     },
     Notes {},
+    NotesPage {
+        page_index: u32,
+    },
     Close {},
     Shutdown {},
     Opened {
@@ -190,6 +193,9 @@ impl Envelope {
         ensure!(global == (self.session_id == 0), "invalid session ID");
         match &self.message {
             Message::Open { path } => path.validate()?,
+            Message::NotesPage { page_index } => {
+                ensure!(*page_index < MAX_PAGES, "page index exceeds limit")
+            }
             Message::Render { page_index, width } => {
                 ensure!(*page_index < MAX_PAGES, "page index exceeds limit");
                 ensure!((1..=MAX_DIMENSION).contains(width), "invalid render width");
@@ -346,6 +352,7 @@ enum Pending {
     Open,
     Render(RenderRequest, RenderJobId),
     Notes,
+    NotesPage(u32),
     Close,
     Shutdown,
 }
@@ -454,6 +461,24 @@ impl Broker {
         );
         self.request(Pending::Close, Message::Close {})
     }
+    pub fn notes_page(&mut self, page_index: u32) -> Result<Frame> {
+        ensure!(
+            self.ready
+                && !self
+                    .pending
+                    .values()
+                    .any(|p| matches!(p, Pending::Close | Pending::Shutdown)),
+            "helper is not ready for notes"
+        );
+        ensure!(
+            page_index < self.page_count.context("document not open")?,
+            "page outside document"
+        );
+        self.request(
+            Pending::NotesPage(page_index),
+            Message::NotesPage { page_index },
+        )
+    }
     fn check_session(&self, session: RenderSessionId) -> Result<()> {
         ensure!(session == self.session, "stale session");
         Ok(())
@@ -495,7 +520,14 @@ impl Broker {
                     "notes outside document"
                 );
             }
-            (Pending::Open | Pending::Render(_, _) | Pending::Notes, Message::Failed { .. }) => {}
+            (Pending::NotesPage(index), Message::NotesLoaded { pages }) => ensure!(
+                pages.iter().all(|p| p.page_number == index + 1),
+                "notes for unexpected page"
+            ),
+            (
+                Pending::Open | Pending::Render(_, _) | Pending::Notes | Pending::NotesPage(_),
+                Message::Failed { .. },
+            ) => {}
             _ => bail!("unexpected response kind"),
         }
         Ok(pending)
@@ -538,7 +570,7 @@ impl Broker {
                     },
                 })
             }
-            (Pending::Notes, Message::NotesLoaded { pages }) => {
+            (Pending::Notes | Pending::NotesPage(_), Message::NotesLoaded { pages }) => {
                 let count = self.page_count.context("document not open")?;
                 ensure!(
                     pages.iter().all(|n| n.page_number <= count),
@@ -564,7 +596,7 @@ impl Broker {
                     message: message.clone(),
                 })
             }
-            (Pending::Notes, Message::Failed { message, .. }) => {
+            (Pending::Notes | Pending::NotesPage(_), Message::Failed { message, .. }) => {
                 Some(RenderEvent::SpeakerNotesLoaded {
                     session_id: self.session,
                     notes: SpeakerNotes::empty(),
@@ -680,6 +712,7 @@ mod tests {
                 width: 1920,
             },
             Message::Notes {},
+            Message::NotesPage { page_index: 1 },
             Message::Close {},
             Message::Shutdown {},
             Message::Opened {
@@ -721,6 +754,37 @@ mod tests {
             assert_eq!(reader.receive().unwrap(), Some(expected));
         }
         assert_eq!(reader.receive().unwrap(), None);
+    }
+
+    #[test]
+    fn notes_page_rejects_other_pages_without_consuming_pending_request() {
+        let mut broker = opened_broker();
+        assert!(broker.notes_page(3).is_err());
+        let request = broker.notes_page(1).unwrap();
+        let wrong = response(
+            &request,
+            Message::NotesLoaded {
+                pages: vec![PageNote {
+                    page_number: 1,
+                    text: "wrong".into(),
+                }],
+            },
+        );
+        assert!(broker.accept(wrong).is_err());
+        assert!(matches!(
+            broker
+                .accept(response(
+                    &request,
+                    Message::NotesLoaded {
+                        pages: vec![PageNote {
+                            page_number: 2,
+                            text: "correct".into()
+                        }]
+                    }
+                ))
+                .unwrap(),
+            Some(RenderEvent::SpeakerNotesLoaded { .. })
+        ));
     }
 
     #[test]
