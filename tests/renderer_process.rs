@@ -160,7 +160,10 @@ fn restart_is_bounded_malformed_responses_are_not_retried_and_later_pdf_recovers
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("recovery_result=true restart_attempts=1")
+        String::from_utf8_lossy(&output.stdout).contains("recovery_result=true restart_attempts=1"),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
     std::fs::remove_dir_all(directory).unwrap();
 }

@@ -454,6 +454,13 @@ impl RemoteDocument {
 
 /// Run before diagnostics or GUI initialization. stdout is exclusively protocol bytes.
 pub fn run() -> Result<()> {
+    #[cfg(debug_assertions)]
+    if let Some(marker) = std::env::var_os("QUICK_PRESENTER_HELPER_TEST_FAULT_ONCE") {
+        if let Ok(marker) = std::fs::canonicalize(marker) {
+            // Still single-threaded, before the input guardian is started.
+            std::env::set_var("QUICK_PRESENTER_HELPER_TEST_FAULT_ONCE", marker);
+        }
+    }
     crate::renderer_resources::constrain_helper()?;
     let (sender, receiver) = std::sync::mpsc::sync_channel(64);
     std::thread::spawn(move || {
@@ -526,7 +533,10 @@ pub fn run() -> Result<()> {
             }
             Message::Open { path } => {
                 ensure!(document.is_none(), "helper document already open");
-                match PdfDocumentState::open(path.into_path()?) {
+                let path = path.into_path()?.canonicalize()?;
+                crate::renderer_sandbox::enter(&path)?;
+                crate::renderer_sandbox::verify_denials()?;
+                match PdfDocumentState::open(path) {
                     Ok(doc) if doc.page_count() > 0 => {
                         let response = Message::Opened {
                             title: doc.title(),
