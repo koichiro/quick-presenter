@@ -486,6 +486,20 @@ h3 {
   text-transform: uppercase;
 }
 
+.store-link {
+  display: block;
+  border-radius: 8px;
+}
+
+.store-link:hover {
+  transform: translateY(-1px);
+}
+
+.store-link:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+
 .store-links img {
   width: min(252px, 100%);
   border-radius: 8px;
