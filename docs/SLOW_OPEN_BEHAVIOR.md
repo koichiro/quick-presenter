@@ -27,6 +27,13 @@ cooperative cancellation only at boundaries where the worker regains control.
 Instead, v1.0.0 implements a delayed slow-open status message and keeps the
 latest selected PDF as the deterministic winner.
 
+This is an explicit in-process release tradeoff. It does not protect the app
+from a native PDFium crash or provide a security sandbox. The approved
+helper-process timeout and recovery direction is defined in
+[PDF Rendering Security and Isolation Policy](PDF_RENDERING_SECURITY.md); it
+becomes the runtime contract only after #372 and #373 are implemented and
+validated.
+
 ## User-Facing Behavior
 
 Normal open path:
@@ -158,14 +165,11 @@ Unit tests in `src/render_scheduler.rs` cover:
 The timer glue stays thin in `src/main.rs`; behavior is tested through the pure
 session-controller helpers rather than by constructing Slint windows.
 
-## Future Options
+## Future Helper Process Behavior
 
-If v1.x needs a real open timeout, design it separately. The likely safe options
-are:
-
-- open PDFs in a separate process that can be terminated on timeout; or
-- prove and document a multi-worker PDFium strategy where each worker owns an
-  independent document and cancellation/cleanup semantics are explicit.
-
-Both options are larger than the v1.0.0 scope and should include platform,
-packaging, memory, and PDFium lifecycle analysis.
+The selected direction for a real open timeout is a supervised helper process
+that the broker can terminate and reap without cancelling a thread inside
+PDFium. #371 defines its IPC,
+#372 moves production PDFium work into the helper, #373 implements deadlines and
+bounded recovery, and #374 through #376 add platform sandboxing. Until those
+issues ship, the v1.0.0 behavior above remains authoritative.
