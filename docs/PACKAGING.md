@@ -295,6 +295,55 @@ The bundle metadata uses:
 The bundled PDFium directory is copied to `Contents/Resources/pdfium/`, which is
 covered by the runtime lookup order documented above.
 
+#### Release credential preflight
+
+macOS distribution uses two independent credentials:
+
+- the Developer ID Application certificate and its private key sign the app and
+  DMG through `codesign`;
+- the App Store Connect API key authorizes `notarytool` submissions, normally
+  through a profile stored in the login Keychain.
+
+Check both credentials from a normal signed-in macOS user session before
+starting release packaging:
+
+```sh
+security find-identity -v -p codesigning
+xcrun notarytool history --keychain-profile quick-presenter-notary
+```
+
+Restricted sandboxes and non-interactive processes can return
+`0 valid identities found`, fail to find an existing notarytool profile, or
+report `User interaction is not allowed` even when the corresponding credential
+is valid. Treat those results as inconclusive until the same command has been
+run in the user's normal Terminal session. In particular, do not conclude that
+the Developer ID private key is missing, replace the certificate, or create a
+new private key based only on a sandboxed `security find-identity` result.
+
+Use the following distinctions when diagnosing the preflight:
+
+| Observation | Meaning | Next action |
+| --- | --- | --- |
+| `security find-identity` lists the intended Developer ID identity in a normal Terminal session | The signing certificate and private key are available to `codesign`. | Continue with app signing. |
+| A sandbox reports no valid identity, but a normal Terminal lists it | The sandbox cannot see the usable Keychain state. | Run signing commands with access to the normal user Keychain. |
+| `notarytool` reports that the named profile is missing | The local Keychain profile is unavailable; this does not prove that the API key is missing or invalid. | Locate the existing API key and recreate the local profile in a normal Terminal session. |
+| `store-credentials` validates the API key and then reports `User interaction is not allowed` | Apple accepted the API credential, but the current process could not write the Keychain item. | Rerun `store-credentials` interactively in the normal Terminal session. |
+
+Create or restore the local notarytool profile with an existing App Store
+Connect API key when necessary:
+
+```sh
+xcrun notarytool store-credentials quick-presenter-notary \
+  --key /path/to/AuthKey_XXXXXXXXXX.p8 \
+  --key-id YOUR_KEY_ID \
+  --issuer YOUR_ISSUER_ID
+```
+
+The private key file, Key ID, Issuer ID, local key paths, and Keychain contents
+are release-operator state and must not be committed to the repository. The
+profile name is also local machine state; `quick-presenter-notary` is the
+documented convention, not evidence that another profile name is invalid.
+
 To stage the app bundle locally:
 
 ```sh
@@ -302,6 +351,26 @@ python3 scripts/fetch_pdfium.py --clean
 cargo build --release --bin quick-presenter
 scripts/stage_macos_app_bundle.sh /tmp/quick-presenter-macos
 ```
+
+For a tagged release, the staged app from the successful `Build Binaries` run
+can be used instead of rebuilding it locally. Download the
+`quick-presenter-macos` artifact, then copy its app bundle to a separate release
+working directory with `ditto` before signing. Do not sign in place inside the
+downloaded CI artifact, and do not publish the unsigned CI DMG.
+
+```sh
+gh run download RUN_ID \
+  --name quick-presenter-macos \
+  --dir /tmp/quick-presenter-macos-ci
+
+mkdir -p /tmp/quick-presenter-macos-release
+ditto \
+  "/tmp/quick-presenter-macos-ci/Quick Presenter.app" \
+  "/tmp/quick-presenter-macos-release/Quick Presenter.app"
+```
+
+Confirm that the artifact version and workflow commit match the intended tag
+before signing it.
 
 To create an unsigned disk image from the staged app bundle:
 
@@ -340,18 +409,8 @@ scripts/sign_macos_app.sh \
   "Developer ID Application: Example Name (TEAMID)"
 ```
 
-To create a signed, notarized, and stapled distribution disk image, first store
-notarytool credentials in the local Keychain. The profile name is local machine
-state and should not be committed to the repository:
-
-```sh
-xcrun notarytool store-credentials quick-presenter-notary \
-  --key /path/to/AuthKey_XXXXXXXXXX.p8 \
-  --key-id YOUR_KEY_ID \
-  --issuer YOUR_ISSUER_ID
-```
-
-Then create, sign, notarize, staple, and validate the DMG:
+To create a signed, notarized, and stapled distribution disk image, use the
+Developer ID identity and notarytool profile validated by the preflight above:
 
 ```sh
 export MACOS_SIGNING_IDENTITY="Developer ID Application: Example Name (TEAMID)"
@@ -412,10 +471,10 @@ Manual verification:
 - Open `tests/fixtures/marp-speaker-notes.pdf` without `PDFIUM_DYNAMIC_LIB_PATH`.
 - Press Cmd+Tab and confirm the Quick Presenter icon is shown.
 
-The CI disk image is an unsigned packaging-validation artifact. The public
-v1.0.0 DMG must be Developer ID signed, Apple-notarized, and stapled with the
-release-only procedure above. Universal binary packaging is tracked separately
-from the first disk image packaging flow.
+The CI disk image is an unsigned packaging-validation artifact. Every public
+release DMG for v1.0.0 and later must be Developer ID signed, Apple-notarized,
+and stapled with the release-only procedure above. Universal binary packaging
+is tracked separately from the first disk image packaging flow.
 
 ### Windows
 
