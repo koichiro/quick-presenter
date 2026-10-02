@@ -219,7 +219,9 @@ under [docs/](docs/).
 ## Releases
 
 Quick Presenter is an OSS project focused on reliable PDF presentation
-playback. Download and launch steps for packaged artifacts are documented in
+playback. Windows v1.0.0 is distributed exclusively through Microsoft Store;
+the signed/notarized macOS package and Linux package are published through
+GitHub Releases. Download and launch steps are documented in
 [docs/RELEASE.md](docs/RELEASE.md).
 
 Packaging and signing details for maintainers are documented in
