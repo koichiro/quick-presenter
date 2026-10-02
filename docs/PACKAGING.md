@@ -412,10 +412,10 @@ Manual verification:
 - Open `tests/fixtures/marp-speaker-notes.pdf` without `PDFIUM_DYNAMIC_LIB_PATH`.
 - Press Cmd+Tab and confirm the Quick Presenter icon is shown.
 
-The current CI disk image is unsigned unless release signing credentials are
-configured. Developer ID notarization and stapling are tracked as release-only
-steps that come after app bundle signing. Universal binary packaging is also
-tracked separately from the first disk image packaging flow.
+The CI disk image is an unsigned packaging-validation artifact. The public
+v1.0.0 DMG must be Developer ID signed, Apple-notarized, and stapled with the
+release-only procedure above. Universal binary packaging is tracked separately
+from the first disk image packaging flow.
 
 ### Windows
 
@@ -505,10 +505,10 @@ Manual verification:
 - If Explorer shows a stale generic icon, copy the artifact to a fresh path and
   retry before treating it as a failure.
 
-The current pull request MSI is unsigned. Trusted non-PR builds can
-optionally sign Windows artifacts when signing credentials are configured, as
-described below. Microsoft Store distribution, PDF file associations, and
-auto-update infrastructure are tracked separately from the first MSI packaging
+The MSI and direct MSIX paths are retained for packaging and signing validation,
+but they are not public v1.0.0 distribution channels. Windows v1.0.0 is
+distributed only through the Microsoft Store. PDF file associations and
+auto-update infrastructure are tracked separately from the first packaging
 flow.
 
 #### Optional Authenticode signing
@@ -573,10 +573,14 @@ certificate subject. Pass the same publisher value to
 SmartScreen reputation is not a CI gate; a technically valid signature may still
 show warnings until the publisher or app has sufficient reputation.
 
+Self-signed certificates are strictly non-production. They may verify that the
+CI signing steps and package metadata work, but artifacts signed with them must
+not be published or treated as satisfying the v1.0.0 Windows trust gate.
+
 #### Microsoft Store MSIX identity
 
-The Microsoft Store package identity is separate from the direct-download MSI
-and direct-download signed MSIX validation path above. Partner Center currently
+The Microsoft Store package identity is separate from the direct MSI and signed
+MSIX validation paths above. Partner Center currently
 reserves the following identity values for Quick Presenter:
 
 - `Package/Identity/Name`: `KoichiroOhba.QuickPresenter`
@@ -632,14 +636,15 @@ Quick Presenter will use MSIX as the Microsoft Store submission package format.
 This keeps the Store path aligned with the existing MSIX packaging work and
 avoids introducing an MSI/EXE Store installer path for the first submission.
 
-The distribution paths are intentionally separate:
+For v1.0.0, the distribution and validation paths are intentionally separate:
 
-- Direct Windows downloads use `QuickPresenter-<version>.msi`.
-- Direct signed MSIX builds are only a validation/signing path unless a release
-  explicitly promotes them.
+- MSI, direct MSIX, and raw executable artifacts are CI validation outputs and
+  must not be published as supported Windows downloads.
+- Self-signed outputs only exercise CI signing and are non-production.
 - Microsoft Store publication uses
   `quick-presenter-windows-store-x64/QuickPresenter-<version>.msix` with the
-  Partner Center package identity.
+  Partner Center package identity. After certification and Store-managed
+  signing, the Store-installed package is the supported Windows release.
 
 For the first Store submission, upload the single-architecture `.msix` package.
 Do not introduce `.msixupload`, `.appxupload`, or MSIX bundle generation until

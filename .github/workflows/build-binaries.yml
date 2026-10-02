@@ -154,6 +154,8 @@ jobs:
           if (-not $enabled) {
             "enabled=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
             Write-Host "Windows signing is disabled for this run."
+            "Windows MSI, direct MSIX, and raw executable outputs are CI validation artifacts only; v1.0.0 is distributed through Microsoft Store." |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
             exit 0
           }
 
@@ -184,6 +186,12 @@ jobs:
           "publisher=$publisher" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "thumbprint=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "allow_untrusted_self_signed=$allowUntrustedSelfSigned" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+          if ($allowUntrustedSelfSigned -eq 'true') {
+            Write-Warning "The configured certificate is self-signed. Outputs are non-production CI validation artifacts and must not be published."
+            "Windows signing used a self-signed test certificate. These outputs do not satisfy the v1.0.0 trust gate and must not be published." |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          }
 
       - name: Sign Windows release binary
         if: runner.os == 'Windows' && steps.windows-signing.outputs.enabled == 'true'
@@ -219,15 +227,16 @@ jobs:
           This archive contains the release package for this platform, plus
           the raw quick-presenter executable and PDFium files used to build or validate it.
 
-          Prefer the packaged file for normal installation:
+          Supported v1.0.0 installation paths:
 
           - macOS: QuickPresenter-${PACKAGE_VERSION}.dmg
-          - Windows: QuickPresenter-${PACKAGE_VERSION}.msi
+          - Windows: Microsoft Store ID 9N913S9NJ6D1
           - Ubuntu: quick-presenter_${PACKAGE_VERSION}_amd64.deb
 
-          Windows artifacts may also include QuickPresenter-${PACKAGE_VERSION}.msix
-          for layout validation. Use the MSI unless a release explicitly
-          identifies a signed MSIX as supported.
+          Windows MSI, direct MSIX, and raw executable files in this archive are
+          CI validation artifacts. They are not supported v1.0.0 downloads.
+          The Store-identity MSIX is a Partner Center submission input and is
+          supported only after Microsoft Store certification and signing.
 
           Raw quick-presenter or quick-presenter.exe binaries are development and diagnostic artifacts.
           If you run or move a raw executable directly, keep the pdfium directory
@@ -973,7 +982,7 @@ jobs:
           GitHub-hosted Windows runners do not provide the normal installed desktop session needed
           to treat Slint window, focus, Start Menu, taskbar, Alt+Tab, SmartScreen, and installer UI
           behavior as a reliable release gate. Run docs/GUI_SMOKE_CHECKLIST.md against the final
-          Windows MSI artifact.
+          Microsoft Store-installed release.
           '@ | Set-Content -Path (Join-Path $reportDir 'windows-skipped.txt') -Encoding utf8
 
       - name: Clean Windows signing certificate

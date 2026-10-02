@@ -8,7 +8,7 @@ that must be checked in a real desktop session.
 Run the checklist on the final release artifacts for each supported platform:
 
 - macOS: `QuickPresenter-<version>.dmg` or `Quick Presenter.app`
-- Windows x64: `QuickPresenter-<version>.msi`
+- Windows x64: the Microsoft Store-installed app (Store ID `9N913S9NJ6D1`)
 - Ubuntu x64: `quick-presenter_<version>_amd64.deb`
 
 Use `docs/samples/quick-presenter-demo.pdf` or
@@ -30,6 +30,10 @@ Do not publish the release until:
 - The successful `Build Binaries` workflow run URL is recorded with the release
   checklist.
 - The packaged artifact smoke tests pass for macOS, Windows, and Ubuntu Linux.
+- The macOS DMG is Developer ID signed, Apple-notarized, stapled, and accepted
+  by Gatekeeper without an unidentified-developer warning.
+- The Windows package has passed Microsoft Store certification and the tested
+  app was installed from the Store, not from a direct MSI or MSIX artifact.
 - The uploaded `quick-presenter-ubuntu-x64-gui-smoke` report passes, and the
   macOS/Windows GUI smoke skip-reason reports are reviewed.
 - This GUI smoke checklist passes on macOS, Windows, and Ubuntu Linux desktop
@@ -73,6 +77,8 @@ following fields before the checklist results:
 - Artifact archive:
 - Tested package file:
 - Tested package SHA-256:
+- Distribution channel:
+- Store ID/package identity (Windows):
 - Source commit or tag:
 - App version:
 - Signing/notarization state:
@@ -92,10 +98,10 @@ following fields before the checklist results:
 
 ```
 
-Use `shasum -a 256 <file>` on macOS or Linux, or
-`Get-FileHash -Algorithm SHA256 <file>` on Windows, to record the tested package
-hash. The hash should be for the final package file that a user installs or
-opens, such as the DMG, MSI, or Debian package.
+Use `shasum -a 256 <file>` on macOS or Linux to record the final DMG or Debian
+package hash. For a Microsoft Store installation, set the package file and hash
+fields to `N/A (Microsoft Store)` and record Store ID `9N913S9NJ6D1`, the
+installed package identity, and the installed app version.
 
 ## Semi-Automated Path
 
@@ -196,8 +202,8 @@ Test on a normal signed-in desktop session, not a headless CI session.
 
 - Mount the DMG and launch `Quick Presenter.app` from the mounted volume or
   from `Applications`.
-- If the build is unsigned or unnotarized, record any Gatekeeper prompt shown
-  before continuing.
+- Confirm Gatekeeper accepts the signed, notarized, and stapled release without
+  an unidentified-developer warning. Treat a trust prompt as a release blocker.
 - Confirm the app name and icon appear in Cmd+Tab.
 - Confirm `File > Open PDF...` opens the file picker and can load the test PDF.
 - Confirm window menu actions for showing or focusing the presenter and slide
@@ -210,12 +216,13 @@ Test on a normal signed-in desktop session, not a headless CI session.
 
 ## Windows
 
-Test from the installed MSI, not only from the raw `quick-presenter.exe` diagnostic artifact.
+Test the Microsoft Store-installed app. A direct MSI, MSIX, or raw
+`quick-presenter.exe` test does not satisfy the v1.0.0 Windows release gate.
 
-- Install `QuickPresenter-<version>.msi`.
+- Install Quick Presenter from Microsoft Store ID `9N913S9NJ6D1`.
 - Launch `Quick Presenter` from the Start Menu.
-- If the build is unsigned, record any SmartScreen or installer trust prompt
-  shown before continuing.
+- Confirm the installed app reports the intended release version and launches
+  without an untrusted-publisher or SmartScreen warning.
 - Confirm the app uses the Quick Presenter icon in the Start Menu, taskbar, and
   Alt+Tab.
 - Confirm `File > Open PDF...` opens the file picker and can load the test PDF.
@@ -225,7 +232,8 @@ Test from the installed MSI, not only from the raw `quick-presenter.exe` diagnos
   display.
 - Record any taskbar, Alt+Tab, or display-selection behavior that changes how
   the presenter and slide windows are recovered after focus moves away.
-- Uninstall the MSI after testing and confirm the normal uninstall path works.
+- Uninstall the app through Windows Settings after testing and confirm the
+  normal uninstall path works.
 
 ## Ubuntu Linux
 
