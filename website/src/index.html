@@ -3,11 +3,23 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quick Presenter</title>
+    <title>Quick Presenter - PDF presentation playback for live talks</title>
     <meta
       name="description"
-      content="Quick Presenter is preparing for public release as a desktop app for presenting local PDF slide decks."
+      content="Quick Presenter is an open source desktop app for presenting prepared PDF slide decks reliably."
     />
+    <link rel="canonical" href="https://koichiro.github.io/quick-presenter/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Quick Presenter" />
+    <meta
+      property="og:description"
+      content="Reliable PDF presentation playback for macOS, Windows, and Linux."
+    />
+    <meta
+      property="og:image"
+      content="https://koichiro.github.io/quick-presenter/assets/presenter-window-en.png"
+    />
+    <meta property="og:url" content="https://koichiro.github.io/quick-presenter/" />
     <link rel="icon" href="./assets/quick-presenter-icon-256.png" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
@@ -18,27 +30,47 @@
         <span>Quick Presenter</span>
       </a>
       <nav class="nav-links" aria-label="Primary navigation">
+        <a href="#audience">Who it helps</a>
+        <a href="#features">Features</a>
+        <a href="#authoring">PDF workflow</a>
+        <a href="#scope">Scope</a>
+        <a href="#download">Download</a>
         <a href="./privacy/">Privacy</a>
+        <a href="https://github.com/koichiro/quick-presenter">GitHub</a>
       </nav>
     </header>
 
     <main id="top">
-      <section class="hero teaser-hero">
+      <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Preparing for public release</p>
+          <p class="eyebrow">Open source PDF presentation player</p>
           <h1>Quick Presenter</h1>
           <p class="hero-subtitle">
-            A desktop application for reliably presenting local PDF slide decks.
-          </p>
-          <p class="teaser-note">
-            The full open-source project website, source repository, and public
-            downloads are planned for publication later in 2026.
+            A lightweight desktop app for presenting prepared PDF slide decks with
+            predictable controls, presenter context, and reliable live playback.
           </p>
           <div class="hero-actions" aria-label="Primary actions">
-            <a class="button primary" href="./privacy/">
-              Privacy Policy
+            <a class="button primary" href="#support">
+              Download App
+            </a>
+            <a class="button secondary" href="https://github.com/koichiro/quick-presenter">
+              View on GitHub
             </a>
           </div>
+          <dl class="hero-facts" aria-label="Project facts">
+            <div>
+              <dt>Input</dt>
+              <dd>PDF only</dd>
+            </div>
+            <div>
+              <dt>License</dt>
+              <dd>GPL-3.0-only</dd>
+            </div>
+            <div>
+              <dt>Platforms</dt>
+              <dd>macOS, Windows, Linux</dd>
+            </div>
+          </dl>
         </div>
         <figure class="hero-shot">
           <img
@@ -49,11 +81,273 @@
           />
         </figure>
       </section>
+
+      <section id="audience" class="audience" aria-labelledby="audience-title">
+        <div class="section-heading">
+          <p class="eyebrow">Who it helps</p>
+          <h2 id="audience-title">For speakers who already have the deck.</h2>
+          <p>
+            Quick Presenter is built for academic talks, research presentations,
+            technical conferences, and online sessions where the final slides are
+            exported to PDF before the talk.
+          </p>
+        </div>
+        <div class="audience-grid">
+          <article>
+            <span>Problem</span>
+            <h3>PDF viewers are general-purpose.</h3>
+            <p>
+              They open files well, but live talks need presenter context,
+              predictable navigation, and a clean audience output.
+            </p>
+          </article>
+          <article>
+            <span>Need</span>
+            <h3>The speaker must stay oriented.</h3>
+            <p>
+              Current slide, next slide, speaker notes, elapsed time, clock, and
+              page status should be visible without adding editing complexity.
+            </p>
+          </article>
+          <article>
+            <span>Value</span>
+            <h3>Prepared PDFs become presentation-ready.</h3>
+            <p>
+              Quick Presenter keeps the playback path compact so switching between
+              conference rooms, classrooms, and online meetings feels predictable.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="positioning" aria-labelledby="positioning-title">
+        <div class="section-heading">
+          <p class="eyebrow">Built for presenting</p>
+          <h2 id="positioning-title">Not another slide editor.</h2>
+        </div>
+        <div class="positioning-grid">
+          <article>
+            <h3>Open a finished PDF</h3>
+            <p>
+              Keep authoring in Keynote, PowerPoint, Google Slides, Marp, Beamer,
+              or any tool that exports a stable PDF deck.
+            </p>
+          </article>
+          <article>
+            <h3>Stay oriented on stage</h3>
+            <p>
+              See the current page, next slide, notes, elapsed time, and clock
+              without turning the presentation surface into a document manager.
+            </p>
+          </article>
+          <article>
+            <h3>Move with confidence</h3>
+            <p>
+              Use keyboard-first navigation and presenter remote friendly controls
+              that keep page transitions simple during a live talk.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="features" class="feature-stack" aria-labelledby="features-title">
+        <div class="section-heading">
+          <p class="eyebrow">Essential workflow</p>
+          <h2 id="features-title">Everything visible when it matters.</h2>
+        </div>
+
+        <article class="feature feature-large">
+          <div class="feature-copy">
+            <p class="eyebrow">Presenter window</p>
+            <h3>Run the talk from one focused control surface.</h3>
+            <p>
+              The speaker-facing window keeps the active slide, next slide preview,
+              speaker notes, timer, clock, and page position in one place.
+            </p>
+          </div>
+          <figure>
+            <img
+              src="./assets/quick-presenter-demo.gif"
+              width="760"
+              height="517"
+              alt="Animated Quick Presenter demo showing PDF slide navigation in the presenter window."
+            />
+          </figure>
+        </article>
+
+        <article class="feature split">
+          <figure>
+            <img
+              src="./assets/slide-window-title-en.png"
+              width="1024"
+              height="548"
+              alt="Audience slide window showing the Quick Presenter title slide."
+            />
+          </figure>
+          <div class="feature-copy">
+            <p class="eyebrow">Audience output</p>
+            <h3>Keep the projected slide clean.</h3>
+            <p>
+              The audience-facing slide window stays dedicated to the deck, while
+              presenter details remain on the speaker side.
+            </p>
+          </div>
+        </article>
+
+        <article class="feature split reverse">
+          <figure>
+            <img
+              src="./assets/slide-window-en.png"
+              width="1024"
+              height="548"
+              alt="Audience slide window showing a workflow slide about using Quick Presenter."
+            />
+          </figure>
+          <div class="feature-copy">
+            <p class="eyebrow">PDF-first playback</p>
+            <h3>Present the deck you already exported.</h3>
+            <p>
+              Quick Presenter treats PDF as the source of truth, avoiding authoring
+              features that can complicate the live playback path.
+            </p>
+          </div>
+        </article>
+      </section>
+
+      <section id="authoring" class="authoring" aria-labelledby="authoring-title">
+        <div class="section-heading">
+          <p class="eyebrow">PDF authoring workflow</p>
+          <h2 id="authoring-title">Create slides anywhere. Present the exported PDF.</h2>
+          <p>
+            Quick Presenter does not create or edit slide decks. Keep using the
+            authoring tool that fits your workflow, then export the finished deck
+            to PDF for playback.
+          </p>
+        </div>
+        <div class="tool-grid" role="list">
+          <a href="https://www.apple.com/keynote/" role="listitem">
+            <span>Keynote</span>
+            <p>Export the final deck to PDF before presenting.</p>
+          </a>
+          <a href="https://www.microsoft.com/microsoft-365/powerpoint" role="listitem">
+            <span>PowerPoint</span>
+            <p>Use Quick Presenter with the exported PDF, not the source file.</p>
+          </a>
+          <a href="https://www.google.com/slides/about/" role="listitem">
+            <span>Google Slides</span>
+            <p>Download the prepared presentation as a PDF deck.</p>
+          </a>
+          <a href="https://marp.app/" role="listitem">
+            <span>Marp</span>
+            <p>OSS Markdown slide authoring with PDF speaker-note support.</p>
+          </a>
+          <a href="https://ctan.org/pkg/beamer" role="listitem">
+            <span>LaTeX Beamer</span>
+            <p>OSS LaTeX class for PDF-first academic and technical talks.</p>
+          </a>
+        </div>
+        <p class="authoring-note">
+          The supported input remains the exported PDF, not the source project
+          from any authoring tool.
+        </p>
+      </section>
+
+      <section id="scope" class="scope" aria-labelledby="scope-title">
+        <div class="section-heading">
+          <p class="eyebrow">Designed scope</p>
+          <h2 id="scope-title">Small on purpose.</h2>
+        </div>
+        <div class="scope-list" role="list">
+          <div role="listitem">
+            <span aria-hidden="true">PDF</span>
+            <p>PDF is the only presentation input format.</p>
+          </div>
+          <div role="listitem">
+            <span aria-hidden="true">No edit</span>
+            <p>No slide editing, authoring, or design tools during playback.</p>
+          </div>
+          <div role="listitem">
+            <span aria-hidden="true">Reliable</span>
+            <p>Rendering, page transitions, and failure recovery are the priority.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="oss" aria-labelledby="oss-title">
+        <div>
+          <p class="eyebrow">Open source</p>
+          <h2 id="oss-title">Built in the open for reliable talks.</h2>
+          <p>
+            Quick Presenter is developed as an OSS desktop app with public source,
+            release notes, packaging documentation, and issue tracking.
+          </p>
+        </div>
+        <div class="oss-actions">
+          <a class="button secondary" href="https://github.com/koichiro/quick-presenter">
+            Source code
+          </a>
+          <a class="button secondary" href="https://github.com/koichiro/quick-presenter/issues">
+            Report an issue
+          </a>
+        </div>
+      </section>
+
+      <section id="support" class="support" aria-labelledby="support-title">
+        <div class="support-copy">
+          <p class="eyebrow">Support development</p>
+          <h2 id="support-title">Help fund the next stage of presentation tools.</h2>
+          <p>
+            Quick Presenter will remain focused on reliable PDF playback, while
+            development continues toward AI-centric presentation operations: faster
+            preparation, speaker-aware workflows, and automation that still treats
+            the exported PDF as the source of truth.
+          </p>
+          <p>
+            Buying through desktop app stores is the planned donation-friendly way
+            to support the project while keeping the source code open.
+          </p>
+        </div>
+        <div class="store-links" aria-label="Planned store availability">
+          <div class="store-coming-soon">
+            <img
+              src="./assets/mac-app-store-badge.svg"
+              width="252"
+              height="74"
+              alt="Mac App Store"
+            />
+            <span>Coming soon</span>
+          </div>
+          <div class="store-coming-soon">
+            <img
+              src="./assets/microsoft-store-badge.svg"
+              width="252"
+              height="74"
+              alt="Microsoft Store"
+            />
+            <span>Coming soon</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="download" class="download" aria-labelledby="download-title">
+        <p class="eyebrow">Release</p>
+        <h2 id="download-title">Download Quick Presenter v1.0.0</h2>
+        <p>
+          Installable packages will be published from GitHub Releases when v1.0.0
+          is ready.
+        </p>
+        <a class="button primary" href="https://github.com/koichiro/quick-presenter/releases">
+          Open GitHub Releases
+        </a>
+      </section>
     </main>
 
     <footer class="site-footer">
       <span>Quick Presenter</span>
       <a href="./privacy/">Privacy</a>
+      <a href="https://github.com/koichiro/quick-presenter/blob/main/LICENSE">
+        GPL-3.0-only
+      </a>
     </footer>
   </body>
 </html>
