@@ -25,6 +25,8 @@ on:
       - 'src/renderer_resources.rs'
       - 'src/renderer_supervision.rs'
       - 'src/renderer_protocol.rs'
+      - 'src/renderer_process.rs'
+      - 'scripts/check_renderer_sandbox.py'
       - 'src/render_scheduler.rs'
       - 'tests/renderer_process.rs'
   push:
@@ -975,6 +977,16 @@ jobs:
           } finally {
             Pop-Location
           }
+
+      - name: Verify Windows renderer sandbox denials
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}/${{ matrix.binary-name }}'
+          $pdf = Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/marp-speaker-notes.pdf'
+          python scripts/check_renderer_sandbox.py $exe $pdf
+          if ($LASTEXITCODE -ne 0) { throw 'Windows renderer sandbox denial gate failed' }
 
       - name: Record Windows GUI smoke CI skip
         if: runner.os == 'Windows'

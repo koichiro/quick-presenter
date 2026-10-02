@@ -1,4 +1,39 @@
 //! Exercise the shipped executable, not the test harness, over its pipe protocol.
+#[test]
+#[cfg(all(target_os = "windows", debug_assertions))]
+fn windows_job_terminates_helper_after_broker_abort() {
+    use windows_sys::Win32::{Foundation::*, System::Threading::*};
+    let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+    command
+        .arg("--smoke-open-pdf")
+        .arg(fixture())
+        .env("QUICK_PRESENTER_HELPER_TEST_ABORT_BROKER", "1");
+    let output = run_broker(command);
+    assert!(!output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    let pid: u32 = text
+        .lines()
+        .find_map(|line| line.strip_prefix("renderer-helper-pid="))
+        .expect("broker reached sandboxed helper")
+        .parse()
+        .unwrap();
+    let handle = unsafe {
+        OpenProcess(
+            PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+            0,
+            pid,
+        )
+    };
+    if handle.is_null() {
+        assert_eq!(unsafe { GetLastError() }, ERROR_INVALID_PARAMETER);
+    } else {
+        let result = unsafe { WaitForSingleObject(handle, 2000) };
+        unsafe {
+            CloseHandle(handle);
+        }
+        assert_eq!(result, WAIT_OBJECT_0, "helper survived broker abort");
+    }
+}
 use serde_json::{json, Value};
 use std::{
     io::{Read, Write},
@@ -261,6 +296,7 @@ impl Helper {
         let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
         command
             .arg("--renderer-helper")
+            .env("QUICK_PRESENTER_HELPER_TEST_RAW_PROTOCOL", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());

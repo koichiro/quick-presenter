@@ -40,6 +40,32 @@ pub struct PdfDocumentState {
 }
 
 impl PdfDocumentState {
+    #[cfg(target_os = "windows")]
+    pub(crate) fn open_brokered(path: PathBuf, mut file: std::fs::File) -> Result<Self> {
+        use std::io::{Read, Seek};
+        let metadata = file.metadata()?;
+        ensure!(
+            metadata.is_file() && metadata.len() > 0 && metadata.len() <= MAX_PREFLIGHT_PDF_BYTES,
+            "invalid brokered PDF input"
+        );
+        let mut header = [0u8; 5];
+        file.read_exact(&mut header)?;
+        ensure!(&header == PDF_HEADER, "invalid brokered PDF header");
+        file.rewind()?;
+        // pdfium-render owns the reader for the entire native document lifetime.
+        let document = shared_pdfium()?.load_pdf_from_reader(file, None)?;
+        let page_count = document.pages().len();
+        ensure!(
+            page_count > 0 && page_count as u32 <= crate::renderer_limits::MAX_PAGES,
+            "PDF page count exceeds supported limit"
+        );
+        Ok(Self {
+            document,
+            path,
+            page_count: page_count as u32,
+            _worker_thread_only: PhantomData,
+        })
+    }
     pub fn open(path: PathBuf) -> Result<Self> {
         preflight_pdf_input(&path)
             .with_context(|| format!("failed to open PDF: {}", path.display()))?;
@@ -327,6 +353,28 @@ pub(crate) fn preflight_pdf_input(path: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn renderer_library_path() -> Result<PathBuf> {
+    let policy = default_pdfium_load_policy();
+    if pdfium_dynamic_override_allowed(
+        policy,
+        std::env::var(PDFIUM_OVERRIDE_GUARD_ENV).ok().as_deref(),
+    ) {
+        if let Some(path) = std::env::var_os(PDFIUM_DYNAMIC_LIB_PATH_ENV) {
+            return Ok(std::fs::canonicalize(path)?);
+        }
+    }
+    bundled_pdfium_library_candidates(
+        policy,
+        std::env::current_exe().ok().as_deref(),
+        std::env::current_dir().ok().as_deref(),
+    )
+    .into_iter()
+    .find(|path| path.is_file())
+    .context("no packaged PDFium library")
+    .and_then(|path| Ok(path.canonicalize()?))
 }
 
 fn create_pdfium() -> Result<PdfiumRuntime> {

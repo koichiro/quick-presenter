@@ -5,6 +5,7 @@ use crate::{
     pdf::PdfDocumentState,
     render_scheduler::{RenderCommand, RenderEvent, RenderJobId, RenderPriority, RenderSessionId},
     renderer_limits::{Operation, RestartBudget, RESTART_BACKOFF},
+    renderer_process::{Child, ReadPipe, WritePipe},
     renderer_protocol::{
         Broker, Envelope, FailureCode, Frame, Framed, Message, PageNote, PixelFormat,
         MAX_DOCUMENT_NOTE_BYTES, MAX_NOTE_BYTES, MAX_TEXT_BYTES,
@@ -18,7 +19,7 @@ use std::{
     cell::{Cell, RefCell},
     io,
     path::PathBuf,
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{Command, Stdio},
     sync::{Arc, Mutex, Weak},
 };
 
@@ -77,8 +78,8 @@ impl ProcessGroup {
 }
 pub struct HelperClient {
     child: Arc<Mutex<Child>>,
-    writer: Framed<ChildStdin>,
-    reader: Framed<ChildStdout>,
+    writer: Framed<WritePipe>,
+    reader: Framed<ReadPipe>,
     broker: Broker,
     failed: bool,
     failure_message: Option<String>,
@@ -93,33 +94,27 @@ impl HelperClient {
             group,
         )
     }
-    pub fn spawn_command(mut command: Command, group: &ProcessGroup) -> Result<Self> {
+    pub fn spawn_for_document(group: &ProcessGroup, path: &std::path::Path) -> Result<Self> {
+        Self::spawn_command_with_document(Command::new(std::env::current_exe()?), group, Some(path))
+    }
+    pub fn spawn_command(command: Command, group: &ProcessGroup) -> Result<Self> {
+        Self::spawn_command_with_document(command, group, None)
+    }
+    fn spawn_command_with_document(
+        mut command: Command,
+        group: &ProcessGroup,
+        path: Option<&std::path::Path>,
+    ) -> Result<Self> {
         command
             .arg(HELPER_ARGUMENT)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
-        #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x08000000);
-        }
-        let mut child = command.spawn().map_err(|_| HelperFailure {
-            kind: FailureKind::Spawn,
-            operation: Operation::Handshake,
-        })?;
-        let resource_job = match ResourceJob::attach(&child) {
-            Ok(job) => job,
-            Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(HelperFailure {
-                    kind: FailureKind::MemoryLimit,
-                    operation: Operation::Handshake,
-                }
-                .into());
-            }
-        };
+        let (mut child, resource_job) =
+            crate::renderer_process::spawn(command, path).map_err(|_| HelperFailure {
+                kind: FailureKind::Spawn,
+                operation: Operation::Handshake,
+            })?;
         let stdin = child.stdin.take().context("missing helper stdin")?;
         let stdout = child.stdout.take().context("missing helper stdout")?;
         let child = Arc::new(Mutex::new(child));
@@ -302,7 +297,7 @@ pub struct RemoteDocument {
 impl RemoteDocument {
     pub fn open(path: PathBuf, group: &Arc<ProcessGroup>) -> Result<Self> {
         let metadata = std::fs::metadata(&path)?;
-        let mut client = HelperClient::spawn(group)?;
+        let mut client = HelperClient::spawn_for_document(group, &path)?;
         let (title, page_count) = client.open(path.clone())?;
         Ok(Self {
             client: RefCell::new(client),
@@ -419,7 +414,7 @@ impl RemoteDocument {
                 (metadata.len(), metadata.modified().ok()) == self.file_identity,
                 "document changed during renderer recovery"
             );
-            let mut replacement = HelperClient::spawn(&self.group)?;
+            let mut replacement = HelperClient::spawn_for_document(&self.group, &self.path)?;
             let (title, count) = replacement.open(self.path.clone())?;
             ensure!(
                 title == self.title && count == self.page_count,
@@ -454,6 +449,20 @@ impl RemoteDocument {
 
 /// Run before diagnostics or GUI initialization. stdout is exclusively protocol bytes.
 pub fn run() -> Result<()> {
+    #[cfg(target_os = "windows")]
+    let mut brokered_input = None;
+    #[cfg(target_os = "windows")]
+    {
+        #[cfg(debug_assertions)]
+        let raw_test = std::env::var_os("QUICK_PRESENTER_HELPER_TEST_RAW_PROTOCOL").is_some();
+        #[cfg(not(debug_assertions))]
+        let raw_test = false;
+        if !raw_test {
+            crate::renderer_process::verify_token()?;
+            brokered_input = Some(crate::renderer_process::take_document_file()?);
+            crate::renderer_process::verify_denials()?;
+        }
+    }
     crate::renderer_resources::constrain_helper()?;
     let (sender, receiver) = std::sync::mpsc::sync_channel(64);
     std::thread::spawn(move || {
@@ -526,7 +535,26 @@ pub fn run() -> Result<()> {
             }
             Message::Open { path } => {
                 ensure!(document.is_none(), "helper document already open");
-                match PdfDocumentState::open(path.into_path()?) {
+                #[cfg(target_os = "windows")]
+                let opened = if let Some(file) = brokered_input.take() {
+                    PdfDocumentState::open_brokered(path.into_path()?, file)
+                } else {
+                    #[cfg(debug_assertions)]
+                    {
+                        ensure!(
+                            std::env::var_os("QUICK_PRESENTER_HELPER_TEST_RAW_PROTOCOL").is_some(),
+                            "missing brokered PDF handle"
+                        );
+                        PdfDocumentState::open(path.into_path()?)
+                    }
+                    #[cfg(not(debug_assertions))]
+                    {
+                        bail!("missing brokered PDF handle");
+                    }
+                };
+                #[cfg(not(target_os = "windows"))]
+                let opened = PdfDocumentState::open(path.into_path()?);
+                match opened {
                     Ok(doc) if doc.page_count() > 0 => {
                         let response = Message::Opened {
                             title: doc.title(),

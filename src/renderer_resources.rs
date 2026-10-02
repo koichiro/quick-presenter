@@ -1,7 +1,8 @@
 //! OS resource controls. This is not a filesystem/network security sandbox.
 use crate::renderer_limits::MAX_HELPER_MEMORY_BYTES;
+use crate::renderer_process::Child;
 use anyhow::{Context, Result};
-use std::{process::Child, sync::Mutex};
+use std::sync::Mutex;
 
 pub fn constrain_helper() -> Result<()> {
     #[cfg(target_os = "linux")]
@@ -79,8 +80,40 @@ impl ResourceJob {
             let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
             limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_PROCESS_MEMORY
                 | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-                | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION;
+                | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION
+                | JOB_OBJECT_LIMIT_ACTIVE_PROCESS;
+            limits.BasicLimitInformation.ActiveProcessLimit = 1;
             limits.ProcessMemoryLimit = MAX_HELPER_MEMORY_BYTES;
+            let cpu = JOBOBJECT_CPU_RATE_CONTROL_INFORMATION {
+                ControlFlags: JOB_OBJECT_CPU_RATE_CONTROL_ENABLE
+                    | JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP,
+                Anonymous: JOBOBJECT_CPU_RATE_CONTROL_INFORMATION_0 { CpuRate: 8000 },
+            };
+            let ui = JOBOBJECT_BASIC_UI_RESTRICTIONS {
+                UIRestrictionsClass: 0xff,
+            };
+            // Named 80% aggregate CPU ceiling and all documented UI restrictions.
+            // The helper is still suspended until every job control succeeds.
+            for (class, data, bytes) in [
+                (
+                    JobObjectCpuRateControlInformation,
+                    (&cpu as *const JOBOBJECT_CPU_RATE_CONTROL_INFORMATION)
+                        .cast::<std::ffi::c_void>(),
+                    std::mem::size_of_val(&cpu),
+                ),
+                (
+                    JobObjectBasicUIRestrictions,
+                    (&ui as *const JOBOBJECT_BASIC_UI_RESTRICTIONS).cast::<std::ffi::c_void>(),
+                    std::mem::size_of_val(&ui),
+                ),
+            ] {
+                anyhow::ensure!(
+                    unsafe {
+                        SetInformationJobObject(handle.as_raw_handle(), class, data, bytes as u32)
+                    } != 0,
+                    "helper job policy unavailable"
+                );
+            }
             // SAFETY: structure size/type match the information class; valid handles.
             let set = unsafe {
                 SetInformationJobObject(
