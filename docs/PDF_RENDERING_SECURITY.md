@@ -20,7 +20,7 @@ The following inputs are untrusted:
 - PDF bytes, metadata, page geometry, annotations, and speaker-note contents;
 - file names and paths selected by a user or supplied on the command line;
 - every message, length, identifier, pixel dimension, pixel buffer, error, and
-  exit status received from a future renderer helper;
+  exit status received from a renderer helper;
 - timing behavior, including a PDFium call that never returns.
 
 The installed Quick Presenter executable, its packaged renderer helper, and the
@@ -53,8 +53,8 @@ not receive UI authority merely because the broker launched it.
 
 | Stage | Native crash or abort | Hard timeout | Compromised renderer authority |
 | --- | --- | --- | --- |
-| Current render thread | Terminates the application | Not available while PDFium is running | Same user authority and address space as the UI |
-| Supervised, unsandboxed helper | Contained to the helper; broker can detect exit | Broker can terminate and reap the helper | Same user authority as the UI; **not a security boundary** |
+| Previous render thread | Terminates the application | Not available while PDFium is running | Same user authority and address space as the UI |
+| Current supervised, unsandboxed helper | Contained to the helper; broker can detect exit | Termination/reaping exists; operation deadlines pending #373 | Same user authority as the UI; **not a security boundary** |
 | Supervised, OS-sandboxed helper | Contained to the helper | Broker can terminate and reap the helper | Restricted by the documented platform policy and brokered resources |
 
 Process isolation is therefore the cross-platform reliability boundary.
@@ -64,17 +64,18 @@ safe.
 
 ## Current release tradeoff
 
-The production runtime currently keeps `PdfDocumentState` on one render thread
-inside the UI process. The worker keeps the UI responsive, serializes PDFium
-access, bounds pending work, and converts Rust panics into `WorkerFailed` when
-unwinding is possible. It cannot recover from a segmentation fault, abort,
-native memory corruption, or a PDFium call that never returns.
+The production runtime keeps `PdfDocumentState` in an unsandboxed helper, using
+the same installed executable in internal helper mode. The UI/broker does not
+initialize PDFium. Active-helper EOF, exit, or invalid IPC becomes `WorkerFailed`;
+candidate failures keep the previous helper and last good slide. Shutdown kills
+and reaps helpers without waiting for native work; parent-pipe EOF independently
+exits the helper. This contains ordinary native crashes to the helper, but does
+not prevent a compromised helper from exercising the user's OS authority.
 
-Opening and shutdown are cooperatively cancelled only after PDFium returns.
-There is no hard open or render timeout. A new worker cannot safely replace a
-still-running worker because both would share the same process-global PDFium
-runtime. These limitations apply to current packaged releases until #372 and
-#373 replace the production path and its lifecycle behavior.
+There is still no hard open/render timeout, automatic bounded restart, or
+per-helper memory cap. A hung operation can block broker dispatch until shutdown.
+Those lifecycle and resource policies remain #373. Packaged releases gain these
+guarantees only when they include and validate this implementation.
 
 Current mitigations reduce accidental and resource-exhaustion risk but do not
 form a sandbox:
@@ -85,9 +86,10 @@ form a sandbox:
 - rendered pages use the budgets in [Render Cache Budgets](CACHE_BUDGETS.md);
 - packaged releases load a checksum-pinned bundled PDFium by default.
 
-The current path has no explicit page-count, note-size, decoded-pixel, render
-dimension, per-operation time, or worker-memory limit. Adding those limits and
-process-level fault tests is tracked by #373.
+The IPC boundary enforces page-count, note-size, decoded-pixel, and dimension
+caps documented in [Renderer IPC Protocol](RENDERER_PROTOCOL.md), but these do
+not cap PDFium's internal allocations. Measured product limits, operation
+deadlines, memory confinement, and expanded recovery tests remain #373.
 
 ## Target broker and helper contract
 

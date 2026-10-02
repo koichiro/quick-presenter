@@ -23,6 +23,7 @@ pub mod presentation;
 pub mod recent;
 pub mod render_controller;
 pub mod render_scheduler;
+pub mod renderer_helper;
 pub mod renderer_protocol;
 pub mod rendering;
 pub mod session_controller;
@@ -43,9 +44,10 @@ use std::{
 #[cfg(target_os = "linux")]
 use std::sync::mpsc;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use app_metadata::about_metadata;
 use app_state::AppState;
+#[cfg(test)]
 use app_state::ThumbnailState;
 use cli::{help_text, parse_startup_options, GuiSmokeOptions, StartupRequest};
 use clock::current_clock_label;
@@ -57,19 +59,24 @@ use hot_reload::{
 };
 use input::PresentationCommand;
 use notes::SpeakerNotes;
-use pdf::{pdfium_runtime_version_label, PdfDocumentState};
+use pdf::pdfium_runtime_version_label;
+#[cfg(test)]
+use pdf::PdfDocumentState;
 use presentation::PageSnapshot;
+#[cfg(test)]
 use presentation::PresentationState;
 use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
+use render_controller::CURRENT_RENDER_WIDTH;
 use render_controller::{
     enqueue_render_plan_if_missing, presentation_preload_render_plan, thumbnail_render_plan,
     thumbnail_visible_range_render_plan, visible_page_render_plan,
 };
-use render_controller::{CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH};
+#[cfg(test)]
+use render_controller::{PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH};
 use render_scheduler::{RenderEvent, RenderScheduler, RenderWorkerLifecycle};
-use rendering::presentation_preload_order;
-use rendering::RenderCache;
-use rendering::{thumbnail_window_indices, RenderPurpose, RenderRequest, RenderedPage};
+#[cfg(test)]
+use rendering::{presentation_preload_order, thumbnail_window_indices, RenderCache};
+use rendering::{RenderPurpose, RenderRequest, RenderedPage};
 use session_controller::{
     apply_session_command, begin_open_pdf_state, clear_render_reload_state,
     commit_page_render_failed_state, commit_page_rendered_state, commit_render_open_failed_state,
@@ -84,6 +91,7 @@ use view_sync::{
     apply_opening_state_to_windows, apply_snapshot_to_windows, set_presenter_message,
     thumbnail_current_row_index, thumbnail_model,
 };
+#[cfg(test)]
 use view_sync::{black_slide_image, presenter_status_text};
 use window_controller::{
     apply_macos_slide_window_chrome, fitted_slide_window_size, hide_slide_window,
@@ -113,6 +121,11 @@ const INITIAL_LINUX_WINDOW_SHOW_DELAY: Duration = Duration::from_millis(120);
 const INITIAL_LINUX_PRESENTER_FRONT_DELAY: Duration = Duration::from_millis(80);
 
 fn main() -> Result<()> {
+    if std::env::args_os().nth(1).as_deref()
+        == Some(std::ffi::OsStr::new(renderer_helper::HELPER_ARGUMENT))
+    {
+        return renderer_helper::run();
+    }
     let startup_request = parse_startup_options(std::env::args_os().skip(1))?;
     if startup_request == StartupRequest::Help {
         print!("{}", help_text(&startup_program_name()));
@@ -332,19 +345,24 @@ fn startup_program_name() -> String {
 fn smoke_open_pdf(path: PathBuf) -> Result<()> {
     const SMOKE_RENDER_WIDTH: i32 = 320;
 
-    let doc = PdfDocumentState::open(path)?;
-    let page_count = doc.page_count();
-    if page_count == 0 {
-        bail!("smoke-open-pdf requires a PDF with at least one page");
+    let group = renderer_helper::ProcessGroup::default();
+    let mut helper = renderer_helper::HelperClient::spawn(&group)?;
+    let (title, page_count) = helper.open(path)?;
+    let page = helper.render(RenderRequest {
+        page_index: 0,
+        width: SMOKE_RENDER_WIDTH,
+        purpose: RenderPurpose::CurrentSlide,
+    })?;
+    for index in 0..page_count {
+        helper.notes_page(index)?;
     }
-
-    let image = doc.render_page(0, SMOKE_RENDER_WIDTH)?;
     println!(
-        "Smoke open PDF succeeded: title=\"{}\" pages={} first_page={}x{}",
-        doc.title(),
+        "Smoke open PDF succeeded through renderer helper: title=\"{}\" pages={} first_page={}x{} helper_pid={}",
+        title,
         page_count,
-        image.size().width,
-        image.size().height
+        page.pixels.width(),
+        page.pixels.height(),
+        helper.process_id()
     );
 
     Ok(())
@@ -402,12 +420,14 @@ fn remove_macos_native_about_menu_item() {
 fn remove_macos_native_about_menu_item() {}
 
 #[allow(dead_code)]
+#[cfg(test)]
 struct RenderedPages {
     current: RenderedPage,
     next: Option<RenderedPage>,
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 struct PreparedPdfSession {
     loaded_path: PathBuf,
     doc: PdfDocumentState,
@@ -421,11 +441,13 @@ struct PreparedPdfSession {
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 struct SynchronousPdfSession {
     doc: PdfDocumentState,
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 struct CommittedPdfSession {
     session: SynchronousPdfSession,
     loaded_path: PathBuf,
@@ -961,6 +983,7 @@ fn ensure_render_scheduler_for_open(state: &mut AppState) -> bool {
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 pub(crate) fn open_and_render(
     windows: &AppWindowRefs,
     state: &Rc<RefCell<AppState>>,
@@ -992,11 +1015,13 @@ pub(crate) fn open_and_render(
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 fn prepare_pdf_session(path: PathBuf) -> Result<PreparedPdfSession> {
     prepare_pdf_session_with_initial_render(path, render_pages)
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 fn prepare_pdf_session_with_initial_render(
     path: PathBuf,
     render_initial_pages: impl FnOnce(
@@ -1048,6 +1073,7 @@ fn prepare_pdf_session_with_initial_render(
     })
 }
 
+#[cfg(test)]
 fn commit_prepared_pdf_session(
     state: &mut AppState,
     prepared: Result<PreparedPdfSession>,
@@ -1056,6 +1082,7 @@ fn commit_prepared_pdf_session(
     Ok(commit_prepared_pdf_session_state(state, prepared))
 }
 
+#[cfg(test)]
 fn commit_prepared_pdf_session_state(
     state: &mut AppState,
     prepared: PreparedPdfSession,
@@ -1084,6 +1111,7 @@ fn commit_prepared_pdf_session_state(
     }
 }
 
+#[cfg(test)]
 fn commit_prepared_pdf_session_metadata(
     state: &mut AppState,
     notes: SpeakerNotes,
@@ -1270,6 +1298,7 @@ fn render_into_windows(
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 fn apply_rendered_pages_to_windows(
     windows: &AppWindowRefs,
     state: &AppState,
@@ -1318,6 +1347,7 @@ fn apply_rendered_pages_to_windows(
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 fn render_pages(
     doc: &PdfDocumentState,
     cache: &mut RenderCache,
@@ -1351,6 +1381,7 @@ fn render_pages(
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 fn render_pdf_page_cached(
     doc: &PdfDocumentState,
     cache: &mut RenderCache,
@@ -1427,6 +1458,7 @@ fn enqueue_thumbnail_visible_range(
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 fn render_thumbnail_window(
     session: &SynchronousPdfSession,
     state: &mut AppState,
@@ -1481,6 +1513,7 @@ fn schedule_presentation_preload(state: Rc<RefCell<AppState>>, snapshot: PageSna
 }
 
 #[allow(dead_code)]
+#[cfg(test)]
 fn preload_presentation_window(
     session: &SynchronousPdfSession,
     state: &mut AppState,

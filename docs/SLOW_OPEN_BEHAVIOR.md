@@ -2,6 +2,14 @@
 
 ## Problem
 
+The v1.0.0 decision below records the original thread-only design. Since #372,
+native open/render runs in a separate helper. A replacement is committed only
+after open and initial-page render succeed; shutdown can terminate and reap a
+blocked helper. Normal broker dispatch still waits synchronously for IPC, so
+newer opens remain coalesced until that exchange finishes. Hard deadlines and
+bounded recovery are still pending #373. The presenter-facing delayed status
+and last-good-deck behavior below remain in effect.
+
 PDF opens run on the single render worker because loaded `PdfDocumentState`
 must stay worker-local. `PdfDocumentState::open()` is a synchronous PDFium
 boundary. While that call is running, the worker cannot process newer `Open`,
@@ -43,7 +51,8 @@ Normal open path:
   for the selected filename.
 - If a deck is already committed, the current slide, notes, page label,
   thumbnails, and audience slide remain visible while the new PDF opens.
-- When the new PDF opens successfully, it replaces the current deck atomically.
+- When the new PDF opens and its initial render succeeds, it replaces the current
+  deck atomically.
 - If the new PDF fails to open, the current committed deck remains available and
   the presenter status changes to `Could not open PDF. Choose another file.`
 

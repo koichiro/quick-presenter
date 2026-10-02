@@ -1,17 +1,16 @@
 # Render Scheduling
 
-The future helper transport and broker adapter are documented in
+The helper transport and broker adapter are documented in
 [Renderer IPC Protocol](RENDERER_PROTOCOL.md). They preserve the scheduler's
-request/session identities without changing the production thread worker yet.
+request/session identities while moving all native calls out of the UI process.
 
-Quick Presenter keeps PDFium document access on one render worker. Rendering is
+Quick Presenter keeps scheduling on one broker worker. Rendering is
 scheduled in two stages so the UI can remain responsive under backlog while the
 worker keeps a stable, deduplicated view of pending work.
 
-This is the current in-process implementation, not a native-crash or security
-boundary. The target helper-process transport must preserve the scheduling and
-session semantics in this document while applying the hostile IPC and recovery
-contract in [PDF Rendering Security and Isolation Policy](PDF_RENDERING_SECURITY.md).
+PDFium runs serially in helper processes, not in this worker. Process separation
+contains native crashes but does not restrict a compromised helper's authority.
+See [PDF Rendering Security and Isolation Policy](PDF_RENDERING_SECURITY.md).
 
 ## Two-stage model
 
@@ -23,6 +22,8 @@ unbounded thumbnail or preload bursts.
 The render worker then places render work into `RenderQueue`. The worker queue is
 the final execution order for PDFium access. It deduplicates requests again
 because different UI paths can request the same page while the worker is busy.
+Dispatch uses one synchronous, correlated IPC exchange at a time. Notes use
+`NotesPage` so existing background batching yields between pages.
 
 Both stages use the same work policy:
 
@@ -76,12 +77,15 @@ new scheduler command.
 
 The worker repeats session cleanup when opening, committing, or shutting down
 because commands may already have crossed the mailbox boundary. A prepared
-reload owns at most one candidate document on the same worker, preserving the
-single-threaded PDFium ownership model.
+reload owns at most one candidate proxy alongside the active proxy. Each proxy
+owns a separate helper; replacement opens validate page zero before emitting
+`Opened`, and reload validates the requested/clamped current page before
+`ReloadPrepared`. Failed candidates do not replace or terminate the active
+helper. Commit/discard drops and reaps the obsolete helper.
 
 `Open` cancellation is cooperative. A newer `Open` replaces older pending open
 commands in the mailbox, but it cannot interrupt a worker that is already inside
-the synchronous `PdfDocumentState::open()` PDFium call. Slow-open presenter
+the synchronous IPC exchange waiting for a helper's PDFium call. Slow-open presenter
 behavior is defined in [Slow PDF Open Behavior](SLOW_OPEN_BEHAVIOR.md).
 
 ## Worker lifecycle
@@ -89,28 +93,27 @@ behavior is defined in [Slow PDF Open Behavior](SLOW_OPEN_BEHAVIOR.md).
 `RenderScheduler` owns the render worker thread handle and tracks its lifecycle
 explicitly:
 
-- `Running`: the worker may own a PDFium document and may be inside a PDFium
-  call.
+- `Running`: the worker owns remote proxies and may be waiting for helper IPC.
 - `ShutdownRequested`: shutdown has been requested, but the worker has not
   necessarily finished. This state is not safe for replacement.
 - `Stopped`: the worker exited after an intentional shutdown.
-- `Failed`: the guarded worker caught a panic or unexpected return.
+- `Failed`: the guarded worker caught a panic, unexpected return, or active
+  helper transport failure (EOF, exit, or invalid protocol). Idle helpers are
+  checked for exit at the mailbox's 250 ms wake boundary.
 
 Quick Presenter may construct a replacement render worker only after the
 previous scheduler is terminal (`Stopped` or `Failed`) and its thread handle has
 finished. The replacement path attempts to join the finished worker before
 installing a new scheduler. It must not create a new worker while the previous
-worker is still `Running` or `ShutdownRequested`, because that worker may still
-be inside a long-running PDFium call.
+worker is still `Running` or `ShutdownRequested`.
 
-Shutdown and session changes use cooperative cancellation. The app does not try
-to forcefully interrupt PDFium; if a PDFium call is slow, the old worker remains
-the only worker until it reaches the cancellation boundary and exits.
-
-A future helper process may be forcefully terminated by its broker after a hard
-deadline. That process-level termination must not be implemented as cancellation
-of a PDFium thread, and it must follow the bounded restart policy rather than
-silently replaying failed work.
+Session changes remain cooperative at IPC boundaries; hard operation deadlines
+and bounded restart remain #373. Scheduler shutdown first cancels work, then
+kills and reaps all registered helpers without waiting for a protocol reply.
+Registration after shutdown kills the newly spawned helper as well. Proxy drop
+also kills/reaps its child. Closing the parent control pipe independently exits
+the helper, including while its native execution thread is blocked. No PDFium
+thread is asynchronously cancelled inside the UI process.
 
 ## Render events
 

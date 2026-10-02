@@ -20,6 +20,10 @@ on:
       - 'assets/icons/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
+      - 'src/renderer_helper.rs'
+      - 'src/renderer_protocol.rs'
+      - 'src/render_scheduler.rs'
+      - 'tests/renderer_process.rs'
   push:
     tags:
       - 'v*'
@@ -116,6 +120,9 @@ jobs:
 
       - name: Fetch PDFium
         run: python scripts/fetch_pdfium.py --clean
+
+      - name: Test renderer process boundary
+        run: cargo test --test renderer_process
 
       - name: Build release binary
         run: cargo build --release --bin quick-presenter

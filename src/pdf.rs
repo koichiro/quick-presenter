@@ -24,16 +24,16 @@ const PDF_HEADER: &[u8; 5] = b"%PDF-";
 ///
 /// The limit is intentionally conservative for v1.0.0: large enough for
 /// image-heavy slide decks, small enough to avoid accidental multi-GB files or
-/// other inputs that should be handled by a future isolated PDFium process.
+/// other inputs that need additional isolated-process resource budgets (#373).
 const MAX_PREFLIGHT_PDF_BYTES: u64 = 1024 * 1024 * 1024;
 
-/// Worker-local PDF document state.
+/// Helper-local PDF document state.
 ///
-/// In the production runtime, this type should stay on the render worker. The UI
-/// thread receives document metadata, rendered pixels, and errors through
+/// In production, this type stays on the helper's serial execution thread. The UI
+/// broker receives document metadata, rendered pixels, and errors through
 /// `RenderEvent` instead of accessing PDFium documents directly. The marker keeps
 /// accidental cross-thread moves from compiling while still allowing same-thread
-/// smoke and unit-test paths to exercise PDF loading directly.
+/// unit-test paths to exercise PDF loading directly.
 pub struct PdfDocumentState {
     document: PdfDocument<'static>,
     path: PathBuf,
@@ -211,16 +211,28 @@ fn rgba_pixel_buffer(
 
 struct PdfiumRuntime {
     pdfium: Pdfium,
-    version_label: String,
 }
 
 pub fn pdfium_runtime_version_label() -> String {
-    shared_pdfium_runtime()
-        .map(|runtime| runtime.version_label.clone())
-        .unwrap_or_else(|error| {
-            debug!(error = ?error, "PDFium runtime version is unavailable");
-            PDFIUM_VERSION_UNKNOWN_LABEL.to_string()
-        })
+    // Metadata lookup must never initialize PDFium in the GUI/broker process.
+    let policy = default_pdfium_load_policy();
+    if let Ok(path) = std::env::var(PDFIUM_DYNAMIC_LIB_PATH_ENV) {
+        if pdfium_dynamic_override_allowed(
+            policy,
+            std::env::var(PDFIUM_OVERRIDE_GUARD_ENV).ok().as_deref(),
+        ) {
+            return pdfium_version_label_for_library(Path::new(&path));
+        }
+    }
+    bundled_pdfium_library_candidates(
+        policy,
+        std::env::current_exe().ok().as_deref(),
+        std::env::current_dir().ok().as_deref(),
+    )
+    .into_iter()
+    .find(|p| p.exists())
+    .map(|p| pdfium_version_label_for_library(&p))
+    .unwrap_or_else(|| PDFIUM_VERSION_UNKNOWN_LABEL.to_owned())
 }
 
 fn shared_pdfium() -> Result<&'static Pdfium> {
@@ -295,10 +307,7 @@ fn create_pdfium() -> Result<PdfiumRuntime> {
             let library_path = PathBuf::from(path);
             let pdfium = new_or_reuse(Pdfium::bind_to_library(&library_path))
                 .context("failed to bind PDFium from PDFIUM_DYNAMIC_LIB_PATH")?;
-            return Ok(PdfiumRuntime {
-                pdfium,
-                version_label: pdfium_version_label_for_library(&library_path),
-            });
+            return Ok(PdfiumRuntime { pdfium });
         }
     }
 
@@ -313,10 +322,7 @@ fn create_pdfium() -> Result<PdfiumRuntime> {
     if policy == PdfiumLoadPolicy::Development {
         let pdfium = new_or_reuse(Pdfium::bind_to_system_library())
             .context("failed to bind system PDFium")?;
-        return Ok(PdfiumRuntime {
-            pdfium,
-            version_label: PDFIUM_VERSION_UNKNOWN_LABEL.to_string(),
-        });
+        return Ok(PdfiumRuntime { pdfium });
     }
 
     bail!("failed to bind bundled PDFium: no packaged PDFium library found")
@@ -402,12 +408,7 @@ fn bind_first_existing_pdfium_candidate(candidates: Vec<PathBuf>) -> Result<Opti
 
         let pdfium = new_or_reuse(Pdfium::bind_to_library(&candidate))
             .with_context(|| format!("failed to bind bundled PDFium: {}", candidate.display()))?;
-        let version_label = pdfium_version_label_for_library(&candidate);
-
-        return Ok(Some(PdfiumRuntime {
-            pdfium,
-            version_label,
-        }));
+        return Ok(Some(PdfiumRuntime { pdfium }));
     }
 
     Ok(None)

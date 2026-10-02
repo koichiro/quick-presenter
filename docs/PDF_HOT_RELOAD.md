@@ -29,7 +29,7 @@ preference and does not add a menu item, setting, or keyboard shortcut.
 - A user-facing hot reload toggle or persisted preference.
 - Editing or writing PDF files.
 - Watching source files used to generate a PDF.
-- Opening PDFium documents concurrently on multiple workers.
+- Sharing native PDFium documents across threads or helper processes.
 - Perfect change detection on every network or virtual filesystem.
 
 ## Dependency and Platform Behavior
@@ -164,7 +164,7 @@ The worker stores at most one `PreparedWorkerDocument`. `PrepareReload` performs
 all of the following before publishing a result:
 
 1. Run normal PDF input preflight.
-2. Open the candidate with PDFium on the existing worker.
+2. Open the candidate with PDFium in a separate helper process.
 3. Read its page count and reject an empty document.
 4. Clamp `requested_page_index` to the candidate's last page.
 5. Render that page at the normal current-slide width.
@@ -190,6 +190,8 @@ commit. On commit, the worker:
 
 An open or initial-page render error discards only the candidate and emits
 `ReloadPrepareFailed`. The old document and session remain active.
+The broker worker owns both remote proxies, not native documents. Dropping a
+failed/discarded candidate reaps only its helper; commit reaps the old helper.
 
 ## UI-thread Commit
 

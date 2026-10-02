@@ -60,4 +60,4 @@ jobs:
         run: cargo check --bin quick-presenter
 
       - name: Test
-        run: cargo test --bin quick-presenter
+        run: cargo test
