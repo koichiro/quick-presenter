@@ -32,8 +32,8 @@ Do not publish the release until:
 - The packaged artifact smoke tests pass for macOS, Windows, and Ubuntu Linux.
 - The macOS DMG is Developer ID signed, Apple-notarized, stapled, and accepted
   by Gatekeeper without an unidentified-developer warning.
-- The Windows package has passed Microsoft Store certification and the tested
-  app was installed from the Store, not from a direct MSI or MSIX artifact.
+- The existing public Microsoft Store listing is reachable and its current
+  public package can be installed from the Store.
 - The uploaded `quick-presenter-ubuntu-x64-gui-smoke` report passes, and the
   macOS/Windows GUI smoke skip-reason reports are reviewed.
 - This GUI smoke checklist passes on macOS, Windows, and Ubuntu Linux desktop
@@ -46,6 +46,11 @@ Do not publish the release until:
 Record the successful `Build Binaries` workflow run URL, tested artifact name,
 app version, operating system version, display setup, and test PDF for each
 platform.
+
+After the GitHub release, update the Microsoft Store package to v1.0.0, wait
+for certification, and rerun this checklist against the Store-installed v1.0.0
+app. Record that post-release result separately; a direct MSI or MSIX does not
+replace it.
 
 ## Manual Report Artifacts
 
@@ -216,8 +221,10 @@ Test on a normal signed-in desktop session, not a headless CI session.
 
 ## Windows
 
-Test the Microsoft Store-installed app. A direct MSI, MSIX, or raw
-`quick-presenter.exe` test does not satisfy the v1.0.0 Windows release gate.
+The existing public Store version may be used to confirm channel availability
+before the GitHub release. After publishing the GitHub release, rerun this
+section against the Microsoft Store-installed v1.0.0 app. A direct MSI, MSIX,
+or raw `quick-presenter.exe` test does not satisfy the Windows trust check.
 
 - Install Quick Presenter from Microsoft Store ID `9N913S9NJ6D1`.
 - Launch `Quick Presenter` from the Start Menu.

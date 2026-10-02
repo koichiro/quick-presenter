@@ -27,13 +27,17 @@ Before publishing a release:
    tag matching `v*`.
 5. Record the successful `Build Binaries` workflow run URL in the release
    checklist.
-6. Confirm the Linux, macOS, and Windows packages use the intended release
-   version and their package smoke tests pass. For Linux, verify the Debian file
-   name and the `Version` reported by `dpkg-deb --field <package> Version`.
+6. Confirm the Linux and macOS packages use the intended release version and
+   their package smoke tests pass. For Linux, verify the Debian file name and
+   the `Version` reported by `dpkg-deb --field <package> Version`. Confirm the
+   existing Microsoft Store listing remains publicly reachable; the v1.0.0
+   Store update is verified after the GitHub release as described below.
 7. Review the uploaded `quick-presenter-ubuntu-x64-gui-smoke` report and the
    macOS/Windows GUI smoke skip-reason reports from `Build Binaries`.
 8. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
-   macOS, Windows, and Ubuntu Linux artifacts before publishing.
+   macOS and Ubuntu Linux artifacts and the existing public Microsoft Store
+   build before publishing. Rerun the Windows checks on v1.0.0 after its Store
+   update is certified.
 9. Complete the platform trust checks in the v1.0.0 policy below.
 10. Attach the completed manual GUI smoke reports to the GitHub release, or
     document any platform-specific waiver in the release notes before publishing.
@@ -46,19 +50,22 @@ The supported v1.0.0 distribution channels are intentionally narrow:
 | --- | --- | --- | --- | --- |
 | macOS direct | Developer ID DMG | Developer ID signed, Apple-notarized, and stapled | Required release gate | Notarization must finish before publishing; there is no unsigned fallback. |
 | Mac App Store | App Store package | App Sandbox, App Store entitlements, and App Store review | Best effort; not a blocker | Review timing is external; use the signed/notarized direct DMG if the Store version is not ready. |
-| Windows | Microsoft Store MSIX | Partner Center identity, certification, and Store-managed signing | Required and the only supported Windows channel | Submit before release and verify the live listing; delay Windows publication rather than publishing a direct installer. |
+| Windows | Microsoft Store MSIX | Partner Center identity, certification, and Store-managed signing | Store availability is required; the v1.0.0 package update is post-release | Verify the existing public listing before release, then submit v1.0.0 and verify the updated Store installation. Never use a direct installer as a fallback. |
 | Ubuntu Linux direct | Debian package | Package version, SHA-256, bundled licenses, and real-machine smoke test | Required release gate | There is no alternate v1.0.0 package channel. |
 
 Validate the final macOS DMG with `codesign --verify --deep --strict`,
 `xcrun stapler validate`, and `spctl --assess`. An unsigned or unnotarized CI
 DMG is a validation artifact and must not be published as the release.
 
-For Windows, confirm that the Store submission passed certification, that the
-Store-installed app reports the intended version, and that it launches without
-an untrusted-publisher or SmartScreen warning. Direct MSI, MSIX, and raw
-executable artifacts are CI validation artifacts for v1.0.0 and must not be
-published as supported downloads. A self-signed certificate only exercises the
-signing pipeline and is never a production trust credential.
+For Windows, the already-public Store version establishes that the distribution
+channel is available before the GitHub v1.0.0 release. After that release,
+submit the v1.0.0 Store package, wait for certification, and confirm that the
+Store-installed app reports v1.0.0 and launches without an untrusted-publisher
+or SmartScreen warning. This post-release verification does not block the
+GitHub release. Direct MSI, MSIX, and raw executable artifacts are CI
+validation artifacts and must not be published as supported downloads. A
+self-signed certificate only exercises the signing pipeline and is never a
+production trust credential.
 
 For Ubuntu Linux, record the Debian package SHA-256, confirm the filename and
 package metadata version, and install and smoke-test that exact package on a
