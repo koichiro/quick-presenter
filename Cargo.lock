@@ -3725,6 +3725,8 @@ dependencies = [
  "pdfium-render",
  "raw-window-handle",
  "rfd",
+ "serde",
+ "serde_json",
  "slint",
  "slint-build",
  "tracing",

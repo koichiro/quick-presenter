@@ -23,6 +23,7 @@ pub mod presentation;
 pub mod recent;
 pub mod render_controller;
 pub mod render_scheduler;
+pub mod renderer_protocol;
 pub mod rendering;
 pub mod session_controller;
 pub mod timer;
