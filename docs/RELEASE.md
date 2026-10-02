@@ -42,20 +42,30 @@ Before publishing a release:
 
 The supported v1.0.0 distribution channels are intentionally narrow:
 
-- macOS is distributed as a Developer ID signed, Apple-notarized, and stapled
-  DMG. Validate the final DMG with `codesign --verify --deep --strict`,
-  `xcrun stapler validate`, and `spctl --assess`. An unsigned or unnotarized CI
-  DMG is a validation artifact and must not be published as the release.
-- Windows is distributed only through the Microsoft Store. Confirm that the
-  Store submission passed certification, that the Store-installed app reports
-  the intended version, and that it launches without an untrusted-publisher or
-  SmartScreen warning. Direct MSI, MSIX, and raw executable artifacts are CI
-  validation artifacts for v1.0.0 and must not be published as supported
-  downloads. A self-signed certificate only exercises the signing pipeline and
-  is never a production trust credential.
-- Ubuntu Linux is distributed as the Debian package. Record its SHA-256,
-  confirm the filename and package metadata version, and install and smoke-test
-  that exact package on a supported real machine before publishing.
+| Platform/channel | User package | Trust and identity | v1.0.0 status | Review lead time and fallback |
+| --- | --- | --- | --- | --- |
+| macOS direct | Developer ID DMG | Developer ID signed, Apple-notarized, and stapled | Required release gate | Notarization must finish before publishing; there is no unsigned fallback. |
+| Mac App Store | App Store package | App Sandbox, App Store entitlements, and App Store review | Best effort; not a blocker | Review timing is external; use the signed/notarized direct DMG if the Store version is not ready. |
+| Windows | Microsoft Store MSIX | Partner Center identity, certification, and Store-managed signing | Required and the only supported Windows channel | Submit before release and verify the live listing; delay Windows publication rather than publishing a direct installer. |
+| Ubuntu Linux direct | Debian package | Package version, SHA-256, bundled licenses, and real-machine smoke test | Required release gate | There is no alternate v1.0.0 package channel. |
+
+Validate the final macOS DMG with `codesign --verify --deep --strict`,
+`xcrun stapler validate`, and `spctl --assess`. An unsigned or unnotarized CI
+DMG is a validation artifact and must not be published as the release.
+
+For Windows, confirm that the Store submission passed certification, that the
+Store-installed app reports the intended version, and that it launches without
+an untrusted-publisher or SmartScreen warning. Direct MSI, MSIX, and raw
+executable artifacts are CI validation artifacts for v1.0.0 and must not be
+published as supported downloads. A self-signed certificate only exercises the
+signing pipeline and is never a production trust credential.
+
+For Ubuntu Linux, record the Debian package SHA-256, confirm the filename and
+package metadata version, and install and smoke-test that exact package on a
+supported real machine before publishing.
+
+Homebrew Cask, WinGet, Flatpak/Flathub, and other package-manager channels are
+outside the v1.0.0 scope.
 
 `Build Binaries` still runs automatically for pull requests that change
 packaging-sensitive files, such as packaging scripts, installer metadata,
