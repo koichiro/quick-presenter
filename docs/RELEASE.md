@@ -27,15 +27,45 @@ Before publishing a release:
    tag matching `v*`.
 5. Record the successful `Build Binaries` workflow run URL in the release
    checklist.
-6. Confirm the Linux, macOS, and Windows artifacts use the intended release
+6. Confirm the Linux, macOS, and Windows packages use the intended release
    version and their package smoke tests pass. For Linux, verify the Debian file
    name and the `Version` reported by `dpkg-deb --field <package> Version`.
 7. Review the uploaded `quick-presenter-ubuntu-x64-gui-smoke` report and the
    macOS/Windows GUI smoke skip-reason reports from `Build Binaries`.
 8. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
    macOS, Windows, and Ubuntu Linux artifacts before publishing.
-9. Attach the completed manual GUI smoke reports to the GitHub release, or
-   document any platform-specific waiver in the release notes before publishing.
+9. Complete the platform trust checks in the v1.0.0 policy below.
+10. Attach the completed manual GUI smoke reports to the GitHub release, or
+    document any platform-specific waiver in the release notes before publishing.
+
+### v1.0.0 distribution and trust policy
+
+The supported v1.0.0 distribution channels are intentionally narrow:
+
+| Platform/channel | User package | Trust and identity | v1.0.0 status | Review lead time and fallback |
+| --- | --- | --- | --- | --- |
+| macOS direct | Developer ID DMG | Developer ID signed, Apple-notarized, and stapled | Required release gate | Notarization must finish before publishing; there is no unsigned fallback. |
+| Mac App Store | App Store package | App Sandbox, App Store entitlements, and App Store review | Best effort; not a blocker | Review timing is external; use the signed/notarized direct DMG if the Store version is not ready. |
+| Windows | Microsoft Store MSIX | Partner Center identity, certification, and Store-managed signing | Required and the only supported Windows channel | Submit before release and verify the live listing; delay Windows publication rather than publishing a direct installer. |
+| Ubuntu Linux direct | Debian package | Package version, SHA-256, bundled licenses, and real-machine smoke test | Required release gate | There is no alternate v1.0.0 package channel. |
+
+Validate the final macOS DMG with `codesign --verify --deep --strict`,
+`xcrun stapler validate`, and `spctl --assess`. An unsigned or unnotarized CI
+DMG is a validation artifact and must not be published as the release.
+
+For Windows, confirm that the Store submission passed certification, that the
+Store-installed app reports the intended version, and that it launches without
+an untrusted-publisher or SmartScreen warning. Direct MSI, MSIX, and raw
+executable artifacts are CI validation artifacts for v1.0.0 and must not be
+published as supported downloads. A self-signed certificate only exercises the
+signing pipeline and is never a production trust credential.
+
+For Ubuntu Linux, record the Debian package SHA-256, confirm the filename and
+package metadata version, and install and smoke-test that exact package on a
+supported real machine before publishing.
+
+Homebrew Cask, WinGet, Flatpak/Flathub, and other package-manager channels are
+outside the v1.0.0 scope.
 
 `Build Binaries` still runs automatically for pull requests that change
 packaging-sensitive files, such as packaging scripts, installer metadata,
@@ -82,8 +112,10 @@ keyboard-focus, shell integration, and readability behavior.
 Manual GUI smoke reports are release artifacts. For v1.0.0 and later releases,
 attach one report per supported platform to the GitHub release using the
 filenames and required metadata in [GUI_SMOKE_CHECKLIST.md](GUI_SMOKE_CHECKLIST.md).
-Each report must identify the exact tested package file and package SHA-256 so
-the result can be matched to the released DMG, MSI, or Debian package.
+Each report must identify the exact tested distribution. Record the final file
+and SHA-256 for the DMG and Debian package. For Windows, record the Microsoft
+Store ID, Store package identity, and installed version instead of a local
+package hash.
 
 ## Supported Release Artifacts
 
@@ -92,7 +124,7 @@ Use the artifact that matches your operating system:
 | Platform | Artifact | What to use |
 | --- | --- | --- |
 | macOS | `quick-presenter-macos` | `QuickPresenter-<version>.dmg` or `Quick Presenter.app` |
-| Windows x64 | `quick-presenter-windows-x64` | `QuickPresenter-<version>.msi` |
+| Windows x64 | Microsoft Store ID `9N913S9NJ6D1` | Install from Microsoft Store |
 | Ubuntu x64 | `quick-presenter-ubuntu-x64` | `quick-presenter_<version>_amd64.deb` |
 
 The uploaded artifact directories may also include raw `quick-presenter` or `quick-presenter.exe`
@@ -100,11 +132,10 @@ development binaries. Prefer the packaged artifact for normal use because
 it keeps the executable, bundled PDFium files, desktop metadata, and license
 files in the expected layout.
 
-The Windows artifact may include `QuickPresenter-<version>.msix` for layout validation.
-Unsigned MSIX packages are not a user-installable distribution artifact.
-Use the MSI unless a release explicitly identifies a signed MSIX as supported.
-Microsoft Store releases are a separate distribution path and use a
-Store-identity MSIX package rather than the direct-download MSI.
+The Windows CI artifact may include MSI, MSIX, and raw executable files for
+layout, packaging, and signing validation. They are not supported v1.0.0
+downloads. The Store-identity MSIX is submitted to Partner Center and becomes
+the supported package only after Microsoft Store certification and signing.
 
 ## macOS
 
@@ -118,25 +149,25 @@ Download `quick-presenter-macos` and open `QuickPresenter-<version>.dmg`.
 5. Use the presenter window for controls and the slide window for audience
    output.
 
-Current macOS disk images may be unsigned unless release signing and
-notarization were configured for that build. macOS Gatekeeper can warn about
-unsigned or unnotarized builds.
+The v1.0.0 release disk image must be Developer ID signed, Apple-notarized, and
+stapled. Gatekeeper must accept the final DMG without an unidentified-developer
+warning. Unsigned CI disk images are packaging validation artifacts only.
 
 ## Windows
 
-Download `quick-presenter-windows-x64` and run `QuickPresenter-<version>.msi`.
+Install Quick Presenter from Microsoft Store ID `9N913S9NJ6D1`.
 
-1. Install the MSI.
+1. Complete the Microsoft Store installation.
 2. Launch `Quick Presenter` from the Start Menu.
 3. Choose `Open` or `File > Open PDF...`.
 4. Select a PDF slide deck.
 5. Use the presenter window for controls and the slide window for audience
    output.
 
-Current MSI packages may be unsigned unless release signing was configured
-for that build. Windows SmartScreen can warn about unsigned or low-reputation
-builds. PDF file associations and auto-update are not part of the current
-installer flow.
+The Microsoft Store is the only supported Windows distribution channel for
+v1.0.0. Do not publish the workflow-generated MSI, direct MSIX, or raw
+executable as a release download. Microsoft Store certification and signing
+provide the production trust boundary; a self-signed CI artifact does not.
 
 ## Ubuntu Linux
 
