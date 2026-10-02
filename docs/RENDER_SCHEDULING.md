@@ -1,5 +1,9 @@
 # Render Scheduling
 
+The future helper transport and broker adapter are documented in
+[Renderer IPC Protocol](RENDERER_PROTOCOL.md). They preserve the scheduler's
+request/session identities without changing the production thread worker yet.
+
 Quick Presenter keeps PDFium document access on one render worker. Rendering is
 scheduled in two stages so the UI can remain responsive under backlog while the
 worker keeps a stable, deduplicated view of pending work.
