@@ -111,10 +111,6 @@ main {
   padding: 54px 0 42px;
 }
 
-.teaser-hero {
-  min-height: calc(100vh - 140px);
-}
-
 .eyebrow {
   margin: 0 0 12px;
   color: var(--accent);
@@ -157,13 +153,6 @@ h3 {
   margin: 24px 0 0;
   color: var(--muted);
   font-size: clamp(1.12rem, 2vw, 1.34rem);
-}
-
-.teaser-note {
-  max-width: 620px;
-  margin: 18px 0 0;
-  color: var(--muted);
-  font-size: 1.05rem;
 }
 
 .hero-actions {
@@ -483,13 +472,32 @@ h3 {
   justify-content: end;
 }
 
-.store-links a {
+.store-coming-soon {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.store-coming-soon span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.store-link {
   display: block;
   border-radius: 8px;
 }
 
-.store-links a:hover {
+.store-link:hover {
   transform: translateY(-1px);
+}
+
+.store-link:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
 }
 
 .store-links img {

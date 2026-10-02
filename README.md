@@ -1,10 +1,14 @@
 # Quick Presenter
 
+[Website](https://koichiro.github.io/quick-presenter/) ·
+[Downloads](https://github.com/koichiro/quick-presenter/releases) ·
+[Privacy](https://koichiro.github.io/quick-presenter/privacy/)
+
 [![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/ci.yml)
 [![Build Binaries](https://img.shields.io/badge/builds-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml)
 ![Rust](https://img.shields.io/badge/language-Rust-b7410e)
 ![Coverage target](https://img.shields.io/badge/coverage%20target-80%25-brightgreen)
-[![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPL--3.0--only-blue)](LICENSE)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 ![Input](https://img.shields.io/badge/input-PDF-orange)
 
@@ -215,7 +219,9 @@ under [docs/](docs/).
 ## Releases
 
 Quick Presenter is an OSS project focused on reliable PDF presentation
-playback. Download and launch steps for packaged artifacts are documented in
+playback. Windows v1.0.0 is distributed exclusively through Microsoft Store;
+the signed/notarized macOS package and Linux package are published through
+GitHub Releases. Download and launch steps are documented in
 [docs/RELEASE.md](docs/RELEASE.md).
 
 Packaging and signing details for maintainers are documented in
