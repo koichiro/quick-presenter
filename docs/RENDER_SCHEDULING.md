@@ -107,13 +107,118 @@ finished. The replacement path attempts to join the finished worker before
 installing a new scheduler. It must not create a new worker while the previous
 worker is still `Running` or `ShutdownRequested`.
 
-Session changes remain cooperative at IPC boundaries; hard operation deadlines
-and bounded restart remain #373. Scheduler shutdown first cancels work, then
+Session changes remain cooperative at IPC boundaries, now bounded by operation
+deadlines. Scheduler shutdown first cancels work, then
 kills and reaps all registered helpers without waiting for a protocol reply.
-Registration after shutdown kills the newly spawned helper as well. Proxy drop
-also kills/reaps its child. Closing the parent control pipe independently exits
+Registration after shutdown kills the newly spawned helper as well. Healthy
+proxy drop allows a bounded graceful shutdown before killing/reaping its child.
+Closing the parent control pipe independently exits
 the helper, including while its native execution thread is blocked. No PDFium
 thread is asynchronously cancelled inside the UI process.
+
+## Helper deadlines and recovery (v1.5.0)
+
+`renderer_limits::Operation` defines separate hard deadlines for the whole pipe
+exchange, including blocked writes, partial replies, and payload transfer:
+
+| Operation | Deadline |
+| --- | --- |
+| Handshake | 5 seconds |
+| Open | 30 seconds |
+| Visible render (`BlockingVisible`) | 5 seconds |
+| Auxiliary render (preview, thumbnail, warm preload) | 10 seconds |
+| Notes (one page, or the legacy whole-document request) | 5 seconds |
+| Graceful shutdown | 1 second |
+
+These are conservative initial product budgets, not performance guarantees.
+Handshake, open, and initial render are separately budgeted; selecting a PDF
+does not imply a single 30-second end-to-end deadline. A broker-owned watchdog
+is independent of synchronous IO and kills/reaps the helper at expiry. Deadline
+validation also rejects late replies if the watchdog thread was delayed. OS
+scheduling and process-reaping latency can add overhead; shutdown never waits
+for a PDFium call to finish or for a protocol acknowledgment from a hung child.
+
+Only committed/activated proxies may automatically recover from a clean EOF,
+native exit, or timeout. After 500 ms backoff, reopen the same document and render
+the tracked visible current page. Warm preload must not replace that page in
+recovery state. File size/mtime and title/page-count changes reject recovery
+rather than silently committing a different on-disk document. Session and job
+identities are retained; replacement transport request IDs belong to the new
+connection, so the old connection cannot provide results after restart.
+
+Allow at most one restart in a rolling 60-second window. Another failure within
+the window, or failure during restart preparation, suppresses automatic retries
+until an explicit open creates a new proxy/session. Protocol/version/truncation
+failures and observed memory-limit failures are never replayed. Candidate
+failures do not consume the active document's restart budget. Hot reload stops
+retrying a crashed/timed-out/malformed candidate for that file revision;
+ordinary incomplete-write/PDF errors retain the existing bounded reload retry
+policy, and a later filesystem revision can prepare a new candidate.
+
+If recovery fails, `WorkerFailed` invalidates the failed session, keeps cached
+pixels and the last-good audience image, and offers `Open the PDF again`. A later
+valid PDF can replace the failed scheduler after its worker finishes.
+
+## Product resource limits
+
+Named shared limits live in `renderer_limits.rs`; wire-specific limits live in
+`renderer_protocol.rs`. Both helper preflight and broker validation apply them.
+
+| Resource | Limit |
+| --- | --- |
+| PDF input bytes | 1 GiB, regular nonempty `%PDF-` file |
+| Pages | 10,000 |
+| Target/output dimension | 1–4,096 pixels per side |
+| Decoded pixels / RGBA payload | 16,777,216 pixels / 64 MiB |
+| Control frame / encoded path / title or error | 1 MiB / 32 KiB / 4 KiB UTF-8 |
+| Notes per page / document | 64 KiB / 512 KiB UTF-8 |
+| Pending command work / worker work / events | 64 each |
+| Queued event pixels (including prepared reload pages) | 128 MiB total |
+| Helper memory | 1 GiB per helper, platform-specific below |
+
+Geometry must be finite and positive. Checked calculations validate target and
+rounded output sizes before native bitmap allocation, verify returned bitmap
+dimensions before image conversion, and validate RGBA lengths before copying.
+Note accumulation and aggregate event bytes use checked arithmetic. Byte-pressure
+eviction retains the event priority policy below; the worker queue is bounded as
+well as the UI command mailbox. Existing 96 MiB render-cache policy is unchanged.
+Native annotation APIs may allocate a string before its length can be checked;
+OS helper limits are the backstop, not a claim that PDFium allocates only output
+pixels or text.
+
+Platform memory controls:
+
+- Linux: hard and soft `RLIMIT_AS` are set to 1 GiB before PDFium initialization.
+  This caps virtual address space, including mappings, not just resident pages.
+  Failure to install the control prevents helper startup.
+- Windows: the broker assigns the child to a non-inherited Job Object before
+  sending any document work, with 1 GiB process committed-memory limit,
+  kill-on-job-close, and native-error-dialog suppression. Unsupported/failed job
+  assignment fails closed, rather than running without the requested limit.
+- macOS: sample `proc_pid_rusage` resident bytes every 50 ms and kill/reap an
+  over-budget helper. This is a **best-effort sampled fallback**, not a hard
+  pre-allocation cap: short bursts can overshoot and unavailable sampling leaves
+  only geometry/wire caps and operation deadlines. There is no portable strict
+  macOS address-space cap suitable for this runtime's mappings. Do not describe
+  sampled RSS as equivalent to Linux address-space or Windows commit limits.
+
+Unix helpers disable native core dumps. Timeout/crash/protocol diagnostics contain
+operation, fixed failure classification, and exit status only; helper-controlled
+error chains, paths, notes, and pixels are not logged for those failures. The
+application does not enable full-memory dumps; OS crash-reporting policy is
+outside this logging boundary. None of these controls restrict filesystem or
+network authority: sandbox work remains #374–#376.
+
+References: [Linux resource limits](https://man7.org/linux/man-pages/man2/getrlimit.2.html),
+[Windows Job Objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects),
+and [Apple resource definitions](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/resource.h).
+
+Debug-only executable tests inject hang, abort, EOF, version mismatch, truncated
+and oversized replies, untrusted diagnostic text, and excessive allocation
+attempts. They cover transactional candidate failure, bounded restart, clean
+recovery with a later valid PDF, and scheduler shutdown during a hung render.
+Release builds ignore all `QUICK_PRESENTER_HELPER_TEST_*` hooks and omit internal
+recovery/scheduler smoke entry points.
 
 ## Render events
 

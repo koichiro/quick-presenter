@@ -15,14 +15,12 @@ use std::{
 
 pub const VERSION: u16 = 2;
 pub const MAX_CONTROL_BYTES: usize = 1024 * 1024;
-pub const MAX_PIXEL_BYTES: usize = 64 * 1024 * 1024;
-pub const MAX_DIMENSION: u32 = 16_384;
-pub const MAX_PAGES: u32 = 100_000;
+pub use crate::renderer_limits::{MAX_DIMENSION, MAX_PAGES, MAX_PIXEL_BYTES};
 pub const MAX_PATH_BYTES: usize = 32_768;
 pub const MAX_TEXT_BYTES: usize = 4096;
 pub const MAX_NOTE_BYTES: usize = 64 * 1024;
 pub const MAX_DOCUMENT_NOTE_BYTES: usize = 512 * 1024;
-pub const MAX_PENDING_REQUESTS: usize = 64;
+pub const MAX_PENDING_REQUESTS: usize = crate::renderer_limits::MAX_PENDING_WORK;
 const MAGIC: [u8; 4] = *b"QPRP";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -168,19 +166,7 @@ pub struct Frame {
 }
 
 fn pixel_len(width: u32, height: u32) -> Result<usize> {
-    ensure!(
-        (1..=MAX_DIMENSION).contains(&width) && (1..=MAX_DIMENSION).contains(&height),
-        "invalid pixel dimensions"
-    );
-    let bytes = u64::from(width)
-        .checked_mul(u64::from(height))
-        .and_then(|n| n.checked_mul(4))
-        .context("pixel size overflow")?;
-    ensure!(
-        bytes <= MAX_PIXEL_BYTES as u64,
-        "pixel payload exceeds limit"
-    );
-    usize::try_from(bytes).context("pixel size exceeds address space")
+    crate::renderer_limits::pixel_bytes(width, height)
 }
 
 impl Envelope {
@@ -882,7 +868,7 @@ mod tests {
             (1, 0),
             (u32::MAX, 1),
             (1, u32::MAX),
-            (MAX_DIMENSION, MAX_DIMENSION),
+            (MAX_DIMENSION + 1, MAX_DIMENSION),
         ] {
             assert!(pixel_len(width, height).is_err());
         }

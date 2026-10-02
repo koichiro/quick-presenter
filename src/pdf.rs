@@ -22,10 +22,8 @@ const PDF_HEADER: &[u8; 5] = b"%PDF-";
 
 /// Refuse unusually large inputs before handing them to native PDF parsing.
 ///
-/// The limit is intentionally conservative for v1.0.0: large enough for
-/// image-heavy slide decks, small enough to avoid accidental multi-GB files or
-/// other inputs that need additional isolated-process resource budgets (#373).
-const MAX_PREFLIGHT_PDF_BYTES: u64 = 1024 * 1024 * 1024;
+/// Shared input budget, enforced before either broker IPC or helper PDFium work.
+const MAX_PREFLIGHT_PDF_BYTES: u64 = crate::renderer_limits::MAX_PDF_BYTES;
 
 /// Helper-local PDF document state.
 ///
@@ -62,6 +60,10 @@ impl PdfDocumentState {
         };
 
         let page_count = document.pages().len();
+        ensure!(
+            page_count > 0 && page_count as u32 <= crate::renderer_limits::MAX_PAGES,
+            "PDF page count exceeds supported limit"
+        );
 
         Ok(Self {
             document,
@@ -86,18 +88,31 @@ impl PdfDocumentState {
         page_index: u32,
         target_width: i32,
     ) -> Result<SharedPixelBuffer<Rgba8Pixel>> {
-        let page_number = page_index + 1;
+        ensure!(page_index < self.page_count, "page index outside document");
+        let page_number = page_index.checked_add(1).context("page number overflow")?;
         let page = self
             .document
             .pages()
             .get(page_index as PdfPageIndex)
             .with_context(|| format!("failed to load page {page_number}"))?;
+        let (width, height) = crate::renderer_limits::render_dimensions(
+            page.width().value,
+            page.height().value,
+            target_width,
+        )?;
         let render_config = PdfRenderConfig::new()
-            .set_target_width(target_width)
+            .set_target_size(width as i32, height as i32)
             .render_annotations(false);
         let bitmap = page
             .render_with_config(&render_config)
             .with_context(|| format!("failed to render page {page_number}"))?;
+        let bitmap_width = u32::try_from(bitmap.width())?;
+        let bitmap_height = u32::try_from(bitmap.height())?;
+        crate::renderer_limits::pixel_bytes(bitmap_width, bitmap_height)?;
+        ensure!(
+            bitmap_width == width && bitmap_height == height,
+            "unexpected native bitmap dimensions"
+        );
         let image = bitmap.as_image()?;
         let rgba = image.to_rgba8();
         let width = rgba.width();
@@ -109,7 +124,8 @@ impl PdfDocumentState {
     }
 
     pub fn page_aspect_ratio(&self, page_index: u32) -> Result<f32> {
-        let page_number = page_index + 1;
+        ensure!(page_index < self.page_count, "page index outside document");
+        let page_number = page_index.checked_add(1).context("page number overflow")?;
         let page = self
             .document
             .pages()
@@ -135,6 +151,7 @@ impl PdfDocumentState {
         is_cancelled: impl Fn() -> bool,
     ) -> Result<Option<SpeakerNotes>> {
         let mut notes = Vec::new();
+        let mut note_bytes = 0usize;
 
         for page_index in 0..self.page_count {
             let Some(mut page_notes) =
@@ -142,6 +159,15 @@ impl PdfDocumentState {
             else {
                 return Ok(None);
             };
+            for (_, text) in &page_notes {
+                note_bytes = note_bytes
+                    .checked_add(text.len())
+                    .context("document notes length overflow")?;
+            }
+            ensure!(
+                note_bytes <= crate::renderer_protocol::MAX_DOCUMENT_NOTE_BYTES,
+                "document notes exceed limit"
+            );
             notes.append(&mut page_notes);
         }
 
@@ -153,6 +179,7 @@ impl PdfDocumentState {
         page_index: u32,
         is_cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<Vec<(u32, String)>>> {
+        ensure!(page_index < self.page_count, "page index outside document");
         if is_cancelled() {
             return Ok(None);
         }
@@ -164,6 +191,7 @@ impl PdfDocumentState {
             .with_context(|| format!("failed to load page {}", page_index + 1))?;
 
         let mut notes = Vec::new();
+        let mut note_bytes = 0usize;
         for annotation in page.annotations().iter() {
             if is_cancelled() {
                 return Ok(None);
@@ -175,6 +203,14 @@ impl PdfDocumentState {
 
             if let Some(contents) = annotation.contents() {
                 if is_pdf_speaker_note_annotation(None, Some(&contents)) {
+                    note_bytes = note_bytes
+                        .checked_add(contents.len())
+                        .and_then(|total| total.checked_add(1))
+                        .context("page notes length overflow")?;
+                    ensure!(
+                        note_bytes <= crate::renderer_protocol::MAX_NOTE_BYTES,
+                        "page notes exceed limit"
+                    );
                     notes.push((page_index + 1, contents));
                 }
             }
@@ -189,6 +225,7 @@ fn rgba_pixel_buffer(
     width: u32,
     height: u32,
 ) -> Result<SharedPixelBuffer<Rgba8Pixel>> {
+    crate::renderer_limits::pixel_bytes(width, height)?;
     let expected_len = usize::try_from(width)
         .ok()
         .and_then(|width| {
@@ -261,7 +298,7 @@ fn document_title(path: &Path) -> String {
         .to_owned()
 }
 
-fn preflight_pdf_input(path: &Path) -> Result<()> {
+pub(crate) fn preflight_pdf_input(path: &Path) -> Result<()> {
     let metadata = fs::metadata(path).context("file does not exist or cannot be accessed")?;
 
     if !metadata.is_file() {

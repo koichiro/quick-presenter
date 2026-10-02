@@ -54,7 +54,7 @@ not receive UI authority merely because the broker launched it.
 | Stage | Native crash or abort | Hard timeout | Compromised renderer authority |
 | --- | --- | --- | --- |
 | Previous render thread | Terminates the application | Not available while PDFium is running | Same user authority and address space as the UI |
-| Current supervised, unsandboxed helper | Contained to the helper; broker can detect exit | Termination/reaping exists; operation deadlines pending #373 | Same user authority as the UI; **not a security boundary** |
+| Current supervised, unsandboxed helper | Contained to the helper; bounded recovery | Separate operation deadlines, termination/reaping | Same user authority as the UI; **not a security boundary** |
 | Supervised, OS-sandboxed helper | Contained to the helper | Broker can terminate and reap the helper | Restricted by the documented platform policy and brokered resources |
 
 Process isolation is therefore the cross-platform reliability boundary.
@@ -66,16 +66,17 @@ safe.
 
 The production runtime keeps `PdfDocumentState` in an unsandboxed helper, using
 the same installed executable in internal helper mode. The UI/broker does not
-initialize PDFium. Active-helper EOF, exit, or invalid IPC becomes `WorkerFailed`;
+initialize PDFium. Unrecoverable active-helper EOF, exit, or invalid IPC becomes `WorkerFailed`;
 candidate failures keep the previous helper and last good slide. Shutdown kills
 and reaps helpers without waiting for native work; parent-pipe EOF independently
 exits the helper. This contains ordinary native crashes to the helper, but does
 not prevent a compromised helper from exercising the user's OS authority.
 
-There is still no hard open/render timeout, automatic bounded restart, or
-per-helper memory cap. A hung operation can block broker dispatch until shutdown.
-Those lifecycle and resource policies remain #373. Packaged releases gain these
-guarantees only when they include and validate this implementation.
+Hard deadlines, bounded restart, and platform-specific memory controls are now
+implemented. Their numeric values and fallback guarantees are documented in
+[Render Scheduling](RENDER_SCHEDULING.md). macOS sampled RSS is not a hard memory
+reservation cap. Packaged releases gain these guarantees only when they include
+and validate this implementation; helpers still have unsandboxed user authority.
 
 Current mitigations reduce accidental and resource-exhaustion risk but do not
 form a sandbox:
@@ -87,9 +88,9 @@ form a sandbox:
 - packaged releases load a checksum-pinned bundled PDFium by default.
 
 The IPC boundary enforces page-count, note-size, decoded-pixel, and dimension
-caps documented in [Renderer IPC Protocol](RENDERER_PROTOCOL.md), but these do
-not cap PDFium's internal allocations. Measured product limits, operation
-deadlines, memory confinement, and expanded recovery tests remain #373.
+caps documented in [Renderer IPC Protocol](RENDERER_PROTOCOL.md). Output caps do
+not bound PDFium's internal allocations by themselves; platform memory controls
+and deadlines provide the additional resource-exhaustion backstop described above.
 
 ## Target broker and helper contract
 
@@ -118,9 +119,9 @@ The common contract is:
    to cancel a thread inside PDFium.
 5. Input bytes, page count, target dimensions, decoded pixels and bytes, IPC
    frames, note text, helper memory, queued work, and diagnostic text all have
-   named limits. Checked arithmetic and broker-side limits apply before memory
-   allocation. #373 records and tests the numeric values before enabling the
-   helper path by default.
+   named limits. Checked arithmetic and broker-side limits apply before broker
+   allocation; helper preflight checks output geometry before native bitmap
+   allocation. Platform memory caps have the documented macOS sampled fallback.
 6. A helper cannot outlive its broker during normal shutdown or supported
    packaged-process termination. Platform lifecycle controls must cover any
    process tree the helper could create.
@@ -140,7 +141,7 @@ If an active helper fails, the broker must:
    cached pixels;
 3. show a short presenter-facing recovery message without exposing PDF content
    or sensitive paths;
-4. automatically attempt at most one helper restart for the same document in a
+4. for a crash/EOF/timeout, automatically attempt at most one helper restart for the same document in a
    rolling 60-second window, reopening the document and rerendering the current
    page; and
 5. suppress further automatic restarts after another failure until the user
@@ -151,8 +152,9 @@ downgraded. Malformed IPC is not retried. An explicit user action starts a new
 session and may attempt recovery after automatic restart suppression.
 
 Diagnostics may contain operation names, bounded identifiers, PDFium and
-protocol versions, process exit classification, applied limit names, and error
-chains. They must not contain PDF bytes, rendered pixels, speaker notes, full
+protocol versions, process exit classification, and applied limit names. Native
+failure/protocol diagnostics omit helper-controlled error chains. They must not
+contain PDF bytes, rendered pixels, speaker notes, full
 file dumps, or unnecessary full paths.
 
 ## Platform sandbox policy
