@@ -24,7 +24,10 @@ pub mod recent;
 pub mod render_controller;
 pub mod render_scheduler;
 pub mod renderer_helper;
+pub mod renderer_limits;
 pub mod renderer_protocol;
+pub mod renderer_resources;
+pub mod renderer_supervision;
 pub mod rendering;
 pub mod session_controller;
 pub mod timer;
@@ -121,6 +124,22 @@ const INITIAL_LINUX_WINDOW_SHOW_DELAY: Duration = Duration::from_millis(120);
 const INITIAL_LINUX_PRESENTER_FRONT_DELAY: Duration = Duration::from_millis(80);
 
 fn main() -> Result<()> {
+    #[cfg(debug_assertions)]
+    if std::env::args_os().nth(1).as_deref()
+        == Some(std::ffi::OsStr::new("--renderer-scheduler-smoke"))
+    {
+        let paths: Vec<_> = std::env::args_os().skip(2).collect();
+        anyhow::ensure!(paths.len() == 2, "scheduler smoke requires two PDF paths");
+        return renderer_helper::scheduler_smoke(paths[0].clone().into(), paths[1].clone().into());
+    }
+    #[cfg(debug_assertions)]
+    if std::env::args_os().nth(1).as_deref()
+        == Some(std::ffi::OsStr::new("--renderer-recovery-smoke"))
+    {
+        let paths: Vec<_> = std::env::args_os().skip(2).collect();
+        anyhow::ensure!(paths.len() == 2, "recovery smoke requires two PDF paths");
+        return renderer_helper::recovery_smoke(paths[0].clone().into(), paths[1].clone().into());
+    }
     if std::env::args_os().nth(1).as_deref()
         == Some(std::ffi::OsStr::new(renderer_helper::HELPER_ARGUMENT))
     {
@@ -348,10 +367,17 @@ fn smoke_open_pdf(path: PathBuf) -> Result<()> {
     let group = renderer_helper::ProcessGroup::default();
     let mut helper = renderer_helper::HelperClient::spawn(&group)?;
     let (title, page_count) = helper.open(path)?;
+    let purpose = RenderPurpose::CurrentSlide;
+    #[cfg(debug_assertions)]
+    let purpose = if std::env::var_os("QUICK_PRESENTER_HELPER_TEST_AUXILIARY").is_some() {
+        RenderPurpose::NextPreview
+    } else {
+        purpose
+    };
     let page = helper.render(RenderRequest {
         page_index: 0,
         width: SMOKE_RENDER_WIDTH,
-        purpose: RenderPurpose::CurrentSlide,
+        purpose,
     })?;
     for index in 0..page_count {
         helper.notes_page(index)?;
@@ -1873,7 +1899,8 @@ fn handle_render_event(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, e
         RenderEvent::ReloadPrepareFailed {
             session_id,
             message,
-        } => handle_reload_prepare_failed(windows, state, session_id, message),
+            retryable,
+        } => handle_reload_prepare_failed(windows, state, session_id, message, retryable),
     }
 }
 
@@ -1954,6 +1981,7 @@ fn handle_reload_prepare_failed(
     state: &Rc<RefCell<AppState>>,
     session_id: render_scheduler::RenderSessionId,
     message: String,
+    retryable: bool,
 ) {
     let now = Instant::now();
     let outcome = {
@@ -1968,7 +1996,7 @@ fn handle_reload_prepare_failed(
         clear_render_reload_state(&mut state, session_id);
         let outcome = state
             .hot_reload
-            .finish_preparing(session_id, revision, false, now);
+            .finish_preparing_with_retry(session_id, revision, false, retryable, now);
         if outcome == PreparationOutcome::Failed {
             warn!(error = %message, "failed to reload PDF; keeping previous document");
             state.hot_reload.clear_success_notice();

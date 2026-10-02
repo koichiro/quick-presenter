@@ -6,8 +6,11 @@ The v1.0.0 decision below records the original thread-only design. Since #372,
 native open/render runs in a separate helper. A replacement is committed only
 after open and initial-page render succeed; shutdown can terminate and reap a
 blocked helper. Normal broker dispatch still waits synchronously for IPC, so
-newer opens remain coalesced until that exchange finishes. Hard deadlines and
-bounded recovery are still pending #373. The presenter-facing delayed status
+newer opens remain coalesced until that exchange finishes or its deadline expires.
+Since #373, handshake is capped at 5 seconds, open at 30 seconds, and initial
+visible render at 5 seconds. Candidate timeout preserves the committed deck;
+only active-document crash/timeout is eligible for bounded automatic recovery.
+See [Render Scheduling](RENDER_SCHEDULING.md). The presenter-facing delayed status
 and last-good-deck behavior below remain in effect.
 
 PDF opens run on the single render worker because loaded `PdfDocumentState`

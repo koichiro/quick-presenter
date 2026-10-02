@@ -142,6 +142,14 @@ pub fn enqueue_render_plan_if_missing(
 }
 
 fn enqueue_render_if_missing(state: &AppState, request: RenderRequest, priority: RenderPriority) {
+    if priority == RenderPriority::BlockingVisible {
+        if let (Some(session), Some(scheduler)) = (
+            state.render_sessions.current_session(),
+            state.render_scheduler.as_ref(),
+        ) {
+            scheduler.set_visible_page(session, request);
+        }
+    }
     let Some(session_id) = render_enqueue_session(
         state.render_cache.peek(request).is_some(),
         state.render_sessions.current_session(),
@@ -407,6 +415,21 @@ mod tests {
             }],
         );
 
+        assert!(drained_commands(&state).is_empty());
+        assert_eq!(
+            state
+                .render_scheduler
+                .as_ref()
+                .unwrap()
+                .visible_page_for_test(session),
+            Some(request)
+        );
+        let warm = current_request(1);
+        state.render_cache.insert(warm, cached_page());
+        enqueue_render_if_missing(&state, warm, RenderPriority::Warm);
+        let scheduler = state.render_scheduler.as_ref().unwrap();
+        assert_eq!(scheduler.visible_page_for_test(session), Some(request));
+        assert_eq!(scheduler.visible_page_for_test(RenderSessionId(2)), None);
         assert!(drained_commands(&state).is_empty());
     }
 

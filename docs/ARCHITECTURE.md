@@ -62,14 +62,17 @@ discarding a candidate terminates and reaps only that process. Each helper has
 its own PDFium runtime, with no cross-process native document sharing.
 
 Helper EOF, abnormal exit, and protocol errors are transport failures, not Rust
-panics in PDFium. Active-helper failures become `WorkerFailed`; candidate
+panics in PDFium. Unrecoverable active-helper failures become `WorkerFailed`; candidate
 failures remain open/reload failures and preserve the current deck. Scheduler
 shutdown kills and reaps registered helpers even if native work is blocked.
 A helper's input guardian exits on parent-pipe closure even during native work.
 Only unit tests retain synchronous in-process PDF loading.
 
-Helpers currently run unsandboxed. Operation deadlines, bounded restart, and
-resource budgets remain #373; OS security confinement remains #374–#376.
+Helpers currently run unsandboxed. Independent broker watchdogs enforce operation
+deadlines and supervise helper memory; a crash/timeout may trigger one bounded
+restart, while malformed IPC is not replayed. Numeric budgets, platform controls,
+and fallback guarantees are documented in [Render Scheduling](RENDER_SCHEDULING.md).
+OS security confinement remains #374–#376.
 
 ## Native file dialogs
 

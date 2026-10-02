@@ -2,8 +2,9 @@
 
 `src/renderer_protocol.rs` defines the transport and broker adapter from #371;
 `src/renderer_helper.rs` connects it to production subprocesses in #372. Version
-2 adds page-scoped notes to retain priority scheduling between pages. Deadlines,
-resource budgets, and OS sandboxing remain #373 through #376.
+2 adds page-scoped notes to retain priority scheduling between pages. Product
+deadlines and resource budgets are documented in [Render Scheduling](RENDER_SCHEDULING.md);
+OS sandboxing remains #374 through #376.
 
 ## Framing and compatibility
 
@@ -75,8 +76,8 @@ requests. Brokered handles/data will be reviewed when sandboxing is added.
 | --- | --- |
 | Control JSON | 1 MiB |
 | Pixel payload | 64 MiB |
-| Width or height | 1 through 16,384 |
-| Page count | 1 through 100,000 |
+| Width or height | 1 through 4,096 |
+| Page count | 1 through 10,000 |
 | Encoded path | 32 KiB |
 | Title or error text | 4 KiB UTF-8 |
 | Note per page | 64 KiB UTF-8 |
@@ -88,8 +89,9 @@ decoding is bounded by that buffer and serde's recursion limit; decoded field
 limits and semantic metadata are checked immediately after parsing. String
 limits measure decoded UTF-8 bytes; escaped JSON must also fit the control cap.
 The codec verifies RGBA8 dimensions and checked `width * height * 4` against the
-declared payload before allocating pixel storage. These are wire safety limits;
-#373 adds measured product budgets, operation deadlines, and process memory caps.
+declared payload before allocating pixel storage. These wire safety limits are
+paired with helper geometry preflight, aggregate backlog byte caps, operation
+deadlines, and platform memory controls; they do not themselves confine PDFium.
 
 The broker must use `Broker::read_response()` to correlate request ID, session,
 response kind, requested width, and note page range before allocating or reading

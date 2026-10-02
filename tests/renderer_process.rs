@@ -8,6 +8,247 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(debug_assertions)]
+fn run_broker(mut command: Command) -> std::process::Output {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+    let out = thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let mut reader = stdout;
+        reader.read_to_end(&mut bytes).unwrap();
+        bytes
+    });
+    let err = thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let mut reader = stderr;
+        reader.read_to_end(&mut bytes).unwrap();
+        bytes
+    });
+    let deadline = Instant::now() + Duration::from_secs(15);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("broker deadline exceeded");
+        }
+        thread::sleep(Duration::from_millis(10));
+    };
+    std::process::Output {
+        status,
+        stdout: out.join().unwrap(),
+        stderr: err.join().unwrap(),
+    }
+}
+
+#[cfg(debug_assertions)]
+fn fixture() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/marp-speaker-notes.pdf")
+}
+
+#[test]
+#[cfg(debug_assertions)]
+fn broker_deadlines_cover_handshake_open_render_notes_and_graceful_shutdown() {
+    for (fault, operation) in [
+        ("hang-on-handshake", "Handshake"),
+        ("hang-on-open", "Open"),
+        ("wait-on-render", "VisibleRender"),
+        ("wait-on-render", "AuxiliaryRender"),
+        ("hang-on-notes", "Notes"),
+        ("hang-on-shutdown", "Shutdown"),
+    ] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+        command
+            .arg("--smoke-open-pdf")
+            .arg(fixture())
+            .env("QUICK_PRESENTER_HELPER_TEST_FAULT", fault)
+            .env("QUICK_PRESENTER_HELPER_TEST_DEADLINE_MS", "1000");
+        if operation == "AuxiliaryRender" {
+            command.env("QUICK_PRESENTER_HELPER_TEST_AUXILIARY", "1");
+        }
+        let start = Instant::now();
+        let output = run_broker(command);
+        assert!(start.elapsed() < Duration::from_secs(8), "{fault}");
+        if fault == "hang-on-shutdown" {
+            assert!(output.status.success());
+        } else {
+            assert!(!output.status.success());
+        }
+        let error = String::from_utf8_lossy(&output.stderr);
+        // Drop's shutdown failure is intentionally non-fatal and logged only
+        // when diagnostics have been initialized (headless smoke does so).
+        if fault != "hang-on-shutdown" {
+            assert!(
+                error.contains(operation) && error.contains("Timeout"),
+                "{error}"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(debug_assertions)]
+fn restart_is_bounded_malformed_responses_are_not_retried_and_later_pdf_recovers() {
+    let directory = std::env::temp_dir().join(format!(
+        "quick-presenter-recovery-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("fault.pdf");
+    std::fs::copy(fixture(), &path).unwrap();
+    for (fault, attempts) in [
+        ("abort-on-render", 1),
+        ("wait-on-render", 1),
+        ("truncated-on-render", 0),
+        ("oversized-on-render", 0),
+        ("malformed-on-render", 0),
+        ("mismatch-on-render", 0),
+    ] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+        command
+            .arg("--renderer-recovery-smoke")
+            .arg(&path)
+            .arg(fixture())
+            .env("QUICK_PRESENTER_HELPER_TEST_FAULT", fault)
+            .env("QUICK_PRESENTER_HELPER_TEST_FAULT_PAGE", "1")
+            .env("QUICK_PRESENTER_HELPER_TEST_FAULT_TITLE", "fault.pdf")
+            .env("QUICK_PRESENTER_HELPER_TEST_DEADLINE_MS", "1000");
+        let output = run_broker(command);
+        assert!(
+            output.status.success(),
+            "{fault}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            text.contains(&format!(
+                "recovery_result=false restart_attempts={attempts}"
+            )),
+            "{text}"
+        );
+        assert!(
+            text.contains("later_valid_pdf=true") && text.contains("last_good_bytes=5760000"),
+            "{text}"
+        );
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(!error.contains("SECRET_PDF_NOTE"));
+        assert!(!error.contains(&directory.to_string_lossy().to_string()));
+    }
+    let marker = directory.join("once");
+    std::fs::write(&marker, b"test-owned fault marker").unwrap();
+    let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+    command
+        .arg("--renderer-recovery-smoke")
+        .arg(&path)
+        .arg(fixture())
+        .env("QUICK_PRESENTER_HELPER_TEST_FAULT", "abort-on-render")
+        .env("QUICK_PRESENTER_HELPER_TEST_FAULT_PAGE", "1")
+        .env("QUICK_PRESENTER_HELPER_TEST_FAULT_TITLE", "fault.pdf")
+        .env("QUICK_PRESENTER_HELPER_TEST_FAULT_ONCE", &marker);
+    let output = run_broker(command);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("recovery_result=true restart_attempts=1")
+    );
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+#[cfg(debug_assertions)]
+fn excessive_allocation_attempt_is_rejected_without_losing_broker() {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+    command
+        .arg("--smoke-open-pdf")
+        .arg(fixture())
+        .env("QUICK_PRESENTER_HELPER_TEST_FAULT", "allocate-on-render");
+    let output = run_broker(command);
+    assert!(!output.status.success() && output.status.code().is_some());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("helper allocation limit enforced"));
+}
+
+#[test]
+fn killed_helper_is_reaped_and_another_helper_can_open() {
+    let mut helper = Helper::new(None);
+    helper.open();
+    helper.child.kill().unwrap();
+    assert!(!helper.wait_exit().success());
+    assert!(helper.receive().is_err());
+    let mut next = Helper::new(None);
+    next.open();
+    assert_eq!(
+        next.request(7, json!({"kind":"Render","page_index":0,"width":320}))
+            .0["kind"],
+        "Pixels"
+    );
+}
+
+#[test]
+#[cfg(debug_assertions)]
+fn scheduler_preserves_active_deck_on_candidate_timeout_or_crash_and_shutdown_interrupts_hang() {
+    let directory = std::env::temp_dir().join(format!(
+        "quick-presenter-candidate-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let candidate = directory.join("fault.pdf");
+    std::fs::copy(fixture(), &candidate).unwrap();
+    for fault in [
+        "hang-on-open",
+        "wait-on-render",
+        "abort-on-render",
+        "malformed-on-render",
+    ] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+        command
+            .arg("--renderer-scheduler-smoke")
+            .arg(&candidate)
+            .arg(fixture())
+            .env("QUICK_PRESENTER_HELPER_TEST_FAULT", fault)
+            .env("QUICK_PRESENTER_HELPER_TEST_FAULT_TITLE", "fault.pdf")
+            .env("QUICK_PRESENTER_HELPER_TEST_DEADLINE_MS", "1000");
+        let output = run_broker(command);
+        assert!(
+            output.status.success(),
+            "{fault}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout)
+            .contains("active_preserved=true shutdown_reaped=true"));
+    }
+    let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+    command
+        .arg("--renderer-scheduler-smoke")
+        .arg(&candidate)
+        .arg(fixture())
+        .env("QUICK_PRESENTER_HELPER_TEST_FAULT", "wait-on-render")
+        .env("QUICK_PRESENTER_HELPER_TEST_FAULT_PAGE", "1")
+        .env("QUICK_PRESENTER_HELPER_TEST_SHUTDOWN", "1");
+    let output = run_broker(command);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("shutdown_reaped=true"));
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
 struct Helper {
     child: Child,
     input: Option<ChildStdin>,

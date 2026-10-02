@@ -18,8 +18,8 @@ use crate::{
     rendering::{RenderPurpose, RenderRequest, RenderedPagePixels},
 };
 
-const MAX_PENDING_RENDER_COMMANDS: usize = 64;
-const MAX_PENDING_RENDER_EVENTS: usize = 64;
+const MAX_PENDING_RENDER_COMMANDS: usize = crate::renderer_limits::MAX_PENDING_WORK;
+const MAX_PENDING_RENDER_EVENTS: usize = crate::renderer_limits::MAX_PENDING_WORK;
 
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct RenderSessionId(pub u64);
@@ -99,6 +99,7 @@ pub enum RenderEvent {
     ReloadPrepareFailed {
         session_id: RenderSessionId,
         message: String,
+        retryable: bool,
     },
     PageRendered {
         session_id: RenderSessionId,
@@ -340,6 +341,23 @@ pub struct RenderQueue {
 }
 
 impl RenderQueue {
+    fn make_room(&mut self, priority: RenderPriority) -> bool {
+        if self.items.len() < crate::renderer_limits::MAX_PENDING_WORK {
+            return true;
+        }
+        let (index, item) = self
+            .items
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, item)| (item.priority, item.sequence))
+            .expect("full queue has an item");
+        if item.priority > priority {
+            return false;
+        }
+        let item = self.items.swap_remove(index);
+        self.queued_keys.remove(&item.key);
+        true
+    }
     pub fn push(
         &mut self,
         session_id: RenderSessionId,
@@ -356,6 +374,9 @@ impl RenderQueue {
             return None;
         }
 
+        if !self.make_room(priority) {
+            return None;
+        }
         self.next_job = self.next_job.wrapping_add(1);
         self.next_sequence = self.next_sequence.wrapping_add(1);
         let job_id = RenderJobId(self.next_job);
@@ -377,6 +398,9 @@ impl RenderQueue {
             return None;
         }
 
+        if !self.make_room(RenderSchedulingPolicy::speaker_notes_priority()) {
+            return None;
+        }
         self.next_job = self.next_job.wrapping_add(1);
         self.next_sequence = self.next_sequence.wrapping_add(1);
         let job_id = RenderJobId(self.next_job);
@@ -391,11 +415,23 @@ impl RenderQueue {
         Some(job_id)
     }
 
+    #[cfg(test)]
     fn pop(&mut self) -> Option<(RenderJobId, RenderSessionId, RenderWork)> {
+        self.pop_with_priority()
+            .map(|(job, session, work, _)| (job, session, work))
+    }
+    fn pop_with_priority(
+        &mut self,
+    ) -> Option<(RenderJobId, RenderSessionId, RenderWork, RenderPriority)> {
         let index = self.next_item_index()?;
         let item = self.items.swap_remove(index);
         self.queued_keys.remove(&item.key);
-        Some((item.job_id, item.key.session_id(), item.key.work()))
+        Some((
+            item.job_id,
+            item.key.session_id(),
+            item.key.work(),
+            item.priority,
+        ))
     }
 
     pub fn clear(&mut self) {
@@ -690,6 +726,7 @@ enum RenderEventKey {
 struct PendingRenderEvents {
     events: VecDeque<RenderEvent>,
     capacity: usize,
+    pixel_capacity: usize,
 }
 
 impl PendingRenderEvents {
@@ -697,6 +734,7 @@ impl PendingRenderEvents {
         Self {
             events: VecDeque::new(),
             capacity,
+            pixel_capacity: crate::renderer_limits::MAX_PENDING_PIXEL_BYTES,
         }
     }
 
@@ -711,16 +749,38 @@ impl PendingRenderEvents {
                 .iter()
                 .position(|queued| RenderSchedulingPolicy::event_key(queued) == Some(key))
             {
-                self.events[existing] = event;
+                self.events.remove(existing);
+            }
+        }
+
+        let incoming_bytes = Self::pixel_bytes(&event);
+        if incoming_bytes > self.pixel_capacity {
+            return;
+        }
+        while self.events.len() >= self.capacity
+            || self
+                .events
+                .iter()
+                .try_fold(incoming_bytes, |sum, event| {
+                    sum.checked_add(Self::pixel_bytes(event))
+                })
+                .is_none_or(|sum| sum > self.pixel_capacity)
+        {
+            if !self.make_room_for(&event) {
                 return;
             }
         }
 
-        if self.events.len() >= self.capacity && !self.make_room_for(&event) {
-            return;
-        }
-
         self.events.push_back(event);
+    }
+    fn pixel_bytes(event: &RenderEvent) -> usize {
+        match event {
+            RenderEvent::PageRendered { page, .. } => page.pixels.as_bytes().len(),
+            RenderEvent::ReloadPrepared { current_page, .. } => {
+                current_page.pixels.as_bytes().len()
+            }
+            _ => 0,
+        }
     }
 
     fn drain(&mut self) -> Vec<RenderEvent> {
@@ -807,12 +867,20 @@ impl RenderCancellation {
 }
 
 trait RenderWorkerDocument {
+    fn activate(&self, _session_id: RenderSessionId) {}
     fn prepare_initial(&self) -> anyhow::Result<()> {
         Ok(())
     }
     fn title(&self) -> String;
     fn page_count(&self) -> u32;
     fn render_page_pixels(&self, request: RenderRequest) -> anyhow::Result<RenderedPagePixels>;
+    fn render_prioritized(
+        &self,
+        request: RenderRequest,
+        _priority: RenderPriority,
+    ) -> anyhow::Result<RenderedPagePixels> {
+        self.render_page_pixels(request)
+    }
     fn speaker_notes_for_page_cancellable(
         &self,
         page_index: u32,
@@ -821,6 +889,16 @@ trait RenderWorkerDocument {
 }
 
 impl RenderWorkerDocument for RemoteDocument {
+    fn render_prioritized(
+        &self,
+        request: RenderRequest,
+        priority: RenderPriority,
+    ) -> anyhow::Result<RenderedPagePixels> {
+        self.render_with_priority(request, priority)
+    }
+    fn activate(&self, session_id: RenderSessionId) {
+        self.activate(session_id);
+    }
     fn prepare_initial(&self) -> anyhow::Result<()> {
         self.prepare_initial()
     }
@@ -966,11 +1044,26 @@ impl RenderScheduler {
         request: RenderRequest,
         priority: RenderPriority,
     ) {
+        if priority == RenderPriority::BlockingVisible {
+            self.set_visible_page(session_id, request);
+        }
         self.send(RenderCommand::RenderPage {
             session_id,
             request,
             priority,
         });
+    }
+
+    pub(crate) fn set_visible_page(&self, session_id: RenderSessionId, request: RenderRequest) {
+        self.process_group.set_visible(session_id, request);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn visible_page_for_test(
+        &self,
+        session_id: RenderSessionId,
+    ) -> Option<RenderRequest> {
+        self.process_group.visible_request(session_id)
     }
 
     pub fn extract_speaker_notes(&self, session_id: RenderSessionId) {
@@ -1195,7 +1288,16 @@ fn process_next_work<D: RenderWorkerDocument>(
     event_mailbox: &RenderEventMailbox,
     cancellation: &Arc<RenderCancellation>,
 ) -> bool {
-    let Some((job_id, session_id, work)) = state.queue.pop() else {
+    // Queue pressure may evict a background continuation. Resume it once
+    // visible work drains, without reserving another unbounded work queue.
+    if state.queue.items.is_empty() && state.notes_extraction.is_some() {
+        if let Some(session_id) = state.active_session {
+            if !cancellation.is_cancelled(session_id) {
+                state.queue.push_speaker_notes(session_id);
+            }
+        }
+    }
+    let Some((job_id, session_id, work, priority)) = state.queue.pop_with_priority() else {
         return false;
     };
 
@@ -1210,6 +1312,7 @@ fn process_next_work<D: RenderWorkerDocument>(
                 session_id,
                 job_id,
                 request,
+                priority,
                 event_mailbox,
                 cancellation,
             );
@@ -1352,12 +1455,15 @@ fn prepare_reload_on_worker<D: RenderWorkerDocument>(
             event_mailbox.send(RenderEvent::ReloadPrepareFailed {
                 session_id,
                 message: error.to_string(),
+                retryable: error
+                    .downcast_ref::<crate::renderer_supervision::HelperFailure>()
+                    .is_none(),
             });
         }
     }
 }
 
-fn commit_reload_on_worker<D>(
+fn commit_reload_on_worker<D: RenderWorkerDocument>(
     session_id: RenderSessionId,
     state: &mut RenderWorkerState<D>,
     cancellation: &RenderCancellation,
@@ -1372,6 +1478,7 @@ fn commit_reload_on_worker<D>(
 
     state.queue.clear();
     state.notes_extraction = None;
+    prepared.document.activate(session_id);
     state.document = Some(prepared.document);
     state.active_session = Some(session_id);
     cancellation.activate(session_id);
@@ -1390,6 +1497,7 @@ fn open_document_on_worker<D: RenderWorkerDocument>(
         Ok(doc)
     }) {
         Ok(doc) => {
+            doc.activate(session_id);
             let title = doc.title();
             let page_count = doc.page_count();
             state.document = Some(doc);
@@ -1416,11 +1524,12 @@ fn render_page_on_worker<D: RenderWorkerDocument>(
     session_id: RenderSessionId,
     job_id: RenderJobId,
     request: RenderRequest,
+    priority: RenderPriority,
     event_mailbox: &RenderEventMailbox,
     cancellation: &RenderCancellation,
 ) {
     let event = match document {
-        Some(document) => match document.render_page_pixels(request) {
+        Some(document) => match document.render_prioritized(request, priority) {
             Ok(page) => RenderEvent::PageRendered {
                 session_id,
                 job_id,
@@ -2210,6 +2319,76 @@ mod tests {
             }
             other => panic!("expected open failed event, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn pixel_backlog_is_bounded_and_protects_visible_work() {
+        let mut pending = PendingRenderEvents::new(64);
+        pending.pixel_capacity = 8;
+        let event = |index, purpose| RenderEvent::PageRendered {
+            session_id: RenderSessionId(1),
+            job_id: RenderJobId(index as u64 + 1),
+            request: request(index, purpose),
+            page: RenderedPagePixels {
+                pixels: SharedPixelBuffer::new(1, 1),
+                aspect_ratio: 1.0,
+                estimated_bytes: 4,
+            },
+        };
+        pending.push(event(0, RenderPurpose::CurrentSlide));
+        pending.push(event(1, RenderPurpose::Thumbnail));
+        pending.push(event(2, RenderPurpose::NextPreview));
+        assert_eq!(pending.events.len(), 2);
+        assert_eq!(
+            pending
+                .events
+                .iter()
+                .map(PendingRenderEvents::pixel_bytes)
+                .sum::<usize>(),
+            8
+        );
+        assert!(pending.events.iter().all(|event| !matches!(
+            event,
+            RenderEvent::PageRendered {
+                request: RenderRequest {
+                    purpose: RenderPurpose::Thumbnail,
+                    ..
+                },
+                ..
+            }
+        )));
+        pending.push(RenderEvent::WorkerFailed {
+            session_id: None,
+            message: "failed".into(),
+        });
+        assert_eq!(pending.events.len(), 3);
+    }
+
+    #[test]
+    fn worker_queue_is_bounded_and_protects_visible_work() {
+        let mut queue = RenderQueue::default();
+        let session = RenderSessionId(1);
+        for index in 0..200 {
+            queue.push(
+                session,
+                request(index, RenderPurpose::Thumbnail),
+                RenderPriority::Background,
+            );
+        }
+        assert_eq!(queue.items.len(), crate::renderer_limits::MAX_PENDING_WORK);
+        queue.push(
+            session,
+            request(0, RenderPurpose::CurrentSlide),
+            RenderPriority::BlockingVisible,
+        );
+        assert_eq!(queue.items.len(), crate::renderer_limits::MAX_PENDING_WORK);
+        assert!(matches!(
+            queue.pop().unwrap().2,
+            RenderWork::Page(RenderRequest {
+                purpose: RenderPurpose::CurrentSlide,
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -3050,6 +3229,11 @@ mod tests {
                 panic!("expected visible page render before notes continuation, got {other:?}")
             }
         }
+        state.queue.clear(); // Simulate eviction of the background continuation.
+        assert!(matches!(
+            process_until_single_event(&mut state, &event_mailbox, &cancellation),
+            RenderEvent::SpeakerNotesLoaded { .. }
+        ));
     }
 
     #[test]

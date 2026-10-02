@@ -423,6 +423,16 @@ impl HotReloadState {
         succeeded: bool,
         now: Instant,
     ) -> PreparationOutcome {
+        self.finish_preparing_with_retry(session_id, revision, succeeded, true, now)
+    }
+    pub fn finish_preparing_with_retry(
+        &mut self,
+        session_id: RenderSessionId,
+        revision: u64,
+        succeeded: bool,
+        retryable: bool,
+        now: Instant,
+    ) -> PreparationOutcome {
         if self.phase
             != (HotReloadPhase::Preparing {
                 session_id,
@@ -444,7 +454,11 @@ impl HotReloadState {
             self.deadline = None;
             self.retry_attempt = 0;
             PreparationOutcome::Succeeded
-        } else if let Some(delay) = HOT_RELOAD_RETRY_DELAYS.get(self.retry_attempt).copied() {
+        } else if let Some(delay) = HOT_RELOAD_RETRY_DELAYS
+            .get(self.retry_attempt)
+            .copied()
+            .filter(|_| retryable)
+        {
             self.retry_attempt = self.retry_attempt.saturating_add(1);
             self.phase = HotReloadPhase::Debouncing;
             self.deadline = Some(now + delay);
@@ -695,6 +709,26 @@ mod tests {
 
         assert!(state.observe(&changed_target(), now + Duration::from_secs(1)));
         assert_eq!(state.phase(), HotReloadPhase::Debouncing);
+    }
+
+    #[test]
+    fn helper_failure_stops_reload_retries_until_a_new_file_revision() {
+        let now = Instant::now();
+        let mut state = HotReloadState::default();
+        state.replace_target(target());
+        state.observe(&changed_target(), now);
+        let due = now + HOT_RELOAD_DEBOUNCE;
+        let revision = state.due_revision(due).unwrap();
+        assert!(state.begin_preparing(RenderSessionId(9), revision, due));
+        assert_eq!(
+            state.finish_preparing_with_retry(RenderSessionId(9), revision, false, false, due),
+            PreparationOutcome::Failed
+        );
+        assert!(state.due_revision(due + Duration::from_secs(60)).is_none());
+        state.observe(&changed_target(), due + Duration::from_secs(60));
+        assert!(state
+            .due_revision(due + Duration::from_secs(60) + HOT_RELOAD_DEBOUNCE)
+            .is_some());
     }
 
     #[test]
