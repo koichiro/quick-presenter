@@ -50,6 +50,29 @@ pub enum DisplaySwapOutcome {
     Unavailable,
 }
 
+#[derive(Default)]
+pub struct DisplaySwapController {
+    generation: Cell<u64>,
+    active: Cell<bool>,
+}
+
+impl DisplaySwapController {
+    fn begin(&self) -> u64 {
+        self.cancel();
+        self.active.set(true);
+        self.generation.get()
+    }
+
+    pub fn cancel(&self) {
+        self.generation.set(self.generation.get().wrapping_add(1));
+        self.active.set(false);
+    }
+
+    fn is_current(&self, generation: u64) -> bool {
+        self.active.get() && self.generation.get() == generation
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PixelPoint {
     x: i32,
@@ -109,9 +132,9 @@ struct NativeSwapPlan {
 pub fn request_display_swap(
     windows: &AppWindowRefs,
     initiated_by: WindowRole,
-    active: Rc<Cell<bool>>,
+    active: Rc<DisplaySwapController>,
 ) -> DisplaySwapOutcome {
-    if active.get() {
+    if active.active.get() {
         return DisplaySwapOutcome::Busy;
     }
 
@@ -120,14 +143,14 @@ pub fn request_display_swap(
         Err(outcome) => return outcome,
     };
 
-    active.set(true);
-    if !apply_native_swap(windows, &plan) {
-        active.set(false);
+    let generation = active.begin();
+    if !target_monitors_are_available(windows, &plan) || !apply_native_swap(windows, &plan) {
+        active.cancel();
         return DisplaySwapOutcome::Unavailable;
     }
 
     restore_window_focus(windows, initiated_by);
-    schedule_display_swap_verification(windows.clone(), plan, initiated_by, active, 0);
+    schedule_display_swap_verification(windows.clone(), plan, initiated_by, active, generation, 0);
     DisplaySwapOutcome::Applied
 }
 
@@ -206,22 +229,17 @@ fn native_window_snapshot(window: &slint::Window) -> Option<NativeWindowSnapshot
 
             let monitor = native.current_monitor()?;
             let fullscreen = native.fullscreen().is_some();
-            let position = native
-                .outer_position()
-                .ok()
-                .or_else(|| fullscreen.then(|| monitor.position()))?;
+            let (position, position_scale) = match native.outer_position() {
+                Ok(position) => (position, native.scale_factor()),
+                Err(_) if fullscreen => (monitor.position(), monitor.scale_factor()),
+                Err(_) => return None,
+            };
             let size = native.outer_size();
 
             Some(NativeWindowSnapshot {
                 monitor,
-                outer_position: PixelPoint {
-                    x: position.x,
-                    y: position.y,
-                },
-                outer_size: PixelSize {
-                    width: size.width,
-                    height: size.height,
-                },
+                outer_position: desktop_point(position, position_scale, cfg!(target_os = "macos")),
+                outer_size: desktop_size(size, native.scale_factor(), cfg!(target_os = "macos")),
                 fullscreen,
             })
         })
@@ -250,16 +268,43 @@ fn display_geometry(id: usize, monitor: &winit::monitor::MonitorHandle) -> Optio
 
     Some(DisplayGeometry {
         id,
-        origin: PixelPoint {
-            x: origin.x,
-            y: origin.y,
+        origin: desktop_point(origin, scale_factor, cfg!(target_os = "macos")),
+        size: desktop_size(size, scale_factor, cfg!(target_os = "macos")),
+        scale_factor: if cfg!(target_os = "macos") {
+            1.0
+        } else {
+            scale_factor
         },
-        size: PixelSize {
-            width: size.width,
-            height: size.height,
-        },
-        scale_factor,
     })
+}
+
+// Winit macOS scales global desktop coordinates with each window/monitor's
+// own backing scale. Normalize to Cocoa points before combining rectangles.
+fn desktop_point(
+    position: winit::dpi::PhysicalPosition<i32>,
+    scale: f64,
+    logical: bool,
+) -> PixelPoint {
+    let divisor = if logical { scale } else { 1.0 };
+    PixelPoint {
+        x: (f64::from(position.x) / divisor).round() as i32,
+        y: (f64::from(position.y) / divisor).round() as i32,
+    }
+}
+
+fn desktop_size(size: winit::dpi::PhysicalSize<u32>, scale: f64, logical: bool) -> PixelSize {
+    let divisor = if logical { scale } else { 1.0 };
+    PixelSize {
+        width: (f64::from(size.width) / divisor).round() as u32,
+        height: (f64::from(size.height) / divisor).round() as u32,
+    }
+}
+
+fn set_desktop_position(window: &winit::window::Window, position: PixelPoint) {
+    #[cfg(target_os = "macos")]
+    window.set_outer_position(winit::dpi::LogicalPosition::new(position.x, position.y));
+    #[cfg(not(target_os = "macos"))]
+    window.set_outer_position(winit::dpi::PhysicalPosition::new(position.x, position.y));
 }
 
 fn plan_display_swap(
@@ -309,9 +354,9 @@ fn map_window_position(
 
     let source_width = f64::from(source.size.width);
     let source_height = f64::from(source.size.height);
-    let center_x = f64::from(window.outer_position.x - source.origin.x)
+    let center_x = f64::from(window.outer_position.x) - f64::from(source.origin.x)
         + f64::from(window.outer_size.width) / 2.0;
-    let center_y = f64::from(window.outer_position.y - source.origin.y)
+    let center_y = f64::from(window.outer_position.y) - f64::from(source.origin.y)
         + f64::from(window.outer_size.height) / 2.0;
     let relative_x = (center_x / source_width).clamp(0.0, 1.0);
     let relative_y = (center_y / source_height).clamp(0.0, 1.0);
@@ -363,10 +408,7 @@ fn apply_native_swap(windows: &AppWindowRefs, plan: &NativeSwapPlan) -> bool {
     let presenter_applied = presenter
         .window()
         .with_winit_window(|window| {
-            window.set_outer_position(winit::dpi::PhysicalPosition::new(
-                plan.presenter_position.x,
-                plan.presenter_position.y,
-            ));
+            set_desktop_position(window, plan.presenter_position);
         })
         .is_some();
     let slide_applied = slide
@@ -377,10 +419,7 @@ fn apply_native_swap(windows: &AppWindowRefs, plan: &NativeSwapPlan) -> bool {
                     plan.slide_target.clone(),
                 ))));
             } else {
-                window.set_outer_position(winit::dpi::PhysicalPosition::new(
-                    plan.slide_position.x,
-                    plan.slide_position.y,
-                ));
+                set_desktop_position(window, plan.slide_position);
             }
         })
         .is_some();
@@ -392,13 +431,19 @@ fn schedule_display_swap_verification(
     windows: AppWindowRefs,
     plan: NativeSwapPlan,
     initiated_by: WindowRole,
-    active: Rc<Cell<bool>>,
+    active: Rc<DisplaySwapController>,
+    generation: u64,
     attempt: usize,
 ) {
     let delay = DISPLAY_SWAP_VERIFY_DELAYS[attempt];
     Timer::single_shot(delay, move || {
+        // Fullscreen commands supersede an in-flight placement request. Old
+        // timers must not retry, recover, steal focus, or finish a newer swap.
+        if !active.is_current(generation) {
+            return;
+        }
         if display_swap_matches(&windows, &plan) {
-            active.set(false);
+            active.cancel();
             sync_slide_chrome(&windows);
             restore_window_focus(&windows, initiated_by);
             info!("presenter and slide displays switched");
@@ -410,7 +455,14 @@ fn schedule_display_swap_verification(
             && target_monitors_are_available(&windows, &plan)
             && apply_native_swap(&windows, &plan)
         {
-            schedule_display_swap_verification(windows, plan, initiated_by, active, next_attempt);
+            schedule_display_swap_verification(
+                windows,
+                plan,
+                initiated_by,
+                active,
+                generation,
+                next_attempt,
+            );
             return;
         }
 
@@ -421,7 +473,7 @@ fn schedule_display_swap_verification(
         if let Some(presenter) = windows.presenter.upgrade() {
             presenter.set_status_text(DISPLAY_SWAP_FAILURE_MESSAGE.into());
         }
-        active.set(false);
+        active.cancel();
     });
 }
 
@@ -476,12 +528,13 @@ fn recover_windows_to_available_displays(windows: &AppWindowRefs, slide_fullscre
     };
 
     if !window_has_available_monitor(presenter.window()) {
-        let origin = fallback.position();
+        let origin = desktop_point(
+            fallback.position(),
+            fallback.scale_factor(),
+            cfg!(target_os = "macos"),
+        );
         let _ = presenter.window().with_winit_window(|window| {
-            window.set_outer_position(winit::dpi::PhysicalPosition::new(
-                origin.x.saturating_add(40),
-                origin.y.saturating_add(40),
-            ));
+            set_desktop_position(window, origin);
         });
     }
 
@@ -489,17 +542,18 @@ fn recover_windows_to_available_displays(windows: &AppWindowRefs, slide_fullscre
         return;
     };
     if !window_has_available_monitor(slide.window()) {
-        let origin = fallback.position();
+        let origin = desktop_point(
+            fallback.position(),
+            fallback.scale_factor(),
+            cfg!(target_os = "macos"),
+        );
         let _ = slide.window().with_winit_window(|window| {
             if slide_fullscreen {
                 window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(
                     fallback.clone(),
                 ))));
             } else {
-                window.set_outer_position(winit::dpi::PhysicalPosition::new(
-                    origin.x.saturating_add(80),
-                    origin.y.saturating_add(80),
-                ));
+                set_desktop_position(window, origin);
             }
         });
     }
@@ -508,10 +562,48 @@ fn recover_windows_to_available_displays(windows: &AppWindowRefs, slide_fullscre
 fn window_has_available_monitor(window: &slint::Window) -> bool {
     window
         .with_winit_window(|native| {
-            let current = native.current_monitor();
-            current.is_some_and(|current| native.available_monitors().any(|item| item == current))
+            let Ok(position) = native.outer_position() else {
+                return false;
+            };
+            let displays = native
+                .available_monitors()
+                .enumerate()
+                .filter_map(|(id, monitor)| display_geometry(id, &monitor))
+                .collect::<Vec<_>>();
+            window_controls_are_reachable(
+                desktop_point(position, native.scale_factor(), cfg!(target_os = "macos")),
+                desktop_size(
+                    native.outer_size(),
+                    native.scale_factor(),
+                    cfg!(target_os = "macos"),
+                ),
+                &displays,
+            )
         })
         .unwrap_or(false)
+}
+
+fn window_controls_are_reachable(
+    position: PixelPoint,
+    size: PixelSize,
+    displays: &[DisplayGeometry],
+) -> bool {
+    // A nearest-monitor handle (notably on Windows) says nothing about whether
+    // the window is onscreen. Require a usable strip at its top instead.
+    let required_width = i64::from(size.width.min(100));
+    let required_height = i64::from(size.height.min(28));
+    if required_width == 0 || required_height == 0 {
+        return false;
+    }
+    displays.iter().any(|display| {
+        let left = i64::from(position.x).max(i64::from(display.origin.x));
+        let right = (i64::from(position.x) + i64::from(size.width))
+            .min(i64::from(display.origin.x) + i64::from(display.size.width));
+        let top = i64::from(position.y).max(i64::from(display.origin.y));
+        let bottom = (i64::from(position.y) + required_height)
+            .min(i64::from(display.origin.y) + i64::from(display.size.height));
+        right - left >= required_width && bottom - top >= required_height
+    })
 }
 
 fn restore_window_focus(windows: &AppWindowRefs, role: WindowRole) {
@@ -761,6 +853,102 @@ pub fn fitted_slide_window_size(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fullscreen_command_invalidates_all_old_verification_ticks() {
+        let controller = DisplaySwapController::default();
+        let old = controller.begin();
+        assert!(controller.is_current(old));
+        controller.cancel();
+        assert!(!controller.is_current(old));
+        // Even after another X request, an old tick cannot reapply fullscreen,
+        // recover placement, steal focus, or complete the new operation.
+        let new = controller.begin();
+        assert!(!controller.is_current(old));
+        assert!(controller.is_current(new));
+        controller.cancel();
+        assert!(!controller.is_current(new));
+    }
+
+    #[test]
+    fn macos_mixed_dpi_rectangles_share_logical_desktop_coordinates() {
+        use winit::dpi::{PhysicalPosition, PhysicalSize};
+        // A Retina screen left of the primary uses its own scale for its
+        // origin; window coordinates instead use the window's backing scale.
+        let left = DisplayGeometry {
+            id: 0,
+            origin: desktop_point(PhysicalPosition::new(-2000, 400), 2.0, true),
+            size: desktop_size(PhysicalSize::new(2000, 1600), 2.0, true),
+            scale_factor: 1.0,
+        };
+        let right = display(1, 0, 200, 1000, 800, 1.0);
+        let presenter = WindowGeometry {
+            display_id: 0,
+            outer_position: desktop_point(PhysicalPosition::new(-1500, 800), 2.0, true),
+            outer_size: desktop_size(PhysicalSize::new(1000, 800), 2.0, true),
+        };
+        let slide = window(1, 250, 400, 500, 400);
+        let plan = plan_display_swap(presenter, slide, &[left, right]).unwrap();
+        assert_eq!(plan.presenter.outer_position, PixelPoint { x: 250, y: 400 });
+        assert_eq!(plan.slide.outer_position, PixelPoint { x: -750, y: 400 });
+        let back = plan_display_swap(
+            window(1, 250, 400, 500, 400),
+            window(0, -750, 400, 500, 400),
+            &[left, right],
+        )
+        .unwrap();
+        assert_eq!(back.presenter.outer_position, presenter.outer_position);
+        assert_eq!(back.slide.outer_position, slide.outer_position);
+        // Physical-coordinate platforms must not divide global coordinates.
+        assert_eq!(
+            desktop_point(PhysicalPosition::new(-1500, 800), 2.0, false),
+            PixelPoint { x: -1500, y: 800 }
+        );
+    }
+
+    #[test]
+    fn recovery_uses_visible_controls_not_nearest_monitor_identity() {
+        let displays = [
+            display(0, -1000, 0, 1000, 800, 1.0),
+            display(1, 0, 0, 1000, 800, 1.0),
+        ];
+        let reachable = |x, y| {
+            window_controls_are_reachable(
+                PixelPoint { x, y },
+                PixelSize {
+                    width: 500,
+                    height: 400,
+                },
+                &displays,
+            )
+        };
+        assert!(reachable(-750, 200));
+        assert!(reachable(900, 200));
+        assert!(!reachable(901, 200));
+        assert!(!reachable(2000, 200));
+        assert!(!reachable(-2000, 200));
+        assert!(!reachable(0, -50)); // Body visible, controls inaccessible.
+        assert!(!reachable(0, 790));
+        assert!(!window_controls_are_reachable(
+            PixelPoint { x: 0, y: 0 },
+            PixelSize {
+                width: 0,
+                height: 400
+            },
+            &displays
+        ));
+        assert!(!window_controls_are_reachable(
+            PixelPoint {
+                x: i32::MAX,
+                y: i32::MAX
+            },
+            PixelSize {
+                width: u32::MAX,
+                height: u32::MAX
+            },
+            &displays
+        ));
+    }
 
     fn display(
         id: usize,

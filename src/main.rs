@@ -43,7 +43,7 @@ pub mod window_menu;
 pub mod windows_window;
 
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     path::PathBuf,
     rc::Rc,
     time::{Duration, Instant},
@@ -105,8 +105,8 @@ use window_controller::{
     apply_macos_slide_window_chrome, fitted_slide_window_size, hide_slide_window,
     request_display_swap, restore_presenter_input_after_transient_ui, set_slide_fullscreen,
     show_presenter_window, show_slide_window, slide_titlebar_compensation_height,
-    start_slide_chrome_sync, sync_slide_chrome, AppWindowRefs, AppWindows, DisplaySwapOutcome,
-    WindowRole,
+    start_slide_chrome_sync, sync_slide_chrome, AppWindowRefs, AppWindows, DisplaySwapController,
+    DisplaySwapOutcome, WindowRole,
 };
 
 slint::include_modules!();
@@ -501,7 +501,7 @@ struct CommittedPdfSession {
 
 fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<AppState>>) {
     let app = &windows.presenter;
-    let display_swap_active = Rc::new(Cell::new(false));
+    let display_swap_active = Rc::new(DisplaySwapController::default());
 
     wire_presenter_close_request(windows);
 
@@ -627,7 +627,9 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
 
     let window_refs = refs.clone();
     let state_for_toggle = state.clone();
+    let swap_for_toggle = display_swap_active.clone();
     app.on_toggle_slide_fullscreen(move || {
+        swap_for_toggle.cancel();
         let mut state = state_for_toggle.borrow_mut();
         let fullscreen = state.fullscreen.toggle_slide_fullscreen();
         set_slide_fullscreen(&window_refs, fullscreen);
@@ -637,7 +639,9 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
 
     let window_refs = refs.clone();
     let state_for_presenter_exit = state.clone();
+    let swap_for_presenter_exit = display_swap_active.clone();
     app.on_exit_slide_fullscreen(move || {
+        swap_for_presenter_exit.cancel();
         handle_presentation_command(
             &window_refs,
             &state_for_presenter_exit,
@@ -687,7 +691,7 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
 
     let window_refs = refs.clone();
     let state_for_slide_swap = state.clone();
-    let slide_swap_active = display_swap_active;
+    let slide_swap_active = display_swap_active.clone();
     windows.slide.on_swap_displays(move || {
         handle_display_swap(
             &window_refs,
@@ -709,7 +713,9 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
 
     let window_refs = refs.clone();
     let state_for_slide_toggle = state.clone();
+    let swap_for_slide_toggle = display_swap_active.clone();
     windows.slide.on_toggle_slide_fullscreen(move || {
+        swap_for_slide_toggle.cancel();
         let mut state = state_for_slide_toggle.borrow_mut();
         let fullscreen = state.fullscreen.toggle_slide_fullscreen();
         set_slide_fullscreen(&window_refs, fullscreen);
@@ -718,6 +724,7 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let window_refs = refs;
     let state_for_slide_exit = state;
     windows.slide.on_exit_fullscreen(move || {
+        display_swap_active.cancel();
         handle_presentation_command(
             &window_refs,
             &state_for_slide_exit,
@@ -730,7 +737,7 @@ fn handle_display_swap(
     windows: &AppWindowRefs,
     state: &Rc<RefCell<AppState>>,
     initiated_by: WindowRole,
-    active: Rc<Cell<bool>>,
+    active: Rc<DisplaySwapController>,
 ) {
     let both_visible = {
         let state = state.borrow();
