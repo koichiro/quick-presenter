@@ -5,6 +5,12 @@ direct MSI. MSIX/Store identity is explicitly rejected before helper startup:
 this branch does not claim a tested nested-container/Store configuration.
 No Win32 App Isolation preview or administrative token privilege is required.
 
+The sanitized launch environment preserves only required OS bootstrap paths
+(`SystemRoot`, `WINDIR`, `LOCALAPPDATA`) and explicit sandbox/test probes.
+`LOCALAPPDATA` is required for Windows AppContainer profile redirection; retaining
+its value grants no access to unrelated files. Credentials and unrelated parent
+environment variables are not inherited.
+
 The broker uses `STARTUPINFOEX` security capabilities to create a distinct
 capability-free AppContainer token **before any child instruction executes**.
 Each helper receives a unique container profile and SID (not a shared identity).
@@ -54,6 +60,11 @@ MSI gate establish token launch, ACL inheritance, PDF open/render/notes, denied
 private read/write, denied listen/connect/child creation, and termination after
 broker crash.** AppContainer handle inheritance and the protected runtime DACL
 must be tested, not inferred from successful compilation.
+
+CI installs the actual per-machine MSI on a disposable Windows runner, runs
+the denial gate from outside the install directory with PDFium overrides unset,
+and uninstalls it in a finally block. Administrative MSI extraction remains a
+separate layout check, not evidence of installed-package confinement.
 
 Run the release-capable staged/installed gate:
 

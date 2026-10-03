@@ -611,6 +611,42 @@ jobs:
             Pop-Location
           }
 
+      - name: Verify installed Windows MSI renderer sandbox
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Remove-Item Env:PDFIUM_DYNAMIC_LIB_PATH -ErrorAction SilentlyContinue
+          Remove-Item Env:QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE -ErrorAction SilentlyContinue
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}'
+          $msi = Join-Path $artifactDir "QuickPresenter-$($env:PACKAGE_VERSION).msi"
+          $installDir = Join-Path $env:ProgramFiles 'Quick Presenter'
+          $exe = Join-Path $installDir 'quick-presenter.exe'
+          $pdf = Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/marp-speaker-notes.pdf'
+          $installLog = Join-Path $env:RUNNER_TEMP 'quick-presenter-msi-install.log'
+          $uninstallLog = Join-Path $env:RUNNER_TEMP 'quick-presenter-msi-uninstall.log'
+          # A disposable hosted runner: use the real per-machine installation,
+          # not administrative extraction or a development PDFium override.
+          try {
+            $install = Start-Process msiexec.exe -ArgumentList @(
+              '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "`"$installLog`""
+            ) -Wait -PassThru
+            if ($install.ExitCode -notin @(0, 3010)) {
+              if (Test-Path $installLog) { Get-Content $installLog -Tail 80 }
+              throw "MSI installation failed with exit code $($install.ExitCode)"
+            }
+            if (-not (Test-Path $exe -PathType Leaf)) { throw 'Installed MSI executable missing' }
+            python scripts/check_renderer_sandbox.py $exe $pdf
+            if ($LASTEXITCODE -ne 0) { throw 'Installed MSI renderer denial gate failed' }
+          } finally {
+            $uninstall = Start-Process msiexec.exe -ArgumentList @(
+              '/x', "`"$msi`"", '/qn', '/norestart', '/l*v', "`"$uninstallLog`""
+            ) -Wait -PassThru
+            if ($uninstall.ExitCode -notin @(0, 3010, 1605)) {
+              throw "MSI cleanup failed with exit code $($uninstall.ExitCode)"
+            }
+          }
+
       - name: Build Windows MSIX
         if: runner.os == 'Windows'
         shell: pwsh

@@ -8,6 +8,15 @@ pub use std::process::{Child, ChildStdin as WritePipe, ChildStdout as ReadPipe};
 #[cfg(target_os = "windows")]
 pub use windows::{Child, ReadPipe, WritePipe};
 
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    #[test]
+    fn child_management_can_move_between_supervision_threads() {
+        fn assert_send<T: Send>() {}
+        assert_send::<super::Child>();
+    }
+}
+
 pub fn spawn(command: Command, document: Option<&Path>) -> Result<(Child, ResourceJob)> {
     #[cfg(target_os = "windows")]
     return windows::spawn(command, document);
@@ -352,11 +361,19 @@ mod windows {
             let mut environment = Vec::<u16>::new();
             // Do not expose the broker's credentials, user paths, or unrelated env.
             let mut entries = std::collections::BTreeMap::new();
-            for name in ["SystemRoot", "WINDIR"] {
+            stage = "environment";
+            // Windows uses LOCALAPPDATA to establish AppContainer profile
+            // redirection during creation. Its presence is not a filesystem
+            // grant; the capability-free token still enforces the ACL boundary.
+            for name in ["SystemRoot", "WINDIR", "LOCALAPPDATA"] {
                 if let Some(value) = std::env::var_os(name) {
                     entries.insert(name.to_owned(), value);
                 }
             }
+            ensure!(
+                entries.contains_key("SystemRoot") && entries.contains_key("LOCALAPPDATA"),
+                "renderer OS environment unavailable"
+            );
             for (key, value) in command.get_envs() {
                 if let (Some(key), Some(value)) = (key.to_str(), value) {
                     if key.starts_with("QUICK_PRESENTER_SANDBOX_") {
