@@ -125,10 +125,9 @@ mod windows {
     }
     struct ContainerProfile {
         name: Vec<u16>,
-        sid: Sid,
     }
     impl ContainerProfile {
-        fn create(name: Vec<u16>) -> Result<Self> {
+        fn create(name: Vec<u16>) -> Result<(Self, Sid)> {
             let mut sid = std::ptr::null_mut();
             // A derived SID alone does not create the namespace/profile required
             // by CreateProcess. Never reuse another launch's writable profile.
@@ -145,10 +144,7 @@ mod windows {
             if status < 0 {
                 return Err(io::Error::from_raw_os_error(status & 0xffff).into());
             }
-            Ok(Self {
-                name,
-                sid: Sid(sid),
-            })
+            Ok((Self { name }, Sid(sid)))
         }
     }
     impl Drop for ContainerProfile {
@@ -312,8 +308,7 @@ mod windows {
                 "QuickPresenter.Renderer.{}.{nonce}",
                 std::process::id()
             )));
-            let profile = ContainerProfile::create(name)?;
-            let sid = &profile.sid;
+            let (profile, sid) = ContainerProfile::create(name)?;
             let capabilities = SECURITY_CAPABILITIES {
                 AppContainerSid: sid.0,
                 Capabilities: std::ptr::null_mut(),
