@@ -241,174 +241,194 @@ mod windows {
         }
     }
     pub(super) fn spawn(command: Command, document: Option<&Path>) -> Result<(Child, ResourceJob)> {
-        let mut package_length = 0;
-        ensure!(
-            unsafe {
-                windows_sys::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName(
-                    &mut package_length,
-                    std::ptr::null_mut(),
+        let mut stage = "input";
+        let result = (|| -> Result<(Child, ResourceJob)> {
+            let mut package_length = 0;
+            ensure!(
+                unsafe {
+                    windows_sys::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName(
+                        &mut package_length,
+                        std::ptr::null_mut(),
+                    )
+                } == APPMODEL_ERROR_NO_PACKAGE,
+                "MSIX renderer isolation is not validated; refusing PDF work"
+            );
+            let document = document.context("AppContainer requires a broker-selected document")?;
+            crate::pdf::preflight_pdf_input(document)?;
+            let input = File::open(document)?;
+            checked(unsafe {
+                SetHandleInformation(
+                    input.as_raw_handle(),
+                    HANDLE_FLAG_INHERIT,
+                    HANDLE_FLAG_INHERIT,
                 )
-            } == APPMODEL_ERROR_NO_PACKAGE,
-            "MSIX renderer isolation is not validated; refusing PDF work"
-        );
-        let document = document.context("AppContainer requires a broker-selected document")?;
-        crate::pdf::preflight_pdf_input(document)?;
-        let input = File::open(document)?;
-        checked(unsafe {
-            SetHandleInformation(
+            })?;
+            let (child_input, parent_input) = pipe(false)?;
+            let (parent_output, child_output) = pipe(true)?;
+            static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            let nonce = (std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_nanos() as u64)
+                .wrapping_add(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+            stage = "container-sid";
+            let name = wide(OsStr::new(&format!(
+                "QuickPresenter.Renderer.{}.{nonce}",
+                std::process::id()
+            )));
+            let mut sid = std::ptr::null_mut();
+            ensure!(
+                unsafe { DeriveAppContainerSidFromAppContainerName(name.as_ptr(), &mut sid) } >= 0,
+                "AppContainer SID unavailable"
+            );
+            let sid = Sid(sid);
+            let capabilities = SECURITY_CAPABILITIES {
+                AppContainerSid: sid.0,
+                Capabilities: std::ptr::null_mut(),
+                CapabilityCount: 0,
+                Reserved: 0,
+            };
+            let handles = [
+                child_input.as_raw_handle(),
+                child_output.as_raw_handle(),
                 input.as_raw_handle(),
-                HANDLE_FLAG_INHERIT,
-                HANDLE_FLAG_INHERIT,
-            )
-        })?;
-        let (child_input, parent_input) = pipe(false)?;
-        let (parent_output, child_output) = pipe(true)?;
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let nonce = (std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)?
-            .as_nanos() as u64)
-            .wrapping_add(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
-        let name = wide(OsStr::new(&format!(
-            "QuickPresenter.Renderer.{}.{nonce}",
-            std::process::id()
-        )));
-        let mut sid = std::ptr::null_mut();
-        ensure!(
-            unsafe { DeriveAppContainerSidFromAppContainerName(name.as_ptr(), &mut sid) } >= 0,
-            "AppContainer SID unavailable"
-        );
-        let sid = Sid(sid);
-        let capabilities = SECURITY_CAPABILITIES {
-            AppContainerSid: sid.0,
-            Capabilities: std::ptr::null_mut(),
-            CapabilityCount: 0,
-            Reserved: 0,
-        };
-        let handles = [
-            child_input.as_raw_handle(),
-            child_output.as_raw_handle(),
-            input.as_raw_handle(),
-        ];
-        let mut attributes = Attributes::new()?;
-        unsafe {
-            attributes.set(
-                PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
-                &capabilities,
-                std::mem::size_of_val(&capabilities),
-            )?;
-            attributes.set(
-                PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-                handles.as_ptr(),
-                std::mem::size_of_val(&handles),
-            )?;
-        }
-        let source = std::fs::canonicalize(command.get_program())?;
-        let runtime = RuntimeDirectory::stage(&source, sid.0, nonce)?;
-        let executable = runtime.0.join("quick-presenter.exe");
-        // Production passes no arbitrary arguments: only this internal helper mode.
-        ensure!(
-            command.get_args().eq([OsStr::new("--renderer-helper")]),
-            "unexpected renderer arguments"
-        );
-        let mut arguments = wide(OsStr::new(&format!(
-            "\"{}\" --renderer-helper --renderer-input-handle={}",
-            executable.display(),
-            input.as_raw_handle() as usize
-        )));
-        let program = wide(executable.as_os_str());
-        let mut environment = Vec::<u16>::new();
-        // Do not expose the broker's credentials, user paths, or unrelated env.
-        let mut entries = std::collections::BTreeMap::new();
-        for name in ["SystemRoot", "WINDIR"] {
-            if let Some(value) = std::env::var_os(name) {
-                entries.insert(name.to_owned(), value);
+            ];
+            stage = "startup-attributes";
+            let mut attributes = Attributes::new()?;
+            unsafe {
+                attributes.set(
+                    PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
+                    &capabilities,
+                    std::mem::size_of_val(&capabilities),
+                )?;
+                attributes.set(
+                    PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                    handles.as_ptr(),
+                    std::mem::size_of_val(&handles),
+                )?;
             }
-        }
-        for (key, value) in command.get_envs() {
-            if let (Some(key), Some(value)) = (key.to_str(), value) {
-                if key.starts_with("QUICK_PRESENTER_SANDBOX_") {
-                    entries.insert(key.to_owned(), value.to_owned());
+            let source = std::fs::canonicalize(command.get_program())?;
+            stage = "runtime-grant";
+            let runtime = RuntimeDirectory::stage(&source, sid.0, nonce)?;
+            let executable = runtime.0.join("quick-presenter.exe");
+            // Production passes no arbitrary arguments: only this internal helper mode.
+            ensure!(
+                command.get_args().eq([OsStr::new("--renderer-helper")]),
+                "unexpected renderer arguments"
+            );
+            let mut arguments = wide(OsStr::new(&format!(
+                "\"{}\" --renderer-helper --renderer-input-handle={}",
+                executable.display(),
+                input.as_raw_handle() as usize
+            )));
+            let program = wide(executable.as_os_str());
+            let mut environment = Vec::<u16>::new();
+            // Do not expose the broker's credentials, user paths, or unrelated env.
+            let mut entries = std::collections::BTreeMap::new();
+            for name in ["SystemRoot", "WINDIR"] {
+                if let Some(value) = std::env::var_os(name) {
+                    entries.insert(name.to_owned(), value);
                 }
             }
-        }
-        for (key, value) in std::env::vars_os() {
-            if let Some(key) = key.to_str() {
-                let allowed = key.starts_with("QUICK_PRESENTER_SANDBOX_")
-                    || (cfg!(debug_assertions)
-                        && (key.starts_with("QUICK_PRESENTER_HELPER_TEST_")
-                            || key == "PDFIUM_DYNAMIC_LIB_PATH"));
-                if allowed {
-                    entries.insert(key.to_owned(), value);
+            for (key, value) in command.get_envs() {
+                if let (Some(key), Some(value)) = (key.to_str(), value) {
+                    if key.starts_with("QUICK_PRESENTER_SANDBOX_") {
+                        entries.insert(key.to_owned(), value.to_owned());
+                    }
                 }
             }
-        }
-        #[cfg(debug_assertions)]
-        if let Some(marker) = entries.remove("QUICK_PRESENTER_HELPER_TEST_FAULT_ONCE") {
-            if std::fs::remove_file(marker).is_err() {
-                entries.remove("QUICK_PRESENTER_HELPER_TEST_FAULT");
+            for (key, value) in std::env::vars_os() {
+                if let Some(key) = key.to_str() {
+                    let allowed = key.starts_with("QUICK_PRESENTER_SANDBOX_")
+                        || (cfg!(debug_assertions)
+                            && (key.starts_with("QUICK_PRESENTER_HELPER_TEST_")
+                                || key == "PDFIUM_DYNAMIC_LIB_PATH"));
+                    if allowed {
+                        entries.insert(key.to_owned(), value);
+                    }
+                }
             }
-        }
-        // The helper must load the copied runtime, not a development path that
-        // is outside its explicit read-only ACL grant.
-        entries.remove("PDFIUM_DYNAMIC_LIB_PATH");
-        for (key, value) in entries {
-            environment.extend(wide(OsStr::new(&format!(
-                "{}={}",
-                key,
-                value.to_string_lossy()
-            ))));
-        }
-        environment.push(0);
-        let mut startup = STARTUPINFOEXW::default();
-        startup.StartupInfo.cb = std::mem::size_of_val(&startup) as u32;
-        startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
-        startup.StartupInfo.hStdInput = child_input.as_raw_handle();
-        startup.StartupInfo.hStdOutput = child_output.as_raw_handle();
-        startup.StartupInfo.hStdError = child_output.as_raw_handle();
-        startup.lpAttributeList = attributes.pointer;
-        let mut process = PROCESS_INFORMATION::default();
-        // SAFETY: buffers/attributes and inherited handles live until this call
-        // completes. The OS installs AppContainer before any child instruction.
-        checked(unsafe {
-            CreateProcessW(
-                program.as_ptr(),
-                arguments.as_mut_ptr(),
-                std::ptr::null(),
-                std::ptr::null(),
-                1,
-                EXTENDED_STARTUPINFO_PRESENT
-                    | CREATE_SUSPENDED
-                    | CREATE_NO_WINDOW
-                    | CREATE_UNICODE_ENVIRONMENT,
-                environment.as_ptr().cast(),
-                std::ptr::null(),
-                &startup.StartupInfo,
-                &mut process,
-            )
-        })?;
-        let thread = unsafe { owned(process.hThread) };
-        let mut child = Child {
-            stdin: Some(File::from(parent_input)),
-            stdout: Some(File::from(parent_output)),
-            handle: unsafe { owned(process.hProcess) },
-            pid: process.dwProcessId,
-            _runtime: runtime,
-        };
-        let job = match ResourceJob::attach(&child) {
-            Ok(job) => job,
-            Err(error) => {
+            #[cfg(debug_assertions)]
+            if let Some(marker) = entries.remove("QUICK_PRESENTER_HELPER_TEST_FAULT_ONCE") {
+                if std::fs::remove_file(marker).is_err() {
+                    entries.remove("QUICK_PRESENTER_HELPER_TEST_FAULT");
+                }
+            }
+            // The helper must load the copied runtime, not a development path that
+            // is outside its explicit read-only ACL grant.
+            entries.remove("PDFIUM_DYNAMIC_LIB_PATH");
+            for (key, value) in entries {
+                environment.extend(wide(OsStr::new(&format!(
+                    "{}={}",
+                    key,
+                    value.to_string_lossy()
+                ))));
+            }
+            environment.push(0);
+            let mut startup = STARTUPINFOEXW::default();
+            startup.StartupInfo.cb = std::mem::size_of_val(&startup) as u32;
+            startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+            startup.StartupInfo.hStdInput = child_input.as_raw_handle();
+            startup.StartupInfo.hStdOutput = child_output.as_raw_handle();
+            startup.StartupInfo.hStdError = child_output.as_raw_handle();
+            startup.lpAttributeList = attributes.pointer;
+            let mut process = PROCESS_INFORMATION::default();
+            // SAFETY: buffers/attributes and inherited handles live until this call
+            // completes. The OS installs AppContainer before any child instruction.
+            stage = "create-appcontainer";
+            checked(unsafe {
+                CreateProcessW(
+                    program.as_ptr(),
+                    arguments.as_mut_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    1,
+                    EXTENDED_STARTUPINFO_PRESENT
+                        | CREATE_SUSPENDED
+                        | CREATE_NO_WINDOW
+                        | CREATE_UNICODE_ENVIRONMENT,
+                    environment.as_ptr().cast(),
+                    std::ptr::null(),
+                    &startup.StartupInfo,
+                    &mut process,
+                )
+            })?;
+            let thread = unsafe { owned(process.hThread) };
+            let mut child = Child {
+                stdin: Some(File::from(parent_input)),
+                stdout: Some(File::from(parent_output)),
+                handle: unsafe { owned(process.hProcess) },
+                pid: process.dwProcessId,
+                _runtime: runtime,
+            };
+            stage = "job-controls";
+            let job = match ResourceJob::attach(&child) {
+                Ok(job) => job,
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(error);
+                }
+            };
+            stage = "resume";
+            if unsafe { ResumeThread(thread.as_raw_handle()) } == u32::MAX {
+                let error = io::Error::last_os_error();
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(error);
+                return Err(error.into());
             }
-        };
-        if unsafe { ResumeThread(thread.as_raw_handle()) } == u32::MAX {
-            let error = io::Error::last_os_error();
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(error.into());
-        }
-        Ok((child, job))
+            Ok((child, job))
+        })();
+        result.map_err(|error| {
+            let code = error.chain().find_map(|cause| {
+                cause
+                    .downcast_ref::<io::Error>()
+                    .and_then(io::Error::raw_os_error)
+            });
+            // Only trusted setup stage and numeric OS error, never error chains
+            // or PDF paths/content. This also works before logging initialization.
+            eprintln!("Renderer sandbox setup failed: stage={stage} win32={code:?}");
+            anyhow::anyhow!("renderer sandbox setup failed")
+        })
     }
 
     pub(crate) fn verify_token() -> Result<()> {
