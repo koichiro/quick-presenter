@@ -371,6 +371,23 @@ cargo build --release --bin quick-presenter
 scripts/stage_macos_app_bundle.sh /tmp/quick-presenter-macos
 ```
 
+Staging produces an ad-hoc signed layout artifact. It cannot open PDFs: the
+XPC renderer requires Apple-anchored signatures with a Team ID. This applies to
+local GUI review bundles as well as release builds. Before handing a staged
+bundle to a tester, sign it and run the PDF gate:
+
+```sh
+scripts/sign_macos_app.sh "/tmp/quick-presenter-macos/Quick Presenter.app" \
+  "Developer ID Application: Example Name (TEAMID)"
+```
+
+The signing script verifies the nested signatures and runs
+`scripts/check_macos_renderer.py` to open/render a PDF and check sandbox denials.
+Only then use the bundle for GUI validation. An ad-hoc bundle reports
+`This app is not signed for PDF playback` before starting a renderer; its
+diagnostic error identifies the missing signing Team ID. Do not bypass XPC
+authentication to make a layout artifact runnable.
+
 For a tagged release, the staged app from the successful `Build Binaries` run
 can be used instead of rebuilding it locally. Download the
 `quick-presenter-macos` artifact, then copy its app bundle to a separate release

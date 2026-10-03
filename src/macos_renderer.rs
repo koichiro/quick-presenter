@@ -148,6 +148,7 @@ pub fn verify_denials() -> Result<()> {
     Ok(())
 }
 unsafe extern "C" {
+    fn qp_xpc_has_signing_team() -> bool;
     fn qp_xpc_proxy() -> libc::c_int;
     fn qp_xpc_service();
 }
@@ -164,6 +165,14 @@ pub fn configure(
 ) -> Result<(Command, Option<FileIdentity>)> {
     let exe = std::env::current_exe()?;
     let contents = app_contents(&exe);
+    if contents.is_some() {
+        // SAFETY: this only reads signing metadata for the running broker.
+        // Reject layout-only bundles before acquiring a PDF or spawning a proxy.
+        ensure!(
+            unsafe { qp_xpc_has_signing_team() },
+            "macOS app bundle has no signing Team ID; sign it with scripts/sign_macos_app.sh before PDF validation"
+        );
+    }
     if contents.is_none() {
         ensure!(
             cfg!(debug_assertions),
