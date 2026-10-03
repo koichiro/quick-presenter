@@ -10,8 +10,10 @@ The first implementation uses Slint's window API:
 - `Window::is_fullscreen()` when the native window state needs to be queried
 
 With the current Slint winit backend, this maps to borderless fullscreen on the
-current display. Monitor selection is intentionally deferred so the first
-fullscreen workflow can stay small and predictable.
+current display. The current implementation does not select a monitor. The
+proposed display-swap feature will add a narrow Winit boundary for targeted
+borderless fullscreen while preserving the existing fullscreen intent; see
+[Presenter and Slide Display Swap](DISPLAY_SWAP.md).
 
 Platform notes:
 
@@ -21,8 +23,9 @@ Platform notes:
   window to have keyboard focus.
 - Presenter controls also provide a fullscreen toggle so the presenter can leave
   fullscreen without relying on slide-window focus.
-- Future monitor selection should be implemented behind the Rust fullscreen
-  helper boundary instead of embedding platform-specific logic in Slint UI code.
+- Monitor-aware fullscreen and window placement must stay behind a Rust window
+  management boundary instead of embedding platform-specific logic in Slint UI
+  code.
 
 ## Windows Slide Chrome
 

@@ -15,6 +15,12 @@ are defined in [PDF Rendering Security and Isolation Policy](PDF_RENDERING_SECUR
 
 The app should keep PDF rendering, page caching, file IO, and presentation state in Rust. Slint should stay focused on UI layout, events, and display.
 
+Display discovery and native window placement follow the same boundary. The
+proposed `X` shortcut for exchanging the presenter and slide displays is defined
+in [Presenter and Slide Display Swap](DISPLAY_SWAP.md). Slint forwards the key
+event; Rust owns monitor snapshots, the two-window swap transaction, focus
+recovery, and platform limitations.
+
 Diagnostic file creation, permissions, byte accounting, and rotation remain in
 the Rust diagnostics boundary. The v1.0.0 retention design is documented in
 [Diagnostic Log Retention](DIAGNOSTIC_LOG_RETENTION.md); Slint and presentation
