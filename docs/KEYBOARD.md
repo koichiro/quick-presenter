@@ -37,5 +37,15 @@ window remains usable, and page navigation continues while the audience screen
 is black. Pressing `B` again reveals the current page, including any page
 changes made while the slide window was blanked.
 
+## Swap Displays
+
+- Swap the presenter and slide displays: `X`
+
+The shortcut works from either focused Quick Presenter window. It swaps the two
+displays already occupied by the presenter and slide windows without changing
+their roles, the current page, timer, black-screen state, or slide fullscreen
+intent. It is a safe no-op when both windows are on the same display or the
+desktop does not allow application-controlled window placement.
+
 Future presentation controls such as go-to-page and timer actions should be
 added as new Rust presentation commands before adding UI key bindings.

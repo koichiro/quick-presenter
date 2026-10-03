@@ -354,6 +354,30 @@ component KeyboardBindingsPanel inherits Rectangle {
         vertical-alignment: center;
         overflow: elide;
     }
+
+    Text {
+        text: "Displays";
+        x: 8px;
+        y: 168px;
+        width: 70px;
+        height: 17px;
+        color: #9aa0a6;
+        font-size: 12px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    Text {
+        text: "X";
+        x: 83px;
+        y: 168px;
+        width: parent.width - 91px;
+        height: 17px;
+        color: #f1f3f4;
+        font-size: 12px;
+        vertical-alignment: center;
+        overflow: elide;
+    }
 }
 
 component ThumbnailTile inherits Rectangle {
@@ -509,7 +533,7 @@ export component PresenterWindow inherits Window {
     property <int> active-menu-index: -1;
     property <length> inline-menu-height: root.use-native-menu-bar ? 0px : 28px;
     property <length> presenter-main-height: max(0px, root.height - root.inline-menu-height - 96px);
-    property <length> presenter-bottom-section-height: 180px;
+    property <length> presenter-bottom-section-height: 200px;
     property <float> safe-current-page-aspect-ratio: root.current-page-aspect-ratio > 0 ? root.current-page-aspect-ratio : 16.0 / 9.0;
     property <float> safe-next-page-aspect-ratio: root.next-page-aspect-ratio > 0 ? root.next-page-aspect-ratio : 16.0 / 9.0;
     property <length> next-preview-natural-height: 260px / root.safe-next-page-aspect-ratio;
@@ -534,6 +558,7 @@ export component PresenterWindow inherits Window {
     callback keyboard-next-page();
     callback keyboard-first-page();
     callback keyboard-last-page();
+    callback swap-displays();
     callback jump-to-page(int);
     callback request-thumbnail-range(int, int);
 
@@ -843,6 +868,13 @@ export component PresenterWindow inherits Window {
             keys: @keys(B);
             activated => {
                 root.toggle-black-screen();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(X);
+            activated => {
+                root.swap-displays();
             }
         }
 
@@ -1330,6 +1362,7 @@ export component SlideWindow inherits Window {
     callback keyboard-next-page();
     callback keyboard-first-page();
     callback keyboard-last-page();
+    callback swap-displays();
 
     title: "Quick Presenter - Slide";
     preferred-width: root.slide-window-width;
@@ -1473,6 +1506,13 @@ export component SlideWindow inherits Window {
             keys: @keys(B);
             activated => {
                 root.toggle-black-screen();
+            }
+        }
+
+        KeyBinding {
+            keys: @keys(X);
+            activated => {
+                root.swap-displays();
             }
         }
 

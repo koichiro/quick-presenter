@@ -2,11 +2,11 @@
 
 ## Status
 
-This document proposes the implementation design for
+This document defines the implementation design for
 [GitHub issue #384](https://github.com/koichiro/quick-presenter/issues/384).
 
-The feature is not implemented by this document. Until the implementation lands,
-`X` has no display-management behavior.
+The implementation follows this contract through the Rust window-management
+boundary and the `X` bindings in both Slint windows.
 
 ## Goal
 
@@ -52,6 +52,8 @@ persistence across launches.
 
 ## Non-goals
 
+- Presenter fullscreen and fullscreen-specific presenter widget layout. These
+  require a separate future feature; this implementation assumes a windowed presenter.
 - A display picker or display-configuration UI.
 - Automatically choosing an audience display when the app starts.
 - Moving windows when a display is connected or disconnected without an `X`
@@ -183,6 +185,12 @@ to keep the title/control region reachable; if the window is larger than the
 destination, align it to the destination origin rather than producing an
 off-screen coordinate.
 
+On macOS, normalize window geometry using the window's backing scale and monitor
+geometry using that monitor's scale into a common logical desktop coordinate
+space. Submit window positions as `LogicalPosition`, so a destination coordinate
+is not divided by the source window's backing scale. Other platforms retain
+physical desktop coordinates and scale-aware size mapping.
+
 Fullscreen placement ignores the source window rectangle and targets the whole
 destination monitor.
 
@@ -246,6 +254,16 @@ If the topology changed or the retry budget expires:
 Recovery is best-effort because a display can disappear between any two native
 calls. It must never loop indefinitely, panic on an absent monitor, or replace a
 valid current placement with an unverified stale coordinate.
+
+Check actual rectangle overlap with available displays before keeping a window:
+its top control strip must remain reachable. A current-monitor handle alone is
+insufficient, because Windows returns the nearest monitor even for an entirely
+offscreen window. Unreachable windows are moved to the fallback display origin.
+
+Fullscreen toggle and exit commands cancel the active swap generation before
+changing fullscreen intent. Every delayed verification tick checks its generation
+before any placement, recovery, focus, status, or completion action. Starting a
+new swap cannot reactivate ticks from a cancelled operation.
 
 ## Fullscreen and Chrome Synchronization
 
