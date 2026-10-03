@@ -93,3 +93,4 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 fi
 
 echo "Staged $bundle"
+echo "Layout only: this ad-hoc bundle cannot open PDFs until signed with scripts/sign_macos_app.sh." >&2
