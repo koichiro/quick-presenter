@@ -2,11 +2,11 @@
 
 ## Status
 
-This document proposes the implementation design for
+This document defines the implementation design for
 [GitHub issue #384](https://github.com/koichiro/quick-presenter/issues/384).
 
-The feature is not implemented by this document. Until the implementation lands,
-`X` has no display-management behavior.
+The implementation follows this contract through the Rust window-management
+boundary and the `X` bindings in both Slint windows.
 
 ## Goal
 
