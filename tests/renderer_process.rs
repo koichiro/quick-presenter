@@ -1,4 +1,21 @@
 //! Exercise the shipped executable, not the test harness, over its pipe protocol.
+#[test]
+#[cfg(all(target_os = "linux", debug_assertions))]
+fn unavailable_landlock_and_flatpak_modes_fail_closed() {
+    for environment in ["QUICK_PRESENTER_HELPER_TEST_NO_LANDLOCK", "FLATPAK_ID"] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+        command
+            .arg("--smoke-open-pdf")
+            .arg(fixture())
+            .env(environment, "test");
+        let output = run_broker(command);
+        assert!(
+            !output.status.success(),
+            "{environment} silently ran without confinement"
+        );
+        assert!(String::from_utf8_lossy(&output.stderr).contains("Renderer helper failed"));
+    }
+}
 use serde_json::{json, Value};
 use std::{
     io::{Read, Write},

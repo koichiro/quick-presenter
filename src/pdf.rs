@@ -272,6 +272,11 @@ pub fn pdfium_runtime_version_label() -> String {
     .unwrap_or_else(|| PDFIUM_VERSION_UNKNOWN_LABEL.to_owned())
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) fn initialize_renderer_runtime() -> Result<()> {
+    shared_pdfium().map(|_| ())
+}
+
 fn shared_pdfium() -> Result<&'static Pdfium> {
     Ok(&shared_pdfium_runtime()?.pdfium)
 }

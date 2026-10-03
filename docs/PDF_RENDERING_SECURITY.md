@@ -64,19 +64,23 @@ safe.
 
 ## Current release tradeoff
 
-The production runtime keeps `PdfDocumentState` in an unsandboxed helper, using
+The production runtime keeps `PdfDocumentState` in a helper, using
 the same installed executable in internal helper mode. The UI/broker does not
 initialize PDFium. Unrecoverable active-helper EOF, exit, or invalid IPC becomes `WorkerFailed`;
 candidate failures keep the previous helper and last good slide. Shutdown kills
 and reaps helpers without waiting for native work; parent-pipe EOF independently
 exits the helper. This contains ordinary native crashes to the helper, but does
-not prevent a compromised helper from exercising the user's OS authority.
+not by itself prevent a compromised helper from exercising the user's OS authority.
+Direct Linux builds now require the fail-closed Landlock/seccomp boundary in
+[Linux renderer confinement](../packaging/linux/RENDERER-SANDBOX.md). macOS and
+Windows remain unsandboxed on this branch; their platform changes are separate.
 
 Hard deadlines, bounded restart, and platform-specific memory controls are now
 implemented. Their numeric values and fallback guarantees are documented in
 [Render Scheduling](RENDER_SCHEDULING.md). macOS sampled RSS is not a hard memory
 reservation cap. Packaged releases gain these guarantees only when they include
-and validate this implementation; helpers still have unsandboxed user authority.
+and validate this implementation. Do not extend the Linux sandbox claim to
+unsupported kernels, Flatpak, or other operating systems.
 
 Current mitigations reduce accidental and resource-exhaustion risk but do not
 form a sandbox:

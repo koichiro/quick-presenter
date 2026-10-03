@@ -94,6 +94,11 @@ impl HelperClient {
         )
     }
     pub fn spawn_command(mut command: Command, group: &ProcessGroup) -> Result<Self> {
+        #[cfg(target_os = "linux")]
+        command.env(
+            "QUICK_PRESENTER_RENDERER_PARENT_PID",
+            std::process::id().to_string(),
+        );
         command
             .arg(HELPER_ARGUMENT)
             .stdin(Stdio::piped())
@@ -453,8 +458,7 @@ impl RemoteDocument {
 }
 
 /// Run before diagnostics or GUI initialization. stdout is exclusively protocol bytes.
-pub fn run() -> Result<()> {
-    crate::renderer_resources::constrain_helper()?;
+fn start_input_guardian() -> std::sync::mpsc::Receiver<Frame> {
     let (sender, receiver) = std::sync::mpsc::sync_channel(64);
     std::thread::spawn(move || {
         let mut input = Framed::new(io::stdin().lock());
@@ -471,12 +475,32 @@ pub fn run() -> Result<()> {
             }
         }
     });
+    receiver
+}
+
+pub fn run() -> Result<()> {
+    #[cfg(target_os = "linux")]
+    crate::renderer_sandbox_linux::close_inherited_descriptors()?;
+    crate::renderer_resources::constrain_helper()?;
+    let mut input = Framed::new(io::stdin());
+    let mut receiver = None;
     let mut output = Framed::new(io::stdout().lock());
     let mut document: Option<PdfDocumentState> = None;
     let mut session = None;
     let mut ready = false;
     let mut last_request = 0;
-    for frame in receiver {
+    loop {
+        let frame = if let Some(receiver) = &receiver {
+            match std::sync::mpsc::Receiver::recv(receiver) {
+                Ok(frame) => frame,
+                Err(_) => break,
+            }
+        } else {
+            match input.receive()? {
+                Some(frame) => frame,
+                None => break,
+            }
+        };
         let Envelope {
             request_id,
             session_id,
@@ -526,7 +550,15 @@ pub fn run() -> Result<()> {
             }
             Message::Open { path } => {
                 ensure!(document.is_none(), "helper document already open");
-                match PdfDocumentState::open(path.into_path()?) {
+                let path = path.into_path()?.canonicalize()?;
+                #[cfg(target_os = "linux")]
+                crate::renderer_sandbox_linux::enter(&path)?;
+                // Landlock is thread-local on older supported ABIs: create the
+                // guardian only after confinement so it inherits the policy.
+                if receiver.is_none() {
+                    receiver = Some(start_input_guardian());
+                }
+                match PdfDocumentState::open(path) {
                     Ok(doc) if doc.page_count() > 0 => {
                         let response = Message::Opened {
                             title: doc.title(),
@@ -711,12 +743,30 @@ fn render_fault(page_index: u32, document: Option<&PdfDocumentState>) -> Option<
     }
     let fault = test_fault()?;
     if let Ok(marker) = std::env::var("QUICK_PRESENTER_HELPER_TEST_FAULT_ONCE") {
+        #[cfg(target_os = "linux")]
+        {
+            let _ = marker;
+            if !FAULT_MARKER_CONSUMED.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                return None;
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
         // Only debug test-owned marker files are consumed; release ignores all hooks.
         if std::fs::remove_file(marker).is_err() {
             return None;
         }
     }
     Some(fault)
+}
+
+#[cfg(all(target_os = "linux", debug_assertions))]
+static FAULT_MARKER_CONSUMED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+#[cfg(all(target_os = "linux", debug_assertions))]
+pub(crate) fn consume_fault_marker(path: &std::path::Path) -> Result<()> {
+    std::fs::remove_file(path)?;
+    FAULT_MARKER_CONSUMED.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
 }
 
 /// Internal executable-level test entry point: exercise real broker supervision
