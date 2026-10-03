@@ -2,9 +2,10 @@
 
 Status: implementation draft. Developer ID runtime/security and lifetime gates
 are exercised against real signed XPC code. Store signing configuration is a
-candidate, not a validated Store release. Actual notarization/Gatekeeper and
-Store UI/file-selection checks remain release requirements. Do not close #374
-on unsigned CI or design documentation alone.
+candidate, not a validated Store release. Actual Developer ID
+notarization/Gatekeeper remains a direct-DMG gate. Store packaging, sandboxed UI
+and file-selection checks belong to #120 and do not block #374/#381. Do not close
+#374 on unsigned CI or design documentation alone.
 
 ## App Sandbox and renderer isolation are complementary
 
@@ -65,7 +66,8 @@ the precise denied UI/service/process operations claimed by the implementation.
    nested libraries/service before the outer app with each target's own
    entitlements; verify those entitlements, strict signatures and library lookup.
    Validate the DMG through Gatekeeper and actual Developer ID notarization,
-   and the Store variant through its own signing/packaging validation.
+   and validate the Store variant separately under #120. Store readiness is not
+   a completion gate for #374 or the direct-DMG implementation PR.
 5. For each claimed package/version, test PDF open/render/notes plus denied
    unrelated private read/write, network listen/connect, and reviewed child,
    UI and Mach/service access. Include UI-owned settings/cache sentinels so a
@@ -107,7 +109,8 @@ not given extra sandbox permissions. `MACOS_DISTRIBUTION_MODE=app-store` supplie
 exactly `app-sandbox`/`inherit` to the proxy and read-only user-selected access
 to the sandboxed UI. This is a signing candidate only: actual Store identity,
 PowerBox selection, recent-file/security-scoped persistence, UI behavior and
-Store packaging/review remain unvalidated. No broad bookmark/app-group authority
+Store packaging/review remain unvalidated and are tracked in #120, not as blockers
+for #374. No broad bookmark/app-group authority
 is given to the renderer to compensate for missing UI integration.
 
 Staging supplies ad-hoc layout signatures, not a runnable production security
@@ -126,6 +129,12 @@ With a separately signed **debug** bundle, add `--debug-tests` to test actual
 service PIDs, deadlines, candidate isolation, one-shot recovery and broker loss.
 Release builds exclude all fault/PID-report hooks in both Rust and the C shim.
 Earlier custom Seatbelt test results are not evidence for this XPC boundary.
+
+Developer ID notarization can be rehearsed before release using the existing
+`scripts/notarize_macos_dmg.sh` procedure in `docs/PACKAGING.md`; neither a tag
+nor a published release is required. Validate the final v1.5.0 artifact again
+before publication. A rehearsal ticket does not establish notarization for a
+subsequently changed binary or disk image.
 
 ## Sources
 
