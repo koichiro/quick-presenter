@@ -16,6 +16,8 @@ pub mod gui_smoke;
 pub mod hot_reload;
 pub mod input;
 #[cfg(target_os = "macos")]
+pub mod macos_renderer;
+#[cfg(target_os = "macos")]
 pub mod macos_window;
 pub mod notes;
 pub mod pdf;
@@ -124,6 +126,10 @@ const INITIAL_LINUX_WINDOW_SHOW_DELAY: Duration = Duration::from_millis(120);
 const INITIAL_LINUX_PRESENTER_FRONT_DELAY: Duration = Duration::from_millis(80);
 
 fn main() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    if let Some(result) = macos_renderer::entry() {
+        return result;
+    }
     #[cfg(debug_assertions)]
     if std::env::args_os().nth(1).as_deref()
         == Some(std::ffi::OsStr::new("--renderer-scheduler-smoke"))
@@ -365,7 +371,7 @@ fn smoke_open_pdf(path: PathBuf) -> Result<()> {
     const SMOKE_RENDER_WIDTH: i32 = 320;
 
     let group = renderer_helper::ProcessGroup::default();
-    let mut helper = renderer_helper::HelperClient::spawn(&group)?;
+    let mut helper = renderer_helper::HelperClient::spawn_for_document(&group, &path)?;
     let (title, page_count) = helper.open(path)?;
     let purpose = RenderPurpose::CurrentSlide;
     #[cfg(debug_assertions)]

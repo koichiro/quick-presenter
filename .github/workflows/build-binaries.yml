@@ -12,6 +12,10 @@ on:
       - 'scripts/sign_*'
       - 'scripts/create_macos_dmg.sh'
       - 'scripts/notarize_macos_dmg.sh'
+      - 'scripts/check_macos_renderer.py'
+      - 'src/macos_renderer*'
+      - 'src/pdf.rs'
+      - 'build.rs'
       - 'scripts/fetch_pdfium.py'
       - 'scripts/pdfium_manifest.json'
       - 'scripts/generate_icons.py'
@@ -249,6 +253,9 @@ jobs:
           supported only after Microsoft Store certification and signing.
 
           Raw quick-presenter or quick-presenter.exe binaries are development and diagnostic artifacts.
+          macOS raw release executables cannot render PDFs; the signed app bundle
+          is required. Ad-hoc CI app bundles/DMGs are layout artifacts and reject
+          PDF work until signed with a trusted Apple developer identity.
           If you run or move a raw executable directly, keep the pdfium directory
           next to it because the executable locates bundled PDFium files relative
           to its own path.
@@ -286,6 +293,14 @@ jobs:
           test -d "$resources/pdfium/licenses"
           test -s "$resources/licenses/QuickPresenter-LICENSE.txt"
           test -s "$resources/licenses/PDFium-LICENSE.txt"
+
+          proxy="$app/Contents/Helpers/RendererProxy.app"
+          service="$proxy/Contents/XPCServices/org.quickpresenter.renderer.xpc"
+          test -x "$proxy/Contents/MacOS/quick-presenter-proxy"
+          test -x "$service/Contents/MacOS/quick-presenter-renderer"
+          test -s "$service/Contents/Resources/pdfium/lib/libpdfium.dylib"
+          plutil -lint "$proxy/Contents/Info.plist" "$service/Contents/Info.plist"
+          codesign --verify --deep --strict "$app"
 
           plutil -lint "$plist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$plist")" = "Quick Presenter"
@@ -340,8 +355,7 @@ jobs:
           test -s "$resources/licenses/QuickPresenter-LICENSE.txt"
           test -s "$resources/licenses/PDFium-LICENSE.txt"
 
-          env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$app/Contents/MacOS/quick-presenter" \
-            --smoke-open-pdf "$pdf"
+          python3 scripts/check_macos_renderer.py "$app" "$pdf" --expect-untrusted
 
       - name: Record macOS GUI smoke CI skip
         if: runner.os == 'macOS'
@@ -935,17 +949,17 @@ jobs:
           artifact_dir="$GITHUB_WORKSPACE/artifacts/${{ matrix.artifact-name }}"
           pdf="$GITHUB_WORKSPACE/tests/fixtures/marp-speaker-notes.pdf"
 
-          (
+          if [[ "${{ runner.os }}" == "Linux" ]]; then (
             cd /tmp
             env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$artifact_dir/${{ matrix.binary-name }}" \
               --smoke-open-pdf "$pdf"
-          )
+          ); fi
 
           if [[ "${{ runner.os }}" == "macOS" ]]; then
+            python3 scripts/check_macos_renderer.py "$artifact_dir/${{ matrix.binary-name }}" "$pdf" --expect-unbundled
             (
               cd /tmp
-              env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$artifact_dir/Quick Presenter.app/Contents/MacOS/quick-presenter" \
-                --smoke-open-pdf "$pdf"
+              python3 "$GITHUB_WORKSPACE/scripts/check_macos_renderer.py" "$artifact_dir/Quick Presenter.app" "$pdf" --expect-untrusted
             )
           fi
 

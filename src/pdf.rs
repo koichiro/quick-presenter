@@ -40,6 +40,43 @@ pub struct PdfDocumentState {
 }
 
 impl PdfDocumentState {
+    pub(crate) fn open_brokered(path: PathBuf, mut file: fs::File) -> Result<Self> {
+        use std::io::{Seek, SeekFrom};
+        let metadata = file.metadata()?;
+        ensure!(
+            metadata.is_file() && metadata.len() <= MAX_PREFLIGHT_PDF_BYTES,
+            "invalid brokered PDF size/type"
+        );
+        let mut header = [0u8; 5];
+        file.read_exact(&mut header)?;
+        ensure!(&header == PDF_HEADER, "invalid brokered PDF header");
+        file.seek(SeekFrom::Start(0))?;
+        let document = shared_pdfium()?
+            .load_pdf_from_reader(file, None)
+            .map_err(|error| {
+                if matches!(
+                    error,
+                    PdfiumError::PdfiumLibraryInternalError(
+                        PdfiumInternalError::PasswordError | PdfiumInternalError::SecurityError
+                    )
+                ) {
+                    anyhow::Error::new(ProtectedPdfError)
+                } else {
+                    error.into()
+                }
+            })?;
+        let page_count = document.pages().len();
+        ensure!(
+            page_count > 0 && page_count as u32 <= crate::renderer_limits::MAX_PAGES,
+            "PDF page count exceeds supported limit"
+        );
+        Ok(Self {
+            document,
+            path,
+            page_count: page_count as u32,
+            _worker_thread_only: PhantomData,
+        })
+    }
     pub fn open(path: PathBuf) -> Result<Self> {
         preflight_pdf_input(&path)
             .with_context(|| format!("failed to open PDF: {}", path.display()))?;
@@ -506,6 +543,29 @@ mod tests {
         sync::{Mutex, OnceLock},
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    #[test]
+    fn brokered_pdf_uses_owned_reader_not_the_display_path() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/marp-speaker-notes.pdf");
+        let file = fs::File::open(path).unwrap();
+        let document =
+            PdfDocumentState::open_brokered("/not-reopened/display.pdf".into(), file).unwrap();
+        assert_eq!(document.title(), "display.pdf");
+        assert_eq!(document.page_count(), 3);
+        assert!(document.render_page_pixels(0, 320).is_ok());
+    }
+
+    #[test]
+    fn brokered_pdf_rejects_non_pdf_before_native_loading() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        assert!(PdfDocumentState::open_brokered(
+            "display.pdf".into(),
+            fs::File::open(path).unwrap()
+        )
+        .is_err());
+    }
 
     #[test]
     fn rgba_pixel_buffer_accepts_exact_dimensions() {

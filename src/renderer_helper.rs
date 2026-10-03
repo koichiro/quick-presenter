@@ -93,12 +93,28 @@ impl HelperClient {
             group,
         )
     }
-    pub fn spawn_command(mut command: Command, group: &ProcessGroup) -> Result<Self> {
+    pub fn spawn_for_document(group: &ProcessGroup, path: &std::path::Path) -> Result<Self> {
+        Self::spawn_with_document(Command::new(std::env::current_exe()?), group, Some(path))
+    }
+    pub fn spawn_command(command: Command, group: &ProcessGroup) -> Result<Self> {
+        Self::spawn_with_document(command, group, None)
+    }
+    fn spawn_with_document(
+        command: Command,
+        group: &ProcessGroup,
+        path: Option<&std::path::Path>,
+    ) -> Result<Self> {
+        #[cfg(target_os = "macos")]
+        let command = crate::macos_renderer::configure(command, path)?;
+        let _ = path;
+        let mut command = command;
         command
             .arg(HELPER_ARGUMENT)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
+        #[cfg(target_os = "macos")]
+        command.stderr(Stdio::inherit());
         #[cfg(target_os = "windows")]
         {
             use std::os::windows::process::CommandExt;
@@ -302,7 +318,7 @@ pub struct RemoteDocument {
 impl RemoteDocument {
     pub fn open(path: PathBuf, group: &Arc<ProcessGroup>) -> Result<Self> {
         let metadata = std::fs::metadata(&path)?;
-        let mut client = HelperClient::spawn(group)?;
+        let mut client = HelperClient::spawn_for_document(group, &path)?;
         let (title, page_count) = client.open(path.clone())?;
         Ok(Self {
             client: RefCell::new(client),
@@ -419,7 +435,7 @@ impl RemoteDocument {
                 (metadata.len(), metadata.modified().ok()) == self.file_identity,
                 "document changed during renderer recovery"
             );
-            let mut replacement = HelperClient::spawn(&self.group)?;
+            let mut replacement = HelperClient::spawn_for_document(&self.group, &self.path)?;
             let (title, count) = replacement.open(self.path.clone())?;
             ensure!(
                 title == self.title && count == self.page_count,
@@ -454,6 +470,14 @@ impl RemoteDocument {
 
 /// Run before diagnostics or GUI initialization. stdout is exclusively protocol bytes.
 pub fn run() -> Result<()> {
+    ensure!(
+        cfg!(debug_assertions) || !cfg!(target_os = "macos"),
+        "macOS release PDF work requires XPC"
+    );
+    run_with_input(None)
+}
+pub(crate) fn run_with_input(mut input: Option<std::fs::File>) -> Result<()> {
+    let brokered = input.is_some();
     crate::renderer_resources::constrain_helper()?;
     let (sender, receiver) = std::sync::mpsc::sync_channel(64);
     std::thread::spawn(move || {
@@ -526,7 +550,18 @@ pub fn run() -> Result<()> {
             }
             Message::Open { path } => {
                 ensure!(document.is_none(), "helper document already open");
-                match PdfDocumentState::open(path.into_path()?) {
+                let path = path.into_path()?;
+                #[cfg(target_os = "macos")]
+                if input.is_some() {
+                    crate::macos_renderer::verify_denials()?;
+                }
+                let opened = if let Some(file) = input.take() {
+                    PdfDocumentState::open_brokered(path, file)
+                } else {
+                    ensure!(!brokered, "brokered input already consumed");
+                    PdfDocumentState::open(path)
+                };
+                match opened {
                     Ok(doc) if doc.page_count() > 0 => {
                         let response = Message::Opened {
                             title: doc.title(),

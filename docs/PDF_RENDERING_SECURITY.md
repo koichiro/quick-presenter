@@ -64,7 +64,13 @@ safe.
 
 ## Current release tradeoff
 
-The production runtime keeps `PdfDocumentState` in an unsandboxed helper, using
+Bundled macOS builds now use an independently App-Sandboxed XPC renderer with
+brokered read-only document access and signature-authenticated peers. See
+[macOS Renderer Sandbox](../packaging/macos/RENDERER-SANDBOX.md) for the validated
+Developer ID gates and pending Store/notarization requirements. Unsigned/ad-hoc
+macOS release artifacts fail closed; they are not native security validation.
+
+Other platforms on this branch keep `PdfDocumentState` in an unsandboxed helper, using
 the same installed executable in internal helper mode. The UI/broker does not
 initialize PDFium. Unrecoverable active-helper EOF, exit, or invalid IPC becomes `WorkerFailed`;
 candidate failures keep the previous helper and last good slide. Shutdown kills
@@ -76,7 +82,8 @@ Hard deadlines, bounded restart, and platform-specific memory controls are now
 implemented. Their numeric values and fallback guarantees are documented in
 [Render Scheduling](RENDER_SCHEDULING.md). macOS sampled RSS is not a hard memory
 reservation cap. Packaged releases gain these guarantees only when they include
-and validate this implementation; helpers still have unsandboxed user authority.
+and validate this implementation; non-macOS helpers still have unsandboxed user authority
+until their separate platform isolation PRs are incorporated.
 
 Current mitigations reduce accidental and resource-exhaustion risk but do not
 form a sandbox:
@@ -165,9 +172,10 @@ when that is practical, or be described explicitly as unsandboxed crash
 containment. It must never silently receive the same security claim as a tested
 sandboxed package.
 
-- **macOS (#374):** evaluate an embedded XPC service for a separate entitlement
-  boundary and broker access to the selected document. App Sandbox inheritance
-  alone does not transfer dynamically granted user-selected-file access.
+- **macOS (#374):** use an embedded XPC service with its own minimal App Sandbox
+  and read-only brokered PDF descriptor. Document-specific proxy clients retain
+  active/candidate native-process independence. App Sandbox inheritance is used
+  only by the Store proxy, never as the renderer's privilege-separation boundary.
 - **Windows (#375):** use AppContainer or LPAC for authority reduction and a Job
   Object for process-tree lifetime and resource limits.
 - **Linux (#376):** for direct packages, use `no_new_privs`, inherited-descriptor

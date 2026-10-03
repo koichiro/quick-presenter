@@ -73,4 +73,23 @@ cp "LICENSE" "$license_dir/QuickPresenter-LICENSE.txt"
 cp "packaging/SOURCE-OFFER.txt" "$license_dir/QuickPresenter-SOURCE-OFFER.txt"
 cp "pdfium/LICENSE" "$license_dir/PDFium-LICENSE.txt"
 
+proxy="$contents/Helpers/RendererProxy.app"
+service="$proxy/Contents/XPCServices/org.quickpresenter.renderer.xpc"
+mkdir -p "$proxy/Contents/MacOS" "$service/Contents/MacOS" "$service/Contents/Resources"
+cp "$binary" "$proxy/Contents/MacOS/quick-presenter-proxy"
+sed "s/@APP_VERSION@/$version/g" packaging/macos/Proxy-Info.plist.in > "$proxy/Contents/Info.plist"
+cp "$binary" "$service/Contents/MacOS/quick-presenter-renderer"
+cp -R "pdfium" "$service/Contents/Resources/pdfium"
+sed "s/@APP_VERSION@/$version/g" packaging/macos/Renderer-Info.plist.in > "$service/Contents/Info.plist"
+
+# XPC requires signed nested code even for a developer/CI staging run. These
+# ad-hoc signatures are replaced by the Developer ID signing step for release.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  find "$contents" -name '*.dylib' -type f -print0 |
+    while IFS= read -r -d '' library; do codesign --force --sign - "$library"; done
+  codesign --force --sign - --entitlements packaging/macos/Renderer.entitlements "$service"
+  codesign --force --sign - "$proxy"
+  codesign --force --sign - "$bundle"
+fi
+
 echo "Staged $bundle"

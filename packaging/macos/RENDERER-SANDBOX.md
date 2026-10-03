@@ -1,17 +1,18 @@
 # macOS renderer privilege-separation decision (#374)
 
-Status: design only. The XPC transport, separate signed service, entitlements,
-and packaged security gates are not implemented by this PR. The existing
-self-spawned renderer still provides crash containment, not a supported macOS
-least-privilege boundary. Do not close #374 on this document's evidence.
+Status: implementation draft. Developer ID runtime/security and lifetime gates
+are exercised against real signed XPC code. Store signing configuration is a
+candidate, not a validated Store release. Actual notarization/Gatekeeper and
+Store UI/file-selection checks remain release requirements. Do not close #374
+on unsigned CI or design documentation alone.
 
 ## App Sandbox and renderer isolation are complementary
 
 Mac App Store submission requires App Sandbox. It is enabled by the signed
 `com.apple.security.app-sandbox` entitlement, not by the distribution channel
 automatically adding a policy. Developer ID signing, hardened runtime and
-notarization alone do not enable App Sandbox. The current DMG signing script
-does not supply App Sandbox entitlements.
+notarization alone do not enable App Sandbox. The DMG signing script now supplies
+App Sandbox entitlements to the separate renderer, not to the whole UI.
 
 App Sandbox restricts the whole application's resources. It does not mean that
 every component can access only the PDF currently being rendered. The UI needs
@@ -46,7 +47,7 @@ the precise denied UI/service/process operations claimed by the implementation.
 
 ## Required implementation and release gates
 
-1. Move PDFium work into `Contents/XPCServices/<service>.xpc`, with a distinct
+1. Move PDFium work into a nested `Contents/XPCServices/<service>.xpc`, with a distinct
    executable identity and entitlements. Authenticate the connection to the
    containing app and prevent unrelated clients from submitting PDF work.
 2. The UI opens the selected regular file read-only under its own authorization.
@@ -73,9 +74,58 @@ the precise denied UI/service/process operations claimed by the implementation.
    documents. Missing confinement must fail before PDF parsing; no unsandboxed
    release fallback or Store-support claim on unsigned developer evidence.
 
-The earlier experimental denial results do not validate this XPC design. The
-existing generic denial script on other platform branches may be reused only
-after the macOS service performs probes inside the actual sandboxed renderer.
+## Implemented transport and packaging
+
+Each document starts `Contents/Helpers/RendererProxy.app` as a distinct client.
+Its own `Contents/XPCServices/org.quickpresenter.renderer.xpc` is launched by
+libXPC. The proxy is necessary because an application's XPC service is normally
+shared: active and candidate documents need independent native processes.
+The proxy never parses PDF bytes, creates UI, or initializes PDFium. It only
+authenticates the service, transfers stdio and the read-only PDF FD, and supervises
+the OS-reported service identity/memory. The existing bounded Rust pipe protocol
+and broker watchdog remain unchanged above this bootstrap.
+
+Both peers require an Apple-anchored signature with a fixed signing identifier
+and their own running code's signing Team ID. They never copy requirements from
+replaceable nested files or trust peer-supplied PIDs. No filesystem exception is
+added so native code can inspect the UI/proxy signature. Untrusted/ad-hoc code
+and unbundled release executables fail before PDF parsing; debug-only unbundled
+helpers remain available for the existing protocol regression harness.
+
+The service receives an owned, read-only regular-file descriptor, checks its
+size/header, and uses PDFium's owned reader API under the existing process-global
+`OnceLock` owner. The display path is not reopened. The descriptor is consumed
+once: Close/Open cannot turn the service into a path-based reader. XPC loss and
+the independent stdin guardian terminate it even during blocked native work.
+`RLIMIT_NPROC` is hard-limited to zero to deny child creation independently of
+App Sandbox; native threads remain usable. The proxy samples the native service's
+resident memory against the existing 1 GiB budget, complementing UI deadlines.
+As before, macOS resident-memory sampling is best effort, not a reservation cap.
+
+`Renderer.entitlements` contains only `app-sandbox`. Developer ID proxies/UI are
+not given extra sandbox permissions. `MACOS_DISTRIBUTION_MODE=app-store` supplies
+exactly `app-sandbox`/`inherit` to the proxy and read-only user-selected access
+to the sandboxed UI. This is a signing candidate only: actual Store identity,
+PowerBox selection, recent-file/security-scoped persistence, UI behavior and
+Store packaging/review remain unvalidated. No broad bookmark/app-group authority
+is given to the renderer to compensate for missing UI integration.
+
+Staging supplies ad-hoc layout signatures, not a runnable production security
+claim. Developer ID signing signs PDFium and the XPC bundle first, then proxy,
+then outer app; strict verification and the actual XPC denial gate run before
+the signing script succeeds. CI with no trusted signing identity verifies
+ad-hoc packages fail closed and records no native security success for them.
+
+Run the signed release gate:
+
+```sh
+python3 scripts/check_macos_renderer.py "/path/Quick Presenter.app" tests/fixtures/marp-speaker-notes.pdf
+```
+
+With a separately signed **debug** bundle, add `--debug-tests` to test actual
+service PIDs, deadlines, candidate isolation, one-shot recovery and broker loss.
+Release builds exclude all fault/PID-report hooks in both Rust and the C shim.
+Earlier custom Seatbelt test results are not evidence for this XPC boundary.
 
 ## Sources
 
