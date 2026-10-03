@@ -9,6 +9,11 @@ use std::{
 const READ_FILE: u64 = 1 << 2;
 const READ_DIR: u64 = 1 << 3;
 const MIN_ABI: i64 = 3;
+// Linux UAPI command values shared by the reviewed x86_64/aarch64 targets;
+// libc does not expose these constants on every supported target.
+const F_SETSIG: libc::c_int = 10;
+#[cfg(test)]
+const F_SETOWN_EX: libc::c_int = 15;
 #[repr(C)]
 struct Ruleset {
     handled_access_fs: u64,
@@ -116,6 +121,19 @@ pub fn enter(document: &Path) -> Result<()> {
     );
     drop(ruleset);
     install_seccomp()?;
+    #[cfg(debug_assertions)]
+    if std::env::var_os("QUICK_PRESENTER_HELPER_TEST_SIGNAL_PARENT").is_some() {
+        let parent: libc::pid_t = std::env::var("QUICK_PRESENTER_RENDERER_PARENT_PID")?.parse()?;
+        // Attempt the historical escape over the real broker input pipe. With
+        // the policy installed, all three mutations must be denied. The next
+        // broker request would deliver SIGKILL if they ever became permitted.
+        unsafe {
+            let flags = libc::fcntl(0, libc::F_GETFL);
+            libc::fcntl(0, libc::F_SETOWN, parent);
+            libc::fcntl(0, F_SETSIG, libc::SIGKILL);
+            libc::fcntl(0, libc::F_SETFL, flags | libc::O_ASYNC);
+        }
+    }
     verify_denials()?;
     Ok(())
 }
@@ -199,6 +217,32 @@ fn filter(architecture: u32, pid: u32) -> Vec<libc::sock_filter> {
         statement(0x06, ERRNO | libc::EPERM as u32),
         statement(0x20, 0),
     ];
+    // fcntl can deliver signals to another process without kill/tgkill. Allow
+    // only descriptor duplication/status operations, and prohibit O_ASYNC even
+    // through F_SETFL. In particular, never allow F_SETOWN(_EX) or F_SETSIG.
+    let fcntl_branch = code.len();
+    code.push(equal(libc::SYS_fcntl as u32, 0, 0));
+    code.push(statement(0x20, 24)); // args[1]: command
+    for command in [
+        libc::F_DUPFD_CLOEXEC,
+        libc::F_GETFD,
+        libc::F_SETFD,
+        libc::F_GETFL,
+    ] {
+        code.push(equal(command as u32, 0, 1));
+        code.push(statement(0x06, ALLOW));
+    }
+    code.extend([
+        equal(libc::F_SETFL as u32, 0, 4),
+        statement(0x20, 32), // args[2]: status flags
+        statement(0x54, libc::O_ASYNC as u32),
+        equal(0, 0, 1),
+        statement(0x06, ALLOW),
+        statement(0x06, ERRNO | libc::EPERM as u32),
+    ]);
+    code[fcntl_branch].jf = (code.len() - fcntl_branch - 1)
+        .try_into()
+        .expect("bounded fcntl filter branch");
     // Measured ARM64 Rust/PDFium open/render/notes surface, plus libc signal,
     // thread teardown, filesystem/font enumeration and timed wait counterparts.
     // Syscall constants are compiled separately for each claimed architecture.
@@ -216,7 +260,6 @@ fn filter(architecture: u32, pid: u32) -> Vec<libc::sock_filter> {
         libc::SYS_faccessat2,
         libc::SYS_getdents64,
         libc::SYS_getcwd,
-        libc::SYS_fcntl,
         libc::SYS_mmap,
         libc::SYS_munmap,
         libc::SYS_mprotect,
@@ -276,6 +319,19 @@ fn verify_denials() -> Result<()> {
     let Some(sentinel) = std::env::var_os("QUICK_PRESENTER_SANDBOX_DENIAL_PROBE") else {
         return Ok(());
     };
+    let flags = unsafe { libc::fcntl(0, libc::F_GETFL) };
+    ensure!(flags >= 0, "sandbox pipe status unavailable");
+    for (command, argument) in [
+        (libc::F_SETOWN, std::process::id() as i32),
+        (F_SETSIG, libc::SIGKILL),
+        (libc::F_SETFL, flags | libc::O_ASYNC),
+    ] {
+        ensure!(
+            unsafe { libc::fcntl(0, command, argument) } == -1
+                && std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM),
+            "sandbox allowed asynchronous signal configuration"
+        );
+    }
     ensure!(
         std::fs::File::open(&sentinel).is_err(),
         "sandbox allowed unrelated read"
@@ -314,6 +370,9 @@ fn verify_denials() -> Result<()> {
 mod tests {
     use super::*;
     fn evaluate(syscall: i64, arch: u32, argument: u32) -> u32 {
+        evaluate_arguments(syscall, arch, [argument, 0, 0])
+    }
+    fn evaluate_arguments(syscall: i64, arch: u32, arguments: [u32; 3]) -> u32 {
         let code = filter(0xc00000b7, 42);
         let (mut pc, mut value) = (0, 0);
         loop {
@@ -323,7 +382,9 @@ mod tests {
                     value = match instruction.k {
                         0 => syscall as u32,
                         4 => arch,
-                        16 => argument,
+                        16 => arguments[0],
+                        24 => arguments[1],
+                        32 => arguments[2],
                         _ => panic!("unexpected load"),
                     }
                 }
@@ -339,6 +400,44 @@ mod tests {
                 _ => panic!("unexpected opcode"),
             }
             pc += 1;
+        }
+    }
+    #[test]
+    fn bpf_denies_fcntl_signal_routes_and_unknown_commands() {
+        for command in [libc::F_SETOWN, F_SETOWN_EX, F_SETSIG, libc::F_SETLEASE, -1] {
+            assert_eq!(
+                evaluate_arguments(libc::SYS_fcntl, 0xc00000b7, [0, command as u32, 42]),
+                ERRNO | libc::EPERM as u32
+            );
+        }
+        for command in [
+            libc::F_DUPFD_CLOEXEC,
+            libc::F_GETFD,
+            libc::F_SETFD,
+            libc::F_GETFL,
+        ] {
+            assert_eq!(
+                evaluate_arguments(libc::SYS_fcntl, 0xc00000b7, [0, command as u32, 0]),
+                ALLOW
+            );
+        }
+        for flags in [0, libc::O_NONBLOCK, libc::O_APPEND | libc::O_NONBLOCK] {
+            assert_eq!(
+                evaluate_arguments(
+                    libc::SYS_fcntl,
+                    0xc00000b7,
+                    [0, libc::F_SETFL as u32, flags as u32]
+                ),
+                ALLOW
+            );
+            assert_eq!(
+                evaluate_arguments(
+                    libc::SYS_fcntl,
+                    0xc00000b7,
+                    [0, libc::F_SETFL as u32, (flags | libc::O_ASYNC) as u32]
+                ),
+                ERRNO | libc::EPERM as u32
+            );
         }
     }
     #[test]

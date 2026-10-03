@@ -45,6 +45,14 @@ signals/resource changes. Packaged denial tests must be rerun after PDFium,
 Rust/libc, architecture, or distribution changes; never add an unexplained broad
 allow merely to make a test pass.
 
+`fcntl` is limited to F_DUPFD_CLOEXEC, F_GETFD, F_SETFD, F_GETFL and F_SETFL;
+F_SETFL rejects O_ASYNC. Ownership, signal selection, leases and unknown
+commands are denied. This prevents inherited pipe notifications from signaling
+the broker without kill/tgkill. Native regression tests attempt the former
+F_SETOWN/F_SETSIG/O_ASYNC escape over stdin and require the broker to survive
+and finish PDF rendering. Staged/installed gates also assert EPERM for these
+signal-configuration operations.
+
 ```sh
 python3 scripts/check_renderer_sandbox.py /path/to/installed/quick-presenter tests/fixtures/marp-speaker-notes.pdf
 ```

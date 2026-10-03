@@ -1,6 +1,23 @@
 //! Exercise the shipped executable, not the test harness, over its pipe protocol.
 #[test]
 #[cfg(all(target_os = "linux", debug_assertions))]
+fn broker_survives_helper_fcntl_signal_attack_and_renders_pdf() {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+    command
+        .arg("--smoke-open-pdf")
+        .arg(fixture())
+        .env("QUICK_PRESENTER_HELPER_TEST_SIGNAL_PARENT", "1");
+    let output = run_broker(command);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Smoke open PDF succeeded"));
+}
+
+#[test]
+#[cfg(all(target_os = "linux", debug_assertions))]
 fn unavailable_landlock_and_flatpak_modes_fail_closed() {
     for environment in ["QUICK_PRESENTER_HELPER_TEST_NO_LANDLOCK", "FLATPAK_ID"] {
         let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
