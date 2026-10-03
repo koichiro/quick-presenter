@@ -1,7 +1,7 @@
 //! Deadline supervision independent of blocking pipe IO and native execution.
 use crate::renderer_limits::{Operation, MEMORY_POLL_INTERVAL};
+use crate::renderer_process::Child;
 use std::{
-    process::Child,
     sync::{Arc, Condvar, Mutex},
     thread::JoinHandle,
     time::Instant,

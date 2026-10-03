@@ -64,7 +64,14 @@ safe.
 
 ## Current release tradeoff
 
-The production runtime keeps `PdfDocumentState` in a helper, using
+Bundled macOS builds now use an independently App-Sandboxed XPC renderer with
+brokered read-only document access and signature-authenticated peers. See
+[macOS Renderer Sandbox](../packaging/macos/RENDERER-SANDBOX.md) for the validated
+Developer ID runtime and notarization rehearsal evidence, and separate Store
+requirements tracked in #120. Unsigned/ad-hoc
+macOS release artifacts fail closed; they are not native security validation.
+
+Windows and direct Linux builds keep `PdfDocumentState` in sandboxed helpers, using
 the same installed executable in internal helper mode. The UI/broker does not
 initialize PDFium. Unrecoverable active-helper EOF, exit, or invalid IPC becomes `WorkerFailed`;
 candidate failures keep the previous helper and last good slide. Shutdown kills
@@ -72,8 +79,9 @@ and reaps helpers without waiting for native work; parent-pipe EOF independently
 exits the helper. This contains ordinary native crashes to the helper, but does
 not by itself prevent a compromised helper from exercising the user's OS authority.
 Direct Linux builds now require the fail-closed Landlock/seccomp boundary in
-[Linux renderer confinement](../packaging/linux/RENDERER-SANDBOX.md). macOS and
-Windows remain unsandboxed on this branch; their platform changes are separate.
+[Linux renderer confinement](../packaging/linux/RENDERER-SANDBOX.md). Windows uses
+AppContainer with brokered read-only PDF handles and an atomic kill-on-close Job
+Object; see [Windows Renderer Sandbox](../packaging/windows/RENDERER-SANDBOX.md).
 
 Hard deadlines, bounded restart, and platform-specific memory controls are now
 implemented. Their numeric values and fallback guarantees are documented in
@@ -82,8 +90,8 @@ reservation cap. Packaged releases gain these guarantees only when they include
 and validate this implementation. Do not extend the Linux sandbox claim to
 unsupported kernels, Flatpak, or other operating systems.
 
-Current mitigations reduce accidental and resource-exhaustion risk but do not
-form a sandbox:
+The following shared mitigations reduce accidental and resource-exhaustion risk;
+they do not form a sandbox on their own:
 
 - the input must be a non-empty regular file beginning with `%PDF-`;
 - input size is limited to 1 GiB before PDFium opens the file;
@@ -169,9 +177,10 @@ when that is practical, or be described explicitly as unsandboxed crash
 containment. It must never silently receive the same security claim as a tested
 sandboxed package.
 
-- **macOS (#374):** evaluate an embedded XPC service for a separate entitlement
-  boundary and broker access to the selected document. App Sandbox inheritance
-  alone does not transfer dynamically granted user-selected-file access.
+- **macOS (#374):** use an embedded XPC service with its own minimal App Sandbox
+  and read-only brokered PDF descriptor. Document-specific proxy clients retain
+  active/candidate native-process independence. App Sandbox inheritance is used
+  only by the Store proxy, never as the renderer's privilege-separation boundary.
 - **Windows (#375):** use AppContainer or LPAC for authority reduction and a Job
   Object for process-tree lifetime and resource limits.
 - **Linux (#376):** for direct packages, use `no_new_privs`, inherited-descriptor

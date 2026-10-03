@@ -12,6 +12,10 @@ on:
       - 'scripts/sign_*'
       - 'scripts/create_macos_dmg.sh'
       - 'scripts/notarize_macos_dmg.sh'
+      - 'scripts/check_macos_renderer.py'
+      - 'src/macos_renderer*'
+      - 'src/pdf.rs'
+      - 'build.rs'
       - 'scripts/fetch_pdfium.py'
       - 'scripts/pdfium_manifest.json'
       - 'scripts/generate_icons.py'
@@ -26,7 +30,9 @@ on:
       - 'src/renderer_supervision.rs'
       - 'src/renderer_protocol.rs'
       - 'src/renderer_sandbox_linux.rs'
+      - 'src/renderer_process.rs'
       - 'scripts/check_renderer_sandbox.py'
+      - 'scripts/check_windows_msix_sandbox.ps1'
       - 'src/render_scheduler.rs'
       - 'tests/renderer_process.rs'
   push:
@@ -251,6 +257,9 @@ jobs:
           supported only after Microsoft Store certification and signing.
 
           Raw quick-presenter or quick-presenter.exe binaries are development and diagnostic artifacts.
+          macOS raw release executables cannot render PDFs; the signed app bundle
+          is required. Ad-hoc CI app bundles/DMGs are layout artifacts and reject
+          PDF work until signed with a trusted Apple developer identity.
           If you run or move a raw executable directly, keep the pdfium directory
           next to it because the executable locates bundled PDFium files relative
           to its own path.
@@ -288,6 +297,14 @@ jobs:
           test -d "$resources/pdfium/licenses"
           test -s "$resources/licenses/QuickPresenter-LICENSE.txt"
           test -s "$resources/licenses/PDFium-LICENSE.txt"
+
+          proxy="$app/Contents/Helpers/RendererProxy.app"
+          service="$proxy/Contents/XPCServices/org.quickpresenter.renderer.xpc"
+          test -x "$proxy/Contents/MacOS/quick-presenter-proxy"
+          test -x "$service/Contents/MacOS/quick-presenter-renderer"
+          test -s "$service/Contents/Resources/pdfium/lib/libpdfium.dylib"
+          plutil -lint "$proxy/Contents/Info.plist" "$service/Contents/Info.plist"
+          codesign --verify --deep --strict "$app"
 
           plutil -lint "$plist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$plist")" = "Quick Presenter"
@@ -342,8 +359,7 @@ jobs:
           test -s "$resources/licenses/QuickPresenter-LICENSE.txt"
           test -s "$resources/licenses/PDFium-LICENSE.txt"
 
-          env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$app/Contents/MacOS/quick-presenter" \
-            --smoke-open-pdf "$pdf"
+          python3 scripts/check_macos_renderer.py "$app" "$pdf" --expect-untrusted
 
       - name: Record macOS GUI smoke CI skip
         if: runner.os == 'macOS'
@@ -612,6 +628,73 @@ jobs:
           } finally {
             Pop-Location
           }
+
+      - name: Verify installed Windows MSI renderer sandbox
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Remove-Item Env:PDFIUM_DYNAMIC_LIB_PATH -ErrorAction SilentlyContinue
+          Remove-Item Env:QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE -ErrorAction SilentlyContinue
+          $artifactDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}'
+          $msi = Join-Path $artifactDir "QuickPresenter-$($env:PACKAGE_VERSION).msi"
+          $installDir = Join-Path $env:ProgramFiles 'Quick Presenter'
+          $exe = Join-Path $installDir 'quick-presenter.exe'
+          $pdf = Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/marp-speaker-notes.pdf'
+          $installLog = Join-Path $env:RUNNER_TEMP 'quick-presenter-msi-install.log'
+          $uninstallLog = Join-Path $env:RUNNER_TEMP 'quick-presenter-msi-uninstall.log'
+          # The x64 payload must also be authored as an x64 MSI. A default x86
+          # package redirects even an explicit Program Files path to (x86).
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $database = $installer.OpenDatabase($msi, 0)
+          $summary = $database.SummaryInformation(0)
+          $template = $summary.Property(7)
+          if (($template -split ';')[0] -ne 'x64') {
+            throw "Expected x64 MSI Template Summary, got: $template"
+          }
+          [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($summary)
+          [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($database)
+          [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)
+          # A disposable hosted runner: use the real per-machine installation,
+          # not administrative extraction or a development PDFium override.
+          try {
+            $install = Start-Process msiexec.exe -ArgumentList @(
+              '/i', "`"$msi`"", '/qn', '/norestart',
+              "INSTALLFOLDER=`"$installDir`"", '/l*v', "`"$installLog`""
+            ) -Wait -PassThru
+            if ($install.ExitCode -notin @(0, 3010)) {
+              if (Test-Path $installLog) { Get-Content $installLog -Tail 80 }
+              throw "MSI installation failed with exit code $($install.ExitCode)"
+            }
+            if (-not (Test-Path $exe -PathType Leaf)) {
+              if (Test-Path $installLog) { Get-Content $installLog -Tail 120 }
+              throw "Installed MSI executable missing at the explicit INSTALLFOLDER: $exe"
+            }
+            python scripts/check_renderer_sandbox.py $exe $pdf
+            if ($LASTEXITCODE -ne 0) { throw 'Installed MSI renderer denial gate failed' }
+          } finally {
+            $uninstall = Start-Process msiexec.exe -ArgumentList @(
+              '/x', "`"$msi`"", '/qn', '/norestart', '/l*v', "`"$uninstallLog`""
+            ) -Wait -PassThru
+            if ($uninstall.ExitCode -notin @(0, 3010, 1605)) {
+              throw "MSI cleanup failed with exit code $($uninstall.ExitCode)"
+            }
+          }
+
+      - name: Upload installed Windows MSI verification logs
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact-name }}-msi-verification-logs
+          path: |
+            ${{ runner.temp }}/quick-presenter-msi-install.log
+            ${{ runner.temp }}/quick-presenter-msi-uninstall.log
+          if-no-files-found: ignore
+
+      - name: Verify installed Store-identity MSIX renderer sandbox
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: scripts/check_windows_msix_sandbox.ps1
 
       - name: Build Windows MSIX
         if: runner.os == 'Windows'
@@ -939,17 +1022,17 @@ jobs:
           artifact_dir="$GITHUB_WORKSPACE/artifacts/${{ matrix.artifact-name }}"
           pdf="$GITHUB_WORKSPACE/tests/fixtures/marp-speaker-notes.pdf"
 
-          (
+          if [[ "${{ runner.os }}" == "Linux" ]]; then (
             cd /tmp
             env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$artifact_dir/${{ matrix.binary-name }}" \
               --smoke-open-pdf "$pdf"
-          )
+          ); fi
 
           if [[ "${{ runner.os }}" == "macOS" ]]; then
+            python3 scripts/check_macos_renderer.py "$artifact_dir/${{ matrix.binary-name }}" "$pdf" --expect-unbundled
             (
               cd /tmp
-              env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE "$artifact_dir/Quick Presenter.app/Contents/MacOS/quick-presenter" \
-                --smoke-open-pdf "$pdf"
+              python3 "$GITHUB_WORKSPACE/scripts/check_macos_renderer.py" "$artifact_dir/Quick Presenter.app" "$pdf" --expect-untrusted
             )
           fi
 
@@ -983,6 +1066,16 @@ jobs:
           } finally {
             Pop-Location
           }
+
+      - name: Verify Windows renderer sandbox denials
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'artifacts/${{ matrix.artifact-name }}/${{ matrix.binary-name }}'
+          $pdf = Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/marp-speaker-notes.pdf'
+          python scripts/check_renderer_sandbox.py $exe $pdf
+          if ($LASTEXITCODE -ne 0) { throw 'Windows renderer sandbox denial gate failed' }
 
       - name: Record Windows GUI smoke CI skip
         if: runner.os == 'Windows'

@@ -40,6 +40,43 @@ pub struct PdfDocumentState {
 }
 
 impl PdfDocumentState {
+    pub(crate) fn open_brokered(path: PathBuf, mut file: fs::File) -> Result<Self> {
+        use std::io::{Seek, SeekFrom};
+        let metadata = file.metadata()?;
+        ensure!(
+            metadata.is_file() && metadata.len() > 0 && metadata.len() <= MAX_PREFLIGHT_PDF_BYTES,
+            "invalid brokered PDF size/type"
+        );
+        let mut header = [0u8; 5];
+        file.read_exact(&mut header)?;
+        ensure!(&header == PDF_HEADER, "invalid brokered PDF header");
+        file.seek(SeekFrom::Start(0))?;
+        let document = shared_pdfium()?
+            .load_pdf_from_reader(file, None)
+            .map_err(|error| {
+                if matches!(
+                    error,
+                    PdfiumError::PdfiumLibraryInternalError(
+                        PdfiumInternalError::PasswordError | PdfiumInternalError::SecurityError
+                    )
+                ) {
+                    anyhow::Error::new(ProtectedPdfError)
+                } else {
+                    error.into()
+                }
+            })?;
+        let page_count = document.pages().len();
+        ensure!(
+            page_count > 0 && page_count as u32 <= crate::renderer_limits::MAX_PAGES,
+            "PDF page count exceeds supported limit"
+        );
+        Ok(Self {
+            document,
+            path,
+            page_count: page_count as u32,
+            _worker_thread_only: PhantomData,
+        })
+    }
     pub fn open(path: PathBuf) -> Result<Self> {
         preflight_pdf_input(&path)
             .with_context(|| format!("failed to open PDF: {}", path.display()))?;
@@ -334,6 +371,28 @@ pub(crate) fn preflight_pdf_input(path: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+pub(crate) fn renderer_library_path() -> Result<PathBuf> {
+    let policy = default_pdfium_load_policy();
+    if pdfium_dynamic_override_allowed(
+        policy,
+        std::env::var(PDFIUM_OVERRIDE_GUARD_ENV).ok().as_deref(),
+    ) {
+        if let Some(path) = std::env::var_os(PDFIUM_DYNAMIC_LIB_PATH_ENV) {
+            return Ok(std::fs::canonicalize(path)?);
+        }
+    }
+    bundled_pdfium_library_candidates(
+        policy,
+        std::env::current_exe().ok().as_deref(),
+        std::env::current_dir().ok().as_deref(),
+    )
+    .into_iter()
+    .find(|path| path.is_file())
+    .context("no packaged PDFium library")
+    .and_then(|path| Ok(path.canonicalize()?))
+}
+
 fn create_pdfium() -> Result<PdfiumRuntime> {
     let policy = default_pdfium_load_policy();
 
@@ -511,6 +570,29 @@ mod tests {
         sync::{Mutex, OnceLock},
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    #[test]
+    fn brokered_pdf_uses_owned_reader_not_the_display_path() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/marp-speaker-notes.pdf");
+        let file = fs::File::open(path).unwrap();
+        let document =
+            PdfDocumentState::open_brokered("/not-reopened/display.pdf".into(), file).unwrap();
+        assert_eq!(document.title(), "display.pdf");
+        assert_eq!(document.page_count(), 3);
+        assert!(document.render_page_pixels(0, 320).is_ok());
+    }
+
+    #[test]
+    fn brokered_pdf_rejects_non_pdf_before_native_loading() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        assert!(PdfDocumentState::open_brokered(
+            "display.pdf".into(),
+            fs::File::open(path).unwrap()
+        )
+        .is_err());
+    }
 
     #[test]
     fn rgba_pixel_buffer_accepts_exact_dimensions() {

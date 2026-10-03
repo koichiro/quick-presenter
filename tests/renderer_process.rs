@@ -59,6 +59,52 @@ fn unavailable_landlock_and_flatpak_modes_fail_closed() {
         assert!(String::from_utf8_lossy(&output.stderr).contains("Renderer helper failed"));
     }
 }
+#[test]
+#[cfg(all(target_os = "windows", debug_assertions))]
+fn windows_job_terminates_helper_after_broker_abort() {
+    assert_windows_job_terminates_helper("QUICK_PRESENTER_HELPER_TEST_ABORT_BROKER");
+}
+
+#[test]
+#[cfg(all(target_os = "windows", debug_assertions))]
+fn windows_job_terminates_suspended_helper_after_broker_abort() {
+    assert_windows_job_terminates_helper("QUICK_PRESENTER_HELPER_TEST_ABORT_AFTER_CREATE");
+}
+
+#[cfg(all(target_os = "windows", debug_assertions))]
+fn assert_windows_job_terminates_helper(fault: &str) {
+    use windows_sys::Win32::{Foundation::*, System::Threading::*};
+    let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+    command
+        .arg("--smoke-open-pdf")
+        .arg(fixture())
+        .env(fault, "1");
+    let output = run_broker(command);
+    assert!(!output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    let pid: u32 = text
+        .lines()
+        .find_map(|line| line.strip_prefix("renderer-helper-pid="))
+        .expect("broker reached sandboxed helper")
+        .parse()
+        .unwrap();
+    let handle = unsafe {
+        OpenProcess(
+            PROCESS_SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION,
+            0,
+            pid,
+        )
+    };
+    if handle.is_null() {
+        assert_eq!(unsafe { GetLastError() }, ERROR_INVALID_PARAMETER);
+    } else {
+        let result = unsafe { WaitForSingleObject(handle, 2000) };
+        unsafe {
+            CloseHandle(handle);
+        }
+        assert_eq!(result, WAIT_OBJECT_0, "helper survived broker abort");
+    }
+}
 use serde_json::{json, Value};
 use std::{
     io::{Read, Write},
@@ -108,6 +154,43 @@ fn run_broker(mut command: Command) -> std::process::Output {
 #[cfg(debug_assertions)]
 fn fixture() -> std::path::PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/marp-speaker-notes.pdf")
+}
+
+#[test]
+#[cfg(all(debug_assertions, target_os = "macos"))]
+fn stalled_broker_input_preserves_active_pdf_and_allows_shutdown() {
+    let directory =
+        std::env::temp_dir().join(format!("quick-presenter-input-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let fault_path = directory.join("fault.pdf");
+    std::fs::copy(fixture(), &fault_path).unwrap();
+    for shutdown in [false, true] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+        command
+            .arg("--renderer-scheduler-smoke")
+            .arg(&fault_path)
+            .arg(fixture())
+            .env("QUICK_PRESENTER_HELPER_TEST_FAULT", "hang-before-input")
+            .env("QUICK_PRESENTER_HELPER_TEST_FAULT_TITLE", "fault.pdf")
+            .env("QUICK_PRESENTER_HELPER_TEST_DEADLINE_MS", "1000");
+        if shutdown {
+            command.env("QUICK_PRESENTER_HELPER_TEST_SHUTDOWN", "1");
+        }
+        let start = Instant::now();
+        let output = run_broker(command);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(start.elapsed() < Duration::from_secs(8));
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("shutdown_reaped=true"), "{stdout}");
+        if !shutdown {
+            assert!(stdout.contains("active_preserved=true"), "{stdout}");
+        }
+    }
+    std::fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
@@ -321,6 +404,7 @@ impl Helper {
         let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
         command
             .arg("--renderer-helper")
+            .env("QUICK_PRESENTER_HELPER_TEST_RAW_PROTOCOL", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());

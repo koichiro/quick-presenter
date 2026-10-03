@@ -200,6 +200,7 @@ Remove-Item -Force $OutputMsi -ErrorAction SilentlyContinue
 & $wix.Source build `
     $productWxs `
     $generatedWxs `
+    -arch x64 `
     -d "SourceDir=$stageDir" `
     -d "ProductVersion=$version" `
     -d "IconPath=$iconPath" `
