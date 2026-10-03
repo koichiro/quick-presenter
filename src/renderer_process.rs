@@ -535,10 +535,30 @@ pub(crate) fn verify_denials() -> Result<()> {
             .is_err(),
         "sandbox allowed unrelated write"
     );
-    anyhow::ensure!(
-        std::net::TcpListener::bind("127.0.0.1:0").is_err(),
-        "sandbox allowed listen"
-    );
+    // AppContainer can bind/listen on loopback; WFP enforces isolation at
+    // receive/accept. The external gate actively connects throughout this
+    // window. A permitted listener alone is not permitted communication.
+    let port: u16 = std::env::var("QUICK_PRESENTER_SANDBOX_INBOUND_PORT")?.parse()?;
+    match std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)) {
+        Ok(listener) => {
+            listener.set_nonblocking(true)?;
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+            while std::time::Instant::now() < deadline {
+                match listener.accept() {
+                    Ok(_) => anyhow::bail!("sandbox allowed inbound connection"),
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::PermissionDenied
+                        ) => {}
+                    Err(error) => return Err(error.into()),
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {}
+        Err(error) => return Err(error.into()),
+    }
     if let Ok(address) = std::env::var("QUICK_PRESENTER_SANDBOX_CONNECT_PROBE") {
         anyhow::ensure!(
             std::net::TcpStream::connect_timeout(
