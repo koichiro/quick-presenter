@@ -1,4 +1,7 @@
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        build_xpc_bridge();
+    }
     let slint_source =
         if std::env::var_os("CARGO_CFG_TARGET_OS").as_deref() == Some("linux".as_ref()) {
             linux_slint_source()
@@ -13,6 +16,49 @@ fn main() {
     if std::env::var_os("CARGO_CFG_WINDOWS").is_some() {
         embed_windows_icon();
     }
+}
+
+fn build_xpc_bridge() {
+    use std::{path::PathBuf, process::Command};
+    println!("cargo:rerun-if-changed=src/macos_renderer_xpc.c");
+    let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+    let arch = match std::env::var("CARGO_CFG_TARGET_ARCH").unwrap().as_str() {
+        "aarch64" => "arm64",
+        "x86_64" => "x86_64",
+        _ => panic!("unsupported macOS renderer architecture"),
+    };
+    let mut compiler = Command::new("xcrun");
+    compiler.args([
+        "clang",
+        "-arch",
+        arch,
+        "-fblocks",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-c",
+        "src/macos_renderer_xpc.c",
+    ]);
+    if std::env::var("PROFILE").as_deref() == Ok("release") {
+        compiler.arg("-DNDEBUG");
+    }
+    assert!(compiler
+        .arg("-o")
+        .arg(out.join("renderer-xpc.o"))
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("xcrun")
+        .args(["libtool", "-static", "-o"])
+        .arg(out.join("librenderer_xpc.a"))
+        .arg(out.join("renderer-xpc.o"))
+        .status()
+        .unwrap()
+        .success());
+    println!("cargo:rustc-link-search=native={}", out.display());
+    println!("cargo:rustc-link-lib=static=renderer_xpc");
+    println!("cargo:rustc-link-lib=framework=Security");
+    println!("cargo:rustc-link-lib=framework=CoreFoundation");
 }
 
 fn linux_slint_source() -> std::path::PathBuf {

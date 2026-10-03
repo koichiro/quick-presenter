@@ -431,6 +431,16 @@ scripts/sign_macos_app.sh \
 To create a signed, notarized, and stapled distribution disk image, use the
 Developer ID identity and notarytool profile validated by the preflight above:
 
+This procedure can also run against a signed pre-release candidate to rehearse
+notarization and Gatekeeper before v1.5.0. It does not require a release tag,
+GitHub release, or Mac App Store submission, and does not publish the artifact.
+Use a separate working directory and output DMG for the rehearsal. Before
+publication, repeat the procedure against the final release artifact; a prior
+successful candidate submission does not validate subsequently changed code
+or a different disk image. Store-specific signing, sandboxed UI/file access,
+packaging and review are tracked separately in #120 and do not block the
+Developer ID renderer-isolation work in #374.
+
 ```sh
 export MACOS_SIGNING_IDENTITY="Developer ID Application: Example Name (TEAMID)"
 export NOTARYTOOL_KEYCHAIN_PROFILE="quick-presenter-notary"
@@ -466,8 +476,11 @@ and validates:
 - `Contents/MacOS/quick-presenter` is executable,
 - `QuickPresenter.icns` exists in `Contents/Resources/`,
 - bundled PDFium, license files, and source offer are present.
-- the bundled app executable can run `--smoke-open-pdf` without
-  `PDFIUM_DYNAMIC_LIB_PATH`.
+- nested renderer proxy/XPC executables and PDFium resources are present and
+  strict nested signature verification passes,
+- ad-hoc CI bundles reject PDF work before parsing; raw macOS release binaries
+  also reject PDF work. Signed Developer ID packages use the actual XPC render
+  and denial gate in `scripts/check_macos_renderer.py`.
 
 The same workflow also creates an unsigned `QuickPresenter-<version>.dmg`, mounts it,
 and validates:
@@ -476,13 +489,13 @@ and validates:
 - the disk image contains an `Applications` symlink,
 - the app bundle inside the mounted disk image still contains the icon, PDFium,
   license files, and source offer,
-- the mounted app executable can run `--smoke-open-pdf` without
-  `PDFIUM_DYNAMIC_LIB_PATH`.
+- the mounted ad-hoc app rejects PDF work before parsing. This is layout and
+  fail-closed validation, not evidence of signed XPC runtime security.
 
 Manual verification:
 
 - Stage the app bundle locally.
-- Create the unsigned disk image locally.
+- Sign the app with Developer ID and run its XPC gate, then create the disk image.
 - Mount `/tmp/quick-presenter-macos/QuickPresenter-<version>.dmg`.
 - Confirm the mounted volume contains `Quick Presenter.app` and an
   `Applications` symlink.

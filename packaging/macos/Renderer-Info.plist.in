@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>org.quickpresenter.renderer</string>
+  <key>CFBundleExecutable</key><string>quick-presenter-renderer</string>
+  <key>CFBundlePackageType</key><string>XPC!</string>
+  <key>CFBundleVersion</key><string>@APP_VERSION@</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>XPCService</key><dict>
+    <key>ServiceType</key><string>Application</string>
+    <key>RunLoopType</key><string>dispatch_main</string>
+  </dict>
+</dict></plist>
