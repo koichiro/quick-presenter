@@ -132,6 +132,25 @@ App Sandbox; native threads remain usable. The proxy samples the native service'
 resident memory against the existing 1 GiB budget, complementing UI deadlines.
 As before, macOS resident-memory sampling is best effort, not a reservation cap.
 
+The broker acquires the read-only descriptor and its metadata on a separate
+thread with the Open deadline and shutdown polling. It never reads PDF headers
+before XPC startup: header/content reads remain in the supervised service.
+Open and recovery use metadata from that same acquired descriptor, avoiding
+unmonitored path metadata calls and a second path open. Nonblocking open rejects
+FIFO/device inputs through descriptor-based type validation. A timed-out or
+cancelled acquisition cannot supply a late result to a different request.
+
+macOS cannot reliably cancel a thread blocked in file-provider or network IO.
+At most two acquisition threads may remain outstanding; further acquisition
+requests fail promptly until storage responds and releases a slot. The active
+renderer remains available after a candidate acquisition timeout, and shutdown
+does not wait for these threads. This is a bound on broker responsiveness and
+resource accumulation, not a claim that underlying storage IO is forcibly stopped.
+Debug gates stall acquisition before any candidate service exists and verify
+active-PDF rendering and shutdown; unit tests also cover slot exhaustion and
+discarding late results. The notarization evidence above predates this change;
+the final release artifact still requires a new notarization submission.
+
 `Renderer.entitlements` contains only `app-sandbox`. Developer ID proxies/UI are
 not given extra sandbox permissions. `MACOS_DISTRIBUTION_MODE=app-store` supplies
 exactly `app-sandbox`/`inherit` to the proxy and read-only user-selected access

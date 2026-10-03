@@ -86,6 +86,14 @@ with tempfile.TemporaryDirectory(prefix="quick-presenter-xpc-") as directory:
 
         fault_pdf = Path(directory) / "fault.pdf"
         shutil.copyfile(args.pdf, fault_pdf)
+        # This fault stalls broker acquisition before any candidate XPC service exists.
+        run(["--renderer-scheduler-smoke", fault_pdf, args.pdf.resolve()],
+            {"QUICK_PRESENTER_HELPER_TEST_FAULT": "hang-before-input",
+             "QUICK_PRESENTER_HELPER_TEST_FAULT_TITLE": "fault.pdf"}, True, "active_preserved=true")
+        run(["--renderer-scheduler-smoke", fault_pdf, args.pdf.resolve()],
+            {"QUICK_PRESENTER_HELPER_TEST_FAULT": "hang-before-input",
+             "QUICK_PRESENTER_HELPER_TEST_FAULT_TITLE": "fault.pdf",
+             "QUICK_PRESENTER_HELPER_TEST_SHUTDOWN": "1"}, True, "shutdown_reaped=true")
         for fault in ["hang-on-open", "abort-on-render"]:
             pids = run(["--renderer-scheduler-smoke", fault_pdf, args.pdf.resolve()],
                        {"QUICK_PRESENTER_HELPER_TEST_FAULT": fault,

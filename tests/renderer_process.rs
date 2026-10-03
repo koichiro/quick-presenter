@@ -51,6 +51,43 @@ fn fixture() -> std::path::PathBuf {
 }
 
 #[test]
+#[cfg(all(debug_assertions, target_os = "macos"))]
+fn stalled_broker_input_preserves_active_pdf_and_allows_shutdown() {
+    let directory =
+        std::env::temp_dir().join(format!("quick-presenter-input-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let fault_path = directory.join("fault.pdf");
+    std::fs::copy(fixture(), &fault_path).unwrap();
+    for shutdown in [false, true] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+        command
+            .arg("--renderer-scheduler-smoke")
+            .arg(&fault_path)
+            .arg(fixture())
+            .env("QUICK_PRESENTER_HELPER_TEST_FAULT", "hang-before-input")
+            .env("QUICK_PRESENTER_HELPER_TEST_FAULT_TITLE", "fault.pdf")
+            .env("QUICK_PRESENTER_HELPER_TEST_DEADLINE_MS", "1000");
+        if shutdown {
+            command.env("QUICK_PRESENTER_HELPER_TEST_SHUTDOWN", "1");
+        }
+        let start = Instant::now();
+        let output = run_broker(command);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(start.elapsed() < Duration::from_secs(8));
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("shutdown_reaped=true"), "{stdout}");
+        if !shutdown {
+            assert!(stdout.contains("active_preserved=true"), "{stdout}");
+        }
+    }
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 #[cfg(debug_assertions)]
 fn broker_deadlines_cover_handshake_open_render_notes_and_graceful_shutdown() {
     for (fault, operation) in [
