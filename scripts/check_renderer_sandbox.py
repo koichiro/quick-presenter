@@ -7,7 +7,6 @@ import socket
 import subprocess
 import tempfile
 import threading
-import time
 
 
 def main():
@@ -21,6 +20,11 @@ def main():
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
             listener.listen()
+            # Prove loopback works outside the sandbox, so ambient network
+            # failure cannot masquerade as a confinement success.
+            with socket.create_connection(listener.getsockname(), timeout=1):
+                control, _ = listener.accept()
+                control.close()
             environment = dict(os.environ)
             environment["QUICK_PRESENTER_SANDBOX_DENIAL_PROBE"] = str(sentinel)
             environment["QUICK_PRESENTER_SANDBOX_CONNECT_PROBE"] = "127.0.0.1:" + str(listener.getsockname()[1])

@@ -29,6 +29,17 @@ runtime files. It does not grant write, device, credential, network, registry,
 COM, or user-interface capabilities. Classic AppContainer can still access
 Windows resources explicitly granted to ALL APPLICATION PACKAGES; this is not
 an LPAC claim or a claim that Windows exposes no public system resources.
+
+Network isolation is a communication boundary, not a ban on creating every
+socket: Windows may permit localhost bind/listen and enforce AppContainer
+isolation at receive/accept. The gate actively attempts connections from an
+external process while the renderer owns a listener, and requires both that
+external connects fail and the renderer accepts no connection. Outbound access
+to a broker-owned listener is separately denied. An unsandboxed loopback control
+must succeed first. No loopback exemption or network capability is installed.
+The guarantee depends on Windows network isolation/WFP configuration; it is not
+a custom syscall filter. See [AppContainer network enforcement analysis](https://projectzero.google/2021/08/understanding-network-access-windows-app.html).
+
 The runtime copy preserves executable/DLL signatures. Normal teardown deletes
 it; abrupt broker termination can leave trusted runtime copies and private
 container profiles, but the broker never copies PDF content into either.
@@ -57,7 +68,7 @@ The Rust launcher/resource-control modules are Windows-target type-checked and
 shared behavior is regression-tested on macOS. **No local Windows runtime test
 has been performed. Keep the PR draft until native Windows CI and the installed
 MSI gate establish token launch, ACL inheritance, PDF open/render/notes, denied
-private read/write, denied listen/connect/child creation, and termination after
+private read/write, denied inbound/outbound communication and child creation, and termination after
 broker crash.** AppContainer handle inheritance and the protected runtime DACL
 must be tested, not inferred from successful compilation.
 
@@ -65,6 +76,13 @@ CI installs the actual per-machine MSI on a disposable Windows runner, runs
 the denial gate from outside the install directory with PDFium overrides unset,
 and uninstalls it in a finally block. Administrative MSI extraction remains a
 separate layout check, not evidence of installed-package confinement.
+WiX must build with `-arch x64`; CI verifies the MSI Template Summary before
+installation. Without this, a default x86 MSI redirects Program Files to (x86),
+even when its payload executable is x64 or INSTALLFOLDER is supplied explicitly.
+
+Windows helper stderr is not the framed protocol stream. Denial-probe failures
+are bounded IPC errors before native PDF work, so setup diagnostics cannot
+corrupt the handshake or expose raw PDF/native errors through stdout.
 
 Run the release-capable staged/installed gate:
 
