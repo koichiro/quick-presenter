@@ -7,6 +7,15 @@ unsandboxed fallback, root helper, setuid installation, or namespace dependency.
 Debian 12's default 6.1 kernel is below this boundary; use a compatible kernel.
 Unsupported architectures fail closed; the policy targets x86_64 and aarch64.
 
+The broker clears the helper environment and retains only LANG/LC_ALL/LC_CTYPE,
+the FLATPAK_ID rejection indicator, the existing explicitly guarded PDFium
+override, and the two named packaged-denial probes. It supplies its own PID.
+Named fault-injection/environment-test keys are retained only in debug builds;
+arbitrary keys sharing a test/probe prefix are not allowed. HOME, PATH, dynamic
+loader overrides and unrelated credentials are not inherited. Native tests use
+synthetic secrets to verify their absence inside the actual helper while PDF
+open/render/notes and preserved locale still work.
+
 Before any helper-created thread exists, the helper closes inherited descriptors
 above stderr, initializes the trusted PDFium runtime without loading a PDF, and
 verifies `/proc/self/task` contains exactly one thread. SIGKILL parent-death

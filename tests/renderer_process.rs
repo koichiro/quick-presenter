@@ -1,6 +1,32 @@
 //! Exercise the shipped executable, not the test harness, over its pipe protocol.
 #[test]
 #[cfg(all(target_os = "linux", debug_assertions))]
+fn helper_does_not_inherit_broker_secrets_and_renders_with_preserved_locale() {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+    command
+        .arg("--smoke-open-pdf")
+        .arg(fixture())
+        .env("LANG", "C.UTF-8")
+        .env("QUICK_PRESENTER_HELPER_TEST_ENVIRONMENT_PROBE", "1");
+    for key in [
+        "QUICK_PRESENTER_TEST_SECRET",
+        "AWS_SECRET_ACCESS_KEY",
+        "QUICK_PRESENTER_SANDBOX_FAKE_SECRET",
+        "QUICK_PRESENTER_HELPER_TEST_FAKE_SECRET",
+    ] {
+        command.env(key, "synthetic-test-value");
+    }
+    let output = run_broker(command);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Smoke open PDF succeeded"));
+}
+
+#[test]
+#[cfg(all(target_os = "linux", debug_assertions))]
 fn broker_survives_helper_fcntl_signal_attack_and_renders_pdf() {
     let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
     command

@@ -24,6 +24,64 @@ use std::{
 
 pub const HELPER_ARGUMENT: &str = "--renderer-helper";
 
+#[cfg(any(target_os = "linux", test))]
+fn linux_renderer_environment_allowed(name: &std::ffi::OsStr, debug_tests: bool) -> bool {
+    let Some(name) = name.to_str() else {
+        return false;
+    };
+    matches!(
+        name,
+        "LANG"
+            | "LC_ALL"
+            | "LC_CTYPE"
+            | "FLATPAK_ID"
+            | "PDFIUM_DYNAMIC_LIB_PATH"
+            | "QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE"
+            | "QUICK_PRESENTER_SANDBOX_DENIAL_PROBE"
+            | "QUICK_PRESENTER_SANDBOX_CONNECT_PROBE"
+    ) || (debug_tests
+        && matches!(
+            name,
+            "QUICK_PRESENTER_HELPER_TEST_FAULT"
+                | "QUICK_PRESENTER_HELPER_TEST_FAULT_TITLE"
+                | "QUICK_PRESENTER_HELPER_TEST_FAULT_PAGE"
+                | "QUICK_PRESENTER_HELPER_TEST_FAULT_ONCE"
+                | "QUICK_PRESENTER_HELPER_TEST_NO_LANDLOCK"
+                | "QUICK_PRESENTER_HELPER_TEST_SIGNAL_PARENT"
+                | "QUICK_PRESENTER_HELPER_TEST_ENVIRONMENT_PROBE"
+        ))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn configure_linux_renderer_environment(command: &mut Command, debug_tests: bool) {
+    // Collect before env_clear, retaining explicit overrides/removals only for
+    // reviewed keys. A test/probe prefix is never an ambient credential grant.
+    let overrides: Vec<_> = command
+        .get_envs()
+        .map(|(key, value)| (key.to_owned(), value.map(std::ffi::OsStr::to_owned)))
+        .collect();
+    let inherited =
+        std::env::vars_os().filter(|(key, _)| linux_renderer_environment_allowed(key, debug_tests));
+    command.env_clear().envs(inherited);
+    for (key, value) in overrides {
+        if linux_renderer_environment_allowed(&key, debug_tests) {
+            match value {
+                Some(value) => {
+                    command.env(key, value);
+                }
+                None => {
+                    command.env_remove(key);
+                }
+            }
+        }
+    }
+    // The caller cannot substitute another parent PID through its environment.
+    command.env(
+        "QUICK_PRESENTER_RENDERER_PARENT_PID",
+        std::process::id().to_string(),
+    );
+}
+
 #[derive(Default)]
 pub struct ProcessGroup {
     state: Mutex<GroupState>,
@@ -95,10 +153,7 @@ impl HelperClient {
     }
     pub fn spawn_command(mut command: Command, group: &ProcessGroup) -> Result<Self> {
         #[cfg(target_os = "linux")]
-        command.env(
-            "QUICK_PRESENTER_RENDERER_PARENT_PID",
-            std::process::id().to_string(),
-        );
+        configure_linux_renderer_environment(&mut command, cfg!(debug_assertions));
         command
             .arg(HELPER_ARGUMENT)
             .stdin(Stdio::piped())
@@ -479,6 +534,24 @@ fn start_input_guardian() -> std::sync::mpsc::Receiver<Frame> {
 }
 
 pub fn run() -> Result<()> {
+    #[cfg(all(target_os = "linux", debug_assertions))]
+    if std::env::var_os("QUICK_PRESENTER_HELPER_TEST_ENVIRONMENT_PROBE").is_some() {
+        for key in [
+            "QUICK_PRESENTER_TEST_SECRET",
+            "AWS_SECRET_ACCESS_KEY",
+            "QUICK_PRESENTER_SANDBOX_FAKE_SECRET",
+            "QUICK_PRESENTER_HELPER_TEST_FAKE_SECRET",
+        ] {
+            ensure!(
+                std::env::var_os(key).is_none(),
+                "helper inherited unrelated environment"
+            );
+        }
+        ensure!(
+            std::env::var("LANG").ok().as_deref() == Some("C.UTF-8"),
+            "helper locale was not preserved"
+        );
+    }
     #[cfg(target_os = "linux")]
     crate::renderer_sandbox_linux::close_inherited_descriptors()?;
     crate::renderer_resources::constrain_helper()?;
@@ -908,4 +981,76 @@ fn bounded_notes(notes: Vec<(u32, String)>) -> Result<Vec<PageNote>> {
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod environment_tests {
+    use super::*;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn linux_environment_keeps_only_reviewed_keys_and_debug_hooks() {
+        for key in [
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "FLATPAK_ID",
+            "PDFIUM_DYNAMIC_LIB_PATH",
+            "QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE",
+            "QUICK_PRESENTER_SANDBOX_DENIAL_PROBE",
+            "QUICK_PRESENTER_SANDBOX_CONNECT_PROBE",
+        ] {
+            assert!(linux_renderer_environment_allowed(OsStr::new(key), false));
+        }
+        for key in [
+            "AWS_SECRET_ACCESS_KEY",
+            "API_TOKEN",
+            "HOME",
+            "LD_PRELOAD",
+            "LD_LIBRARY_PATH",
+            "QUICK_PRESENTER_SANDBOX_FAKE_SECRET",
+            "QUICK_PRESENTER_HELPER_TEST_FAKE_SECRET",
+        ] {
+            assert!(!linux_renderer_environment_allowed(OsStr::new(key), true));
+        }
+        for key in [
+            "QUICK_PRESENTER_HELPER_TEST_FAULT",
+            "QUICK_PRESENTER_HELPER_TEST_SIGNAL_PARENT",
+            "QUICK_PRESENTER_HELPER_TEST_ENVIRONMENT_PROBE",
+        ] {
+            assert!(linux_renderer_environment_allowed(OsStr::new(key), true));
+            assert!(!linux_renderer_environment_allowed(OsStr::new(key), false));
+        }
+    }
+
+    #[test]
+    fn linux_environment_filters_explicit_secrets_and_preserves_overrides() {
+        let mut command = Command::new("unused-test-program");
+        command
+            .env("LANG", "C.UTF-8")
+            .env_remove("LC_ALL")
+            .env("AWS_SECRET_ACCESS_KEY", "synthetic-test-value")
+            .env("QUICK_PRESENTER_HELPER_TEST_SIGNAL_PARENT", "1")
+            .env("QUICK_PRESENTER_RENDERER_PARENT_PID", "invalid");
+        configure_linux_renderer_environment(&mut command, false);
+        let entries: std::collections::BTreeMap<_, _> = command.get_envs().collect();
+        assert_eq!(
+            entries.get(OsStr::new("LANG")),
+            Some(&Some(OsStr::new("C.UTF-8")))
+        );
+        assert!(entries
+            .get(OsStr::new("LC_ALL"))
+            .copied()
+            .flatten()
+            .is_none());
+        assert!(!entries.contains_key(OsStr::new("AWS_SECRET_ACCESS_KEY")));
+        assert!(!entries.contains_key(OsStr::new("QUICK_PRESENTER_HELPER_TEST_SIGNAL_PARENT")));
+        assert_eq!(
+            entries.get(OsStr::new("QUICK_PRESENTER_RENDERER_PARENT_PID")),
+            Some(&Some(OsStr::new(&std::process::id().to_string())))
+        );
+        assert!(entries.keys().all(|key| **key
+            == *OsStr::new("QUICK_PRESENTER_RENDERER_PARENT_PID")
+            || linux_renderer_environment_allowed(key, false)));
+    }
 }
