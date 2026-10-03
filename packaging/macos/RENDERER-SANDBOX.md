@@ -1,11 +1,39 @@
 # macOS renderer privilege-separation decision (#374)
 
-Status: implementation draft. Developer ID runtime/security and lifetime gates
+Status: implemented for Developer ID review. Runtime/security and lifetime gates
 are exercised against real signed XPC code. Store signing configuration is a
-candidate, not a validated Store release. Actual Developer ID
-notarization/Gatekeeper remains a direct-DMG gate. Store packaging, sandboxed UI
+candidate, not a validated Store release. The pre-release Developer ID
+notarization/Gatekeeper rehearsal passed. Store packaging, sandboxed UI
 and file-selection checks belong to #120 and do not block #374/#381. Do not close
 #374 on unsigned CI or design documentation alone.
+
+## Developer ID notarization rehearsal (2026-10-03)
+
+The release executable from implementation commit `66f94f6` (head `76f3c18`
+adds documentation only) was staged and signed with the nested XPC service and
+PDFium. On macOS 26.7 / arm64, the existing `notarize_macos_dmg.sh` flow passed:
+
+- Apple submission `e70f3917-4be3-4c70-96c5-8afd896df825`: `Accepted`,
+  `Ready for distribution`, no issues in the notarization log.
+- The ticket covers the outer app, proxy, native XPC service, both PDFium copies
+  and the disk image. Stapling and ticket validation passed.
+- DMG and mounted app Gatekeeper assessments: `accepted`,
+  `source=Notarized Developer ID`.
+- Strict nested signatures and mounted-DMG PDF open/render/notes passed.
+- The mounted notarized payload also passed the actual XPC private-file read/write,
+  network listen/connect and child-creation denial gate.
+- Actual service signing entitlements contain only `com.apple.security.app-sandbox`.
+
+Artifact: `QuickPresenter-1.5.0-pr381-rehearsal.dmg` (not published).
+Post-stapling SHA-256:
+`dd1af38394c6ce2a4cfe89d133e952eb0a10f69411430c3aeecc68c0e03795aa`.
+Mach-O build UUID: `2F1A3460-05F0-3126-BB1F-687862AAF16F`.
+
+This is evidence for the tested arm64 Developer ID candidate, not Store
+certification or a full GUI/OS-version compatibility matrix. App Sandbox grants
+required system/Mach and container access; no extra automation, device, app-group
+or temporary-exception entitlements are supplied. There is no claim of blanket
+UI/Mach denial. Validate the final v1.5.0 artifact before publication.
 
 ## App Sandbox and renderer isolation are complementary
 

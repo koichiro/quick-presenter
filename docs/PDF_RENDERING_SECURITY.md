@@ -67,7 +67,8 @@ safe.
 Bundled macOS builds now use an independently App-Sandboxed XPC renderer with
 brokered read-only document access and signature-authenticated peers. See
 [macOS Renderer Sandbox](../packaging/macos/RENDERER-SANDBOX.md) for the validated
-Developer ID gates and pending Store/notarization requirements. Unsigned/ad-hoc
+Developer ID runtime and notarization rehearsal evidence, and separate Store
+requirements tracked in #120. Unsigned/ad-hoc
 macOS release artifacts fail closed; they are not native security validation.
 
 Other platforms on this branch keep `PdfDocumentState` in an unsandboxed helper, using
