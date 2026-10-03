@@ -414,7 +414,9 @@ mod windows {
             startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
             startup.StartupInfo.hStdInput = child_input.as_raw_handle();
             startup.StartupInfo.hStdOutput = child_output.as_raw_handle();
-            startup.StartupInfo.hStdError = child_output.as_raw_handle();
+            // stderr must never share the framed protocol stream. This matches
+            // the broker's Stdio::null policy and avoids leaking native errors.
+            startup.StartupInfo.hStdError = std::ptr::null_mut();
             startup.lpAttributeList = attributes.pointer;
             let mut process = PROCESS_INFORMATION::default();
             // SAFETY: buffers/attributes and inherited handles live until this call

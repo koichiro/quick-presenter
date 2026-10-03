@@ -460,7 +460,6 @@ pub fn run() -> Result<()> {
         if !raw_test {
             crate::renderer_process::verify_token()?;
             brokered_input = Some(crate::renderer_process::take_document_file()?);
-            crate::renderer_process::verify_denials()?;
         }
     }
     crate::renderer_resources::constrain_helper()?;
@@ -535,6 +534,20 @@ pub fn run() -> Result<()> {
             }
             Message::Open { path } => {
                 ensure!(document.is_none(), "helper document already open");
+                #[cfg(target_os = "windows")]
+                if let Err(error) = crate::renderer_process::verify_denials() {
+                    // Test probes run before PDFium. Report their bounded static
+                    // failure through IPC, never plaintext on the protocol pipe.
+                    output.send(&Frame {
+                        envelope: Envelope {
+                            request_id,
+                            session_id,
+                            message: failure(FailureCode::Internal, &error.to_string()),
+                        },
+                        pixels,
+                    })?;
+                    return Ok(());
+                }
                 #[cfg(target_os = "windows")]
                 let opened = if let Some(file) = brokered_input.take() {
                     PdfDocumentState::open_brokered(path.into_path()?, file)
