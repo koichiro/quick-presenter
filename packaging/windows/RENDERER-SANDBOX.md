@@ -7,7 +7,10 @@ No Win32 App Isolation preview or administrative token privilege is required.
 
 The broker uses `STARTUPINFOEX` security capabilities to create a distinct
 capability-free AppContainer token **before any child instruction executes**.
-Each helper receives a unique derived container SID (not a shared identity).
+Each helper receives a unique container profile and SID (not a shared identity).
+The profile is created before launch and removed on normal teardown. Windows
+grants that container its own private profile storage/registry; this is not a
+claim of zero writable storage. No profile is reused between helper launches.
 Only explicitly listed stdin/stdout and the selected read-only PDF handle are
 inherited. The PDF path in IPC supplies the display name; PDFium reads the owned
 reader and never opens that user path. No ACL is changed on the original PDF,
@@ -21,7 +24,8 @@ COM, or user-interface capabilities. Classic AppContainer can still access
 Windows resources explicitly granted to ALL APPLICATION PACKAGES; this is not
 an LPAC claim or a claim that Windows exposes no public system resources.
 The runtime copy preserves executable/DLL signatures. Normal teardown deletes
-it; abrupt broker termination can leave trusted runtime copies, not PDF copies.
+it; abrupt broker termination can leave trusted runtime copies and private
+container profiles, but the broker never copies PDF content into either.
 Never treat these leftover copies as authoritative installed artifacts.
 
 The child is initially suspended. Before resuming it, the broker assigns a

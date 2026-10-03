@@ -55,6 +55,7 @@ mod windows {
         handle: OwnedHandle,
         pid: u32,
         _runtime: RuntimeDirectory,
+        _profile: ContainerProfile,
     }
     impl AsRawHandle for Child {
         fn as_raw_handle(&self) -> std::os::windows::io::RawHandle {
@@ -119,6 +120,42 @@ mod windows {
         fn drop(&mut self) {
             unsafe {
                 FreeSid(self.0);
+            }
+        }
+    }
+    struct ContainerProfile {
+        name: Vec<u16>,
+        sid: Sid,
+    }
+    impl ContainerProfile {
+        fn create(name: Vec<u16>) -> Result<Self> {
+            let mut sid = std::ptr::null_mut();
+            // A derived SID alone does not create the namespace/profile required
+            // by CreateProcess. Never reuse another launch's writable profile.
+            let status = unsafe {
+                CreateAppContainerProfile(
+                    name.as_ptr(),
+                    name.as_ptr(),
+                    name.as_ptr(),
+                    std::ptr::null(),
+                    0,
+                    &mut sid,
+                )
+            };
+            if status < 0 {
+                return Err(io::Error::from_raw_os_error(status & 0xffff).into());
+            }
+            Ok(Self {
+                name,
+                sid: Sid(sid),
+            })
+        }
+    }
+    impl Drop for ContainerProfile {
+        fn drop(&mut self) {
+            // Only this launch's unique profile; no shared/user-selected state.
+            unsafe {
+                DeleteAppContainerProfile(self.name.as_ptr());
             }
         }
     }
@@ -275,12 +312,8 @@ mod windows {
                 "QuickPresenter.Renderer.{}.{nonce}",
                 std::process::id()
             )));
-            let mut sid = std::ptr::null_mut();
-            ensure!(
-                unsafe { DeriveAppContainerSidFromAppContainerName(name.as_ptr(), &mut sid) } >= 0,
-                "AppContainer SID unavailable"
-            );
-            let sid = Sid(sid);
+            let profile = ContainerProfile::create(name)?;
+            let sid = &profile.sid;
             let capabilities = SECURITY_CAPABILITIES {
                 AppContainerSid: sid.0,
                 Capabilities: std::ptr::null_mut(),
@@ -399,6 +432,7 @@ mod windows {
                 handle: unsafe { owned(process.hProcess) },
                 pid: process.dwProcessId,
                 _runtime: runtime,
+                _profile: profile,
             };
             stage = "job-controls";
             let job = match ResourceJob::attach(&child) {
