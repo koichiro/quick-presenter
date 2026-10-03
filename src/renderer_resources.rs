@@ -64,8 +64,8 @@ pub struct ResourceJob {
 #[cfg(not(target_os = "windows"))]
 pub struct ResourceJob;
 impl ResourceJob {
-    pub fn attach(child: &Child) -> Result<Self> {
-        #[cfg(target_os = "windows")]
+    #[cfg(target_os = "windows")]
+    pub fn create() -> Result<Self> {
         {
             use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
             use windows_sys::Win32::System::JobObjects::*;
@@ -93,7 +93,7 @@ impl ResourceJob {
                 UIRestrictionsClass: 0xff,
             };
             // Named 80% aggregate CPU ceiling and all documented UI restrictions.
-            // The helper is still suspended until every job control succeeds.
+            // Configure all controls before atomically assigning a new process.
             for (class, data, bytes) in [
                 (
                     JobObjectCpuRateControlInformation,
@@ -123,17 +123,17 @@ impl ResourceJob {
                     std::mem::size_of_val(&limits) as u32,
                 )
             };
-            let assigned = set != 0
-                && unsafe {
-                    AssignProcessToJobObject(handle.as_raw_handle(), child.as_raw_handle())
-                } != 0;
-            anyhow::ensure!(assigned, "helper memory job could not be assigned");
-            return Ok(Self { _handle: handle });
+            anyhow::ensure!(set != 0, "helper memory job policy unavailable");
+            Ok(Self { _handle: handle })
         }
-        #[cfg(not(target_os = "windows"))]
-        {
-            let _ = child;
-            Ok(Self)
-        }
+    }
+    #[cfg(target_os = "windows")]
+    pub fn as_raw_handle(&self) -> std::os::windows::io::RawHandle {
+        use std::os::windows::io::AsRawHandle;
+        self._handle.as_raw_handle()
+    }
+    #[cfg(not(target_os = "windows"))]
+    pub fn attach(_child: &Child) -> Result<Self> {
+        Ok(Self)
     }
 }

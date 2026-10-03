@@ -255,14 +255,14 @@ mod windows {
         fn new() -> io::Result<Self> {
             let mut bytes = 0;
             unsafe {
-                InitializeProcThreadAttributeList(std::ptr::null_mut(), 2, 0, &mut bytes);
+                InitializeProcThreadAttributeList(std::ptr::null_mut(), 3, 0, &mut bytes);
             }
             if bytes == 0 {
                 return Err(io::Error::last_os_error());
             }
             let mut storage = vec![0usize; bytes.div_ceil(std::mem::size_of::<usize>())];
             let pointer = storage.as_mut_ptr().cast();
-            checked(unsafe { InitializeProcThreadAttributeList(pointer, 2, 0, &mut bytes) })?;
+            checked(unsafe { InitializeProcThreadAttributeList(pointer, 3, 0, &mut bytes) })?;
             Ok(Self {
                 _storage: storage,
                 pointer,
@@ -329,6 +329,9 @@ mod windows {
                 child_output.as_raw_handle(),
                 input.as_raw_handle(),
             ];
+            stage = "job-controls";
+            let job = ResourceJob::create()?;
+            let job_handle = job.as_raw_handle();
             stage = "startup-attributes";
             let mut attributes = Attributes::new()?;
             unsafe {
@@ -341,6 +344,13 @@ mod windows {
                     PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
                     handles.as_ptr(),
                     std::mem::size_of_val(&handles),
+                )?;
+                // Membership is installed during creation, eliminating the
+                // orphan window between CreateProcess and AssignProcessToJobObject.
+                attributes.set(
+                    PROC_THREAD_ATTRIBUTE_JOB_LIST,
+                    &job_handle,
+                    std::mem::size_of_val(&job_handle),
                 )?;
             }
             let source = std::fs::canonicalize(command.get_program())?;
@@ -439,6 +449,15 @@ mod windows {
                     &mut process,
                 )
             })?;
+            #[cfg(debug_assertions)]
+            if std::env::var_os("QUICK_PRESENTER_HELPER_TEST_ABORT_AFTER_CREATE").is_some() {
+                use std::io::Write;
+                // Deliberately skip every Rust destructor before resuming the
+                // child: only atomic membership and kill-on-close can reap it.
+                println!("renderer-helper-pid={}", process.dwProcessId);
+                std::io::stdout().flush()?;
+                std::process::abort();
+            }
             let thread = unsafe { owned(process.hThread) };
             let mut child = Child {
                 stdin: Some(File::from(parent_input)),
@@ -447,15 +466,6 @@ mod windows {
                 pid: process.dwProcessId,
                 _runtime: runtime,
                 _profile: profile,
-            };
-            stage = "job-controls";
-            let job = match ResourceJob::attach(&child) {
-                Ok(job) => job,
-                Err(error) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(error);
-                }
             };
             stage = "resume";
             if unsafe { ResumeThread(thread.as_raw_handle()) } == u32::MAX {

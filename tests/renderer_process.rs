@@ -2,12 +2,23 @@
 #[test]
 #[cfg(all(target_os = "windows", debug_assertions))]
 fn windows_job_terminates_helper_after_broker_abort() {
+    assert_windows_job_terminates_helper("QUICK_PRESENTER_HELPER_TEST_ABORT_BROKER");
+}
+
+#[test]
+#[cfg(all(target_os = "windows", debug_assertions))]
+fn windows_job_terminates_suspended_helper_after_broker_abort() {
+    assert_windows_job_terminates_helper("QUICK_PRESENTER_HELPER_TEST_ABORT_AFTER_CREATE");
+}
+
+#[cfg(all(target_os = "windows", debug_assertions))]
+fn assert_windows_job_terminates_helper(fault: &str) {
     use windows_sys::Win32::{Foundation::*, System::Threading::*};
     let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
     command
         .arg("--smoke-open-pdf")
         .arg(fixture())
-        .env("QUICK_PRESENTER_HELPER_TEST_ABORT_BROKER", "1");
+        .env(fault, "1");
     let output = run_broker(command);
     assert!(!output.status.success());
     let text = String::from_utf8(output.stdout).unwrap();

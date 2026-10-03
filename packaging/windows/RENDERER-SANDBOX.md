@@ -45,8 +45,10 @@ it; abrupt broker termination can leave trusted runtime copies and private
 container profiles, but the broker never copies PDF content into either.
 Never treat these leftover copies as authoritative installed artifacts.
 
-The child is initially suspended. Before resuming it, the broker assigns a
-non-inherited Job Object with:
+Before creating the child, the broker configures a non-inherited Job Object.
+`PROC_THREAD_ATTRIBUTE_JOB_LIST` assigns the initially suspended child to that
+job as part of process creation, so even a broker crash immediately after
+`CreateProcessW` cannot leave an unassigned suspended helper. The job has:
 
 - 1 GiB committed-memory limit;
 - one active process (child creation cannot escape the job);
@@ -55,6 +57,9 @@ non-inherited Job Object with:
   deadlines still bound individual work;
 - all eight documented basic UI restrictions (handles, clipboard, atoms,
   desktop/display/system settings, and exit-Windows).
+
+Native process tests abort the broker both immediately after process creation
+(before resume) and after opening a PDF, and require the helper to terminate.
 
 Any token, ACL, process, job, or resume failure fails closed. No unsandboxed
 launcher fallback exists. The helper checks `TokenIsAppContainer` before parsing
