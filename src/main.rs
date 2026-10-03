@@ -27,7 +27,6 @@ pub mod renderer_helper;
 pub mod renderer_limits;
 pub mod renderer_protocol;
 pub mod renderer_resources;
-pub mod renderer_sandbox;
 pub mod renderer_supervision;
 pub mod rendering;
 pub mod session_controller;
