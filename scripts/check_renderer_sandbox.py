@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run rendering and denial checks against the staged/installed executable."""
 import argparse
+import json
 import os
 from pathlib import Path
 import socket
@@ -13,7 +14,21 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("binary", type=Path)
     parser.add_argument("pdf", type=Path)
+    parser.add_argument("--require-package-identity", action="store_true")
+    parser.add_argument("--result-file", type=Path)
     args = parser.parse_args()
+    try:
+        check(args)
+    except BaseException as error:
+        if args.result_file:
+            args.result_file.write_text(json.dumps({"success": False, "error": str(error)}), encoding="utf-8")
+        raise
+    else:
+        if args.result_file:
+            args.result_file.write_text(json.dumps({"success": True}), encoding="utf-8")
+
+
+def check(args):
     with tempfile.TemporaryDirectory(prefix="quick-presenter-sandbox-") as directory:
         sentinel = Path(directory) / "unrelated-private-file"
         sentinel.write_text("sandbox sentinel", encoding="utf-8")
@@ -26,6 +41,8 @@ def main():
                 control, _ = listener.accept()
                 control.close()
             environment = dict(os.environ)
+            if args.require_package_identity:
+                environment["QUICK_PRESENTER_SANDBOX_REQUIRE_PACKAGE"] = "1"
             environment["QUICK_PRESENTER_SANDBOX_DENIAL_PROBE"] = str(sentinel)
             environment["QUICK_PRESENTER_SANDBOX_CONNECT_PROBE"] = "127.0.0.1:" + str(listener.getsockname()[1])
             stopped = threading.Event()

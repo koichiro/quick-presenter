@@ -27,6 +27,7 @@ on:
       - 'src/renderer_protocol.rs'
       - 'src/renderer_process.rs'
       - 'scripts/check_renderer_sandbox.py'
+      - 'scripts/check_windows_msix_sandbox.ps1'
       - 'src/render_scheduler.rs'
       - 'tests/renderer_process.rs'
   push:
@@ -672,6 +673,11 @@ jobs:
             ${{ runner.temp }}/quick-presenter-msi-install.log
             ${{ runner.temp }}/quick-presenter-msi-uninstall.log
           if-no-files-found: ignore
+
+      - name: Verify installed Store-identity MSIX renderer sandbox
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: scripts/check_windows_msix_sandbox.ps1
 
       - name: Build Windows MSIX
         if: runner.os == 'Windows'

@@ -285,16 +285,23 @@ mod windows {
     pub(super) fn spawn(command: Command, document: Option<&Path>) -> Result<(Child, ResourceJob)> {
         let mut stage = "input";
         let result = (|| -> Result<(Child, ResourceJob)> {
-            let mut package_length = 0;
-            ensure!(
-                unsafe {
-                    windows_sys::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName(
-                        &mut package_length,
-                        std::ptr::null_mut(),
-                    )
-                } == APPMODEL_ERROR_NO_PACKAGE,
-                "MSIX renderer isolation is not validated; refusing PDF work"
-            );
+            // Package identity is not a reason to disable rendering. Packaged
+            // full-trust brokers use the same capability-free helper boundary.
+            // CI must prove it entered the installed package context, rather
+            // than accidentally testing another unpacked executable.
+            if std::env::var_os("QUICK_PRESENTER_SANDBOX_REQUIRE_PACKAGE").is_some() {
+                let mut package_length = 0;
+                ensure!(
+                    unsafe {
+                        windows_sys::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName(
+                            &mut package_length,
+                            std::ptr::null_mut(),
+                        )
+                    } == ERROR_INSUFFICIENT_BUFFER
+                        && package_length > 0,
+                    "installed-package gate requires broker package identity"
+                );
+            }
             let document = document.context("AppContainer requires a broker-selected document")?;
             crate::pdf::preflight_pdf_input(document)?;
             let input = File::open(document)?;

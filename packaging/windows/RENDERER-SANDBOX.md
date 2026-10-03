@@ -1,8 +1,9 @@
 # Windows renderer isolation (#375, draft validation gate)
 
-The proposed supported matrix is unpackaged Windows 10/11 x64, including the
-direct MSI. MSIX/Store identity is explicitly rejected before helper startup:
-this branch does not claim a tested nested-container/Store configuration.
+The target matrix is Windows 10/11 x64, including direct MSI and installed
+MSIX/Store packages. A packaged full-trust broker uses the same capability-free
+AppContainer helper as an unpackaged broker; package identity must not disable
+PDF rendering. There is no unsandboxed fallback for either distribution path.
 No Win32 App Isolation preview or administrative token privilege is required.
 
 The sanitized launch environment preserves only required OS bootstrap paths
@@ -84,6 +85,14 @@ separate layout check, not evidence of installed-package confinement.
 WiX must build with `-arch x64`; CI verifies the MSI Template Summary before
 installation. Without this, a default x86 MSI redirects Program Files to (x86),
 even when its payload executable is x64 or INSTALLFOLDER is supplied explicitly.
+
+CI also builds an MSIX with the Store identity, signs a temporary copy with a
+disposable test certificate, installs it, and runs the render/notes and denial
+probe in its package context using `Invoke-CommandInDesktopPackage`. The broker
+asserts package identity, so unpacked execution cannot satisfy this gate. The
+package and certificate are removed afterwards; this test package is not a
+release artifact. This validates installed package-context behavior, not Store
+certification or the final interactive Store activation/GUI release checklist.
 
 Windows helper stderr is not the framed protocol stream. Denial-probe failures
 are bounded IPC errors before native PDF work, so setup diagnostics cannot
