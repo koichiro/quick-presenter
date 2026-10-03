@@ -629,13 +629,17 @@ jobs:
           # not administrative extraction or a development PDFium override.
           try {
             $install = Start-Process msiexec.exe -ArgumentList @(
-              '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "`"$installLog`""
+              '/i', "`"$msi`"", '/qn', '/norestart',
+              "INSTALLFOLDER=`"$installDir`"", '/l*v', "`"$installLog`""
             ) -Wait -PassThru
             if ($install.ExitCode -notin @(0, 3010)) {
               if (Test-Path $installLog) { Get-Content $installLog -Tail 80 }
               throw "MSI installation failed with exit code $($install.ExitCode)"
             }
-            if (-not (Test-Path $exe -PathType Leaf)) { throw 'Installed MSI executable missing' }
+            if (-not (Test-Path $exe -PathType Leaf)) {
+              if (Test-Path $installLog) { Get-Content $installLog -Tail 120 }
+              throw "Installed MSI executable missing at the explicit INSTALLFOLDER: $exe"
+            }
             python scripts/check_renderer_sandbox.py $exe $pdf
             if ($LASTEXITCODE -ne 0) { throw 'Installed MSI renderer denial gate failed' }
           } finally {
@@ -646,6 +650,16 @@ jobs:
               throw "MSI cleanup failed with exit code $($uninstall.ExitCode)"
             }
           }
+
+      - name: Upload installed Windows MSI verification logs
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact-name }}-msi-verification-logs
+          path: |
+            ${{ runner.temp }}/quick-presenter-msi-install.log
+            ${{ runner.temp }}/quick-presenter-msi-uninstall.log
+          if-no-files-found: ignore
 
       - name: Build Windows MSIX
         if: runner.os == 'Windows'
