@@ -16,6 +16,8 @@ pub mod gui_smoke;
 pub mod hot_reload;
 pub mod input;
 #[cfg(target_os = "macos")]
+pub mod macos_renderer;
+#[cfg(target_os = "macos")]
 pub mod macos_window;
 pub mod notes;
 pub mod pdf;
@@ -125,6 +127,10 @@ const INITIAL_LINUX_WINDOW_SHOW_DELAY: Duration = Duration::from_millis(120);
 const INITIAL_LINUX_PRESENTER_FRONT_DELAY: Duration = Duration::from_millis(80);
 
 fn main() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    if let Some(result) = macos_renderer::entry() {
+        return result;
+    }
     #[cfg(debug_assertions)]
     if std::env::args_os().nth(1).as_deref()
         == Some(std::ffi::OsStr::new("--renderer-scheduler-smoke"))

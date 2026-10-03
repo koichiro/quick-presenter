@@ -13,6 +13,8 @@ Arguments:
               MACOS_SIGNING_IDENTITY.
 
 Environment:
+  MACOS_DISTRIBUTION_MODE developer-id (default) or app-store (signing candidate;
+                          Store runtime/package gates remain required).
   MACOS_SIGNING_IDENTITY  Developer ID Application identity to use when the
                           IDENTITY argument is omitted.
 
@@ -45,6 +47,12 @@ strip_surrounding_quotes() {
 }
 
 identity="$(strip_surrounding_quotes "$identity")"
+
+distribution_mode="${MACOS_DISTRIBUTION_MODE:-developer-id}"
+case "$distribution_mode" in
+  developer-id|app-store) ;;
+  *) echo "Unsupported MACOS_DISTRIBUTION_MODE" >&2; exit 2 ;;
+esac
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "sign_macos_app.sh is only supported on macOS." >&2
@@ -109,13 +117,34 @@ find "$app_bundle/Contents" -type f -print0 |
     case "$file_type" in
       *Mach-O*)
         echo "Signing $file_path"
-        codesign "${signing_args[@]}" "$file_path"
+        if [[ "$file_path" == */org.quickpresenter.renderer.xpc/Contents/MacOS/quick-presenter-renderer ]]; then
+          continue
+        elif [[ "$file_path" == */RendererProxy.app/Contents/MacOS/quick-presenter-proxy ]]; then
+          continue
+        else
+          codesign "${signing_args[@]}" "$file_path"
+        fi
         ;;
     esac
-  done
+done
+
+codesign "${signing_args[@]}" --entitlements packaging/macos/Renderer.entitlements \
+  "$app_bundle/Contents/Helpers/RendererProxy.app/Contents/XPCServices/org.quickpresenter.renderer.xpc"
+if [[ "$distribution_mode" == "app-store" ]]; then
+  codesign "${signing_args[@]}" --entitlements packaging/macos/Proxy-Inherit.entitlements "$app_bundle/Contents/Helpers/RendererProxy.app"
+else
+  codesign "${signing_args[@]}" "$app_bundle/Contents/Helpers/RendererProxy.app"
+fi
 
 echo "Signing $app_bundle"
-codesign "${signing_args[@]}" "$app_bundle"
+if [[ "$distribution_mode" == "app-store" ]]; then
+  codesign "${signing_args[@]}" --entitlements packaging/macos/Store-UI.entitlements "$app_bundle"
+else
+  codesign "${signing_args[@]}" "$app_bundle"
+fi
 
 codesign --verify --deep --strict --verbose=4 "$app_bundle"
+if [[ "$distribution_mode" == "developer-id" ]]; then
+  python3 scripts/check_macos_renderer.py "$app_bundle" tests/fixtures/marp-speaker-notes.pdf
+fi
 echo "Signed $app_bundle"

@@ -41,7 +41,17 @@ Quick Presenter treats PDFium document access as worker-confined. `shared_pdfium
 is only the process-global initialization boundary; it does not make loaded
 documents safe to use from multiple threads.
 
-The normal runtime keeps each `PdfDocumentState` in a renderer helper launched
+On macOS, bundled release builds keep each `PdfDocumentState` in an independently
+App-Sandboxed XPC service. A PDF-specific nested proxy app authenticates that
+service and transfers the broker-opened read-only FD and protocol pipes. Distinct
+proxy clients preserve active/candidate process independence. The service uses
+PDFium's owned reader API; it never reopens the display path. Its document still
+borrows the real process-global PDFium owner; no unsafe lifetime extension is
+used. See [macOS Renderer Sandbox](../packaging/macos/RENDERER-SANDBOX.md) for
+signature requirements, package support and release gates.
+
+Other platforms and the unbundled debug regression harness keep each
+`PdfDocumentState` in a renderer helper launched
 from `current_exe()` with the internal `--renderer-helper` argument. This mode is
 selected before CLI parsing, diagnostics, or Slint initialization. The UI
 process never initializes or calls PDFium, including About and headless smoke
@@ -68,11 +78,12 @@ shutdown kills and reaps registered helpers even if native work is blocked.
 A helper's input guardian exits on parent-pipe closure even during native work.
 Only unit tests retain synchronous in-process PDF loading.
 
-Helpers currently run unsandboxed. Independent broker watchdogs enforce operation
+Non-macOS helpers on this branch still run unsandboxed; #375/#376 supply their
+platform boundaries separately. Independent broker watchdogs enforce operation
 deadlines and supervise helper memory; a crash/timeout may trigger one bounded
 restart, while malformed IPC is not replayed. Numeric budgets, platform controls,
 and fallback guarantees are documented in [Render Scheduling](RENDER_SCHEDULING.md).
-OS security confinement remains #374–#376.
+XPC startup/connection loss complements rather than replaces these watchdogs.
 
 ## Native file dialogs
 

@@ -5,6 +5,19 @@ use anyhow::{Context, Result};
 use std::sync::Mutex;
 
 pub fn constrain_helper() -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        let limit = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        // App Sandbox alone is not a blanket fork prohibition. Native parsing
+        // needs threads, not additional processes; keep the hard process limit 0.
+        if unsafe { libc::setrlimit(libc::RLIMIT_NPROC, &limit) } != 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("helper process limit unavailable");
+        }
+    }
     #[cfg(target_os = "linux")]
     {
         let limit = libc::rlimit {
