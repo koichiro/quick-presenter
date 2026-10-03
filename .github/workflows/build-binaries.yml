@@ -625,6 +625,18 @@ jobs:
           $pdf = Join-Path $env:GITHUB_WORKSPACE 'tests/fixtures/marp-speaker-notes.pdf'
           $installLog = Join-Path $env:RUNNER_TEMP 'quick-presenter-msi-install.log'
           $uninstallLog = Join-Path $env:RUNNER_TEMP 'quick-presenter-msi-uninstall.log'
+          # The x64 payload must also be authored as an x64 MSI. A default x86
+          # package redirects even an explicit Program Files path to (x86).
+          $installer = New-Object -ComObject WindowsInstaller.Installer
+          $database = $installer.OpenDatabase($msi, 0)
+          $summary = $database.SummaryInformation(0)
+          $template = $summary.Property(7)
+          if (($template -split ';')[0] -ne 'x64') {
+            throw "Expected x64 MSI Template Summary, got: $template"
+          }
+          [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($summary)
+          [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($database)
+          [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($installer)
           # A disposable hosted runner: use the real per-machine installation,
           # not administrative extraction or a development PDFium override.
           try {
