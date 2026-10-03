@@ -27,6 +27,7 @@ pub mod render_controller;
 pub mod render_scheduler;
 pub mod renderer_helper;
 pub mod renderer_limits;
+pub mod renderer_process;
 pub mod renderer_protocol;
 pub mod renderer_resources;
 pub mod renderer_supervision;
@@ -373,6 +374,13 @@ fn smoke_open_pdf(path: PathBuf) -> Result<()> {
     let group = renderer_helper::ProcessGroup::default();
     let mut helper = renderer_helper::HelperClient::spawn_for_document(&group, &path)?;
     let (title, page_count) = helper.open(path)?;
+    #[cfg(debug_assertions)]
+    if std::env::var_os("QUICK_PRESENTER_HELPER_TEST_ABORT_BROKER").is_some() {
+        use std::io::Write;
+        println!("renderer-helper-pid={}", helper.process_id());
+        std::io::stdout().flush()?;
+        std::process::abort();
+    }
     let purpose = RenderPurpose::CurrentSlide;
     #[cfg(debug_assertions)]
     let purpose = if std::env::var_os("QUICK_PRESENTER_HELPER_TEST_AUXILIARY").is_some() {

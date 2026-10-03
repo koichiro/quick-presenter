@@ -5,6 +5,7 @@ use crate::{
     pdf::PdfDocumentState,
     render_scheduler::{RenderCommand, RenderEvent, RenderJobId, RenderPriority, RenderSessionId},
     renderer_limits::{Operation, RestartBudget, RESTART_BACKOFF},
+    renderer_process::{Child, ReadPipe, WritePipe},
     renderer_protocol::{
         Broker, Envelope, FailureCode, Frame, Framed, Message, PageNote, PixelFormat,
         MAX_DOCUMENT_NOTE_BYTES, MAX_NOTE_BYTES, MAX_TEXT_BYTES,
@@ -18,7 +19,7 @@ use std::{
     cell::{Cell, RefCell},
     io,
     path::PathBuf,
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    process::{Command, Stdio},
     sync::{Arc, Mutex, Weak},
 };
 
@@ -77,8 +78,8 @@ impl ProcessGroup {
 }
 pub struct HelperClient {
     child: Arc<Mutex<Child>>,
-    writer: Framed<ChildStdin>,
-    reader: Framed<ChildStdout>,
+    writer: Framed<WritePipe>,
+    reader: Framed<ReadPipe>,
     broker: Broker,
     failed: bool,
     failure_message: Option<String>,
@@ -118,14 +119,17 @@ impl HelperClient {
         #[cfg(target_os = "macos")]
         command.stderr(Stdio::inherit());
         #[cfg(target_os = "windows")]
-        {
-            use std::os::windows::process::CommandExt;
-            command.creation_flags(0x08000000);
-        }
+        let (mut child, resource_job) =
+            crate::renderer_process::spawn(command, path).map_err(|_| HelperFailure {
+                kind: FailureKind::Spawn,
+                operation: Operation::Handshake,
+            })?;
+        #[cfg(not(target_os = "windows"))]
         let mut child = command.spawn().map_err(|_| HelperFailure {
             kind: FailureKind::Spawn,
             operation: Operation::Handshake,
         })?;
+        #[cfg(not(target_os = "windows"))]
         let resource_job = match ResourceJob::attach(&child) {
             Ok(job) => job,
             Err(_) => {
@@ -202,6 +206,9 @@ impl HelperClient {
         result
     }
     pub fn open(&mut self, path: PathBuf) -> Result<(String, u32)> {
+        // macOS acquires the descriptor with a bounded wait and validates PDF
+        // contents in XPC; do not reintroduce an unmonitored broker header read.
+        #[cfg(not(target_os = "macos"))]
         crate::pdf::preflight_pdf_input(&path)?;
         let request = self.broker.command(
             RenderCommand::Open {
@@ -493,7 +500,22 @@ pub fn run() -> Result<()> {
         cfg!(debug_assertions) || !cfg!(target_os = "macos"),
         "macOS release PDF work requires XPC"
     );
-    run_with_input(None)
+    #[cfg(target_os = "windows")]
+    let input = {
+        #[cfg(debug_assertions)]
+        let raw_test = std::env::var_os("QUICK_PRESENTER_HELPER_TEST_RAW_PROTOCOL").is_some();
+        #[cfg(not(debug_assertions))]
+        let raw_test = false;
+        if !raw_test {
+            crate::renderer_process::verify_token()?;
+            Some(crate::renderer_process::take_document_file()?)
+        } else {
+            None
+        }
+    };
+    #[cfg(not(target_os = "windows"))]
+    let input = None;
+    run_with_input(input)
 }
 pub(crate) fn run_with_input(mut input: Option<std::fs::File>) -> Result<()> {
     let brokered = input.is_some();
@@ -569,6 +591,20 @@ pub(crate) fn run_with_input(mut input: Option<std::fs::File>) -> Result<()> {
             }
             Message::Open { path } => {
                 ensure!(document.is_none(), "helper document already open");
+                #[cfg(target_os = "windows")]
+                if let Err(error) = crate::renderer_process::verify_denials() {
+                    // Test probes run before PDFium. Report their bounded static
+                    // failure through IPC, never plaintext on the protocol pipe.
+                    output.send(&Frame {
+                        envelope: Envelope {
+                            request_id,
+                            session_id,
+                            message: failure(FailureCode::Internal, &error.to_string()),
+                        },
+                        pixels,
+                    })?;
+                    return Ok(());
+                }
                 let path = path.into_path()?;
                 #[cfg(target_os = "macos")]
                 if input.is_some() {
@@ -578,6 +614,13 @@ pub(crate) fn run_with_input(mut input: Option<std::fs::File>) -> Result<()> {
                     PdfDocumentState::open_brokered(path, file)
                 } else {
                     ensure!(!brokered, "brokered input already consumed");
+                    #[cfg(target_os = "windows")]
+                    ensure!(
+                        cfg!(debug_assertions)
+                            && std::env::var_os("QUICK_PRESENTER_HELPER_TEST_RAW_PROTOCOL")
+                                .is_some(),
+                        "missing brokered PDF handle"
+                    );
                     PdfDocumentState::open(path)
                 };
                 match opened {

@@ -44,7 +44,7 @@ impl PdfDocumentState {
         use std::io::{Seek, SeekFrom};
         let metadata = file.metadata()?;
         ensure!(
-            metadata.is_file() && metadata.len() <= MAX_PREFLIGHT_PDF_BYTES,
+            metadata.is_file() && metadata.len() > 0 && metadata.len() <= MAX_PREFLIGHT_PDF_BYTES,
             "invalid brokered PDF size/type"
         );
         let mut header = [0u8; 5];
@@ -364,6 +364,28 @@ pub(crate) fn preflight_pdf_input(path: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn renderer_library_path() -> Result<PathBuf> {
+    let policy = default_pdfium_load_policy();
+    if pdfium_dynamic_override_allowed(
+        policy,
+        std::env::var(PDFIUM_OVERRIDE_GUARD_ENV).ok().as_deref(),
+    ) {
+        if let Some(path) = std::env::var_os(PDFIUM_DYNAMIC_LIB_PATH_ENV) {
+            return Ok(std::fs::canonicalize(path)?);
+        }
+    }
+    bundled_pdfium_library_candidates(
+        policy,
+        std::env::current_exe().ok().as_deref(),
+        std::env::current_dir().ok().as_deref(),
+    )
+    .into_iter()
+    .find(|path| path.is_file())
+    .context("no packaged PDFium library")
+    .and_then(|path| Ok(path.canonicalize()?))
 }
 
 fn create_pdfium() -> Result<PdfiumRuntime> {
