@@ -29,6 +29,7 @@ on:
       - 'src/renderer_resources.rs'
       - 'src/renderer_supervision.rs'
       - 'src/renderer_protocol.rs'
+      - 'src/renderer_sandbox_linux.rs'
       - 'src/renderer_process.rs'
       - 'scripts/check_renderer_sandbox.py'
       - 'scripts/check_windows_msix_sandbox.ps1'
@@ -487,6 +488,8 @@ jobs:
 
           sudo apt-get install -y "$deb"
           trap 'sudo apt-get remove -y quick-presenter || true' EXIT
+          env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE \
+            python3 scripts/check_renderer_sandbox.py /usr/lib/quick-presenter/quick-presenter "$pdf"
           test -s /usr/share/applications/mimeinfo.cache
           grep -F "application/pdf=" /usr/share/applications/mimeinfo.cache | grep -F "quick-presenter.desktop"
           (
@@ -1032,6 +1035,10 @@ jobs:
               python3 "$GITHUB_WORKSPACE/scripts/check_macos_renderer.py" "$artifact_dir/Quick Presenter.app" "$pdf" --expect-untrusted
             )
           fi
+
+      - name: Verify Linux renderer sandbox denials
+        if: runner.os == 'Linux'
+        run: python3 scripts/check_renderer_sandbox.py "artifacts/${{ matrix.artifact-name }}/${{ matrix.binary-name }}" tests/fixtures/marp-speaker-notes.pdf
 
       - name: Smoke test staged artifact
         if: runner.os == 'Windows'

@@ -71,23 +71,27 @@ Developer ID runtime and notarization rehearsal evidence, and separate Store
 requirements tracked in #120. Unsigned/ad-hoc
 macOS release artifacts fail closed; they are not native security validation.
 
-Other platforms on this branch keep `PdfDocumentState` in an unsandboxed helper, using
+Windows and direct Linux builds keep `PdfDocumentState` in sandboxed helpers, using
 the same installed executable in internal helper mode. The UI/broker does not
 initialize PDFium. Unrecoverable active-helper EOF, exit, or invalid IPC becomes `WorkerFailed`;
 candidate failures keep the previous helper and last good slide. Shutdown kills
 and reaps helpers without waiting for native work; parent-pipe EOF independently
 exits the helper. This contains ordinary native crashes to the helper, but does
-not prevent a compromised helper from exercising the user's OS authority.
+not by itself prevent a compromised helper from exercising the user's OS authority.
+Direct Linux builds now require the fail-closed Landlock/seccomp boundary in
+[Linux renderer confinement](../packaging/linux/RENDERER-SANDBOX.md). Windows uses
+AppContainer with brokered read-only PDF handles and an atomic kill-on-close Job
+Object; see [Windows Renderer Sandbox](../packaging/windows/RENDERER-SANDBOX.md).
 
 Hard deadlines, bounded restart, and platform-specific memory controls are now
 implemented. Their numeric values and fallback guarantees are documented in
 [Render Scheduling](RENDER_SCHEDULING.md). macOS sampled RSS is not a hard memory
 reservation cap. Packaged releases gain these guarantees only when they include
-and validate this implementation; non-macOS helpers still have unsandboxed user authority
-until their separate platform isolation PRs are incorporated.
+and validate this implementation. Do not extend the Linux sandbox claim to
+unsupported kernels, Flatpak, or other operating systems.
 
-Current mitigations reduce accidental and resource-exhaustion risk but do not
-form a sandbox:
+The following shared mitigations reduce accidental and resource-exhaustion risk;
+they do not form a sandbox on their own:
 
 - the input must be a non-empty regular file beginning with `%PDF-`;
 - input size is limited to 1 GiB before PDFium opens the file;

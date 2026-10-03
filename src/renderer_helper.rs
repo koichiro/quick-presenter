@@ -25,6 +25,64 @@ use std::{
 
 pub const HELPER_ARGUMENT: &str = "--renderer-helper";
 
+#[cfg(any(target_os = "linux", test))]
+fn linux_renderer_environment_allowed(name: &std::ffi::OsStr, debug_tests: bool) -> bool {
+    let Some(name) = name.to_str() else {
+        return false;
+    };
+    matches!(
+        name,
+        "LANG"
+            | "LC_ALL"
+            | "LC_CTYPE"
+            | "FLATPAK_ID"
+            | "PDFIUM_DYNAMIC_LIB_PATH"
+            | "QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE"
+            | "QUICK_PRESENTER_SANDBOX_DENIAL_PROBE"
+            | "QUICK_PRESENTER_SANDBOX_CONNECT_PROBE"
+    ) || (debug_tests
+        && matches!(
+            name,
+            "QUICK_PRESENTER_HELPER_TEST_FAULT"
+                | "QUICK_PRESENTER_HELPER_TEST_FAULT_TITLE"
+                | "QUICK_PRESENTER_HELPER_TEST_FAULT_PAGE"
+                | "QUICK_PRESENTER_HELPER_TEST_FAULT_ONCE"
+                | "QUICK_PRESENTER_HELPER_TEST_NO_LANDLOCK"
+                | "QUICK_PRESENTER_HELPER_TEST_SIGNAL_PARENT"
+                | "QUICK_PRESENTER_HELPER_TEST_ENVIRONMENT_PROBE"
+        ))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn configure_linux_renderer_environment(command: &mut Command, debug_tests: bool) {
+    // Collect before env_clear, retaining explicit overrides/removals only for
+    // reviewed keys. A test/probe prefix is never an ambient credential grant.
+    let overrides: Vec<_> = command
+        .get_envs()
+        .map(|(key, value)| (key.to_owned(), value.map(std::ffi::OsStr::to_owned)))
+        .collect();
+    let inherited =
+        std::env::vars_os().filter(|(key, _)| linux_renderer_environment_allowed(key, debug_tests));
+    command.env_clear().envs(inherited);
+    for (key, value) in overrides {
+        if linux_renderer_environment_allowed(&key, debug_tests) {
+            match value {
+                Some(value) => {
+                    command.env(key, value);
+                }
+                None => {
+                    command.env_remove(key);
+                }
+            }
+        }
+    }
+    // The caller cannot substitute another parent PID through its environment.
+    command.env(
+        "QUICK_PRESENTER_RENDERER_PARENT_PID",
+        std::process::id().to_string(),
+    );
+}
+
 #[derive(Default)]
 pub struct ProcessGroup {
     state: Mutex<GroupState>,
@@ -111,6 +169,8 @@ impl HelperClient {
         let (command, input_identity) = crate::macos_renderer::configure(command, path, group)?;
         let _ = path;
         let mut command = command;
+        #[cfg(target_os = "linux")]
+        configure_linux_renderer_environment(&mut command, cfg!(debug_assertions));
         command
             .arg(HELPER_ARGUMENT)
             .stdin(Stdio::piped())
@@ -495,6 +555,26 @@ impl RemoteDocument {
 }
 
 /// Run before diagnostics or GUI initialization. stdout is exclusively protocol bytes.
+fn start_input_guardian() -> std::sync::mpsc::Receiver<Frame> {
+    let (sender, receiver) = std::sync::mpsc::sync_channel(64);
+    std::thread::spawn(move || {
+        let mut input = Framed::new(io::stdin().lock());
+        loop {
+            match input.receive() {
+                Ok(Some(frame)) => {
+                    if sender.try_send(frame).is_err() {
+                        std::process::exit(1);
+                    }
+                }
+                // This guardian can terminate a helper even while PDFium is blocked.
+                Ok(None) => std::process::exit(0),
+                Err(_) => std::process::exit(1),
+            }
+        }
+    });
+    receiver
+}
+
 pub fn run() -> Result<()> {
     ensure!(
         cfg!(debug_assertions) || !cfg!(target_os = "macos"),
@@ -519,29 +599,49 @@ pub fn run() -> Result<()> {
 }
 pub(crate) fn run_with_input(mut input: Option<std::fs::File>) -> Result<()> {
     let brokered = input.is_some();
-    crate::renderer_resources::constrain_helper()?;
-    let (sender, receiver) = std::sync::mpsc::sync_channel(64);
-    std::thread::spawn(move || {
-        let mut input = Framed::new(io::stdin().lock());
-        loop {
-            match input.receive() {
-                Ok(Some(frame)) => {
-                    if sender.try_send(frame).is_err() {
-                        std::process::exit(1);
-                    }
-                }
-                // This guardian can terminate a helper even while PDFium is blocked.
-                Ok(None) => std::process::exit(0),
-                Err(_) => std::process::exit(1),
-            }
+    #[cfg(all(target_os = "linux", debug_assertions))]
+    if std::env::var_os("QUICK_PRESENTER_HELPER_TEST_ENVIRONMENT_PROBE").is_some() {
+        for key in [
+            "QUICK_PRESENTER_TEST_SECRET",
+            "AWS_SECRET_ACCESS_KEY",
+            "QUICK_PRESENTER_SANDBOX_FAKE_SECRET",
+            "QUICK_PRESENTER_HELPER_TEST_FAKE_SECRET",
+        ] {
+            ensure!(
+                std::env::var_os(key).is_none(),
+                "helper inherited unrelated environment"
+            );
         }
-    });
+        ensure!(
+            std::env::var("LANG").ok().as_deref() == Some("C.UTF-8"),
+            "helper locale was not preserved"
+        );
+    }
+    #[cfg(target_os = "linux")]
+    crate::renderer_sandbox_linux::close_inherited_descriptors()?;
+    crate::renderer_resources::constrain_helper()?;
+    let mut protocol_input = Framed::new(io::stdin());
+    #[cfg(target_os = "linux")]
+    let mut receiver = None;
+    #[cfg(not(target_os = "linux"))]
+    let mut receiver = Some(start_input_guardian());
     let mut output = Framed::new(io::stdout().lock());
     let mut document: Option<PdfDocumentState> = None;
     let mut session = None;
     let mut ready = false;
     let mut last_request = 0;
-    for frame in receiver {
+    loop {
+        let frame = if let Some(receiver) = &receiver {
+            match std::sync::mpsc::Receiver::recv(receiver) {
+                Ok(frame) => frame,
+                Err(_) => break,
+            }
+        } else {
+            match protocol_input.receive()? {
+                Some(frame) => frame,
+                None => break,
+            }
+        };
         let Envelope {
             request_id,
             session_id,
@@ -606,6 +706,15 @@ pub(crate) fn run_with_input(mut input: Option<std::fs::File>) -> Result<()> {
                     return Ok(());
                 }
                 let path = path.into_path()?;
+                #[cfg(target_os = "linux")]
+                let path = path.canonicalize()?;
+                #[cfg(target_os = "linux")]
+                crate::renderer_sandbox_linux::enter(&path)?;
+                // Landlock confinement must precede guardian creation so the
+                // guardian inherits the thread-local filesystem policy.
+                if receiver.is_none() {
+                    receiver = Some(start_input_guardian());
+                }
                 #[cfg(target_os = "macos")]
                 if input.is_some() {
                     crate::macos_renderer::verify_denials()?;
@@ -808,12 +917,30 @@ fn render_fault(page_index: u32, document: Option<&PdfDocumentState>) -> Option<
     }
     let fault = test_fault()?;
     if let Ok(marker) = std::env::var("QUICK_PRESENTER_HELPER_TEST_FAULT_ONCE") {
+        #[cfg(target_os = "linux")]
+        {
+            let _ = marker;
+            if !FAULT_MARKER_CONSUMED.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                return None;
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
         // Only debug test-owned marker files are consumed; release ignores all hooks.
         if std::fs::remove_file(marker).is_err() {
             return None;
         }
     }
     Some(fault)
+}
+
+#[cfg(all(target_os = "linux", debug_assertions))]
+static FAULT_MARKER_CONSUMED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+#[cfg(all(target_os = "linux", debug_assertions))]
+pub(crate) fn consume_fault_marker(path: &std::path::Path) -> Result<()> {
+    std::fs::remove_file(path)?;
+    FAULT_MARKER_CONSUMED.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
 }
 
 /// Internal executable-level test entry point: exercise real broker supervision
@@ -961,4 +1088,76 @@ fn bounded_notes(notes: Vec<(u32, String)>) -> Result<Vec<PageNote>> {
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod environment_tests {
+    use super::*;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn linux_environment_keeps_only_reviewed_keys_and_debug_hooks() {
+        for key in [
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "FLATPAK_ID",
+            "PDFIUM_DYNAMIC_LIB_PATH",
+            "QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE",
+            "QUICK_PRESENTER_SANDBOX_DENIAL_PROBE",
+            "QUICK_PRESENTER_SANDBOX_CONNECT_PROBE",
+        ] {
+            assert!(linux_renderer_environment_allowed(OsStr::new(key), false));
+        }
+        for key in [
+            "AWS_SECRET_ACCESS_KEY",
+            "API_TOKEN",
+            "HOME",
+            "LD_PRELOAD",
+            "LD_LIBRARY_PATH",
+            "QUICK_PRESENTER_SANDBOX_FAKE_SECRET",
+            "QUICK_PRESENTER_HELPER_TEST_FAKE_SECRET",
+        ] {
+            assert!(!linux_renderer_environment_allowed(OsStr::new(key), true));
+        }
+        for key in [
+            "QUICK_PRESENTER_HELPER_TEST_FAULT",
+            "QUICK_PRESENTER_HELPER_TEST_SIGNAL_PARENT",
+            "QUICK_PRESENTER_HELPER_TEST_ENVIRONMENT_PROBE",
+        ] {
+            assert!(linux_renderer_environment_allowed(OsStr::new(key), true));
+            assert!(!linux_renderer_environment_allowed(OsStr::new(key), false));
+        }
+    }
+
+    #[test]
+    fn linux_environment_filters_explicit_secrets_and_preserves_overrides() {
+        let mut command = Command::new("unused-test-program");
+        command
+            .env("LANG", "C.UTF-8")
+            .env_remove("LC_ALL")
+            .env("AWS_SECRET_ACCESS_KEY", "synthetic-test-value")
+            .env("QUICK_PRESENTER_HELPER_TEST_SIGNAL_PARENT", "1")
+            .env("QUICK_PRESENTER_RENDERER_PARENT_PID", "invalid");
+        configure_linux_renderer_environment(&mut command, false);
+        let entries: std::collections::BTreeMap<_, _> = command.get_envs().collect();
+        assert_eq!(
+            entries.get(OsStr::new("LANG")),
+            Some(&Some(OsStr::new("C.UTF-8")))
+        );
+        assert!(entries
+            .get(OsStr::new("LC_ALL"))
+            .copied()
+            .flatten()
+            .is_none());
+        assert!(!entries.contains_key(OsStr::new("AWS_SECRET_ACCESS_KEY")));
+        assert!(!entries.contains_key(OsStr::new("QUICK_PRESENTER_HELPER_TEST_SIGNAL_PARENT")));
+        assert_eq!(
+            entries.get(OsStr::new("QUICK_PRESENTER_RENDERER_PARENT_PID")),
+            Some(&Some(OsStr::new(&std::process::id().to_string())))
+        );
+        assert!(entries.keys().all(|key| **key
+            == *OsStr::new("QUICK_PRESENTER_RENDERER_PARENT_PID")
+            || linux_renderer_environment_allowed(key, false)));
+    }
 }
