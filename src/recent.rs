@@ -12,6 +12,7 @@ use std::os::unix::{fs::OpenOptionsExt, fs::PermissionsExt};
 use anyhow::{Context, Result};
 
 pub const MAX_RECENT_FILES: usize = 5;
+pub const EMPTY_RECENT_FILE_LABEL: &str = "No Recent Files";
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct RecentFiles {
@@ -50,6 +51,54 @@ impl RecentFiles {
 
     pub fn is_empty(&self) -> bool {
         self.paths.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct RecentMenuSnapshot {
+    paths: Vec<PathBuf>,
+    labels: [String; MAX_RECENT_FILES],
+    enabled: [bool; MAX_RECENT_FILES],
+}
+
+impl RecentMenuSnapshot {
+    pub fn from_recent_files(recent_files: &RecentFiles) -> Self {
+        let paths = recent_files.paths().to_vec();
+        let labels = std::array::from_fn(|index| {
+            paths
+                .get(index)
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| {
+                    if index == 0 && paths.is_empty() {
+                        EMPTY_RECENT_FILE_LABEL.to_owned()
+                    } else {
+                        String::new()
+                    }
+                })
+        });
+        let enabled = std::array::from_fn(|index| index < paths.len());
+
+        Self {
+            paths,
+            labels,
+            enabled,
+        }
+    }
+
+    pub fn paths(&self) -> &[PathBuf] {
+        &self.paths
+    }
+
+    pub fn labels(&self) -> &[String; MAX_RECENT_FILES] {
+        &self.labels
+    }
+
+    pub fn enabled(&self) -> &[bool; MAX_RECENT_FILES] {
+        &self.enabled
+    }
+
+    pub fn has_recent_files(&self) -> bool {
+        !self.paths.is_empty()
     }
 }
 
@@ -325,6 +374,32 @@ mod tests {
         recent.clear();
 
         assert!(recent.is_empty());
+    }
+
+    #[test]
+    fn menu_snapshot_keeps_paths_labels_and_enabled_state_aligned() {
+        let recent =
+            RecentFiles::from_paths([PathBuf::from("first.pdf"), PathBuf::from("second.pdf")]);
+
+        let snapshot = RecentMenuSnapshot::from_recent_files(&recent);
+
+        assert_eq!(snapshot.paths(), recent.paths());
+        assert_eq!(snapshot.labels()[0], "first.pdf");
+        assert_eq!(snapshot.labels()[1], "second.pdf");
+        assert_eq!(snapshot.labels()[2], "");
+        assert_eq!(snapshot.enabled(), &[true, true, false, false, false]);
+        assert!(snapshot.has_recent_files());
+    }
+
+    #[test]
+    fn empty_menu_snapshot_has_one_disabled_placeholder() {
+        let snapshot = RecentMenuSnapshot::from_recent_files(&RecentFiles::new());
+
+        assert!(snapshot.paths().is_empty());
+        assert_eq!(snapshot.labels()[0], EMPTY_RECENT_FILE_LABEL);
+        assert_eq!(snapshot.labels()[1], "");
+        assert_eq!(snapshot.enabled(), &[false; MAX_RECENT_FILES]);
+        assert!(!snapshot.has_recent_files());
     }
 
     #[test]

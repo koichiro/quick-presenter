@@ -28,6 +28,9 @@ libc = "0.2"
 slint-build = "1.18.1"
 winresource = { version = "0.1.31", default-features = false }
 
+[patch.crates-io]
+i-slint-backend-winit = { path = "vendor/i-slint-backend-winit" }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.4"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = [
