@@ -1,5 +1,45 @@
 use std::collections::BTreeMap;
 
+/// Presenter typography retained for the lifetime of the application.
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub struct NotesFontSize {
+    step: u8,
+}
+
+impl NotesFontSize {
+    const PERCENTAGES: [u16; 5] = [100, 125, 150, 175, 200];
+
+    pub fn percentage(self) -> u16 {
+        Self::PERCENTAGES[usize::from(self.step)]
+    }
+
+    pub fn scale(self) -> f32 {
+        f32::from(self.percentage()) / 100.0
+    }
+
+    pub fn label(self) -> String {
+        format!("{}%", self.percentage())
+    }
+
+    pub fn can_increase(self) -> bool {
+        usize::from(self.step) + 1 < Self::PERCENTAGES.len()
+    }
+
+    pub fn can_decrease(self) -> bool {
+        self.step > 0
+    }
+
+    pub fn increase(&mut self) {
+        if self.can_increase() {
+            self.step += 1;
+        }
+    }
+
+    pub fn decrease(&mut self) {
+        self.step = self.step.saturating_sub(1);
+    }
+}
+
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct SpeakerNotes {
     pages: BTreeMap<u32, String>,
@@ -78,6 +118,50 @@ pub fn is_pdf_speaker_note_annotation(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notes_font_size_defaults_to_existing_typography() {
+        let size = NotesFontSize::default();
+        assert_eq!(size.scale(), 1.0);
+        assert_eq!(size.label(), "100%");
+        assert!(size.can_increase());
+        assert!(!size.can_decrease());
+    }
+
+    #[test]
+    fn notes_font_size_walks_every_step_in_both_directions() {
+        let mut size = NotesFontSize::default();
+        for percentage in [100, 125, 150, 175, 200] {
+            assert_eq!(size.percentage(), percentage);
+            assert_eq!(size.scale(), f32::from(percentage) / 100.0);
+            assert_eq!(size.label(), format!("{percentage}%"));
+            assert_eq!(size.can_decrease(), percentage > 100);
+            assert_eq!(size.can_increase(), percentage < 200);
+            size.increase();
+        }
+        for percentage in [200, 175, 150, 125, 100] {
+            assert_eq!(size.percentage(), percentage);
+            size.decrease();
+        }
+        assert_eq!(size, NotesFontSize::default());
+    }
+
+    #[test]
+    fn notes_font_size_repeated_adjustments_stop_at_bounds() {
+        let mut size = NotesFontSize::default();
+        for _ in 0..1000 {
+            size.increase();
+        }
+        assert_eq!(size.percentage(), 200);
+        assert!(!size.can_increase());
+        assert!(size.can_decrease());
+        for _ in 0..1000 {
+            size.decrease();
+        }
+        assert_eq!(size.percentage(), 100);
+        assert!(size.can_increase());
+        assert!(!size.can_decrease());
+    }
 
     #[test]
     fn empty_notes_return_none() {

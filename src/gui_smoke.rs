@@ -89,6 +89,8 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         "slide window weak handle could not be upgraded",
     );
 
+    check_notes_font_size(&windows, &state, report, "before opening a PDF");
+
     crate::begin_open_pdf(&window_refs, &state, options.pdf_path.clone());
     report.check(
         "slide progress indicator is hidden while opening without a deck",
@@ -144,6 +146,7 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
     report_state(report, &state, "speaker notes were checked", |state| {
         state.status_text == "Ready" || state.status_text.contains("notes")
     });
+    check_notes_font_size(&windows, &state, report, "with a PDF open");
     report_presenter_progress(
         report,
         &windows,
@@ -284,6 +287,59 @@ fn report_state(
 ) {
     let state = state.borrow();
     report.check(name, verify(&state), "state matched", "state did not match");
+}
+
+fn check_notes_font_size(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    report: &mut GuiSmokeReport,
+    context: &str,
+) {
+    let presenter = &windows.presenter;
+    let original_size = presenter.window().size();
+    presenter
+        .window()
+        .set_size(slint::LogicalSize::new(800.0, 560.0));
+    let before = state.borrow().presentation.snapshot();
+    let notes_before = presenter.get_notes_text();
+    let generation_before = state.borrow().render_generation;
+    let now = Instant::now();
+    let elapsed_before = state.borrow().timer.elapsed_at(now);
+
+    for increasing in [true, false] {
+        let percentages = if increasing {
+            [100, 125, 150, 175, 200, 200]
+        } else {
+            [200, 175, 150, 125, 100, 100]
+        };
+        for percentage in percentages {
+            report.check(
+                format!("notes size {percentage}% (increasing={increasing}, {context})"),
+                state.borrow().notes_font_size.percentage() == percentage
+                    && presenter.get_notes_font_scale() == f32::from(percentage) / 100.0
+                    && presenter.get_notes_font_size_label() == format!("{percentage}%")
+                    && presenter.get_can_increase_notes_font_size() == (percentage < 200)
+                    && presenter.get_can_decrease_notes_font_size() == (percentage > 100),
+                "application state and presenter properties matched",
+                "notes size, label, or button availability did not match",
+            );
+            if increasing {
+                presenter.invoke_increase_notes_font_size();
+            } else {
+                presenter.invoke_decrease_notes_font_size();
+            }
+        }
+    }
+    report.check(
+        format!("notes sizing preserves presentation state ({context})"),
+        state.borrow().presentation.snapshot() == before
+            && state.borrow().render_generation == generation_before
+            && state.borrow().timer.elapsed_at(now) == elapsed_before
+            && presenter.get_notes_text() == notes_before,
+        "page, notes, render generation, and timer stayed unchanged",
+        "notes sizing unexpectedly changed presentation state",
+    );
+    presenter.window().set_size(original_size);
 }
 
 fn report_presenter_progress(

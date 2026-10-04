@@ -378,6 +378,8 @@ mod tests {
         state.black_screen.set_active(true);
         state.fullscreen.set_slide_fullscreen(true);
         state.timer.start(started_at);
+        state.notes_font_size.increase();
+        state.notes_font_size.increase();
         let current = state.render_sessions.begin_open_session();
         assert!(state.render_sessions.commit_pending_open(current));
         let reload = state.render_sessions.begin_reload_session();
@@ -398,6 +400,7 @@ mod tests {
         assert!(state.fullscreen.is_slide_fullscreen());
         assert!(state.timer.is_running());
         assert!(state.notes.is_empty());
+        assert_eq!(state.notes_font_size.percentage(), 150);
         assert_eq!(state.status_text, "PDF reloaded.");
         assert!(state.render_cache.peek(current_slide_request(3)).is_some());
         assert!(state.audience_slide.last_good_current.is_some());
@@ -670,6 +673,8 @@ mod tests {
     #[test]
     fn opened_event_commits_new_presentation_and_loaded_path() {
         let mut state = AppState::default();
+        state.presentation = PresentationState::open_document("Previous deck", 2);
+        state.notes_font_size.increase();
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
         state.notes = SpeakerNotes::from_page_notes([(1, "stale".to_owned())]);
 
@@ -693,6 +698,27 @@ mod tests {
         assert_eq!(state.render_sessions.current_session(), Some(session_id));
         assert_eq!(outcome.loaded_path, Some(PathBuf::from("deck.pdf")));
         assert_eq!(state.pending_open, None);
+        assert_eq!(state.notes_font_size.percentage(), 125);
+    }
+
+    #[test]
+    fn page_navigation_and_missing_notes_preserve_notes_font_size() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 3),
+            notes: SpeakerNotes::from_page_notes([(1, "Opening note".to_owned())]),
+            ..AppState::default()
+        };
+        state.notes_font_size.increase();
+        state.notes_font_size.increase();
+        for command in [
+            PresentationCommand::NextPage,
+            PresentationCommand::LastPage,
+            PresentationCommand::FirstPage,
+        ] {
+            apply_session_command(&mut state, command, Instant::now());
+            assert_eq!(state.notes_font_size.percentage(), 150);
+        }
+        assert_eq!(state.presentation.snapshot().unwrap().current_index, 0);
     }
 
     #[test]

@@ -513,6 +513,33 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
 
     wire_recent_file_callbacks(app, refs.clone(), state.clone());
 
+    view_sync::sync_notes_font_size(app, state.borrow().notes_font_size);
+    let presenter = refs.presenter.clone();
+    let state_for_notes = state.clone();
+    app.on_increase_notes_font_size(move || {
+        let size = {
+            let mut state = state_for_notes.borrow_mut();
+            state.notes_font_size.increase();
+            state.notes_font_size
+        };
+        if let Some(presenter) = presenter.upgrade() {
+            view_sync::sync_notes_font_size(&presenter, size);
+        }
+    });
+
+    let presenter = refs.presenter.clone();
+    let state_for_notes = state.clone();
+    app.on_decrease_notes_font_size(move || {
+        let size = {
+            let mut state = state_for_notes.borrow_mut();
+            state.notes_font_size.decrease();
+            state.notes_font_size
+        };
+        if let Some(presenter) = presenter.upgrade() {
+            view_sync::sync_notes_font_size(&presenter, size);
+        }
+    });
+
     let window_refs = refs.clone();
     let state_for_previous = state.clone();
     app.on_previous_page(move || {

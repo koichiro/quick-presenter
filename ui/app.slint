@@ -98,10 +98,15 @@ component CurrentSlideWithProgress inherits Rectangle {
 component NotesView inherits Rectangle {
     in property <bool> has-notes: false;
     in property <string> notes-text: "";
+    in property <float> font-scale: 1.0;
 
     background: #111315;
     border-color: #3c4043;
     border-width: 1px;
+
+    function clamp-scroll-position() {
+        scroll-view.content-y = max(min(0px, scroll-view.visible-height - scroll-view.content-height), min(0px, scroll-view.content-y));
+    }
 
     scroll-view := ScrollView {
         x: 10px;
@@ -112,8 +117,12 @@ component NotesView inherits Rectangle {
         content-height: max(self.visible-height, notes-input.preferred-height + 10px);
         vertical-scrollbar-policy: root.has-notes ? ScrollBarPolicy.always-on : ScrollBarPolicy.as-needed;
 
+        changed content-height => { root.clamp-scroll-position(); }
+        changed visible-height => { root.clamp-scroll-position(); }
+
         notes-input := TextInput {
             text: root.has-notes ? root.notes-text : "No notes";
+            font-size: 1rem * root.font-scale;
             color: root.has-notes ? #f1f3f4 : #9aa0a6;
             wrap: word-wrap;
             single-line: false;
@@ -502,6 +511,10 @@ export component PresenterWindow inherits Window {
     in property <string> document-title: "No PDF opened";
     in property <string> page-label: "";
     in property <string> notes-text: "";
+    in property <float> notes-font-scale: 1.0;
+    in property <string> notes-font-size-label: "100%";
+    in property <bool> can-increase-notes-font-size: true;
+    in property <bool> can-decrease-notes-font-size: false;
     in property <bool> slide-fullscreen: false;
     in property <bool> use-physical-control-shortcuts: false;
     in property <bool> use-native-menu-bar: true;
@@ -561,6 +574,8 @@ export component PresenterWindow inherits Window {
     callback swap-displays();
     callback jump-to-page(int);
     callback request-thumbnail-range(int, int);
+    callback increase-notes-font-size();
+    callback decrease-notes-font-size();
 
     title: "Quick Presenter";
     preferred-width: 1024px;
@@ -964,7 +979,7 @@ export component PresenterWindow inherits Window {
                 property <length> thumbnail-column-width: 128px;
                 property <length> left-column-width: max(0px, main-area.width - main-area.next-column-width - main-area.thumbnail-column-width - main-area.column-gap * 2);
                 property <length> current-slide-natural-height: main-area.left-column-width / root.safe-current-page-aspect-ratio + (root.has-slide-progress ? 4px : 0px);
-                property <length> top-section-height: min(main-area.current-slide-natural-height, max(0px, main-area.height - root.presenter-bottom-section-height - 34px));
+                property <length> top-section-height: min(main-area.current-slide-natural-height, max(0px, main-area.height - root.presenter-bottom-section-height - 40px));
                 property <length> lower-section-y: main-area.top-section-height;
 
                 Rectangle {
@@ -986,21 +1001,58 @@ export component PresenterWindow inherits Window {
 
                     Rectangle {
                         y: main-area.lower-section-y + 6px;
-                        height: 22px;
+                        height: 28px;
                         width: parent.width;
 
                         Text {
-                            x: (parent.width - self.width) / 2;
-                            width: current-slide-with-progress.page-surface-width;
+                            width: max(0px, parent.width - 144px);
                             height: parent.height;
                             text: "Notes";
                             color: #d9dce0;
                             vertical-alignment: center;
                         }
+
+                        Button {
+                            x: parent.width - 136px;
+                            width: 40px;
+                            min-width: 0px;
+                            height: parent.height;
+                            text: "A−";
+                            accessible-label: "Decrease notes font size";
+                            enabled: root.can-decrease-notes-font-size;
+                            clicked => {
+                                root.decrease-notes-font-size();
+                                presenter-focus.focus();
+                            }
+                        }
+
+                        Text {
+                            x: parent.width - 92px;
+                            width: 48px;
+                            height: parent.height;
+                            text: root.notes-font-size-label;
+                            color: #d9dce0;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        Button {
+                            x: parent.width - 40px;
+                            width: 40px;
+                            min-width: 0px;
+                            height: parent.height;
+                            text: "A+";
+                            accessible-label: "Increase notes font size";
+                            enabled: root.can-increase-notes-font-size;
+                            clicked => {
+                                root.increase-notes-font-size();
+                                presenter-focus.focus();
+                            }
+                        }
                     }
 
                     Rectangle {
-                        y: main-area.lower-section-y + 34px;
+                        y: main-area.lower-section-y + 40px;
                         width: parent.width;
                         height: max(0px, parent.height - self.y);
 
@@ -1010,6 +1062,7 @@ export component PresenterWindow inherits Window {
                             height: parent.height;
                             has-notes: root.has-notes;
                             notes-text: root.notes-text;
+                            font-scale: root.notes-font-scale;
                         }
                     }
                 }

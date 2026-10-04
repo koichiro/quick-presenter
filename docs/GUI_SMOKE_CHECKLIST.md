@@ -164,6 +164,10 @@ Run these checks on every platform.
 | Confirm both windows are visible. | The presenter window and audience-facing slide window appear. |
 | Press next-page controls until the end of the deck. | The current slide, next preview, page label, timer, clock, and notes stay readable. |
 | Open `tests/fixtures/long-speaker-notes.pdf` at the minimum presenter window size. | The notes area scrolls so the full speaker note can be read without resizing the app, while the current slide, next preview, and thumbnails remain usable. |
+| At 800 × 560, click **A+** beside Notes through all five sizes, then **A−** back to 100%. Repeat with a portrait PDF and the platform's menu layout. | The percentage shows 100%, 125%, 150%, 175%, and 200%. The appropriate button is disabled at each limit. The controls, current slide, next preview, and thumbnails remain usable. |
+| With long notes at 200%, scroll to the end and reduce the font size to 100%. Resize the presenter window while scrolled. | The entire note remains reachable. The pixel scroll offset stays within the new range; shrinking the text never leaves an empty viewport beyond the end. |
+| Change the notes size, move to a page with no notes, open another PDF, and trigger a PDF reload. Restart the app afterward. | The size and the **No notes** placeholder stay consistent during the running session. Restarting restores 100%. |
+| Click a notes size button, then press Space, Left, Right, and the existing presentation shortcuts. | Presentation keyboard controls still work. Changing text size does not change the page, timer, audience slide, or black-screen state. |
 | Press previous-page controls until the start of the deck. | Both windows stay synchronized and page navigation clamps at page 1. |
 | Use first-page and last-page controls. | Both windows jump to the expected page. |
 | Use keyboard navigation in the presenter window. | Keys in `docs/KEYBOARD.md` update both windows. |

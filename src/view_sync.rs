@@ -7,12 +7,20 @@ use crate::{
     app_state::{AppState, ThumbnailState},
     clock::current_clock_label,
     errors::PresenterMessage,
+    notes::NotesFontSize,
     presentation::PageSnapshot,
     render_controller::{CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH},
     rendering::{RenderCache, RenderPurpose, RenderRequest, RenderedPage},
     window_controller::AppWindowRefs,
     PresenterWindow, ThumbnailItem,
 };
+
+pub fn sync_notes_font_size(presenter: &PresenterWindow, size: NotesFontSize) {
+    presenter.set_notes_font_scale(size.scale());
+    presenter.set_notes_font_size_label(size.label().into());
+    presenter.set_can_increase_notes_font_size(size.can_increase());
+    presenter.set_can_decrease_notes_font_size(size.can_decrease());
+}
 
 pub fn apply_opening_state_to_windows(windows: &AppWindowRefs, title: &str) {
     let placeholder = placeholder_slide();
@@ -65,6 +73,7 @@ pub fn apply_snapshot_to_windows(
 
     if let Some(presenter) = windows.presenter.upgrade() {
         presenter.set_current_page_image(presenter_current.image.clone());
+        sync_notes_font_size(&presenter, state.notes_font_size);
         presenter.set_current_page_aspect_ratio(presenter_current.aspect_ratio);
         presenter.set_has_next_page(snapshot.next_index.is_some());
         if let Some(next) = next.as_ref() {
