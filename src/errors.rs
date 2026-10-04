@@ -53,6 +53,13 @@ pub fn presenter_error_message(
 ) -> PresenterMessage {
     let chain = error_chain_text(error);
 
+    if chain.contains("macOS app bundle has no signing Team ID") {
+        return PresenterMessage::new(
+            "This app is not signed for PDF playback. Install a signed Quick Presenter app.",
+            MessageSeverity::Error,
+        );
+    }
+
     if error.downcast_ref::<ProtectedPdfError>().is_some()
         || chain.contains("password-protected or encrypted PDF is unsupported")
     {
@@ -145,6 +152,23 @@ mod tests {
             "PDF engine unavailable. Reinstall Quick Presenter or use the documented PDFium override."
         );
         assert_eq!(message.severity(), MessageSeverity::Error);
+    }
+
+    #[test]
+    fn unsigned_macos_bundle_error_survives_worker_serialization() {
+        let error = anyhow!(
+            "macOS app bundle has no signing Team ID; sign it with scripts/sign_macos_app.sh before PDF validation"
+        )
+        .context("failed to open PDF");
+        let serialized = anyhow!(format!("{error:#}"));
+        for error in [&error, &serialized] {
+            let message = presenter_error_message(error, None);
+            assert_eq!(
+                message.text(),
+                "This app is not signed for PDF playback. Install a signed Quick Presenter app."
+            );
+            assert_eq!(message.severity(), MessageSeverity::Error);
+        }
     }
 
     #[test]

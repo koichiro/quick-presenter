@@ -57,6 +57,15 @@ static char *same_team_requirement(const char *identifier) {
     return result;
 }
 
+// Broker-side preflight for layout-only/ad-hoc bundles. Peer authentication
+// still runs independently in both XPC peers and must never be bypassed.
+bool qp_xpc_has_signing_team(void) {
+    char *requirement = same_team_requirement(service_name);
+    if (!requirement) return false;
+    free(requirement);
+    return true;
+}
+
 static bool sandbox_entitlements(void) {
     SecTaskRef task = SecTaskCreateFromSelf(NULL);
     if (!task) return false;

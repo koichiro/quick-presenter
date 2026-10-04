@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix="quick-presenter-xpc-") as directory:
         result = subprocess.run([str(binary), "--smoke-open-pdf", str(args.pdf.resolve())],
                                 cwd=directory, env=environment, capture_output=True, text=True, timeout=45)
         if args.expect_untrusted or args.expect_unbundled:
-            expected = "macOS release renderer requires a signed app bundle" if args.expect_unbundled else "XPC renderer startup failed"
+            expected = "macOS release renderer requires a signed app bundle" if args.expect_unbundled else "macOS app bundle has no signing Team ID"
             if result.returncode == 0 or expected not in result.stderr:
                 raise SystemExit("Untrusted XPC package did not fail closed:\n" + result.stdout + result.stderr)
             print("Untrusted/unbundled package rejected; this is not a signed rendering/security validation")
