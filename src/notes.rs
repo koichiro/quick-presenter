@@ -43,11 +43,36 @@ impl SpeakerNotes {
     }
 }
 
-pub fn is_pdf_speaker_note_annotation(name: Option<&str>, contents: Option<&str>) -> bool {
-    let has_note_name = matches!(name, Some("Note") | None);
-    let has_contents = contents.is_some_and(|contents| !contents.trim().is_empty());
+/// Metadata exposed by pdfium-render without accessing private native handles.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PdfNoteMetadata<'a> {
+    /// PDF `/Rect`, ordered as left, bottom, right, top.
+    pub bounds: Option<[f32; 4]>,
+    /// PDF `/C` and `/CA`, converted by PDFium to RGBA bytes.
+    pub color: Option<[u8; 4]>,
+    /// PDF `/T` (annotation author), not document creator or `/NM`.
+    pub author: Option<&'a str>,
+}
 
-    has_note_name && has_contents
+/// Recognize only the supported generators' annotation fingerprints.
+///
+/// Callers must first require a Text annotation. `/Name /Note` is an icon choice,
+/// not a speaker-note marker; pdfium-render's `name()` reads `/NM` instead.
+/// See docs/NOTES.md for the compatibility rules and their limitations.
+pub fn is_pdf_speaker_note_annotation(
+    metadata: PdfNoteMetadata<'_>,
+    contents: Option<&str>,
+) -> bool {
+    if !contents.is_some_and(|contents| !contents.trim().is_empty()) {
+        return false;
+    }
+
+    let marp = metadata.bounds == Some([0.0, 20.0, 20.0, 20.0])
+        && metadata.color == Some([255, 234, 107, 63]);
+    let beamer = metadata.author == Some("Quick Presenter")
+        && metadata.color.is_some_and(|color| color[3] == 0);
+
+    marp || beamer
 }
 
 #[cfg(test)]
@@ -116,23 +141,80 @@ mod tests {
     #[test]
     fn pdf_speaker_note_annotation_requires_contents() {
         assert!(is_pdf_speaker_note_annotation(
-            Some("Note"),
+            marp_metadata(),
             Some("Speaker note")
         ));
-        assert!(!is_pdf_speaker_note_annotation(Some("Note"), Some("   ")));
-        assert!(!is_pdf_speaker_note_annotation(Some("Note"), None));
-    }
-
-    #[test]
-    fn pdf_speaker_note_annotation_accepts_missing_name_as_fallback() {
-        assert!(is_pdf_speaker_note_annotation(None, Some("Speaker note")));
-    }
-
-    #[test]
-    fn pdf_speaker_note_annotation_rejects_other_names() {
         assert!(!is_pdf_speaker_note_annotation(
-            Some("Comment"),
-            Some("Speaker note")
+            marp_metadata(),
+            Some("   \n")
         ));
+        assert!(!is_pdf_speaker_note_annotation(marp_metadata(), None));
+    }
+
+    #[test]
+    fn pdf_speaker_note_annotation_has_no_unmarked_fallback() {
+        assert!(!is_pdf_speaker_note_annotation(
+            PdfNoteMetadata::default(),
+            Some("Review comment")
+        ));
+    }
+
+    #[test]
+    fn marp_notes_require_both_geometry_and_color() {
+        for bounds in [
+            None,
+            Some([0.0, 0.0, 20.0, 20.0]),
+            Some([0.0, 20.0, 20.0, 21.0]),
+        ] {
+            assert!(!is_pdf_speaker_note_annotation(
+                PdfNoteMetadata {
+                    bounds,
+                    ..marp_metadata()
+                },
+                Some("Review comment")
+            ));
+        }
+        for color in [None, Some([255, 234, 107, 255]), Some([255, 255, 0, 63])] {
+            assert!(!is_pdf_speaker_note_annotation(
+                PdfNoteMetadata {
+                    color,
+                    ..marp_metadata()
+                },
+                Some("Review comment")
+            ));
+        }
+    }
+
+    #[test]
+    fn beamer_notes_require_the_documented_author_and_transparency() {
+        let metadata = PdfNoteMetadata {
+            author: Some("Quick Presenter"),
+            color: Some([0, 0, 255, 0]),
+            bounds: Some([142.226, 125.624, 155.776, 139.173]),
+        };
+        assert!(is_pdf_speaker_note_annotation(
+            metadata,
+            Some("Beamer note")
+        ));
+        for author in [None, Some("Reviewer"), Some("quick presenter")] {
+            assert!(!is_pdf_speaker_note_annotation(
+                PdfNoteMetadata { author, ..metadata },
+                Some("Review comment")
+            ));
+        }
+        for color in [None, Some([0, 0, 255, 255])] {
+            assert!(!is_pdf_speaker_note_annotation(
+                PdfNoteMetadata { color, ..metadata },
+                Some("Review comment")
+            ));
+        }
+    }
+
+    fn marp_metadata() -> PdfNoteMetadata<'static> {
+        PdfNoteMetadata {
+            bounds: Some([0.0, 20.0, 20.0, 20.0]),
+            color: Some([255, 234, 107, 63]),
+            author: None,
+        }
     }
 }

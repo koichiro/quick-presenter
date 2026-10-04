@@ -14,7 +14,7 @@ use tracing::debug;
 use crate::app_metadata::{pdfium_version_label_from_path, PDFIUM_VERSION_UNKNOWN_LABEL};
 use crate::aspect::sanitize_aspect_ratio;
 use crate::errors::ProtectedPdfError;
-use crate::notes::{is_pdf_speaker_note_annotation, SpeakerNotes};
+use crate::notes::{is_pdf_speaker_note_annotation, PdfNoteMetadata, SpeakerNotes};
 
 const PDFIUM_DYNAMIC_LIB_PATH_ENV: &str = "PDFIUM_DYNAMIC_LIB_PATH";
 const PDFIUM_OVERRIDE_GUARD_ENV: &str = "QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE";
@@ -239,7 +239,38 @@ impl PdfDocumentState {
             }
 
             if let Some(contents) = annotation.contents() {
-                if is_pdf_speaker_note_annotation(None, Some(&contents)) {
+                if contents.trim().is_empty() {
+                    continue;
+                }
+
+                let author = annotation.creator();
+                let bounds = annotation.bounds().with_context(|| {
+                    format!(
+                        "failed to read annotation bounds on page {}",
+                        page_index + 1
+                    )
+                })?;
+                let bounds = [
+                    bounds.left().value,
+                    bounds.bottom().value,
+                    bounds.right().value,
+                    bounds.top().value,
+                ];
+                // Only inspect colors for possible supported notes. Ordinary comments
+                // may use appearance streams rather than dictionary colors.
+                if bounds != [0.0, 20.0, 20.0, 20.0] && author.as_deref() != Some("Quick Presenter")
+                {
+                    continue;
+                }
+                let color = annotation.stroke_color().with_context(|| {
+                    format!("failed to read annotation color on page {}", page_index + 1)
+                })?;
+                let metadata = PdfNoteMetadata {
+                    bounds: Some(bounds),
+                    color: Some([color.red(), color.green(), color.blue(), color.alpha()]),
+                    author: author.as_deref(),
+                };
+                if is_pdf_speaker_note_annotation(metadata, Some(&contents)) {
                     note_bytes = note_bytes
                         .checked_add(contents.len())
                         .and_then(|total| total.checked_add(1))
@@ -949,6 +980,68 @@ mod tests {
         assert!(second_page.size().height > 0);
 
         fs::remove_file(path).expect("test PDF should be removable");
+    }
+
+    #[test]
+    fn pdf_document_state_rejects_generic_comments() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+        if !local_pdfium_available() {
+            return;
+        }
+
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/generic-comments.pdf");
+        let document = PdfDocumentState::open(path).expect("comment fixture should open");
+        assert!(document
+            .speaker_notes()
+            .expect("comments should be readable")
+            .is_empty());
+        assert!(document
+            .speaker_notes_for_page_cancellable(0, &|| false)
+            .expect("page comments should be readable")
+            .expect("extraction should finish")
+            .is_empty());
+    }
+
+    #[test]
+    fn pdf_document_state_extracts_only_supported_notes_from_mixed_annotations() {
+        let _guard = pdfium_test_lock().lock().expect("PDFium test lock");
+        if !local_pdfium_available() {
+            return;
+        }
+
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/mixed-speaker-notes.pdf");
+        let document = PdfDocumentState::open(path).expect("mixed fixture should open");
+        let notes = document
+            .speaker_notes()
+            .expect("mixed annotations should be readable");
+        assert_eq!(
+            notes.note_for_page_number(1),
+            Some("Marp note in a commented PDF\n\n日本語のノート")
+        );
+        assert_eq!(
+            notes.note_for_page_number(2),
+            Some("Beamer note in a commented PDF")
+        );
+
+        let first_page = document
+            .speaker_notes_for_page_cancellable(0, &|| false)
+            .expect("page notes should be readable")
+            .expect("extraction should finish");
+        assert_eq!(
+            SpeakerNotes::from_page_notes(first_page).note_for_page_number(1),
+            notes.note_for_page_number(1)
+        );
+        let calls = std::cell::Cell::new(0);
+        let cancelled = document
+            .speaker_notes_cancellable(|| {
+                let count = calls.get();
+                calls.set(count + 1);
+                count >= 3
+            })
+            .expect("cancellation during comment filtering should not fail");
+        assert_eq!(cancelled, None);
     }
 
     #[test]
