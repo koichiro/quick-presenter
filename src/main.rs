@@ -73,7 +73,7 @@ use pdf::PdfDocumentState;
 use presentation::PageSnapshot;
 #[cfg(test)]
 use presentation::PresentationState;
-use recent::{default_recent_file_store, RecentFileStore, RecentFiles};
+use recent::{default_recent_file_store, RecentFileStore, RecentFiles, RecentMenuSnapshot};
 use render_controller::CURRENT_RENDER_WIDTH;
 use render_controller::{
     enqueue_render_plan_if_missing, presentation_preload_render_plan, thumbnail_render_plan,
@@ -1215,69 +1215,73 @@ fn load_recent_files(store: Option<&RecentFileStore>) -> RecentFiles {
 }
 
 fn record_recent_pdf(
-    _presenter: &Weak<PresenterWindow>,
+    presenter: &Weak<PresenterWindow>,
     state: &Rc<RefCell<AppState>>,
     path: PathBuf,
 ) {
-    let mut state = state.borrow_mut();
-    state.recent_files.add(path);
+    let snapshot = {
+        let mut state = state.borrow_mut();
+        state.recent_files.add(path);
+        let snapshot = RecentMenuSnapshot::from_recent_files(&state.recent_files);
+        state.recent_menu_paths = snapshot.paths().to_vec();
 
-    if let Some(store) = state.recent_store.as_ref() {
-        if let Err(err) = store.save(&state.recent_files) {
-            warn!(error = ?err, "failed to save recent files");
+        if let Some(store) = state.recent_store.as_ref() {
+            if let Err(err) = store.save(&state.recent_files) {
+                warn!(error = ?err, "failed to save recent files");
+            }
         }
-    }
+
+        snapshot
+    };
+
+    update_recent_file_menu_snapshot(presenter, &snapshot);
 }
 
-fn clear_recent_files(_presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppState>>) {
-    let mut state = state.borrow_mut();
-    state.recent_files.clear();
-    state.recent_menu_paths.clear();
+fn clear_recent_files(presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppState>>) {
+    let snapshot = {
+        let mut state = state.borrow_mut();
+        state.recent_files.clear();
+        let snapshot = RecentMenuSnapshot::from_recent_files(&state.recent_files);
+        state.recent_menu_paths = snapshot.paths().to_vec();
 
-    if let Some(store) = state.recent_store.as_ref() {
-        if let Err(err) = store.save(&state.recent_files) {
-            warn!(error = ?err, "failed to save cleared recent files");
+        if let Some(store) = state.recent_store.as_ref() {
+            if let Err(err) = store.save(&state.recent_files) {
+                warn!(error = ?err, "failed to save cleared recent files");
+            }
         }
-    }
+
+        snapshot
+    };
+
+    update_recent_file_menu_snapshot(presenter, &snapshot);
 }
 
 fn update_recent_file_menu(presenter: &Weak<PresenterWindow>, recent_files: &RecentFiles) {
-    let labels: Vec<String> = recent_files
-        .paths()
-        .iter()
-        .map(|path| path.display().to_string())
-        .collect();
-
-    update_recent_file_menu_labels(presenter, labels);
+    let snapshot = RecentMenuSnapshot::from_recent_files(recent_files);
+    update_recent_file_menu_snapshot(presenter, &snapshot);
 }
 
-fn update_recent_file_menu_labels(presenter: &Weak<PresenterWindow>, labels: Vec<String>) {
+fn update_recent_file_menu_snapshot(
+    presenter: &Weak<PresenterWindow>,
+    snapshot: &RecentMenuSnapshot,
+) {
     let Some(presenter) = presenter.upgrade() else {
         return;
     };
 
-    let has_recent_files = !labels.is_empty();
-    presenter.set_has_recent_files(has_recent_files);
-
-    let mut labels = labels.into_iter();
-    let label_0 = labels
-        .next()
-        .unwrap_or_else(|| "No Recent Files".to_owned());
-    let label_1 = labels.next().unwrap_or_default();
-    let label_2 = labels.next().unwrap_or_default();
-    let label_3 = labels.next().unwrap_or_default();
-    let label_4 = labels.next().unwrap_or_default();
-
-    presenter.set_recent_file_label_0(label_0.into());
-    presenter.set_recent_file_label_1(label_1.clone().into());
-    presenter.set_recent_file_label_2(label_2.clone().into());
-    presenter.set_recent_file_label_3(label_3.clone().into());
-    presenter.set_recent_file_label_4(label_4.clone().into());
-    presenter.set_recent_file_0_enabled(has_recent_files);
-    presenter.set_recent_file_1_enabled(!label_1.is_empty());
-    presenter.set_recent_file_2_enabled(!label_2.is_empty());
-    presenter.set_recent_file_3_enabled(!label_3.is_empty());
-    presenter.set_recent_file_4_enabled(!label_4.is_empty());
+    let labels = snapshot.labels();
+    let enabled = snapshot.enabled();
+    presenter.set_has_recent_files(snapshot.has_recent_files());
+    presenter.set_recent_file_label_0(labels[0].clone().into());
+    presenter.set_recent_file_label_1(labels[1].clone().into());
+    presenter.set_recent_file_label_2(labels[2].clone().into());
+    presenter.set_recent_file_label_3(labels[3].clone().into());
+    presenter.set_recent_file_label_4(labels[4].clone().into());
+    presenter.set_recent_file_0_enabled(enabled[0]);
+    presenter.set_recent_file_1_enabled(enabled[1]);
+    presenter.set_recent_file_2_enabled(enabled[2]);
+    presenter.set_recent_file_3_enabled(enabled[3]);
+    presenter.set_recent_file_4_enabled(enabled[4]);
 }
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
@@ -2446,7 +2450,7 @@ mod tests {
     }
 
     #[test]
-    fn recording_recent_pdf_keeps_visible_recent_menu_snapshot_stable() {
+    fn recording_recent_pdf_refreshes_visible_recent_menu_snapshot() {
         let first = PathBuf::from("/tmp/first.pdf");
         let second = PathBuf::from("/tmp/second.pdf");
         let state = Rc::new(RefCell::new(AppState {
@@ -2459,11 +2463,8 @@ mod tests {
         record_recent_pdf(&presenter, &state, second.clone());
 
         let state = state.borrow();
-        assert_eq!(state.recent_files.paths(), &[second, first.clone()]);
-        assert_eq!(
-            state.recent_menu_paths,
-            vec![first, PathBuf::from("/tmp/second.pdf")]
-        );
+        assert_eq!(state.recent_files.paths(), &[second.clone(), first.clone()]);
+        assert_eq!(state.recent_menu_paths, vec![second, first]);
     }
 
     #[test]
