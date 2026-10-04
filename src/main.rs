@@ -92,7 +92,7 @@ use session_controller::{
     commit_speaker_notes_loaded_state, mark_pending_open_slow, pending_open_session_id,
     SLOW_OPEN_STATUS_TEXT,
 };
-use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode, Weak};
+use slint::{CloseRequestResponse, ComponentHandle, Model, Timer, TimerMode, Weak};
 use timer::PresentationTimer;
 use tracing::warn;
 use view_sync::{
@@ -513,30 +513,12 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
 
     wire_recent_file_callbacks(app, refs.clone(), state.clone());
 
-    view_sync::sync_notes_font_size(app, state.borrow().notes_font_size);
     let presenter = refs.presenter.clone();
-    let state_for_notes = state.clone();
-    app.on_increase_notes_font_size(move || {
-        let size = {
-            let mut state = state_for_notes.borrow_mut();
-            state.notes_font_size.increase();
-            state.notes_font_size
-        };
+    app.on_fit_notes_font_size(move |has_notes, width, height, measurements| {
+        let heights: Vec<f32> = measurements.iter().collect();
+        let size = notes::fit_notes_font_size(has_notes, width, height, &heights);
         if let Some(presenter) = presenter.upgrade() {
-            view_sync::sync_notes_font_size(&presenter, size);
-        }
-    });
-
-    let presenter = refs.presenter.clone();
-    let state_for_notes = state.clone();
-    app.on_decrease_notes_font_size(move || {
-        let size = {
-            let mut state = state_for_notes.borrow_mut();
-            state.notes_font_size.decrease();
-            state.notes_font_size
-        };
-        if let Some(presenter) = presenter.upgrade() {
-            view_sync::sync_notes_font_size(&presenter, size);
+            presenter.set_notes_font_size(f32::from(size));
         }
     });
 

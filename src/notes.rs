@@ -1,43 +1,37 @@
 use std::collections::BTreeMap;
 
-/// Presenter typography retained for the lifetime of the application.
-#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
-pub struct NotesFontSize {
-    step: u8,
-}
+/// Readability bounds in logical pixels, independent of platform theme defaults.
+pub const MIN_NOTES_FONT_SIZE: u16 = 12;
+pub const MAX_NOTES_FONT_SIZE: u16 = 24;
+pub const NOTES_BOTTOM_PADDING: f32 = 10.0;
 
-impl NotesFontSize {
-    const PERCENTAGES: [u16; 5] = [100, 125, 150, 175, 200];
-
-    pub fn percentage(self) -> u16 {
-        Self::PERCENTAGES[usize::from(self.step)]
+/// Select the largest measured size that fits, falling back to scrolling at 12px.
+/// Heights must cover every whole-pixel size from 12px through 24px in order.
+pub fn fit_notes_font_size(
+    has_notes: bool,
+    viewport_width: f32,
+    viewport_height: f32,
+    measured_heights: &[f32],
+) -> u16 {
+    let expected_count = usize::from(MAX_NOTES_FONT_SIZE - MIN_NOTES_FONT_SIZE + 1);
+    if !has_notes
+        || !viewport_width.is_finite()
+        || viewport_width <= 0.0
+        || !viewport_height.is_finite()
+        || viewport_height <= 0.0
+        || measured_heights.len() != expected_count
+        || measured_heights
+            .iter()
+            .any(|height| !height.is_finite() || *height <= 0.0)
+    {
+        return MIN_NOTES_FONT_SIZE;
     }
 
-    pub fn scale(self) -> f32 {
-        f32::from(self.percentage()) / 100.0
-    }
-
-    pub fn label(self) -> String {
-        format!("{}%", self.percentage())
-    }
-
-    pub fn can_increase(self) -> bool {
-        usize::from(self.step) + 1 < Self::PERCENTAGES.len()
-    }
-
-    pub fn can_decrease(self) -> bool {
-        self.step > 0
-    }
-
-    pub fn increase(&mut self) {
-        if self.can_increase() {
-            self.step += 1;
-        }
-    }
-
-    pub fn decrease(&mut self) {
-        self.step = self.step.saturating_sub(1);
-    }
+    (MIN_NOTES_FONT_SIZE..=MAX_NOTES_FONT_SIZE)
+        .zip(measured_heights)
+        .rev()
+        .find(|(_, height)| **height + NOTES_BOTTOM_PADDING <= viewport_height)
+        .map_or(MIN_NOTES_FONT_SIZE, |(size, _)| size)
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
@@ -120,47 +114,46 @@ mod tests {
     use super::*;
 
     #[test]
-    fn notes_font_size_defaults_to_existing_typography() {
-        let size = NotesFontSize::default();
-        assert_eq!(size.scale(), 1.0);
-        assert_eq!(size.label(), "100%");
-        assert!(size.can_increase());
-        assert!(!size.can_decrease());
+    fn notes_font_size_uses_largest_fitting_measurement_including_padding() {
+        let heights = [
+            20.0, 22.0, 24.0, 26.0, 28.0, 30.0, 32.0, 34.0, 36.0, 38.0, 40.0, 42.0, 44.0,
+        ];
+        assert_eq!(fit_notes_font_size(true, 300.0, 100.0, &heights), 24);
+        assert_eq!(fit_notes_font_size(true, 300.0, 40.0, &heights), 17);
+        assert_eq!(fit_notes_font_size(true, 300.0, 39.9, &heights), 16);
+        assert_eq!(fit_notes_font_size(true, 300.0, 30.0, &heights), 12);
     }
 
     #[test]
-    fn notes_font_size_walks_every_step_in_both_directions() {
-        let mut size = NotesFontSize::default();
-        for percentage in [100, 125, 150, 175, 200] {
-            assert_eq!(size.percentage(), percentage);
-            assert_eq!(size.scale(), f32::from(percentage) / 100.0);
-            assert_eq!(size.label(), format!("{percentage}%"));
-            assert_eq!(size.can_decrease(), percentage > 100);
-            assert_eq!(size.can_increase(), percentage < 200);
-            size.increase();
-        }
-        for percentage in [200, 175, 150, 125, 100] {
-            assert_eq!(size.percentage(), percentage);
-            size.decrease();
-        }
-        assert_eq!(size, NotesFontSize::default());
+    fn overflowing_notes_keep_the_minimum_readable_size() {
+        assert_eq!(fit_notes_font_size(true, 300.0, 200.0, &[1000.0; 13]), 12);
     }
 
     #[test]
-    fn notes_font_size_repeated_adjustments_stop_at_bounds() {
-        let mut size = NotesFontSize::default();
-        for _ in 0..1000 {
-            size.increase();
+    fn no_notes_uses_fixed_placeholder_size() {
+        assert_eq!(fit_notes_font_size(false, 300.0, 200.0, &[20.0; 13]), 12);
+    }
+
+    #[test]
+    fn notes_font_size_rejects_incomplete_or_invalid_layout() {
+        assert_eq!(fit_notes_font_size(true, 300.0, 200.0, &[]), 12);
+        assert_eq!(fit_notes_font_size(true, 300.0, 200.0, &[20.0; 12]), 12);
+        assert_eq!(fit_notes_font_size(true, 300.0, 200.0, &[20.0; 14]), 12);
+        for invalid in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(fit_notes_font_size(true, invalid, 200.0, &[20.0; 13]), 12);
+            assert_eq!(fit_notes_font_size(true, 300.0, invalid, &[20.0; 13]), 12);
+            let mut heights = [20.0; 13];
+            heights[6] = invalid;
+            assert_eq!(fit_notes_font_size(true, 300.0, 200.0, &heights), 12);
         }
-        assert_eq!(size.percentage(), 200);
-        assert!(!size.can_increase());
-        assert!(size.can_decrease());
-        for _ in 0..1000 {
-            size.decrease();
-        }
-        assert_eq!(size.percentage(), 100);
-        assert!(size.can_increase());
-        assert!(!size.can_decrease());
+    }
+
+    #[test]
+    fn fitting_uses_all_measurements_without_assuming_monotonic_heights() {
+        let mut heights = [200.0; 13];
+        heights[4] = 80.0;
+        heights[8] = 70.0;
+        assert_eq!(fit_notes_font_size(true, 300.0, 100.0, &heights), 20);
     }
 
     #[test]
