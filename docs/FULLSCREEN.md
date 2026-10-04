@@ -9,10 +9,10 @@ The first implementation uses Slint's window API:
 - `Window::set_fullscreen(false)` to leave fullscreen
 - `Window::is_fullscreen()` when the native window state needs to be queried
 
-With the current Slint winit backend, this maps to borderless fullscreen on the
-current display. The current implementation does not select a monitor. The
-proposed display-swap feature will add a narrow Winit boundary for targeted
-borderless fullscreen while preserving the existing fullscreen intent; see
+With the current Slint winit backend, the normal fullscreen toggle maps to
+borderless fullscreen on the current display. The `X` display-swap command uses
+a narrow Winit boundary to retarget borderless fullscreen without changing the
+existing fullscreen intent; see
 [Presenter and Slide Display Swap](DISPLAY_SWAP.md).
 
 Platform notes:

@@ -174,6 +174,10 @@ Run these checks on every platform.
 | Press `Escape` while the slide window has focus and is fullscreen. | The slide window exits fullscreen without changing pages. |
 | Toggle black screen mode with the UI and `B`. | The slide window blanks and restores while presenter controls remain usable. |
 | Navigate while black screen mode is active, then restore. | The restored slide shows the current page after the hidden navigation. |
+| In extended-desktop mode, place the presenter and slide windows on different displays, focus the presenter, and press `X`. | The windows exchange displays without changing their roles, current page, timer, or black-screen state. |
+| Press `X` again from the focused slide window. | The original display assignment is restored and the next keyboard navigation command works without an extra click. |
+| Press `X` while the slide window is fullscreen on another display. | The slide remains fullscreen on the destination display and the presenter window moves to the former slide display without a visible windowed transition. |
+| Press `X` with one display or both windows on the same display. | Neither window moves or becomes unreachable, and the presenter shows a short explanation. |
 | Confirm the Window menu does not offer a presenter-hide action. | The presenter controls cannot be hidden from the app menu. |
 | Hide the slide window from the Window menu, then show it again. | The presenter window remains visible and can recover the slide window. |
 | Bring the presenter window to front from the Window menu after focusing or covering it with the slide window. | The presenter window becomes usable again without changing the current slide, fullscreen state, or black-screen state. |
