@@ -63,3 +63,34 @@ are documented in the README, and the reproducible source is in
 Future formats can be added by extending the extraction layer, but they should
 still produce the same in-memory `SpeakerNotes` model so the presenter UI does
 not need to know where the notes came from.
+
+## Automatic presenter text size
+
+Speaker notes automatically use the largest whole-pixel font size between
+12 and 24 logical pixels that fits the notes viewport. These fixed bounds are
+independent of the platform theme (9–18pt in Slint's unit conversion). There are
+no text-size controls or saved preferences. The **No notes** placeholder stays
+at 12px.
+
+Slint measures the note using read-only, invisible TextInput probes for each
+candidate size, with the same font and word wrapping as the visible notes.
+Visible notes and measurement probes share a line-height factor of 1.25 relative
+to the font's natural line height, giving Japanese and other multiline notes
+more breathing room. Rust chooses the largest measured height that fits the
+viewport, including
+10px of bottom padding. Measurements depend on the available width, so explicit
+newlines, Japanese text, and wrapped paragraphs are handled without estimating
+from character counts. The probes do not depend on the chosen size, avoiding
+feedback between size selection and measurement.
+
+The size is recalculated when notes arrive or change, pages change, or the
+notes viewport changes through resizing or a different slide aspect ratio.
+If the full note does not fit at 12px, it stays at 12px and scrolls instead of
+shrinking further. Resizing retains the pixel scroll offset, clamped to the
+new range when necessary; text reflow can change the words at that offset.
+Automatic sizing does not request PDF rendering or modify notes content,
+page navigation, the timer, or the audience display.
+
+The presenter minimum window size remains 800 × 560 logical pixels, with
+at least 200px reserved for the notes area. There are no additional focusable
+controls, so the existing presentation keyboard workflow is preserved.

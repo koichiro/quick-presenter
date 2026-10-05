@@ -92,7 +92,7 @@ use session_controller::{
     commit_speaker_notes_loaded_state, mark_pending_open_slow, pending_open_session_id,
     SLOW_OPEN_STATUS_TEXT,
 };
-use slint::{CloseRequestResponse, ComponentHandle, Timer, TimerMode, Weak};
+use slint::{CloseRequestResponse, ComponentHandle, Model, Timer, TimerMode, Weak};
 use timer::PresentationTimer;
 use tracing::warn;
 use view_sync::{
@@ -512,6 +512,15 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     });
 
     wire_recent_file_callbacks(app, refs.clone(), state.clone());
+
+    let presenter = refs.presenter.clone();
+    app.on_fit_notes_font_size(move |has_notes, width, height, measurements| {
+        let heights: Vec<f32> = measurements.iter().collect();
+        let size = notes::fit_notes_font_size(has_notes, width, height, &heights);
+        if let Some(presenter) = presenter.upgrade() {
+            presenter.set_notes_font_size(f32::from(size));
+        }
+    });
 
     let window_refs = refs.clone();
     let state_for_previous = state.clone();

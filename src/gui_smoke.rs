@@ -8,7 +8,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Model};
 
 use crate::{
     app_state::AppState,
@@ -89,6 +89,8 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         "slide window weak handle could not be upgraded",
     );
 
+    check_notes_font_size(&windows, &state, report, "before opening a PDF")?;
+
     crate::begin_open_pdf(&window_refs, &state, options.pdf_path.clone());
     report.check(
         "slide progress indicator is hidden while opening without a deck",
@@ -144,6 +146,7 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
     report_state(report, &state, "speaker notes were checked", |state| {
         state.status_text == "Ready" || state.status_text.contains("notes")
     });
+    check_notes_font_size(&windows, &state, report, "with a PDF open")?;
     report_presenter_progress(
         report,
         &windows,
@@ -284,6 +287,162 @@ fn report_state(
 ) {
     let state = state.borrow();
     report.check(name, verify(&state), "state matched", "state did not match");
+}
+
+fn settle_notes_layout() -> Result<()> {
+    slint::Timer::single_shot(Duration::from_millis(50), || {
+        slint::quit_event_loop().expect("GUI smoke event loop should accept quit");
+    });
+    slint::run_event_loop_until_quit().context("failed to process notes layout changes")
+}
+
+fn check_notes_font_size(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    report: &mut GuiSmokeReport,
+    context: &str,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let original_size = presenter.window().size();
+    let original_aspect = presenter.get_current_page_aspect_ratio();
+    let original_has_notes = presenter.get_has_notes();
+    let original_text = presenter.get_notes_text();
+    let original_menu = presenter.get_use_native_menu_bar();
+    let before = state.borrow().presentation.snapshot();
+    let generation_before = state.borrow().render_generation;
+    let now = Instant::now();
+    let elapsed_before = state.borrow().timer.elapsed_at(now);
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::Resized {
+            size: slint::LogicalSize::new(800.0, 560.0),
+        });
+
+    presenter.set_has_notes(false);
+    presenter.set_notes_text("".into());
+    settle_notes_layout()?;
+    report.check(
+        format!("no-notes placeholder uses 12px ({context})"),
+        presenter.get_notes_font_size() == 12.0,
+        "fixed placeholder size",
+        "unexpected placeholder size",
+    );
+
+    presenter.set_has_notes(true);
+    presenter.set_notes_text("Opening remarks. 日本語のノート。".into());
+    settle_notes_layout()?;
+    report.check(
+        format!("short notes automatically use 24px ({context})"),
+        presenter.get_notes_font_size() == 24.0
+            && presenter.get_notes_content_height() <= presenter.get_notes_visible_height(),
+        "short notes fit at the maximum size",
+        format!(
+            "size={}, content={}, viewport={}",
+            presenter.get_notes_font_size(),
+            presenter.get_notes_content_height(),
+            presenter.get_notes_visible_height()
+        ),
+    );
+
+    presenter.set_notes_text(
+        "Long speaker notes with English and 日本語.\n"
+            .repeat(150)
+            .into(),
+    );
+    settle_notes_layout()?;
+    report.check(
+        format!("long notes stay readable and scrollable at 12px ({context})"),
+        presenter.get_notes_font_size() == 12.0
+            && presenter.get_notes_content_height() > presenter.get_notes_visible_height(),
+        "overflow remains scrollable at the minimum size",
+        "overflow shrank below the minimum or did not remain scrollable",
+    );
+
+    presenter.set_notes_scroll_y(
+        presenter.get_notes_visible_height() - presenter.get_notes_content_height(),
+    );
+    presenter.set_notes_text("日本語のノートを確認します。\n".repeat(8).into());
+    settle_notes_layout()?;
+    let small_size = presenter.get_notes_font_size();
+    let heights: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();
+    let selected = (small_size as usize).saturating_sub(12);
+    report.check(
+        format!("shrinking content clamps the previous end-of-note scroll offset ({context})"),
+        presenter.get_notes_scroll_y() == 0.0,
+        "the fitting note returned to the top without an empty viewport",
+        format!("scroll offset={}", presenter.get_notes_scroll_y()),
+    );
+    report.check(
+        format!("wrapped notes use the largest fitting measured size ({context})"),
+        small_size > 12.0
+            && small_size < 24.0
+            && heights
+                .get(selected)
+                .is_some_and(|height| *height + 10.0 <= presenter.get_notes_visible_height())
+            && heights
+                .iter()
+                .skip(selected + 1)
+                .all(|height| *height + 10.0 > presenter.get_notes_visible_height())
+            && presenter.get_notes_content_height() <= presenter.get_notes_visible_height(),
+        "an intermediate size fits and every larger candidate overflows",
+        format!(
+            "size={small_size}, measurements={heights:?}, viewport={}",
+            presenter.get_notes_visible_height()
+        ),
+    );
+    // Exercise layout resize events independently of WindowServer size restrictions.
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::Resized {
+            size: slint::LogicalSize::new(1200.0, 1000.0),
+        });
+    settle_notes_layout()?;
+    report.check(
+        format!("logical resize events automatically enlarge notes ({context})"),
+        presenter.get_notes_font_size() > small_size,
+        "larger viewport enlarged the text",
+        format!(
+            "before={small_size}, after={}, viewport={}, window={:?}",
+            presenter.get_notes_font_size(),
+            presenter.get_notes_visible_height(),
+            presenter.window().size()
+        ),
+    );
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::Resized {
+            size: slint::LogicalSize::new(800.0, 560.0),
+        });
+    presenter.set_current_page_aspect_ratio(0.6);
+    presenter.set_use_native_menu_bar(false);
+    settle_notes_layout()?;
+    report.check(
+        format!("portrait slides and inline menus retain bounded notes sizing ({context})"),
+        (12.0..=24.0).contains(&presenter.get_notes_font_size())
+            && presenter.get_notes_visible_height() >= 180.0,
+        "minimum window retained a usable notes viewport",
+        "portrait or inline menu layout exceeded the typography bounds",
+    );
+
+    presenter.set_has_notes(original_has_notes);
+    presenter.set_notes_text(original_text);
+    presenter.set_current_page_aspect_ratio(original_aspect);
+    presenter.set_use_native_menu_bar(original_menu);
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::Resized {
+            size: original_size.to_logical(presenter.window().scale_factor()),
+        });
+    settle_notes_layout()?;
+    report.check(
+        format!("automatic sizing preserves presentation state ({context})"),
+        state.borrow().presentation.snapshot() == before
+            && state.borrow().render_generation == generation_before
+            && state.borrow().timer.elapsed_at(now) == elapsed_before,
+        "page, render generation, and timer stayed unchanged",
+        "automatic sizing unexpectedly changed presentation state",
+    );
+    Ok(())
 }
 
 fn report_presenter_progress(

@@ -95,13 +95,123 @@ component CurrentSlideWithProgress inherits Rectangle {
     }
 }
 
+// Keep visible notes and automatic sizing probes on the same typography.
+component NotesText inherits TextInput {
+    wrap: word-wrap;
+    single-line: false;
+    read-only: true;
+    line-height-factor: 1.25;
+}
+
+component NotesMeasurement inherits NotesText {
+    visible: false;
+}
+
 component NotesView inherits Rectangle {
     in property <bool> has-notes: false;
     in property <string> notes-text: "";
+    in property <length> font-size: 12px;
+    out property <length> visible-height: scroll-view.visible-height;
+    out property <length> content-height: scroll-view.content-height;
+    in-out property <length> scroll-y <=> scroll-view.content-y;
+    out property <[float]> measured-heights: [
+        measure-12.preferred-height / 1px,
+        measure-13.preferred-height / 1px,
+        measure-14.preferred-height / 1px,
+        measure-15.preferred-height / 1px,
+        measure-16.preferred-height / 1px,
+        measure-17.preferred-height / 1px,
+        measure-18.preferred-height / 1px,
+        measure-19.preferred-height / 1px,
+        measure-20.preferred-height / 1px,
+        measure-21.preferred-height / 1px,
+        measure-22.preferred-height / 1px,
+        measure-23.preferred-height / 1px,
+        measure-24.preferred-height / 1px
+    ];
+    callback fit-font-size(bool, float, float, [float]);
 
     background: #111315;
     border-color: #3c4043;
     border-width: 1px;
+
+    function request-font-size() {
+        root.fit-font-size(root.has-notes, scroll-view.visible-width / 1px, scroll-view.visible-height / 1px, root.measured-heights);
+    }
+
+    changed measured-heights => { root.request-font-size(); }
+    changed has-notes => { root.request-font-size(); }
+    changed notes-text => { root.request-font-size(); }
+
+    function clamp-scroll-position() {
+        scroll-view.content-y = max(min(0px, scroll-view.visible-height - scroll-view.content-height), min(0px, scroll-view.content-y));
+    }
+
+    measure-12 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 12px;
+    }
+    measure-13 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 13px;
+    }
+    measure-14 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 14px;
+    }
+    measure-15 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 15px;
+    }
+    measure-16 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 16px;
+    }
+    measure-17 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 17px;
+    }
+    measure-18 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 18px;
+    }
+    measure-19 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 19px;
+    }
+    measure-20 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 20px;
+    }
+    measure-21 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 21px;
+    }
+    measure-22 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 22px;
+    }
+    measure-23 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 23px;
+    }
+    measure-24 := NotesMeasurement {
+        text: root.notes-text;
+        width: scroll-view.visible-width;
+        font-size: 24px;
+    }
 
     scroll-view := ScrollView {
         x: 10px;
@@ -112,20 +222,21 @@ component NotesView inherits Rectangle {
         content-height: max(self.visible-height, notes-input.preferred-height + 10px);
         vertical-scrollbar-policy: root.has-notes ? ScrollBarPolicy.always-on : ScrollBarPolicy.as-needed;
 
-        notes-input := TextInput {
+        changed visible-width => { root.request-font-size(); }
+        changed visible-height => {
+            root.request-font-size();
+            root.clamp-scroll-position();
+        }
+        changed content-height => { root.clamp-scroll-position(); }
+
+        notes-input := NotesText {
             text: root.has-notes ? root.notes-text : "No notes";
+            font-size: root.has-notes ? root.font-size : 12px;
             color: root.has-notes ? #f1f3f4 : #9aa0a6;
-            wrap: word-wrap;
-            single-line: false;
-            read-only: true;
             page-height: scroll-view.visible-height;
             text-cursor-width: 0px;
-            key-pressed(event) => {
-                reject
-            }
-            key-released(event) => {
-                reject
-            }
+            key-pressed(event) => { reject }
+            key-released(event) => { reject }
         }
     }
 }
@@ -502,6 +613,11 @@ export component PresenterWindow inherits Window {
     in property <string> document-title: "No PDF opened";
     in property <string> page-label: "";
     in property <string> notes-text: "";
+    in property <float> notes-font-size: 12;
+    out property <length> notes-visible-height: notes-view.visible-height;
+    out property <length> notes-content-height: notes-view.content-height;
+    in-out property <length> notes-scroll-y <=> notes-view.scroll-y;
+    out property <[float]> notes-measured-heights: notes-view.measured-heights;
     in property <bool> slide-fullscreen: false;
     in property <bool> use-physical-control-shortcuts: false;
     in property <bool> use-native-menu-bar: true;
@@ -561,6 +677,7 @@ export component PresenterWindow inherits Window {
     callback swap-displays();
     callback jump-to-page(int);
     callback request-thumbnail-range(int, int);
+    callback fit-notes-font-size(bool, float, float, [float]);
 
     title: "Quick Presenter";
     preferred-width: 1024px;
@@ -1004,12 +1121,16 @@ export component PresenterWindow inherits Window {
                         width: parent.width;
                         height: max(0px, parent.height - self.y);
 
-                        NotesView {
+                        notes-view := NotesView {
                             x: (parent.width - self.width) / 2;
                             width: current-slide-with-progress.page-surface-width;
                             height: parent.height;
                             has-notes: root.has-notes;
                             notes-text: root.notes-text;
+                            font-size: root.notes-font-size * 1px;
+                            fit-font-size(has-notes, width, height, measurements) => {
+                                root.fit-notes-font-size(has-notes, width, height, measurements);
+                            }
                         }
                     }
                 }
