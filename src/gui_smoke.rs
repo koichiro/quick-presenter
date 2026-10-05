@@ -361,7 +361,7 @@ fn check_notes_font_size(
     presenter.set_notes_scroll_y(
         presenter.get_notes_visible_height() - presenter.get_notes_content_height(),
     );
-    presenter.set_notes_text("One line of notes.\n".repeat(10).into());
+    presenter.set_notes_text("日本語のノートを確認します。\n".repeat(8).into());
     settle_notes_layout()?;
     let small_size = presenter.get_notes_font_size();
     let heights: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();

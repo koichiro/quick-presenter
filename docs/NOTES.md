@@ -74,7 +74,10 @@ at 12px.
 
 Slint measures the note using read-only, invisible TextInput probes for each
 candidate size, with the same font and word wrapping as the visible notes.
-Rust chooses the largest measured height that fits the viewport, including
+Visible notes and measurement probes share a line-height factor of 1.25 relative
+to the font's natural line height, giving Japanese and other multiline notes
+more breathing room. Rust chooses the largest measured height that fits the
+viewport, including
 10px of bottom padding. Measurements depend on the available width, so explicit
 newlines, Japanese text, and wrapped paragraphs are handled without estimating
 from character counts. The probes do not depend on the chosen size, avoiding

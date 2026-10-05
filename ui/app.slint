@@ -95,12 +95,16 @@ component CurrentSlideWithProgress inherits Rectangle {
     }
 }
 
-// Match the visible TextInput's shaping, font, and wrapping without painting probes.
-component NotesMeasurement inherits TextInput {
-    visible: false;
+// Keep visible notes and automatic sizing probes on the same typography.
+component NotesText inherits TextInput {
     wrap: word-wrap;
     single-line: false;
     read-only: true;
+    line-height-factor: 1.25;
+}
+
+component NotesMeasurement inherits NotesText {
+    visible: false;
 }
 
 component NotesView inherits Rectangle {
@@ -225,13 +229,10 @@ component NotesView inherits Rectangle {
         }
         changed content-height => { root.clamp-scroll-position(); }
 
-        notes-input := TextInput {
+        notes-input := NotesText {
             text: root.has-notes ? root.notes-text : "No notes";
             font-size: root.has-notes ? root.font-size : 12px;
             color: root.has-notes ? #f1f3f4 : #9aa0a6;
-            wrap: word-wrap;
-            single-line: false;
-            read-only: true;
             page-height: scroll-view.visible-height;
             text-cursor-width: 0px;
             key-pressed(event) => { reject }
