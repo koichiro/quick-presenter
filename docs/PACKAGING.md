@@ -527,6 +527,20 @@ is tracked separately from the first disk image packaging flow.
 
 ### Windows
 
+For a compile check from macOS, install the `x86_64-pc-windows-msvc` target in
+the stable rustup toolchain and LLVM, then run:
+
+```sh
+scripts/check_windows_cross.sh
+```
+
+The script selects rustup's compiler explicitly so a Homebrew Rust installation
+earlier in `PATH` does not hide the installed Windows standard library. It also
+locates `llvm-rc` through `RC_PATH`, `PATH`, or Homebrew's LLVM installation.
+This checks all Cargo targets, including tests, without linking or executing
+Windows binaries. Native Windows builds and runtime smoke tests remain necessary.
+Use `--help` for toolchain and target overrides.
+
 Raw Windows `quick-presenter.exe` builds embed `assets/icons/windows/quick-presenter.ico`
 as an executable resource from `build.rs`. This keeps the development binary
 name as `quick-presenter.exe` while allowing Windows shell surfaces to discover the Quick

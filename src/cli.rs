@@ -26,6 +26,10 @@ pub struct GuiSmokeOptions {
 }
 
 impl StartupOptions {
+    pub fn is_smoke(&self) -> bool {
+        self.smoke_open_pdf_path.is_some() || self.gui_smoke.is_some()
+    }
+
     fn empty() -> Self {
         Self {
             pdf_path: None,

@@ -28,6 +28,7 @@ pub struct AppState {
     pub pdf_watcher: Option<PdfWatcher>,
     pub watcher_recovery: WatcherRecoveryState,
     pub active_document_path: Option<PathBuf>,
+    pub automatic_reopen: Option<RenderSessionId>,
     pub render_cache: RenderCache,
     pub render_generation: u64,
     pub render_sessions: RenderSessionTracker,

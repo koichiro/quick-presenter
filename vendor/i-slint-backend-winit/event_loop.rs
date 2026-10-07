@@ -192,6 +192,12 @@ impl winit::application::ApplicationHandler<SlintEvent> for EventLoopState {
             }
             #[cfg(muda)]
             CustomEvent::Muda(event) => {
+                #[cfg(target_os = "macos")]
+                if event.id().0 == crate::muda::QUIT_MENU_ID {
+                    self.suspend_all_hidden_windows();
+                    event_loop.exit();
+                    return;
+                }
                 if let Some((window, generation, eid, muda_type)) =
                     event.id().0.split_once('|').and_then(|(w, e)| {
                         let (generation, e) = e.split_once('|')?;

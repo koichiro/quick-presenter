@@ -35,10 +35,13 @@ pub mod renderer_sandbox_linux;
 pub mod renderer_supervision;
 pub mod rendering;
 pub mod session_controller;
+pub mod settings_storage;
+pub mod startup_state;
 pub mod timer;
 pub mod view_sync;
 pub mod window_controller;
 pub mod window_menu;
+pub mod window_placement;
 #[cfg(target_os = "windows")]
 pub mod windows_window;
 
@@ -165,6 +168,10 @@ fn main() -> Result<()> {
         unreachable!("help requests return before app startup");
     };
     let diagnostics = init_diagnostics(startup_options.log_file_path.clone())?;
+    let startup_persistence = startup_state::StartupPersistence::for_options(
+        &startup_options,
+        startup_state::StartupStore::default_store,
+    );
     if let Some(path) = startup_options.smoke_open_pdf_path {
         return smoke_open_pdf(path);
     }
@@ -172,7 +179,12 @@ fn main() -> Result<()> {
         return run_gui_smoke(options);
     }
 
+    let startup_persistence = startup_persistence.expect("normal GUI mode has startup persistence");
+    let startup_pdf = startup_persistence.select_pdf(startup_options.pdf_path);
     let windows = AppWindows::new()?;
+    windows
+        .placement
+        .initialize(startup_persistence.loaded.window_placement.clone());
     configure_linux_desktop_identity()?;
     configure_shortcut_modifiers(&windows);
     configure_presenter_menu_bar(&windows);
@@ -216,12 +228,39 @@ fn main() -> Result<()> {
     set_application_icon();
     remove_macos_native_about_menu_item();
     let _slide_chrome_sync_timer = start_slide_chrome_sync(window_refs.clone());
+    window_controller::start_slide_placement(window_refs.clone());
 
-    if let Some(path) = startup_options.pdf_path {
-        load_startup_pdf(&windows.refs(), &state, path);
+    if let Some(pdf) = startup_pdf {
+        load_startup_pdf(&windows.refs(), &state, pdf.path);
+        if pdf.automatic {
+            let session_id = pending_open_session_id(&state.borrow());
+            state.borrow_mut().automatic_reopen = session_id;
+        }
     }
 
-    slint::run_event_loop()?;
+    let event_loop_result = slint::run_event_loop();
+    if event_loop_result.is_ok() {
+        window_controller::capture_slide_placement(&windows.refs());
+        let last_pdf = state
+            .borrow()
+            .active_document_path
+            .as_deref()
+            .and_then(|path| match startup_state::SavedPdf::capture(path) {
+                Ok(saved) => Some(saved),
+                Err(error) => {
+                    warn!(error = %error, "could not capture active PDF path");
+                    None
+                }
+            });
+        let saved = startup_state::StartupState {
+            window_placement: windows.placement.remembered.borrow().clone(),
+            last_pdf,
+        };
+        if let Err(error) = startup_persistence.save_if_changed(saved) {
+            warn!(error = %error, "could not save startup settings");
+        }
+    }
+    event_loop_result?;
     Ok(())
 }
 
@@ -294,12 +333,11 @@ fn stabilize_initial_presenter_layout(windows: AppWindowRefs) {
 }
 
 fn initialize_slide_window_size(windows: &AppWindowRefs) {
-    if let Some(slide) = windows.slide.upgrade() {
-        let size = default_slide_window_size();
-        slide.set_slide_window_width(size.width);
-        slide.set_slide_window_height(size.height);
-        slide.window().set_size(size);
-    }
+    let size = default_slide_window_size();
+    window_controller::set_slide_logical_size(
+        windows,
+        [f64::from(size.width), f64::from(size.height)],
+    );
 }
 
 fn default_slide_window_size() -> slint::LogicalSize {
@@ -772,16 +810,17 @@ fn handle_display_swap(
 }
 
 fn wire_presenter_close_request(windows: &AppWindows) {
-    windows
-        .presenter
-        .window()
-        .on_close_requested(move || match slint::quit_event_loop() {
+    let refs = windows.refs();
+    windows.presenter.window().on_close_requested(move || {
+        window_controller::capture_slide_placement(&refs);
+        match slint::quit_event_loop() {
             Ok(()) => CloseRequestResponse::KeepWindowShown,
             Err(err) => {
                 warn!(error = ?err, "failed to quit event loop from presenter close request");
                 CloseRequestResponse::KeepWindowShown
             }
-        });
+        }
+    });
 }
 
 fn apply_app_metadata(app: &PresenterWindow) {
@@ -1039,6 +1078,17 @@ pub(crate) fn begin_open_pdf(
     state: &Rc<RefCell<AppState>>,
     path: PathBuf,
 ) {
+    let path = if path.is_absolute() {
+        path
+    } else {
+        match std::env::current_dir() {
+            Ok(directory) => directory.join(path),
+            Err(error) => {
+                warn!(error = %error, "could not resolve absolute PDF path");
+                path
+            }
+        }
+    };
     let title = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -1356,6 +1406,9 @@ fn update_recent_file_menu_snapshot(
 }
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
+    if windows.placement.preserve_size.get() {
+        return;
+    }
     if let Some(slide) = windows.slide.upgrade() {
         if slide.window().is_fullscreen() {
             return;
@@ -1369,10 +1422,10 @@ fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) 
             aspect_ratio,
             compensation_height,
         );
-        let (width, height) = (size.width, size.height);
-        slide.set_slide_window_width(width);
-        slide.set_slide_window_height(height);
-        slide.window().set_size(size);
+        window_controller::set_slide_logical_size(
+            windows,
+            [f64::from(size.width), f64::from(size.height)],
+        );
     }
 }
 
@@ -2198,10 +2251,17 @@ fn handle_render_open_failed(
     warn!(error = %message, "failed to open PDF on render worker");
     let presenter_message = {
         let state = state.borrow();
-        errors::presenter_error_message(
-            &anyhow::anyhow!(message),
-            state.diagnostics_log_path.as_deref(),
-        )
+        if state.automatic_reopen == Some(session_id) {
+            PresenterMessage::new(
+                "Could not reopen the previous PDF. Open a PDF to continue.",
+                errors::MessageSeverity::Error,
+            )
+        } else {
+            errors::presenter_error_message(
+                &anyhow::anyhow!(message),
+                state.diagnostics_log_path.as_deref(),
+            )
+        }
     };
     let accepted = {
         let mut state = state.borrow_mut();
