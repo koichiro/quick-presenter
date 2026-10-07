@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.1] — 2026-10-02
+## [1.0.1](https://github.com/koichiro/quick-presenter/releases/tag/v1.0.1) — 2026-10-02
 
 ### Fixed
 
@@ -8,7 +8,7 @@
   native macOS fullscreen. Preserve normal windowed preferred/minimum sizing.
   Windows and Linux were unaffected ([#366](https://github.com/koichiro/quick-presenter/issues/366), [#367](https://github.com/koichiro/quick-presenter/pull/367)).
 
-## [1.0.0] — 2026-10-02
+## [1.0.0](https://github.com/koichiro/quick-presenter/releases/tag/v1.0.0) — 2026-10-02
 
 First stable release, following the internal 0.x series.
 
@@ -55,7 +55,7 @@ cycle; the absence of a Store source tag prevents an exact shipped commit range.
 Other changes made while Cargo still reported 0.7.2 are listed under v1.0.0,
 where a tagged release establishes their inclusion.
 
-## [0.7.1] — 2026-07-08
+## [0.7.1](https://github.com/koichiro/quick-presenter/releases/tag/v0.7.1) — 2026-07-08
 
 Internal release focused on Linux window/menu behavior and packaging.
 
@@ -75,7 +75,7 @@ Internal release focused on Linux window/menu behavior and packaging.
 - Harden macOS signing checks. The release accepted the tracked `quick-xml`
   advisories for this internal version; upstream fixes landed for v1.0.0 ([#329](https://github.com/koichiro/quick-presenter/issues/329)).
 
-## [0.7.0] — 2026-06-30
+## [0.7.0](https://github.com/koichiro/quick-presenter/releases/tag/v0.7.0) — 2026-06-30
 
 Internal release focused on presenter polish and packaging readiness.
 
@@ -106,7 +106,7 @@ Internal release focused on presenter polish and packaging readiness.
   measurements, and recorded manual GUI/focus validation scenarios
   ([#256](https://github.com/koichiro/quick-presenter/issues/256), [#257](https://github.com/koichiro/quick-presenter/issues/257), [#258](https://github.com/koichiro/quick-presenter/issues/258), [#259](https://github.com/koichiro/quick-presenter/issues/259), [#262](https://github.com/koichiro/quick-presenter/pull/262), [#263](https://github.com/koichiro/quick-presenter/pull/263), [#266](https://github.com/koichiro/quick-presenter/pull/266), [#272](https://github.com/koichiro/quick-presenter/pull/272), [#303](https://github.com/koichiro/quick-presenter/pull/303)).
 
-## [0.6.0] — 2026-06-23
+## [0.6.0](https://github.com/koichiro/quick-presenter/releases/tag/v0.6.0) — 2026-06-23
 
 Internal reliability release.
 
@@ -132,7 +132,7 @@ Internal reliability release.
   in package builds, and add dependency advisory auditing
   ([#208](https://github.com/koichiro/quick-presenter/issues/208), [#212](https://github.com/koichiro/quick-presenter/issues/212), [#215](https://github.com/koichiro/quick-presenter/pull/215), [#228](https://github.com/koichiro/quick-presenter/pull/228), [#233](https://github.com/koichiro/quick-presenter/issues/233), [#234](https://github.com/koichiro/quick-presenter/issues/234), [#248](https://github.com/koichiro/quick-presenter/pull/248), [#250](https://github.com/koichiro/quick-presenter/pull/250)).
 
-## [0.5.1] — 2026-06-21
+## [0.5.1](https://github.com/koichiro/quick-presenter/releases/tag/v0.5.1) — 2026-06-21
 
 Internal stability release.
 
@@ -150,7 +150,7 @@ Internal stability release.
   packaging and mounted-image checks, and correct stale artifact instructions
   ([#189](https://github.com/koichiro/quick-presenter/issues/189), [#190](https://github.com/koichiro/quick-presenter/pull/190), [#191](https://github.com/koichiro/quick-presenter/issues/191), [#192](https://github.com/koichiro/quick-presenter/pull/192), [#194](https://github.com/koichiro/quick-presenter/issues/194), [#204](https://github.com/koichiro/quick-presenter/pull/204)).
 
-## [0.5.0] — 2026-06-20
+## [0.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v0.5.0) — 2026-06-20
 
 Internal release focused on rendering/runtime reliability and package validation.
 
@@ -181,7 +181,7 @@ The v0.5.0 release notes originally used the 0.4.0 version merge commit as their
 comparison base because the `v0.4.0` tag did not yet exist. That tag now points to
 the same checkpoint.
 
-## [0.4.0] — tagged checkpoint, 2026-06-19
+## [0.4.0](https://github.com/koichiro/quick-presenter/tree/v0.4.0) — tagged checkpoint, 2026-06-19
 
 No GitHub release record exists for this version.
 
@@ -197,7 +197,7 @@ No GitHub release record exists for this version.
   macOS distribution ([#118](https://github.com/koichiro/quick-presenter/issues/118), [#119](https://github.com/koichiro/quick-presenter/pull/119)).
 - Change the project license from Apache-2.0 to GPL-3.0-or-later ([#121](https://github.com/koichiro/quick-presenter/issues/121), [#122](https://github.com/koichiro/quick-presenter/pull/122)).
 
-## [0.3.0] — initial MVP tagged checkpoint, 2026-06-12
+## [0.3.0](https://github.com/koichiro/quick-presenter/tree/v0.3.0) — initial MVP tagged checkpoint, 2026-06-12
 
 No GitHub release record exists for this version. This checkpoint includes the
 initial playback implementation developed before the 0.3.0 version bump.
@@ -218,12 +218,9 @@ initial playback implementation developed before the 0.3.0 version bump.
   macOS app/DMG and Windows MSI packaging, CI binary builds, and packaged smoke
   checks ([#48](https://github.com/koichiro/quick-presenter/issues/48), [#53](https://github.com/koichiro/quick-presenter/issues/53), [#69](https://github.com/koichiro/quick-presenter/issues/69), [#71](https://github.com/koichiro/quick-presenter/issues/71), [#86](https://github.com/koichiro/quick-presenter/issues/86), [#87](https://github.com/koichiro/quick-presenter/issues/87), [#88](https://github.com/koichiro/quick-presenter/issues/88), [#94](https://github.com/koichiro/quick-presenter/issues/94), [#101](https://github.com/koichiro/quick-presenter/issues/101)).
 
-[1.0.1]: https://github.com/koichiro/quick-presenter/releases/tag/v1.0.1
-[1.0.0]: https://github.com/koichiro/quick-presenter/releases/tag/v1.0.0
-[0.7.1]: https://github.com/koichiro/quick-presenter/releases/tag/v0.7.1
-[0.7.0]: https://github.com/koichiro/quick-presenter/releases/tag/v0.7.0
-[0.6.0]: https://github.com/koichiro/quick-presenter/releases/tag/v0.6.0
-[0.5.1]: https://github.com/koichiro/quick-presenter/releases/tag/v0.5.1
-[0.5.0]: https://github.com/koichiro/quick-presenter/releases/tag/v0.5.0
-[0.4.0]: https://github.com/koichiro/quick-presenter/tree/v0.4.0
-[0.3.0]: https://github.com/koichiro/quick-presenter/tree/v0.3.0
+### Fixed
+
+- Show the audience window at startup, establish keyboard focus, correct window
+  sizing/clipping, and hide PDF annotation indicators from audience slides
+  ([#18](https://github.com/koichiro/quick-presenter/issues/18), [#19](https://github.com/koichiro/quick-presenter/issues/19), [#42](https://github.com/koichiro/quick-presenter/issues/42), [#44](https://github.com/koichiro/quick-presenter/issues/44), [#62](https://github.com/koichiro/quick-presenter/issues/62)).
+- Restore Marp speaker-note extraction after stricter annotation filtering ([#75](https://github.com/koichiro/quick-presenter/issues/75), [#76](https://github.com/koichiro/quick-presenter/pull/76)).
