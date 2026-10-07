@@ -688,6 +688,17 @@ component ThumbnailPane inherits Rectangle {
 
 export component PresenterWindow inherits Window {
     icon: @image-url("../assets/icons/png/quick-presenter-icon-256.png");
+    in property <string> audience-address;
+    in property <string> audience-status: "Stopped";
+    in property <string> audience-url;
+    in property <image> audience-qr;
+    in property <bool> audience-active: false;
+    in property <bool> audience-can-start: false;
+    in property <int> audience-count: 0;
+    property <bool> audience-panel-visible: false;
+    callback audience-toggle-session();
+    callback audience-next-address();
+    callback audience-refresh-addresses();
     in property <image> current-page-image;
     in property <image> next-page-image;
     in property <float> current-page-aspect-ratio: 16.0 / 9.0;
@@ -1335,12 +1346,53 @@ export component PresenterWindow inherits Window {
             Text {
                 x: 12px;
                 y: max(0px, parent.height - 36px);
-                width: parent.width - 24px;
+                width: parent.width - 150px;
                 text: root.status-text;
                 color: #d9dce0;
                 height: 24px;
                 vertical-alignment: center;
                 overflow: elide;
+            }
+
+            Button {
+                x: parent.width - 130px;
+                y: max(0px, parent.height - 38px);
+                width: 118px;
+                height: 30px;
+                text: root.audience-active ? "Audience (" + root.audience-count + ")" : "Audience";
+                clicked => { root.audience-panel-visible = !root.audience-panel-visible; if root.audience-panel-visible { root.audience-refresh-addresses(); } }
+            }
+
+            if root.audience-panel-visible: Rectangle {
+                x: 20px;
+                y: root.inline-menu-height + 60px;
+                width: parent.width - 40px;
+                height: min(360px, parent.height - self.y - 50px);
+                background: #202124;
+                border-color: #9aa0a6;
+                border-width: 1px;
+                VerticalBox {
+                    padding: 16px;
+                    spacing: 8px;
+                    Text { text: "Audience Live · Local Network"; color: white; font-size: 20px; }
+                    Text { text: root.audience-status; color: white; wrap: word-wrap; }
+                    HorizontalBox {
+                        Text { text: root.audience-address; color: white; horizontal-stretch: 1; wrap: word-wrap; }
+                        Button { text: "Next address"; enabled: !root.audience-active; clicked => { root.audience-next-address(); } }
+                    }
+                    HorizontalBox {
+                        height: 160px;
+                        if root.audience-url != "": Image { source: root.audience-qr; width: 160px; height: 160px; image-fit: contain; }
+                        VerticalBox {
+                            Text { text: root.audience-url; color: white; wrap: word-wrap; }
+                            Text { text: "Join on the same LAN. HTTP is unencrypted. This initial version supports joining only."; color: #d9dce0; wrap: word-wrap; }
+                        }
+                    }
+                    HorizontalBox {
+                        Button { text: root.audience-active ? "Stop Session" : "Start Session"; enabled: root.audience-active || root.audience-can-start; clicked => { root.audience-toggle-session(); } }
+                        Button { text: "Close"; clicked => { root.audience-panel-visible = false; } }
+                    }
+                }
             }
 
             Rectangle {

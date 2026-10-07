@@ -6,6 +6,8 @@
 pub mod app_metadata;
 pub mod app_state;
 pub mod aspect;
+pub mod audience;
+mod audience_ui;
 pub mod black_screen;
 pub mod cli;
 pub mod clock;
@@ -228,6 +230,7 @@ fn main() -> Result<()> {
         }
     };
     wire_callbacks(&windows, windows.refs(), state.clone());
+    let audience_ui = audience_ui::AudienceUi::install(&windows.presenter);
     let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
     let _render_event_timer = start_render_event_updates(windows.refs(), state.clone());
     let _pending_open_status_timer =
@@ -255,6 +258,7 @@ fn main() -> Result<()> {
     }
 
     let event_loop_result = slint::run_event_loop();
+    audience_ui.shutdown();
     if event_loop_result.is_ok() {
         window_controller::capture_slide_placement(&windows.refs());
         let last_pdf = state
