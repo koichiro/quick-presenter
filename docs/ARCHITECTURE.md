@@ -21,6 +21,15 @@ in [Presenter and Slide Display Swap](DISPLAY_SWAP.md). Slint forwards the key
 event; Rust owns monitor snapshots, the two-window swap transaction, focus
 recovery, and platform limitations.
 
+The proposed restoration of audience window placement and the last active PDF
+is defined in [Slide Window and PDF Startup Restoration](SLIDE_WINDOW_PLACEMENT.md).
+Rust owns settings validation, safe placement, capture after verified display
+swaps, and startup PDF selection through the existing asynchronous open pipeline.
+The saved PDF path is separate from page, timer, black-screen, and fullscreen
+state; a reopened PDF starts a new windowed session at its first page.
+Smoke execution modes bypass these settings before store creation, preserve
+their explicit test PDF and harness geometry, and never save startup state.
+
 Diagnostic file creation, permissions, byte accounting, and rotation remain in
 the Rust diagnostics boundary. The v1.0.0 retention design is documented in
 [Diagnostic Log Retention](DIAGNOSTIC_LOG_RETENTION.md); Slint and presentation
