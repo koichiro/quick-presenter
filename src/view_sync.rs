@@ -8,7 +8,7 @@ use crate::{
     clock::current_clock_label,
     errors::PresenterMessage,
     presentation::PageSnapshot,
-    render_controller::{CURRENT_RENDER_WIDTH, PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH},
+    render_controller::{PREVIEW_RENDER_WIDTH, THUMBNAIL_RENDER_WIDTH},
     rendering::{RenderCache, RenderPurpose, RenderRequest, RenderedPage},
     window_controller::AppWindowRefs,
     PresenterWindow, ThumbnailItem,
@@ -47,9 +47,12 @@ pub fn apply_snapshot_to_windows(
     state: &AppState,
     snapshot: &PageSnapshot,
 ) {
-    let current_request = current_slide_request(snapshot.current_index);
+    let current_request = state.current_slide_request(snapshot.current_index);
     let cached_current = state.render_cache.peek(current_request);
-    let presenter_current = cached_current.clone().unwrap_or_else(placeholder_slide);
+    let presenter_current = audience_current_slide(
+        cached_current.clone(),
+        state.audience_slide.last_good_current.clone(),
+    );
     let audience_current = audience_current_slide(
         cached_current,
         state.audience_slide.last_good_current.clone(),
@@ -132,7 +135,7 @@ fn presenter_status_text_for_snapshot(state: &AppState, snapshot: &PageSnapshot)
 
     if state
         .render_cache
-        .peek(current_slide_request(snapshot.current_index))
+        .peek(state.current_slide_request(snapshot.current_index))
         .is_none()
     {
         return "Rendering page...".to_owned();
@@ -148,14 +151,6 @@ fn audience_current_slide(
     cached_current
         .or(last_good_current)
         .unwrap_or_else(placeholder_slide)
-}
-
-fn current_slide_request(page_index: u32) -> RenderRequest {
-    RenderRequest {
-        page_index,
-        width: CURRENT_RENDER_WIDTH,
-        purpose: RenderPurpose::CurrentSlide,
-    }
 }
 
 pub fn thumbnail_model(

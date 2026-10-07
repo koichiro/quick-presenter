@@ -41,6 +41,8 @@ impl Default for CacheBudget {
 
 #[derive(Debug, Clone, Copy)]
 pub struct CacheContext {
+    pub current_render_width: i32,
+    pub visible_render_width: i32,
     pub current_index: u32,
     pub total_pages: u32,
     pub presentation_radius: u32,
@@ -77,6 +79,9 @@ struct CacheEntry {
 }
 
 impl RenderCache {
+    pub fn usage(&self) -> (usize, usize) {
+        (self.pages.len(), self.estimated_bytes)
+    }
     pub fn with_budget(budget: CacheBudget) -> Self {
         Self {
             budget,
@@ -87,6 +92,23 @@ impl RenderCache {
     pub fn clear(&mut self) {
         self.pages.clear();
         self.estimated_bytes = 0;
+    }
+
+    pub fn update_budget(&mut self, budget: CacheBudget, context: Option<CacheContext>) {
+        self.budget = budget;
+        self.enforce_budget(context);
+    }
+
+    pub fn retain_with_context(&mut self, context: CacheContext) {
+        self.retain_requests(|request| {
+            should_retain_presentation_request(
+                request,
+                context.current_index,
+                context.total_pages,
+                context.presentation_radius,
+            )
+        });
+        self.enforce_budget(Some(context));
     }
 
     pub fn get_or_render(
@@ -158,6 +180,8 @@ impl RenderCache {
             should_retain_presentation_request(request, current_index, total_pages, radius)
         });
         self.enforce_budget(Some(CacheContext {
+            current_render_width: crate::render_controller::CURRENT_RENDER_WIDTH,
+            visible_render_width: crate::render_controller::CURRENT_RENDER_WIDTH,
             current_index,
             total_pages,
             presentation_radius: radius,
@@ -328,6 +352,8 @@ fn is_protected_request(request: &RenderRequest, context: Option<CacheContext>) 
     };
 
     matches!(request.purpose, RenderPurpose::CurrentSlide)
+        && (request.width == context.current_render_width
+            || is_visible_current_request(request, context))
         && should_retain_presentation_request(
             request,
             context.current_index,
@@ -337,7 +363,9 @@ fn is_protected_request(request: &RenderRequest, context: Option<CacheContext>) 
 }
 
 fn is_visible_current_request(request: &RenderRequest, context: CacheContext) -> bool {
-    request.purpose == RenderPurpose::CurrentSlide && request.page_index == context.current_index
+    request.purpose == RenderPurpose::CurrentSlide
+        && request.page_index == context.current_index
+        && request.width == context.visible_render_width
 }
 
 fn eviction_priority(purpose: RenderPurpose) -> u8 {
@@ -601,6 +629,8 @@ mod tests {
             max_estimated_bytes: usize::MAX,
         });
         let context = CacheContext {
+            current_render_width: 1600,
+            visible_render_width: 1600,
             current_index: 4,
             total_pages: 12,
             presentation_radius: 2,
@@ -675,6 +705,8 @@ mod tests {
             max_estimated_bytes: 10,
         });
         let context = CacheContext {
+            current_render_width: 1600,
+            visible_render_width: 1600,
             current_index: 3,
             total_pages: 8,
             presentation_radius: 2,
@@ -708,6 +740,8 @@ mod tests {
             max_estimated_bytes: 8,
         });
         let context = CacheContext {
+            current_render_width: 1600,
+            visible_render_width: 1600,
             current_index: 3,
             total_pages: 8,
             presentation_radius: 1,
@@ -765,5 +799,67 @@ mod tests {
         assert_eq!(presentation_preload_order(0, 3, 2), vec![1, 2]);
         assert_eq!(presentation_preload_order(2, 3, 2), vec![1, 0]);
         assert!(presentation_preload_order(0, 0, 2).is_empty());
+    }
+    #[test]
+    fn width_change_and_budget_shrink_evict_old_visible_variants() {
+        let mut cache = RenderCache::with_budget(CacheBudget {
+            max_entries: 64,
+            max_estimated_bytes: 200,
+        });
+        let old = request(3, 2560, RenderPurpose::CurrentSlide);
+        let desired = request(3, 1600, RenderPurpose::CurrentSlide);
+        cache.insert(old, rendered_page_with_bytes(4.0 / 3.0, 80));
+        cache.insert(desired, rendered_page_with_bytes(4.0 / 3.0, 40));
+        cache.insert(
+            request(4, 600, RenderPurpose::NextPreview),
+            rendered_page_with_bytes(1.0, 20),
+        );
+        cache.insert(
+            request(0, 180, RenderPurpose::Thumbnail),
+            rendered_page_with_bytes(1.0, 20),
+        );
+        let context = CacheContext {
+            current_index: 3,
+            total_pages: 10,
+            presentation_radius: 2,
+            current_render_width: 1600,
+            visible_render_width: 1600,
+        };
+        cache.update_budget(
+            CacheBudget {
+                max_entries: 64,
+                max_estimated_bytes: 40,
+            },
+            Some(context),
+        );
+        assert!(cache.peek(desired).is_some());
+        assert!(cache.peek(old).is_none());
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.estimated_bytes, 40);
+    }
+
+    #[test]
+    fn stale_visible_width_is_not_a_second_over_budget_exception() {
+        let mut cache = RenderCache::with_budget(CacheBudget {
+            max_entries: 64,
+            max_estimated_bytes: 8,
+        });
+        let context = CacheContext {
+            current_index: 0,
+            total_pages: 2,
+            presentation_radius: 2,
+            current_render_width: 2560,
+            visible_render_width: 2560,
+        };
+        let desired = request(0, 2560, RenderPurpose::CurrentSlide);
+        cache.insert_with_context(desired, rendered_page_with_bytes(1.0, 12), Some(context));
+        cache.insert_with_context(
+            request(0, 1600, RenderPurpose::CurrentSlide),
+            rendered_page_with_bytes(1.0, 12),
+            Some(context),
+        );
+        assert_eq!(cache.len(), 1);
+        assert!(cache.peek(desired).is_some());
+        assert_eq!(cache.estimated_bytes, 12);
     }
 }
