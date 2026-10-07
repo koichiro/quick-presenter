@@ -1,4 +1,4 @@
-# Temporary Slint native menu patch
+# Temporary Slint backend patches
 
 `i-slint-backend-winit` is vendored from the published Slint 1.18.1 crate. Its
 upstream licenses remain in `i-slint-backend-winit/LICENSES`.
@@ -30,3 +30,15 @@ Remove the override in the repository `Cargo.toml` after a Slint release uses a
 fixed muda version and preserves item identity, or rejects stale activation,
 across native menu updates. Preserve orderly Quit handling as well. Re-run the
 macOS Open Recent stress checks and startup restoration checks before removing it.
+
+## macOS hidden-window frames
+
+After hiding a macOS window, reset its first-frame state so the next Slint
+show renders updated content before revealing the window. If Metal cannot
+render while unmapped, the existing `RevealOnFirstFrame` guard keeps the
+previous backing image hidden until a frame is submitted. This complements
+the application's use of Slint show/hide before native focus operations;
+see [the #400 validation](../docs/validation/ISSUE400_HIDDEN_SLIDE.md).
+
+Retain this behavior, or an equivalent upstream fix, when updating Slint.
+Re-run the signed hidden-window GUI checks before removing it.

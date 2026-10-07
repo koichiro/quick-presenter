@@ -1743,7 +1743,13 @@ impl WinitWindowAdapter {
 
             // After the window is ordered out, so that the reveal can't show it.
             #[cfg(target_os = "macos")]
-            self.reveal_on_first_frame.take();
+            {
+                self.reveal_on_first_frame.take();
+                // Re-render before the next reveal, including windows whose
+                // component image changed while hidden. If Metal cannot draw
+                // until mapped, RevealOnFirstFrame masks the old backing image.
+                self.first_frame_presented.set(false);
+            }
 
             Ok(())
         }

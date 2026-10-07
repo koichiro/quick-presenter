@@ -841,6 +841,14 @@ fn wire_window_menu_callbacks(
     refs: AppWindowRefs,
     state: Rc<RefCell<AppState>>,
 ) {
+    if let Some(slide) = refs.slide.upgrade() {
+        let state = state.clone();
+        slide.window().on_close_requested(move || {
+            state.borrow_mut().window_menu.set_slide_visible(false);
+            CloseRequestResponse::HideWindow
+        });
+    }
+
     let window_refs = refs.clone();
     let state_for_presenter_toggle = state.clone();
     presenter.on_show_presenter_window(move || {

@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     fs,
     path::Path,
     rc::Rc,
@@ -264,6 +264,118 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         },
     );
 
+    check_hidden_slide_recovery(&windows, &state, report)?;
+
+    Ok(())
+}
+
+fn check_hidden_slide_recovery(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let refs = windows.refs();
+    let frames = Rc::new(Cell::new(0_u32));
+    let rendered_frames = frames.clone();
+    windows
+        .slide
+        .window()
+        .set_rendering_notifier(move |phase, _| {
+            if matches!(phase, slint::RenderingState::AfterRendering) {
+                rendered_frames.set(rendered_frames.get() + 1);
+            }
+        })
+        .context("failed to monitor slide rendering for hidden-window recovery")?;
+    settle_notes_layout()?;
+
+    for fullscreen in [false, true] {
+        set_slide_fullscreen(&refs, fullscreen);
+        settle_notes_layout()?;
+        for (close_request, raise, color) in [
+            (true, false, [210, 30, 90, 255]),
+            (true, true, [20, 160, 200, 255]),
+            (false, false, [90, 180, 30, 255]),
+            (false, true, [160, 40, 200, 255]),
+        ] {
+            if close_request {
+                windows
+                    .slide
+                    .window()
+                    .dispatch_event(slint::platform::WindowEvent::CloseRequested);
+            } else {
+                crate::hide_slide_window_from_menu(&refs, state);
+            }
+            report.check(
+                format!(
+                    "slide is hidden through {}",
+                    if close_request {
+                        "close request"
+                    } else {
+                        "Hide Slide"
+                    }
+                ),
+                !windows.slide.window().is_visible() && !state.borrow().window_menu.slide_visible(),
+                "Slint lifecycle is hidden",
+                "native hide left the Slint lifecycle visible",
+            );
+            // Different solid images make stale backing content unambiguous and
+            // avoid relying on the appearance of the caller's PDF fixture.
+            let buffer =
+                slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(&color, 1, 1);
+            windows
+                .slide
+                .set_page_image(slint::Image::from_rgba8(buffer));
+            settle_notes_layout()?;
+            let previous_frames = frames.get();
+            if raise {
+                crate::bring_slide_window_to_front(&refs, state);
+            } else {
+                crate::show_slide_window_from_menu(&refs, state);
+            }
+            settle_notes_layout()?;
+            let action = format!(
+                "{} ({})",
+                if raise {
+                    "Bring Slide to Front"
+                } else {
+                    "Show Slide"
+                },
+                if fullscreen { "fullscreen" } else { "windowed" }
+            );
+            report.check(
+                format!("{action} restores the slide rendering lifecycle"),
+                windows.slide.window().is_visible() && frames.get() > previous_frames,
+                "Slint is visible and rendered a new frame",
+                "Slint is hidden or no new frame was rendered",
+            );
+            let snapshot = windows
+                .slide
+                .window()
+                .take_snapshot()
+                .context("failed to capture the restored slide")?;
+            let center = &snapshot.as_bytes()[((snapshot.height() / 2 * snapshot.width()
+                + snapshot.width() / 2)
+                * 4) as usize..];
+            report.check(
+                format!("{action} renders the image changed while hidden"),
+                center[..3]
+                    .iter()
+                    .zip(color[..3].iter())
+                    .all(|(actual, expected)| actual.abs_diff(*expected) <= 2),
+                "restored slide has the replacement image pixels",
+                format!(
+                    "unexpected center pixel: {:?}, expected {:?}",
+                    &center[..4],
+                    color
+                ),
+            );
+        }
+    }
+    set_slide_fullscreen(&refs, false);
+    if let Some(snapshot) = state.borrow().presentation.snapshot() {
+        crate::apply_snapshot_to_windows(&refs, &state.borrow(), &snapshot);
+    }
+    settle_notes_layout()?;
     Ok(())
 }
 

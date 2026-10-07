@@ -775,17 +775,13 @@ pub fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
 }
 
 pub fn show_presenter_window(windows: &AppWindowRefs) {
-    #[cfg(target_os = "macos")]
-    if let Some(presenter) = windows.presenter.upgrade() {
-        if crate::macos_window::show_window(presenter.window(), PRESENTER_WINDOW_TITLE) {
-            return;
-        }
-    }
-
     if let Some(presenter) = windows.presenter.upgrade() {
         if let Err(err) = presenter.show() {
             warn!(error = ?err, "failed to show presenter window");
+            return;
         }
+        #[cfg(target_os = "macos")]
+        crate::macos_window::show_window(presenter.window(), PRESENTER_WINDOW_TITLE);
     }
 }
 
@@ -815,33 +811,24 @@ fn presenter_input_recovery_delays() -> [Duration; 3] {
 }
 
 pub fn show_slide_window(windows: &AppWindowRefs) {
-    windows.placement.visible.set(true);
-    schedule_show_recovery(windows.clone());
-    #[cfg(target_os = "macos")]
     if let Some(slide) = windows.slide.upgrade() {
-        if crate::macos_window::show_window(slide.window(), SLIDE_WINDOW_TITLE) {
-            apply_macos_slide_window_chrome(windows);
-            return;
-        }
-    }
-
-    if let Some(slide) = windows.slide.upgrade() {
+        // Restore Slint's rendering lifecycle before raising the native window.
+        // A close request hides through Slint, so native ordering alone leaves
+        // the adapter hidden and exposes the previous backing image.
         if let Err(err) = slide.show() {
             warn!(error = ?err, "failed to show slide window");
-        } else {
-            sync_slide_chrome(windows);
+            return;
         }
+        windows.placement.visible.set(true);
+        schedule_show_recovery(windows.clone());
+        sync_slide_chrome(windows);
+        #[cfg(target_os = "macos")]
+        crate::macos_window::show_window(slide.window(), SLIDE_WINDOW_TITLE);
+        slide.window().request_redraw();
     }
 }
 
 pub fn hide_presenter_window(windows: &AppWindowRefs) {
-    #[cfg(target_os = "macos")]
-    if let Some(presenter) = windows.presenter.upgrade() {
-        if crate::macos_window::hide_window(presenter.window(), PRESENTER_WINDOW_TITLE) {
-            return;
-        }
-    }
-
     if let Some(presenter) = windows.presenter.upgrade() {
         if let Err(err) = presenter.hide() {
             warn!(error = ?err, "failed to hide presenter window");
@@ -852,17 +839,11 @@ pub fn hide_presenter_window(windows: &AppWindowRefs) {
 pub fn hide_slide_window(windows: &AppWindowRefs) {
     capture_slide_placement(windows);
     windows.placement.cancel();
-    windows.placement.visible.set(false);
-    #[cfg(target_os = "macos")]
-    if let Some(slide) = windows.slide.upgrade() {
-        if crate::macos_window::hide_window(slide.window(), SLIDE_WINDOW_TITLE) {
-            return;
-        }
-    }
-
     if let Some(slide) = windows.slide.upgrade() {
         if let Err(err) = slide.hide() {
             warn!(error = ?err, "failed to hide slide window");
+        } else {
+            windows.placement.visible.set(false);
         }
     }
 }
