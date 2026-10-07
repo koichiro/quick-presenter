@@ -1,20 +1,5 @@
 # Changelog
 
-## [1.0.2] — development checkpoint, 2026-10-02
-
-No GitHub release or tag was published for this version. [#368](https://github.com/koichiro/quick-presenter/pull/368) advanced package
-metadata after v1.0.1; the following preparation work landed while the package
-reported 1.0.2.
-
-### Development
-
-- Document macOS signing/notarization credential preflight and artifact handoff
-  requirements ([#369](https://github.com/koichiro/quick-presenter/pull/369)).
-- Define PDF renderer isolation, threat-model, and vulnerability-response policy
-  ([#241](https://github.com/koichiro/quick-presenter/issues/241), [#370](https://github.com/koichiro/quick-presenter/issues/370), [#377](https://github.com/koichiro/quick-presenter/pull/377)).
-- Add a bounded, versioned renderer IPC codec and broker adapter that reject
-  malformed, stale, unsolicited, and oversized responses ([#371](https://github.com/koichiro/quick-presenter/issues/371), [#378](https://github.com/koichiro/quick-presenter/pull/378)).
-
 ## [1.0.1] — 2026-10-02
 
 ### Fixed
@@ -233,7 +218,6 @@ initial playback implementation developed before the 0.3.0 version bump.
   macOS app/DMG and Windows MSI packaging, CI binary builds, and packaged smoke
   checks ([#48](https://github.com/koichiro/quick-presenter/issues/48), [#53](https://github.com/koichiro/quick-presenter/issues/53), [#69](https://github.com/koichiro/quick-presenter/issues/69), [#71](https://github.com/koichiro/quick-presenter/issues/71), [#86](https://github.com/koichiro/quick-presenter/issues/86), [#87](https://github.com/koichiro/quick-presenter/issues/87), [#88](https://github.com/koichiro/quick-presenter/issues/88), [#94](https://github.com/koichiro/quick-presenter/issues/94), [#101](https://github.com/koichiro/quick-presenter/issues/101)).
 
-[1.0.2]: https://github.com/koichiro/quick-presenter/compare/v1.0.1...3e06410
 [1.0.1]: https://github.com/koichiro/quick-presenter/releases/tag/v1.0.1
 [1.0.0]: https://github.com/koichiro/quick-presenter/releases/tag/v1.0.0
 [0.7.1]: https://github.com/koichiro/quick-presenter/releases/tag/v0.7.1
