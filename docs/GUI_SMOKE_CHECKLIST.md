@@ -304,7 +304,7 @@ the raw binary as well as from the packaged artifact.
 
 | Action | Expected result |
 | --- | --- |
-| Inspect the presenter toolbar at 800x560 and 1024x768, including fullscreen exit mode. | First, previous, next, and last icons remain clear, with 40x36 px click targets. The clock and page count remain readable. Long document titles elide. |
+| Inspect the presenter toolbar at 800x560 and 1024x768, including fullscreen exit mode. | First, previous, next, and last icons remain clear, with 40x32 px click targets, matching the height of Open, Fullscreen, and Black. A visible gap separates the toolbar from slide previews. The clock and page count remain readable. Long document titles elide. |
 | Compare the toolbar with the keyboard bindings panel. | The same navigation symbols appear in both places, and the panel retains its operation names and key bindings. |
 | Hover each navigation button. | A tooltip shows the operation name and representative keyboard shortcuts. |
 | Inspect the buttons with a screen reader. | Each button exposes its operation name, rather than an empty label or SVG filename. |
