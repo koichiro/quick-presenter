@@ -293,16 +293,42 @@ component PresenterMenuItem inherits Rectangle {
     }
 }
 
+// Keep standard button focus, keyboard activation, and accessibility behavior.
+component NavigationButton inherits Button {
+    in property <string> action-name;
+    in property <string> shortcut-label;
+
+    min-width: 40px;
+    max-width: 40px;
+    height: 32px;
+    icon-size: 18px;
+    colorize-icon: true;
+    accessible-label: root.action-name;
+
+    Tooltip {
+        text: @markdown("\{root.action-name} (\{root.shortcut-label})");
+    }
+}
+
 component KeyboardBindingsPanel inherits Rectangle {
     background: #111315;
     border-color: #3c4043;
     border-width: 1px;
 
-    Text {
-        text: "Next";
+    Image {
+        source: @image-url("../assets/navigation/next.svg");
         x: 8px;
         y: 8px;
-        width: 70px;
+        width: 17px;
+        height: 17px;
+        colorize: #9aa0a6;
+    }
+
+    Text {
+        text: "Next";
+        x: 30px;
+        y: 8px;
+        width: 48px;
         height: 17px;
         color: #9aa0a6;
         font-size: 12px;
@@ -334,11 +360,20 @@ component KeyboardBindingsPanel inherits Rectangle {
         overflow: elide;
     }
 
-    Text {
-        text: "Back";
+    Image {
+        source: @image-url("../assets/navigation/previous.svg");
         x: 8px;
         y: 48px;
-        width: 70px;
+        width: 17px;
+        height: 17px;
+        colorize: #9aa0a6;
+    }
+
+    Text {
+        text: "Back";
+        x: 30px;
+        y: 48px;
+        width: 48px;
         height: 17px;
         color: #9aa0a6;
         font-size: 12px;
@@ -370,11 +405,20 @@ component KeyboardBindingsPanel inherits Rectangle {
         overflow: elide;
     }
 
-    Text {
-        text: "First";
+    Image {
+        source: @image-url("../assets/navigation/first.svg");
         x: 8px;
         y: 88px;
-        width: 70px;
+        width: 17px;
+        height: 17px;
+        colorize: #9aa0a6;
+    }
+
+    Text {
+        text: "First";
+        x: 30px;
+        y: 88px;
+        width: 48px;
         height: 17px;
         color: #9aa0a6;
         font-size: 12px;
@@ -394,11 +438,20 @@ component KeyboardBindingsPanel inherits Rectangle {
         overflow: elide;
     }
 
-    Text {
-        text: "End";
+    Image {
+        source: @image-url("../assets/navigation/last.svg");
         x: 8px;
         y: 108px;
-        width: 70px;
+        width: 17px;
+        height: 17px;
+        colorize: #9aa0a6;
+    }
+
+    Text {
+        text: "End";
+        x: 30px;
+        y: 108px;
+        width: 48px;
         height: 17px;
         color: #9aa0a6;
         font-size: 12px;
@@ -1006,29 +1059,54 @@ export component PresenterWindow inherits Window {
                 width: parent.width - 24px;
                 height: 36px;
                 spacing: 8px;
+                padding: 0px;
 
                 Button {
+                    height: 32px;
                     text: "Open";
                     clicked => {
                         root.open-pdf();
                     }
                 }
 
-                Button {
-                    text: "Previous";
+                NavigationButton {
+                    icon: @image-url("../assets/navigation/first.svg");
+                    action-name: "First Page";
+                    shortcut-label: "Home / Ctrl+A";
+                    clicked => {
+                        root.first-page();
+                    }
+                }
+
+                NavigationButton {
+                    icon: @image-url("../assets/navigation/previous.svg");
+                    action-name: "Previous Page";
+                    shortcut-label: "Left / PgUp";
                     clicked => {
                         root.previous-page();
                     }
                 }
 
-                Button {
-                    text: "Next";
+                NavigationButton {
+                    icon: @image-url("../assets/navigation/next.svg");
+                    action-name: "Next Page";
+                    shortcut-label: "Space / Right";
                     clicked => {
                         root.next-page();
                     }
                 }
 
+                NavigationButton {
+                    icon: @image-url("../assets/navigation/last.svg");
+                    action-name: "Last Page";
+                    shortcut-label: "End / Ctrl+E";
+                    clicked => {
+                        root.last-page();
+                    }
+                }
+
                 Button {
+                    height: 32px;
                     text: root.slide-fullscreen ? "Exit Fullscreen" : "Fullscreen";
                     clicked => {
                         root.toggle-slide-fullscreen();
@@ -1036,6 +1114,7 @@ export component PresenterWindow inherits Window {
                 }
 
                 Button {
+                    height: 32px;
                     text: "Black";
                     clicked => {
                         root.toggle-black-screen();
