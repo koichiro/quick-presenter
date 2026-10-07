@@ -5,102 +5,10 @@ behavior and link to the supporting issues and pull requests. Issue closure alon
 is not treated as evidence that a feature shipped.
 
 Dates for GitHub releases are their publication dates. Tagged checkpoints without
-a GitHub release use the version commit date. Store publication dates and internal
-package publication dates are omitted where no release record establishes them.
+a GitHub release use the version commit date. Store publication dates are omitted
+where no release record establishes them.
 The v0.3.0 and v0.4.0 tags were added retrospectively; their dates below describe
 the original checkpoints, not tag creation.
-
-## [Unreleased] — planned v1.5.0
-
-### Documentation
-
-- Add this version-by-version changelog, reconstructed from release notes, Git
-  history, and implemented issue/PR work.
-
-The v1.5.0 release is tracked in [#202](https://github.com/koichiro/quick-presenter/issues/202). The latest internal package version is
-1.4.0; its changes below will also be part of v1.5.0. Some earlier development and
-validation artifacts already reported 1.5.0 before [#401](https://github.com/koichiro/quick-presenter/pull/401) reset the internal
-version to 1.4.0. Those artifacts do not establish a published v1.5.0 release.
-No v1.1.0, v1.2.0, or v1.3.0 release tags or package-version checkpoints were
-found in the repository history reviewed for this changelog.
-
-## [1.4.0] — internal development checkpoint, 2026-10-07
-
-This entry groups the implemented work after the 1.0.2 development checkpoint
-through [#401](https://github.com/koichiro/quick-presenter/pull/401). There is no corresponding GitHub release or tag.
-
-### Added
-
-- Move production PDF parsing, rendering, and note extraction into supervised
-  helper processes. Prepare replacement opens and hot reloads in a separate
-  candidate helper so failures preserve the active deck and last good slide
-  ([#372](https://github.com/koichiro/quick-presenter/issues/372), [#379](https://github.com/koichiro/quick-presenter/pull/379)).
-- Add helper operation deadlines, resource limits, and bounded crash/timeout
-  recovery. Retry an activated document at most once per rolling 60 seconds;
-  repeated failures require an explicit reopen ([#373](https://github.com/koichiro/quick-presenter/issues/373), [#380](https://github.com/koichiro/quick-presenter/pull/380)).
-- Isolate renderers with signed XPC and App Sandbox on macOS, AppContainer and
-  brokered read-only PDF handles on Windows, and Landlock/seccomp on Linux.
-  Platform enforcement requirements and limitations are documented in the
-  renderer and packaging guides ([#374](https://github.com/koichiro/quick-presenter/issues/374), [#375](https://github.com/koichiro/quick-presenter/issues/375), [#376](https://github.com/koichiro/quick-presenter/issues/376), [#381](https://github.com/koichiro/quick-presenter/pull/381), [#382](https://github.com/koichiro/quick-presenter/pull/382), [#383](https://github.com/koichiro/quick-presenter/pull/383)).
-- Add the `X` shortcut to swap presenter and audience windows between displays,
-  including retargeting a fullscreen audience window. Preserve presentation
-  state and clamp placement to available displays; unsupported or single-display
-  cases give a short status message ([#384](https://github.com/koichiro/quick-presenter/issues/384), [#385](https://github.com/koichiro/quick-presenter/pull/385), [#386](https://github.com/koichiro/quick-presenter/pull/386)).
-- Remember the last active PDF and audience window's usable windowed placement
-  on orderly exit. Reopen at page 1 on normal startup, honor an explicit startup
-  PDF, and recover safely when a file or display is unavailable. Smoke modes
-  bypass this persistence ([#31](https://github.com/koichiro/quick-presenter/issues/31), [#396](https://github.com/koichiro/quick-presenter/pull/396), [#397](https://github.com/koichiro/quick-presenter/pull/397)).
-
-### Changed
-
-- Automatically fit speaker notes to the viewport with a 12–24 logical pixel
-  font range and improved line spacing. Notes that overflow at the minimum size
-  remain scrollable; no manual typography preference is stored ([#260](https://github.com/koichiro/quick-presenter/issues/260), [#391](https://github.com/koichiro/quick-presenter/pull/391)).
-- Replace text-only navigation with First, Previous, Next, and Last icon buttons
-  with accessible names, tooltips, and existing keyboard behavior ([#106](https://github.com/koichiro/quick-presenter/issues/106), [#395](https://github.com/koichiro/quick-presenter/pull/395)).
-- Size audience slide renders from the physical window width, using stable
-  samples and bounded 1600–2560 px widths. Adjust cache budgets to that width,
-  evict obsolete variants, preserve the last good image during rerendering, and
-  reject stale results. Tall pages retain a usable baseline; preview and
-  thumbnail widths stay fixed ([#271](https://github.com/koichiro/quick-presenter/issues/271), [#398](https://github.com/koichiro/quick-presenter/pull/398), [#401](https://github.com/koichiro/quick-presenter/pull/401)).
-
-### Fixed
-
-- Safely refresh native Open Recent menus after successful opens and clears.
-  A scoped Slint backend patch fixes macOS menu-item lifetime handling and rejects
-  stale menu activations that could otherwise select the wrong PDF
-  ([#181](https://github.com/koichiro/quick-presenter/issues/181), [#252](https://github.com/koichiro/quick-presenter/issues/252), [#389](https://github.com/koichiro/quick-presenter/pull/389)).
-- Exclude ordinary PDF comments from speaker notes while preserving supported
-  Marp notes and the documented Beamer `pdfcomment` workflow. Detection uses
-  generator metadata heuristics; unsupported annotations may be omitted
-  ([#158](https://github.com/koichiro/quick-presenter/issues/158), [#390](https://github.com/koichiro/quick-presenter/pull/390)).
-- Report an actionable signing error when an unsigned/ad-hoc macOS bundle
-  cannot authenticate its renderer, instead of showing `Unexpected error`
-  ([#387](https://github.com/koichiro/quick-presenter/issues/387), [#388](https://github.com/koichiro/quick-presenter/pull/388)).
-
-### Known issue
-
-- A hidden macOS audience window can show an old backing image when raised
-  after PDF replacement/reload. This remains a v1.5.0 release blocker pending
-  resolution or an explicit release decision ([#400](https://github.com/koichiro/quick-presenter/issues/400)). Display-aware rendering
-  still needs further mixed-DPI, monitor-reconnect, and Windows/Linux runtime
-  qualification; see [implementation validation](docs/validation/ISSUE271_IMPLEMENTATION.md).
-
-## [1.0.2] — development checkpoint, 2026-10-02
-
-No GitHub release or tag was published for this version. [#368](https://github.com/koichiro/quick-presenter/pull/368) advanced package
-metadata after v1.0.1; the following preparation work landed before the temporary
-development bump to 1.5.0 in [#379](https://github.com/koichiro/quick-presenter/pull/379).
-
-### Development
-
-- Document macOS signing/notarization credential preflight and artifact handoff
-  requirements ([#369](https://github.com/koichiro/quick-presenter/pull/369)).
-- Define PDF renderer isolation, threat-model, and vulnerability-response policy
-  ([#241](https://github.com/koichiro/quick-presenter/issues/241), [#370](https://github.com/koichiro/quick-presenter/issues/370), [#377](https://github.com/koichiro/quick-presenter/pull/377)).
-- Add a bounded, versioned renderer IPC codec and broker adapter that reject
-  malformed, stale, unsolicited, and oversized responses. Production helper
-  activation followed in the work grouped under 1.4.0 ([#371](https://github.com/koichiro/quick-presenter/issues/371), [#378](https://github.com/koichiro/quick-presenter/pull/378)).
 
 ## [1.0.1] — 2026-10-02
 
@@ -320,16 +228,6 @@ initial playback implementation developed before the 0.3.0 version bump.
   macOS app/DMG and Windows MSI packaging, CI binary builds, and packaged smoke
   checks ([#48](https://github.com/koichiro/quick-presenter/issues/48), [#53](https://github.com/koichiro/quick-presenter/issues/53), [#69](https://github.com/koichiro/quick-presenter/issues/69), [#71](https://github.com/koichiro/quick-presenter/issues/71), [#86](https://github.com/koichiro/quick-presenter/issues/86), [#87](https://github.com/koichiro/quick-presenter/issues/87), [#88](https://github.com/koichiro/quick-presenter/issues/88), [#94](https://github.com/koichiro/quick-presenter/issues/94), [#101](https://github.com/koichiro/quick-presenter/issues/101)).
 
-### Fixed
-
-- Show the audience window at startup, establish keyboard focus, correct window
-  sizing/clipping, and hide PDF annotation indicators from audience slides
-  ([#18](https://github.com/koichiro/quick-presenter/issues/18), [#19](https://github.com/koichiro/quick-presenter/issues/19), [#42](https://github.com/koichiro/quick-presenter/issues/42), [#44](https://github.com/koichiro/quick-presenter/issues/44), [#62](https://github.com/koichiro/quick-presenter/issues/62)).
-- Restore Marp speaker-note extraction after stricter annotation filtering ([#75](https://github.com/koichiro/quick-presenter/issues/75), [#76](https://github.com/koichiro/quick-presenter/pull/76)).
-
-[Unreleased]: https://github.com/koichiro/quick-presenter/compare/cbe2cf1b1c5f1514dacfe80329d03fb65669146c...main
-[1.4.0]: https://github.com/koichiro/quick-presenter/compare/3e06410...cbe2cf1b1c5f1514dacfe80329d03fb65669146c
-[1.0.2]: https://github.com/koichiro/quick-presenter/compare/v1.0.1...3e06410
 [1.0.1]: https://github.com/koichiro/quick-presenter/releases/tag/v1.0.1
 [1.0.0]: https://github.com/koichiro/quick-presenter/releases/tag/v1.0.0
 [0.7.1]: https://github.com/koichiro/quick-presenter/releases/tag/v0.7.1
