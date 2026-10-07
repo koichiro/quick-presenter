@@ -26,7 +26,7 @@ scripts/check_windows_cross.sh
 
 The Rust suite passed 398 unit tests and 13 integration tests. Added cases cover width buckets, stable samples, tall geometry, bounded budgets, stale completions and failures, cache eviction, queue coalescing, navigation, and reload width identity. The Windows check compiles all targets; it is not a Windows runtime qualification. The existing macOS atomic `fetch_update` deprecation warning remains.
 
-The final debug build was staged and Developer ID signed using the repository scripts. The signed XPC render/notes and private-file/network/child denial gate passed. Its GUI smoke test passed **39 checks with zero failures**; [the raw report](ISSUE271_IMPLEMENTATION_GUI_SMOKE.txt) is retained. This smoke entry point checks the existing GUI flow and does not start the new adaptive sizing timer.
+The final debug build was staged and Developer ID signed using the repository scripts. The signed XPC render/notes and private-file/network/child denial gate passed. Its GUI smoke test passed **39 checks with zero failures**. This smoke entry point checks the existing GUI flow and does not start the new adaptive sizing timer.
 
 Final signed executable SHA-256:
 
@@ -43,7 +43,7 @@ Environment: macOS 26.7 (25G229), Apple M4 Pro, DELL U4021QW at 5120×2160 / 60 
 - Replacing the open PDF during fullscreen retained page index 1 and loaded the replacement's speaker notes. The audience displayed the replacement's second page; the log recorded its successful 2560 px bitmap.
 - A separate fresh launch opened a two-page 200×400 pt portrait PDF. Its 1600×3200 baseline image rendered successfully. Fullscreen selected the 2560 px policy while page geometry kept the effective bitmap at baseline; navigation to page 2 and audience output remained usable.
 
-Raw adaptive events are retained in [the navigation/reload log](ISSUE271_IMPLEMENTATION_ADAPTIVE.txt) and [the fresh portrait launch log](ISSUE271_IMPLEMENTATION_TALL.txt). Cache values in these logs measure retained RGBA images, not process RSS or all copies of a bitmap.
+Recorded cache values measure retained RGBA images, not process RSS or all copies of a bitmap.
 
 These manual tests used the signed candidate with SHA-256 `568f88be47499302b8b1465d5c18daeca09ac1329f98e8d909ce4ff83ab41e2e`. Afterwards, the final source tightened failure-status recovery when an effective visible request changes or succeeds. That error-path adjustment passed the complete Rust suite and final signed GUI smoke; the manual successful rendering sequence was not repeated on the final artifact.
 

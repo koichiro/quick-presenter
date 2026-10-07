@@ -1,2 +1,0 @@
-2026-10-07T02:54:48.650442Z  INFO quick_presenter: visible slide render committed page_index=0 render_width=1600 cache_entries=1 cache_bytes=20480000
-2026-10-07T02:54:57.364425Z  INFO quick_presenter: slide render sizing changed physical_surface_width=Some(5120) render_width=2560 cache_budget_bytes=151554600

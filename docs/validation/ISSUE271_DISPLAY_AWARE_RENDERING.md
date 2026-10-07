@@ -222,8 +222,7 @@ widths, but does not quantify a quality improvement or validate the proposed
 that ceiling, fullscreen output on this ultrawide display would still upscale.
 
 The same signed app's semi-automated GUI smoke ran against the demo on this
-display: **39 passed, 0 failed**, successful exit. The
-[raw report](ISSUE271_MACOS_GUI_SMOKE.txt) is retained alongside this note.
+display: **39 passed, 0 failed**, successful exit.
 There was one transient ScreenCaptureKit observation error during fullscreen
 entry; a subsequent observation succeeded and confirmed the resulting state.
 Continuous frames, latency, RSS, and cache counters were not measured.

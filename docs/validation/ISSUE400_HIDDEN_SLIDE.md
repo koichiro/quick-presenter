@@ -172,8 +172,7 @@ Final source validation passed:
 - `cargo build`
 - Developer ID signing and `codesign --verify --deep --strict`.
 - Signed XPC PDF render/notes and private-file/network/child denial gate.
-- Final signed GUI smoke: **63 passed, 0 failed**; see
-  [the raw report](ISSUE400_GUI_SMOKE.txt).
+- Final signed GUI smoke: **63 passed, 0 failed**.
 
 The worktree reused the existing PDFium library through
 `PDFIUM_DYNAMIC_LIB_PATH=/Users/koichiro/projects/quick-presenter/pdfium/lib/libpdfium.dylib`.
