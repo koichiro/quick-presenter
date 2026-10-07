@@ -21,6 +21,11 @@ in [Presenter and Slide Display Swap](DISPLAY_SWAP.md). Slint forwards the key
 event; Rust owns monitor snapshots, the two-window swap transaction, focus
 recovery, and platform limitations.
 
+The proposed persistence of audience window placement across launches is defined
+in [Slide Window Placement Persistence](SLIDE_WINDOW_PLACEMENT.md). Rust owns
+record validation, safe startup restoration, and capture after verified display
+swaps; fullscreen intent and PDF state are not persisted by that feature.
+
 Diagnostic file creation, permissions, byte accounting, and rotation remain in
 the Rust diagnostics boundary. The v1.0.0 retention design is documented in
 [Diagnostic Log Retention](DIAGNOSTIC_LOG_RETENTION.md); Slint and presentation
