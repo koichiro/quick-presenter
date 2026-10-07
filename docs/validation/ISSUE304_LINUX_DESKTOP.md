@@ -37,7 +37,7 @@ they do not reproduce clicking GNOME's installed launcher with a rebuilt package
 The contribution of the icon declaration versus startup-token handling has not
 been isolated.
 
-## Automated checks and retained reports
+## Automated checks
 
 - `cargo fmt --check`: passed.
 - `cargo check --locked -j 2`: passed.
@@ -46,18 +46,15 @@ been isolated.
   renderer-process tests, and 1 slide layout test).
 - GitHub CI for the initial PR implementation passed:
   [run 37580172032](https://github.com/koichiro/quick-presenter/actions/runs/37580172032).
-- GUI smoke reports: [Wayland](ISSUE304_WAYLAND_GUI_SMOKE.txt) and
-  [XWayland](ISSUE304_XWAYLAND_GUI_SMOKE.txt).
 
-Each GUI smoke report has 62 passing checks and one failing assertion:
+Each GUI smoke run has 62 passing checks and one failing assertion:
 `wrapped notes use the largest fitting measured size (with a PDF open)`.
 The viewport is 199 px; the measured heights for 12 px and 13 px text are 184 px
 and 200 px. Including the test's 10 px margin, only the minimum size fits, while
 the smoke assertion requires a size greater than 12 px. The selected 12 px size
 is consistent with the measured constraints. This is a separate notes-smoke
 fixture/assertion issue; the icon, lifecycle, navigation, and rendering checks
-above passed. The raw reports retain the failure rather than reporting the full
-GUI suite as successful.
+above passed. The full GUI suite is not claimed to pass.
 
 ## Closure assessment
 
