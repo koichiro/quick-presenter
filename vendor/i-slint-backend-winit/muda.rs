@@ -35,6 +35,9 @@ pub enum MudaType {
 
 static MUDA_SET_EVENT_HANDLER_INSTALLED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(target_os = "macos")]
+pub(crate) const QUIT_MENU_ID: &str = "slint-quit-event-loop";
+
 /// Returns true when `SLINT_NO_MUDA` is set, in which case the menu bar and the context menus
 /// are rendered by Slint. That's the only way to exercise these code paths on macOS and Windows.
 pub fn is_disabled() -> bool {
@@ -422,7 +425,17 @@ fn create_default_app_menu(menu_bar: &muda::Menu) -> Result<(), i_slint_core::ap
                 &muda::PredefinedMenuItem::hide_others(None),
                 &muda::PredefinedMenuItem::show_all(None),
                 &muda::PredefinedMenuItem::separator(),
-                &muda::PredefinedMenuItem::quit(None),
+                // AppKit's predefined Quit terminates the process before the
+                // caller can run cleanup after the Slint event loop returns.
+                &muda::MenuItem::with_id(
+                    QUIT_MENU_ID,
+                    "Quit Quick Presenter",
+                    true,
+                    Some(muda::accelerator::Accelerator::new(
+                        muda::accelerator::Modifiers::META,
+                        muda::accelerator::Code::KeyQ,
+                    )),
+                ),
             ])
         })
         .map_err(|menu_bar_err| {

@@ -240,6 +240,7 @@ fn main() -> Result<()> {
 
     let event_loop_result = slint::run_event_loop();
     if event_loop_result.is_ok() {
+        window_controller::capture_slide_placement(&windows.refs());
         let last_pdf = state
             .borrow()
             .active_document_path

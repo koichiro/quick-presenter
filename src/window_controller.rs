@@ -1292,6 +1292,7 @@ pub fn start_slide_placement(windows: AppWindowRefs) {
 struct NativeRestorePlan {
     target: winit::monitor::MonitorHandle,
     planned: RestorePlan,
+    logical_outer_size: [f64; 2],
 }
 
 fn build_restore_plan(
@@ -1337,6 +1338,10 @@ fn build_restore_plan(
             )?;
             Some(NativeRestorePlan {
                 target: monitors.get(planned.target)?.clone(),
+                logical_outer_size: [
+                    planned.logical_inner_size[0] + frame[0],
+                    planned.logical_inner_size[1] + frame[1],
+                ],
                 planned,
             })
         })
@@ -1357,7 +1362,18 @@ fn apply_restore_plan(windows: &AppWindowRefs, plan: &NativeRestorePlan) -> bool
     if !available {
         return false;
     }
-    set_slide_logical_size(windows, plan.planned.logical_inner_size);
+    let size_settled = slide
+        .window()
+        .with_winit_window(|native| {
+            let inner = native.inner_size().to_logical::<f64>(native.scale_factor());
+            (inner.width - plan.planned.logical_inner_size[0]).abs() < 2.0
+                && (inner.height - plan.planned.logical_inner_size[1]).abs() < 2.0
+        })
+        .unwrap_or(false);
+    // A position-only retry must not restart native content/frame resizing.
+    if !size_settled {
+        set_slide_logical_size(windows, plan.planned.logical_inner_size);
+    }
     slide
         .window()
         .with_winit_window(|native| {
@@ -1435,17 +1451,24 @@ fn verify_startup_placement(
                 let position =
                     desktop_point(position, native.scale_factor(), cfg!(target_os = "macos"));
                 let inner = native.inner_size().to_logical::<f64>(native.scale_factor());
-                Some((position, [inner.width, inner.height]))
+                let outer = native.outer_size().to_logical::<f64>(native.scale_factor());
+                Some((
+                    position,
+                    [inner.width, inner.height],
+                    [outer.width, outer.height],
+                ))
             })
             .flatten();
         if window_has_available_monitor(slide.window()) {
-            if let Some((position, size)) = settled {
+            if let Some((position, size, outer)) = settled {
                 let moved_elsewhere =
                     (i64::from(position.x) - i64::from(plan.planned.position[0])).abs() > 32
                         || (i64::from(position.y) - i64::from(plan.planned.position[1])).abs() > 32;
                 let size_settled = (size[0] - plan.planned.logical_inner_size[0]).abs() < 2.0
                     && (size[1] - plan.planned.logical_inner_size[1]).abs() < 2.0;
-                if moved_elsewhere || size_settled {
+                let frame_settled = (outer[0] - plan.logical_outer_size[0]).abs() < 2.0
+                    && (outer[1] - plan.logical_outer_size[1]).abs() < 2.0;
+                if moved_elsewhere || (size_settled && frame_settled) {
                     // Prefer an externally moved usable window over delayed correction.
                     windows.placement.cancel();
                     sync_slide_chrome(&windows);
