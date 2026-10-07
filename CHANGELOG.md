@@ -1,15 +1,5 @@
 # Changelog
 
-Notable changes to Quick Presenter, newest first. Entries summarize implemented
-behavior and link to the supporting issues and pull requests. Issue closure alone
-is not treated as evidence that a feature shipped.
-
-Dates for GitHub releases are their publication dates. Tagged checkpoints without
-a GitHub release use the version commit date. Store publication dates are omitted
-where no release record establishes them.
-The v0.3.0 and v0.4.0 tags were added retrospectively; their dates below describe
-the original checkpoints, not tag creation.
-
 ## [1.0.2] — development checkpoint, 2026-10-02
 
 No GitHub release or tag was published for this version. [#368](https://github.com/koichiro/quick-presenter/pull/368) advanced package
