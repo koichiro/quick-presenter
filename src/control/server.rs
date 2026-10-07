@@ -1,0 +1,269 @@
+use super::protocol::{Request, Response};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{Receiver, SyncSender},
+        Arc,
+    },
+    time::Instant,
+};
+
+pub struct PendingRequest {
+    pub request: Request,
+    pub deadline: Instant,
+    pub cancelled: Arc<AtomicBool>,
+    pub response: SyncSender<Response>,
+}
+impl PendingRequest {
+    pub fn is_expired(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed) || Instant::now() >= self.deadline
+    }
+}
+
+#[cfg(unix)]
+mod unix {
+    use super::*;
+    use crate::control::{
+        protocol::{self, ErrorCode},
+        transport,
+    };
+    use std::sync::mpsc;
+    use std::{
+        fs::{self, File, OpenOptions},
+        io::{self, Read},
+        os::{
+            fd::AsRawFd,
+            unix::{
+                fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
+                net::{UnixListener, UnixStream},
+            },
+        },
+        path::{Path, PathBuf},
+        thread::{self, JoinHandle},
+        time::Duration,
+    };
+    const MAX_CLIENTS: usize = 8;
+    const IO_TIMEOUT: Duration = Duration::from_secs(1);
+
+    pub struct ControlServer {
+        stop: Arc<AtomicBool>,
+        thread: Option<JoinHandle<()>>,
+        path: PathBuf,
+        identity: (u64, u64),
+        _lock: File,
+    }
+    impl ControlServer {
+        pub fn start() -> io::Result<(Self, Receiver<PendingRequest>)> {
+            Self::bind(&transport::endpoint()?)
+        }
+        pub fn bind(path: &Path) -> io::Result<(Self, Receiver<PendingRequest>)> {
+            transport::validate_directory(path.parent().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "Missing endpoint parent")
+            })?)?;
+            let lock = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .mode(0o600)
+                .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+                .open(path.with_extension("lock"))?;
+            let meta = lock.metadata()?;
+            if !meta.is_file()
+                || meta.uid() != unsafe { libc::geteuid() }
+                || meta.mode() & 0o077 != 0
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "Unsafe control lock",
+                ));
+            }
+            if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::AddrInUse,
+                    "Another instance owns local control",
+                ));
+            }
+            if fs::symlink_metadata(path).is_ok() {
+                transport::validate_socket(path)?;
+                // Preserve endpoints held by older servers that do not use this lock.
+                match UnixStream::connect(path) {
+                    Ok(_) => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::AddrInUse,
+                            "Control endpoint is active",
+                        ))
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::ConnectionRefused => {
+                        fs::remove_file(path)?
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            let listener = UnixListener::bind(path)?;
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+            listener.set_nonblocking(true)?;
+            let meta = fs::symlink_metadata(path)?;
+            let identity = (meta.dev(), meta.ino());
+            let stop = Arc::new(AtomicBool::new(false));
+            let stop_thread = stop.clone();
+            let (sender, receiver) = mpsc::sync_channel(MAX_CLIENTS);
+            let thread = thread::Builder::new()
+                .name("presentation-control".into())
+                .spawn(move || {
+                    let mut clients: Vec<JoinHandle<()>> = Vec::new();
+                    while !stop_thread.load(Ordering::Relaxed) {
+                        let mut index = 0;
+                        while index < clients.len() {
+                            if clients[index].is_finished() {
+                                let _ = clients.swap_remove(index).join();
+                            } else {
+                                index += 1;
+                            }
+                        }
+                        match listener.accept() {
+                            Ok((stream, _)) => {
+                                if clients.len() >= MAX_CLIENTS {
+                                    // Drain the accept backlog without allocating another worker.
+                                    drop(stream);
+                                    thread::sleep(Duration::from_millis(10));
+                                    continue;
+                                }
+                                let sender = sender.clone();
+                                let stop = stop_thread.clone();
+                                if let Ok(client) = thread::Builder::new()
+                                    .name("control-client".into())
+                                    .spawn(move || {
+                                        let _ = serve(stream, sender, stop);
+                                    })
+                                {
+                                    clients.push(client);
+                                }
+                            }
+                            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                                thread::sleep(Duration::from_millis(10))
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                    for client in clients {
+                        let _ = client.join();
+                    }
+                })?;
+            Ok((
+                Self {
+                    stop,
+                    thread: Some(thread),
+                    path: path.to_owned(),
+                    identity,
+                    _lock: lock,
+                },
+                receiver,
+            ))
+        }
+    }
+    impl Drop for ControlServer {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::Relaxed);
+            if let Some(thread) = self.thread.take() {
+                let _ = thread.join();
+            }
+            if let Ok(meta) = fs::symlink_metadata(&self.path) {
+                if (meta.dev(), meta.ino()) == self.identity {
+                    let _ = fs::remove_file(&self.path);
+                }
+            }
+        }
+    }
+    struct DeadlineReader<'a> {
+        stream: &'a mut UnixStream,
+        deadline: Instant,
+    }
+    impl Read for DeadlineReader<'_> {
+        fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+            let remaining = self
+                .deadline
+                .checked_duration_since(Instant::now())
+                .filter(|d| !d.is_zero())
+                .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "Control read timed out"))?;
+            self.stream.set_read_timeout(Some(remaining))?;
+            self.stream.read(bytes)
+        }
+    }
+    fn serve(
+        mut stream: UnixStream,
+        sender: SyncSender<PendingRequest>,
+        stop: Arc<AtomicBool>,
+    ) -> io::Result<()> {
+        stream.set_write_timeout(Some(IO_TIMEOUT))?;
+        // One request per connection. Further clients can reuse the protocol through new connections.
+        let bytes = protocol::read_frame(&mut DeadlineReader {
+            stream: &mut stream,
+            deadline: Instant::now() + IO_TIMEOUT,
+        })?;
+        let request = match protocol::decode_request(&bytes) {
+            Ok(request) => request,
+            Err(response) => return protocol::write_frame(&mut stream, &response),
+        };
+        let id = request.id;
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let deadline = Instant::now() + protocol::REQUEST_TIMEOUT;
+        let (response_sender, receiver) = mpsc::sync_channel(1);
+        let pending = PendingRequest {
+            request,
+            deadline,
+            cancelled: cancelled.clone(),
+            response: response_sender,
+        };
+        if sender.try_send(pending).is_err() {
+            return protocol::write_frame(
+                &mut stream,
+                &Response::error(
+                    Some(id),
+                    ErrorCode::Busy,
+                    "Control queue is full or unavailable.",
+                ),
+            );
+        }
+        loop {
+            if stop.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                cancelled.store(true, Ordering::Relaxed);
+                return protocol::write_frame(
+                    &mut stream,
+                    &Response::error(
+                        Some(id),
+                        ErrorCode::Timeout,
+                        "Control request timed out; query status before retrying a mutation.",
+                    ),
+                );
+            }
+            match receiver.recv_timeout(Duration::from_millis(50)) {
+                Ok(response) => return protocol::write_frame(&mut stream, &response),
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return protocol::write_frame(
+                        &mut stream,
+                        &Response::error(
+                            Some(id),
+                            ErrorCode::Cancelled,
+                            "Presentation request was cancelled.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+#[cfg(unix)]
+pub use unix::ControlServer;
+#[cfg(not(unix))]
+pub struct ControlServer;
+#[cfg(not(unix))]
+impl ControlServer {
+    pub fn start() -> std::io::Result<(Self, Receiver<PendingRequest>)> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "Local control is not implemented for this platform",
+        ))
+    }
+}
