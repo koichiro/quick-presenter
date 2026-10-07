@@ -1,17 +1,20 @@
-# Slide Window Placement Persistence
+# Slide Window and PDF Startup Restoration
 
 ## Status and Scope
 
 Proposed design for [issue #31](https://github.com/koichiro/quick-presenter/issues/31).
-Remember the audience slide window's last usable windowed placement to reduce
-setup work on the next launch. Reuse the Rust native-window boundary introduced
-by [display swapping](DISPLAY_SWAP.md).
+Remember the audience slide window's last usable windowed placement and reopen
+the PDF that was active at orderly exit. Restore both on the next normal launch
+to reduce presentation setup work. Reuse the Rust native-window boundary
+introduced by [display swapping](DISPLAY_SWAP.md) and the existing asynchronous
+PDF open pipeline.
 
-The feature saves one placement for the application, independent of the PDF.
-Presenter placement, fullscreen intent, visibility, PDF paths, and presentation
-state are outside the saved record. Startup remains windowed. There is no
-display picker, persistent monitor identity, per-deck preference, or background
-monitor-management service.
+The feature saves one placement and one last-active PDF path for the application.
+Placement remains independent of the PDF. Presenter placement, fullscreen intent,
+visibility, page index, timer, notes, and black-screen state are outside the saved
+record. Startup remains windowed and a reopened PDF starts at its first page.
+There is no display picker, persistent monitor identity, per-deck preference, or
+background monitor-management service.
 
 ## Behavior Contract
 
@@ -23,6 +26,12 @@ monitor-management service.
   display, then the first usable display. If discovery or placement is
   unsupported, leave placement to the existing startup path and window manager.
 - Missing, invalid, or newer-version settings behave like a first launch.
+- Without an explicit startup PDF, automatically reopen the PDF that was active
+  at orderly exit. An explicit `--pdf` or positional PDF path takes precedence.
+- If no PDF was active at exit, save an empty last-PDF value. Failed or pending
+  replacement opens must never become the remembered PDF.
+- A missing, inaccessible, or invalid remembered PDF leaves the app open with
+  a short presenter-facing error and the normal file-opening controls available.
 - Remember the last settled windowed placement before fullscreen or hiding.
   Fullscreen dimensions, minimized geometry, and hidden-window artifacts must
   never replace the normal size.
@@ -33,8 +42,8 @@ monitor-management service.
   status text.
 
 The first implementation saves on orderly application exit. A crash, forced
-termination, or power loss can retain the previous run's placement. Continuous
-disk writes during a presentation are unnecessary for this issue.
+termination, or power loss can retain the previous run's placement and PDF path.
+Continuous disk writes during a presentation are unnecessary for this issue.
 
 ## Existing Integration Points
 
@@ -55,13 +64,24 @@ Add `src/window_placement.rs` for serializable records, validation, the pure
 restore planner, and an in-memory `SlidePlacementController`. Native capture and
 application stay in `window_controller.rs`. `main.rs` owns their lifetime and
 connects startup, window events, visibility, fullscreen, swap completion, and
-shutdown. Slint continues to expose dimensions and forward user events.
+shutdown. Add a small `src/startup_state.rs` boundary for the shared settings
+envelope, store, and pure startup-PDF selection. PDF selection must not depend on
+native placement support. Track the committed active PDF path in Rust session
+state; placement capture must not own or inspect a native PDF document. Slint
+continues to expose dimensions and forward user events.
 
-The version 1 JSON record contains:
+The version 1 JSON envelope contains:
 
 | Field | Meaning |
 | --- | --- |
 | `version` | Schema version, initially 1. |
+| `window_placement` | Optional placement record; absence retains default sizing and placement. |
+| `last_pdf` | Optional absolute native PDF path and its platform/encoding tag; null means no active PDF. |
+
+The optional placement record contains:
+
+| Field | Meaning |
+| --- | --- |
 | `platform` | Coordinate interpretation for macOS, Windows, or Linux X11. |
 | `source_display` | Display origin, extent, and actual scale factor at capture. |
 | `relative_center` | Window outer center normalized within that display. |
@@ -83,8 +103,11 @@ reachability over reproducing an out-of-bounds center.
 
 Validate before planning: finite numbers, positive sizes and scale, centers in
 `[0, 1]`, supported platform and schema, and checked conversions to native integer
-coordinates. Limit the file read to 16 KiB. Invalid records are ignored as a
-whole; do not reinterpret incomplete data as zero coordinates.
+coordinates. Limit the settings read to 256 KiB, including native path encoding.
+Reject malformed JSON or an unknown envelope version as a whole. Validate the
+placement and last-PDF sections independently: invalid geometry must not prevent
+a valid PDF from reopening, and an invalid path must not prevent valid placement
+restoration. Do not reinterpret incomplete geometry as zero coordinates.
 
 ## Restore Planning and Application
 
@@ -130,6 +153,58 @@ drags from requested moves, so compare observed geometry against the pending
 plan and cancel on conflicting movement; conservatively prefer user control.
 Never restore focus to the slide as a side effect. Preserve the current startup
 ordering that brings the presenter forward.
+
+## Automatic PDF Reopening
+
+Choose exactly one startup PDF in Rust after loading settings:
+
+| Request | PDF to open |
+| --- | --- |
+| Normal GUI launch with `--pdf` or a positional PDF path | The explicitly requested PDF, even if opening it fails. |
+| Normal GUI launch without an explicit PDF | The validated saved `last_pdf`, if present. |
+| No explicit or saved PDF | Start without a document. |
+| Help, renderer helper, headless smoke, or GUI smoke | Keep existing behavior and bypass user startup settings. |
+
+Use `load_startup_pdf()` and the existing scheduler/helper open and render path
+for both explicit and remembered PDFs. Schedule the open after showing the
+windows; IO, PDFium, sandboxing, operation deadlines, and errors retain their
+existing boundaries. Do not synchronously probe or parse the PDF on the UI
+thread. Reopen the current file contents at that path, rather than storing a
+copy, cached pixels, file identity, or an older PDF version.
+
+A reopen is a new session: show the first page, reset the timer, and start with
+black screen and fullscreen disabled. Placement restoration proceeds independently
+of PDF opening and cannot block it. The saved-size flag must be available before
+scheduling either operation. A manual open during startup supersedes the automatic
+open through the existing session IDs; late automatic-open results must not
+replace the user's selected deck.
+
+Capture the path only when a PDF session is successfully committed, using
+`OpenedSessionOutcome::loaded_path` and the corresponding active session path.
+Resolve relative input against the working directory of that open and store an
+absolute path. Preserve native path data without lossy conversion: use a UTF-8
+string for representable paths, or tagged Unix byte/Windows UTF-16 arrays for
+other paths. Validate encoding, platform, absolute-path semantics, and absence
+of NUL before selection. The path platform tag identifies the operating system,
+not X11 versus Wayland. Paths copied between operating systems are ignored.
+Do not use the most recent file list or `pending_open` as the source of truth.
+A watcher failure must not erase a successfully committed PDF path.
+
+At shutdown, snapshot the path of the committed active document alongside the
+placement snapshot. If deck A is active while deck B is still opening or failed
+to open, save A. If nothing was committed in this run, save `last_pdf: null`,
+including after an automatic reopen failure. Thus a missing remembered file is
+not retried on every future launch once a subsequent orderly save succeeds.
+If the user opens another PDF after the failure, save that successfully committed
+PDF instead. Successful hot reload keeps the same path; it does not save the
+current page.
+
+Attempt the remembered open once using the existing bounded open pipeline; no
+extra retry loop, file search, or fallback to another recent PDF is added.
+Report a concise message such as `Could not reopen the previous PDF. Open a PDF
+to continue.` through the existing presenter error surface, with technical
+details in diagnostics. Explicit startup failures retain existing explicit-open
+error handling and must not silently open the saved PDF instead.
 
 ## PDF Sizing Precedence
 
@@ -178,7 +253,7 @@ not replay startup settings or start persistent monitor polling.
 
 ## Storage and Failure Handling
 
-Store `slide-window-placement.json` beside `recent-files.txt` in the existing
+Store `startup-state.json` beside `recent-files.txt` in the existing
 platform configuration directory. Extract the configuration-directory resolver
 and atomic byte writer from `recent.rs` into a small shared storage module;
 preserve recent-file behavior and its existing tests. Reuse same-directory temp
@@ -186,17 +261,25 @@ files, Unix mode `0600`, Windows replacement semantics, and temp-file cleanup.
 Existing `serde` and `serde_json` dependencies suffice.
 
 Read once at GUI startup and write at most once after the GUI event loop ends.
-Skip the write if no valid record was captured or the record is unchanged.
+Save placement and last-PDF fields together in one atomic replacement. Skip only
+when the complete normalized record is unchanged. A null last-PDF value is a real
+update and must be written even if no new placement could be captured. On a
+backend without placement support, preserve any previously valid placement
+section while updating the PDF field; otherwise use null for absent placement.
 Keep writes out of UI/native callbacks. A write failure preserves the old file
 and does not change the application exit result. Simultaneous instances use
-last-successful-writer semantics; no lock or merge policy is needed for one
-placement. Helper, headless smoke, and GUI smoke runs must not touch user settings;
-tests inject a temporary store path.
+last-successful-writer semantics; no lock or merge policy is needed for this
+single startup record. Helper, headless smoke, and GUI smoke runs must not touch
+user settings; tests inject a temporary store path.
 
 Missing settings are silent. Invalid settings, unsupported versions, and IO
 failures produce bounded diagnostics. A stale display is ordinary fallback,
 with no modal warning. Remove the settings file while the application is closed
-to reset placement. No new settings UI is required.
+to reset placement and automatic PDF reopening. The saved path is local user
+data and can reveal deck and directory names; document it in `PRIVACY.md` with
+its location and reset procedure. `Clear Recent Files` clears only the separate
+recent-file list; it does not erase the active PDF or this startup record. No
+new settings UI is required.
 
 ## Platform Support
 
@@ -205,8 +288,8 @@ to reset placement. No new settings UI is required.
 | macOS Winit | Capture and restore using the existing logical desktop conversion and slide chrome synchronization. |
 | Windows Winit | Capture and restore using physical desktop coordinates and destination scale. |
 | Linux X11 Winit | Capture and restore after deferred native-window creation. |
-| Linux Wayland | Keep compositor placement; ignore the loaded record and do not apply or overwrite placement settings in this version. |
-| Other Slint backends | Keep existing startup behavior and preserve existing settings. |
+| Linux Wayland | Keep compositor placement and preserve its saved section; reopen and save the last PDF normally. |
+| Other Slint backends | Keep existing window placement and preserve its saved section; reopen and save the last PDF normally. |
 
 Work-area APIs for excluding docks and taskbars are outside the initial scope.
 Clamp to monitor rectangles and verify the existing reachable-control predicate;
@@ -217,7 +300,9 @@ chrome on supported platforms.
 
 Unit tests should cover record round trips, bounded reads, corrupt and unknown
 schemas, incompatible platforms, invalid numeric values, negative origins,
-permission and write failures, and unchanged-record write suppression.
+permission and write failures, and unchanged-record write suppression. Include
+independent validation of placement and PDF fields, native path round trips,
+relative-to-absolute path capture, and null-PDF saves without new placement.
 
 Pure planner tests should cover unchanged geometry, removed or rearranged
 displays, changed resolution/DPI, mixed scales, fallback ordering, ambiguous
@@ -229,10 +314,20 @@ minimized windows, fullscreen capture suppression, and verified fullscreen/windo
 swap updates. Test both orderings of initial PDF render versus restoration and
 ensure page, timer, notes, black screen, and fullscreen intent remain unchanged.
 
+Startup/session tests should cover explicit PDF precedence (including explicit
+failure), no saved PDF, one remembered-open request, missing/inaccessible/invalid
+PDF failures, first-page/timer/fullscreen defaults, and a manual open superseding
+a pending restore. Cover A active with B pending or failed at exit, watcher
+failure after commit, hot reload retaining the path, no active PDF clearing the
+saved value, and smoke/helper modes leaving user settings untouched. Verify PDF
+reopening works even when placement is unsupported or invalid.
+
 Manual smoke checks on macOS, Windows, and X11:
 
 1. Move and resize the slide onto a second display, quit normally, and relaunch
-   with and without a startup PDF. Confirm position, size, and presenter focus.
+   without arguments. Confirm the same PDF reopens at its first page with the
+   remembered window size/position and presenter focus. Repeat with an explicit
+   different PDF and confirm it takes precedence.
 2. Repeat with different PDF aspect ratios and mixed display scale factors.
 3. Quit while fullscreen, including after `X`; confirm the next launch is
    windowed on the remembered destination with normal windowed dimensions.
@@ -241,11 +336,16 @@ Manual smoke checks on macOS, Windows, and X11:
 5. Hide the slide, change displays, show it, and quit; confirm no hidden or
    intermediate geometry is persisted.
 6. Test corrupt settings, an unwritable directory, very small displays, taskbars,
-   docks, and a Wayland session preserving a pre-existing X11 record.
+   docks, and a Wayland session reopening the PDF while preserving X11 placement.
+7. Delete, move, or deny access to the remembered PDF; confirm a usable empty app
+   with a short error. Open another deck, quit, and confirm that deck reopens.
+8. Quit with no committed document or while a replacement PDF is pending; confirm
+   the saved PDF is null or the previous active deck respectively.
 
-Implement in three stages: shared storage and pure planning; native startup and
-capture integration with PDF size precedence; then verified swap/fullscreen and
-hide/show integration. Each stage includes its corresponding unit tests.
+Implement in three stages: shared startup storage, pure placement planning, and
+PDF selection; native startup/capture and asynchronous PDF reopening with size
+precedence; then verified swap/fullscreen, hide/show, and orderly-exit integration.
+Each stage includes its corresponding unit tests.
 
 The implementation must pass `cargo fmt --check`, `cargo check`, and `cargo test`.
 Update `README.md`, `PRIVACY.md`, `FULLSCREEN.md`, and the GUI smoke checklist to
