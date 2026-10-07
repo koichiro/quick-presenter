@@ -43,3 +43,12 @@ uses Slint's raw window handle to obtain the slide window `HWND`, then applies
 Unsupported Windows versions should keep the normal native title bar. DWM
 attribute failures are logged for diagnostics and are not treated as presenter
 visible errors.
+
+## Placement Between Runs
+
+Normal startup restores the slide's windowed size and placement and reopens the
+last active PDF at its first page. Fullscreen intent is not saved. Quitting in
+fullscreen preserves the last captured windowed dimensions. A verified `X` swap
+in fullscreen updates the remembered destination without saving fullscreen
+bounds as the windowed size. If displays changed, startup falls back to an
+available display. See [startup restoration](SLIDE_WINDOW_PLACEMENT.md).

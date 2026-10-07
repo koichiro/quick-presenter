@@ -143,6 +143,16 @@ Run the app:
 cargo run --bin quick-presenter
 ```
 
+On orderly exit, Quick Presenter remembers the active PDF and the slide window's
+normal size and position. The next launch reopens that PDF at its first page in
+windowed mode. An explicit startup PDF takes precedence. Missing or inaccessible
+PDFs leave the app open so you can select another file. Display changes use an
+available-screen fallback; Wayland leaves window placement to the compositor.
+
+Headless and GUI smoke modes bypass this restoration and never read or save the
+startup record. See [startup restoration](docs/SLIDE_WINDOW_PLACEMENT.md) and
+[privacy and reset instructions](docs/PRIVACY.md).
+
 Open a PDF at startup:
 
 ```sh

@@ -2,7 +2,7 @@
 
 ## Status and Scope
 
-Proposed design for [issue #31](https://github.com/koichiro/quick-presenter/issues/31).
+Implementation contract for [issue #31](https://github.com/koichiro/quick-presenter/issues/31).
 Remember the audience slide window's last usable windowed placement and reopen
 the PDF that was active at orderly exit. Restore both on the next normal launch
 to reduce presentation setup work. Reuse the Rust native-window boundary
@@ -400,4 +400,5 @@ Each stage includes its corresponding unit tests.
 The implementation must pass `cargo fmt --check`, `cargo check`, and `cargo test`.
 Update `README.md`, `PRIVACY.md`, `FULLSCREEN.md`, and the GUI smoke checklist to
 describe the delivered behavior, storage/reset path, and platform limitations.
-This proposal does not claim that persistence is already implemented.
+The implementation keeps native multi-display smoke checks as part of the
+platform release validation.

@@ -129,6 +129,8 @@ pub fn commit_render_opened_state(
     state.timer.reset();
     state.status_text = status_text;
     let loaded_path = state.pending_open.take().map(|pending| pending.path);
+    state.active_document_path = loaded_path.clone();
+    state.automatic_reopen = None;
 
     Some(OpenedSessionOutcome {
         snapshot: state.presentation.snapshot(),
@@ -364,6 +366,40 @@ mod tests {
             .pending_open
             .as_ref()
             .map(|pending_open| pending_open.path.clone())
+    }
+
+    #[test]
+    fn last_active_path_tracks_commit_not_pending_or_failed_replacement() {
+        let mut state = AppState::default();
+        let first = begin_open_pdf_state(&mut state, "/deck-a.pdf".into());
+        commit_render_opened_state(&mut state, first, "A".into(), 2, "Ready".into()).unwrap();
+        assert_eq!(state.active_document_path, Some("/deck-a.pdf".into()));
+        let second = begin_open_pdf_state(&mut state, "/deck-b.pdf".into());
+        assert_eq!(state.active_document_path, Some("/deck-a.pdf".into()));
+        commit_render_open_failed_state(&mut state, second, "failed".into());
+        assert_eq!(state.active_document_path, Some("/deck-a.pdf".into()));
+        let third = begin_open_pdf_state(&mut state, "/deck-c.pdf".into());
+        state.automatic_reopen = Some(second);
+        commit_render_opened_state(&mut state, third, "C".into(), 3, "Ready".into()).unwrap();
+        assert_eq!(state.active_document_path, Some("/deck-c.pdf".into()));
+        assert_eq!(state.presentation.snapshot().unwrap().current_index, 0);
+        assert!(state.automatic_reopen.is_none());
+    }
+
+    #[test]
+    fn failed_initial_reopen_has_no_path_and_manual_open_supersedes_it() {
+        let mut state = AppState::default();
+        let automatic = begin_open_pdf_state(&mut state, "/old.pdf".into());
+        state.automatic_reopen = Some(automatic);
+        commit_render_open_failed_state(&mut state, automatic, "failed".into());
+        assert!(state.active_document_path.is_none());
+        let manual = begin_open_pdf_state(&mut state, "/new.pdf".into());
+        assert!(
+            commit_render_opened_state(&mut state, automatic, "Old".into(), 2, "Ready".into())
+                .is_none()
+        );
+        commit_render_opened_state(&mut state, manual, "New".into(), 2, "Ready".into()).unwrap();
+        assert_eq!(state.active_document_path, Some("/new.pdf".into()));
     }
 
     #[test]

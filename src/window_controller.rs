@@ -7,6 +7,9 @@ use slint::TimerMode;
 use slint::{ComponentHandle, LogicalPosition, LogicalSize, Timer, Weak};
 use tracing::{info, warn};
 
+use crate::window_placement::{
+    plan_restore, DisplayRect, PlacementRecord, RestorePlan, SlidePlacementController,
+};
 use crate::{PresenterWindow, SlideWindow};
 
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
@@ -33,6 +36,7 @@ const PRESENTER_WINDOW_TITLE: &str = "Quick Presenter";
 pub struct AppWindows {
     pub presenter: PresenterWindow,
     pub slide: SlideWindow,
+    pub placement: Rc<SlidePlacementController>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -143,9 +147,12 @@ pub fn request_display_swap(
         Err(outcome) => return outcome,
     };
 
+    capture_slide_placement(windows);
+    windows.placement.suspend();
     let generation = active.begin();
     if !target_monitors_are_available(windows, &plan) || !apply_native_swap(windows, &plan) {
         active.cancel();
+        windows.placement.cancel();
         return DisplaySwapOutcome::Unavailable;
     }
 
@@ -443,6 +450,7 @@ fn schedule_display_swap_verification(
             return;
         }
         if display_swap_matches(&windows, &plan) {
+            finish_placement_swap(&windows, &plan);
             active.cancel();
             sync_slide_chrome(&windows);
             restore_window_focus(&windows, initiated_by);
@@ -474,6 +482,8 @@ fn schedule_display_swap_verification(
             presenter.set_status_text(DISPLAY_SWAP_FAILURE_MESSAGE.into());
         }
         active.cancel();
+        windows.placement.cancel();
+        schedule_placement_capture(windows);
     });
 }
 
@@ -632,6 +642,7 @@ impl AppWindows {
         Ok(Self {
             presenter: PresenterWindow::new()?,
             slide: SlideWindow::new()?,
+            placement: Rc::new(SlidePlacementController::default()),
         })
     }
 
@@ -639,6 +650,7 @@ impl AppWindows {
         AppWindowRefs {
             presenter: self.presenter.as_weak(),
             slide: self.slide.as_weak(),
+            placement: self.placement.clone(),
         }
     }
 
@@ -654,6 +666,7 @@ impl AppWindows {
 pub struct AppWindowRefs {
     pub presenter: Weak<PresenterWindow>,
     pub slide: Weak<SlideWindow>,
+    pub placement: Rc<SlidePlacementController>,
 }
 
 #[cfg(target_os = "macos")]
@@ -739,6 +752,8 @@ pub fn should_apply_slide_chrome(fullscreen: bool) -> bool {
 }
 
 pub fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
+    capture_slide_placement(windows);
+    windows.placement.cancel();
     if let Some(slide) = windows.slide.upgrade() {
         slide.window().set_fullscreen(fullscreen);
         slide.set_titlebar_compensation_height(slide_titlebar_compensation_height(fullscreen));
@@ -790,6 +805,8 @@ fn presenter_input_recovery_delays() -> [Duration; 3] {
 }
 
 pub fn show_slide_window(windows: &AppWindowRefs) {
+    windows.placement.visible.set(true);
+    schedule_show_recovery(windows.clone());
     #[cfg(target_os = "macos")]
     if let Some(slide) = windows.slide.upgrade() {
         if crate::macos_window::show_window(slide.window(), SLIDE_WINDOW_TITLE) {
@@ -823,6 +840,9 @@ pub fn hide_presenter_window(windows: &AppWindowRefs) {
 }
 
 pub fn hide_slide_window(windows: &AppWindowRefs) {
+    capture_slide_placement(windows);
+    windows.placement.cancel();
+    windows.placement.visible.set(false);
     #[cfg(target_os = "macos")]
     if let Some(slide) = windows.slide.upgrade() {
         if crate::macos_window::hide_window(slide.window(), SLIDE_WINDOW_TITLE) {
@@ -1134,4 +1154,385 @@ mod tests {
             None
         );
     }
+}
+
+fn placement_display(monitor: &winit::monitor::MonitorHandle) -> Option<DisplayRect> {
+    let geometry = display_geometry(0, monitor)?;
+    Some(DisplayRect {
+        origin: [geometry.origin.x, geometry.origin.y],
+        extent: [geometry.size.width, geometry.size.height],
+        scale: monitor.scale_factor(),
+    })
+}
+
+pub fn set_slide_logical_size(windows: &AppWindowRefs, size: [f64; 2]) {
+    if let Some(slide) = windows.slide.upgrade() {
+        slide.set_slide_window_width(size[0] as f32);
+        slide.set_slide_window_height(size[1] as f32);
+        slide
+            .window()
+            .set_size(LogicalSize::new(size[0] as f32, size[1] as f32));
+    }
+}
+
+pub fn capture_slide_placement(windows: &AppWindowRefs) {
+    let controller = &windows.placement;
+    if !controller.enabled.get() || controller.busy.get() || !controller.visible.get() {
+        return;
+    }
+    let Some(slide) = windows.slide.upgrade() else {
+        return;
+    };
+    if !window_has_available_monitor(slide.window()) {
+        return;
+    }
+    let record = slide
+        .window()
+        .with_winit_window(|native| {
+            if native_window_placement_is_unsupported(native)
+                || native.is_visible() == Some(false)
+                || !controller.can_capture(
+                    native.fullscreen().is_some(),
+                    native.is_minimized() == Some(true),
+                )
+            {
+                return None;
+            }
+            let monitor = native.current_monitor()?;
+            let display = placement_display(&monitor)?;
+            let position = desktop_point(
+                native.outer_position().ok()?,
+                native.scale_factor(),
+                cfg!(target_os = "macos"),
+            );
+            let outer = desktop_size(
+                native.outer_size(),
+                native.scale_factor(),
+                cfg!(target_os = "macos"),
+            );
+            let inner = native.inner_size().to_logical::<f64>(native.scale_factor());
+            let center = [
+                ((f64::from(position.x) - f64::from(display.origin[0])
+                    + f64::from(outer.width) / 2.0)
+                    / f64::from(display.extent[0]))
+                .clamp(0.0, 1.0),
+                ((f64::from(position.y) - f64::from(display.origin[1])
+                    + f64::from(outer.height) / 2.0)
+                    / f64::from(display.extent[1]))
+                .clamp(0.0, 1.0),
+            ];
+            Some(PlacementRecord {
+                platform: crate::window_placement::platform().into(),
+                source_display: display,
+                relative_center: center,
+                logical_inner_size: [inner.width, inner.height],
+            })
+        })
+        .flatten();
+    if let Some(record) = record {
+        controller.capture(record);
+    }
+}
+
+fn schedule_placement_capture(windows: AppWindowRefs) {
+    if !windows.placement.enabled.get() {
+        return;
+    }
+    let generation = windows.placement.capture_generation.get().wrapping_add(1);
+    windows.placement.capture_generation.set(generation);
+    Timer::single_shot(Duration::from_millis(250), move || {
+        if windows.placement.capture_generation.get() == generation {
+            capture_slide_placement(&windows);
+        }
+    });
+}
+
+pub fn start_slide_placement(windows: AppWindowRefs) {
+    if !windows.placement.enabled.get() {
+        return;
+    }
+    if let Some(slide) = windows.slide.upgrade() {
+        let event_windows = windows.clone();
+        slide.window().on_winit_window_event(move |_, event| {
+            use winit::event::WindowEvent;
+            match event {
+                WindowEvent::Moved(_)
+                | WindowEvent::Resized(_)
+                | WindowEvent::ScaleFactorChanged { .. } => {
+                    schedule_placement_capture(event_windows.clone());
+                }
+                WindowEvent::MouseInput {
+                    state: winit::event::ElementState::Pressed,
+                    ..
+                }
+                | WindowEvent::KeyboardInput { .. }
+                    if event_windows.placement.restoring.get() =>
+                {
+                    event_windows.placement.cancel();
+                    schedule_placement_capture(event_windows.clone());
+                }
+                WindowEvent::CloseRequested => {
+                    capture_slide_placement(&event_windows);
+                    event_windows.placement.cancel();
+                    event_windows.placement.visible.set(false);
+                }
+                _ => {}
+            }
+            slint::winit_030::EventResult::Propagate
+        });
+    }
+    let generation = windows.placement.suspend();
+    windows.placement.restoring.set(true);
+    Timer::single_shot(Duration::ZERO, move || {
+        prepare_startup_placement(windows, generation, 0)
+    });
+}
+
+#[derive(Clone)]
+struct NativeRestorePlan {
+    target: winit::monitor::MonitorHandle,
+    planned: RestorePlan,
+}
+
+fn build_restore_plan(
+    windows: &AppWindowRefs,
+    saved: Option<&PlacementRecord>,
+) -> Option<NativeRestorePlan> {
+    let slide = windows.slide.upgrade()?;
+    let presenter_monitor = windows.presenter.upgrade().and_then(|presenter| {
+        presenter
+            .window()
+            .with_winit_window(|native| native.current_monitor())
+            .flatten()
+    });
+    slide
+        .window()
+        .with_winit_window(|native| {
+            if native_window_placement_is_unsupported(native) {
+                return None;
+            }
+            let monitors: Vec<_> = native
+                .available_monitors()
+                .filter(|m| placement_display(m).is_some())
+                .collect();
+            let displays: Vec<_> = monitors.iter().filter_map(placement_display).collect();
+            let fallback_monitor = presenter_monitor
+                .filter(|m| monitors.contains(m))
+                .or_else(|| native.primary_monitor().filter(|m| monitors.contains(m)));
+            let fallback = fallback_monitor
+                .and_then(|m| monitors.iter().position(|v| *v == m))
+                .unwrap_or(0);
+            let outer = native.outer_size().to_logical::<f64>(native.scale_factor());
+            let inner = native.inner_size().to_logical::<f64>(native.scale_factor());
+            let frame = [
+                (outer.width - inner.width).max(0.0),
+                (outer.height - inner.height).max(0.0),
+            ];
+            let planned = plan_restore(
+                saved,
+                &displays,
+                fallback,
+                frame,
+                [inner.width, inner.height],
+            )?;
+            Some(NativeRestorePlan {
+                target: monitors.get(planned.target)?.clone(),
+                planned,
+            })
+        })
+        .flatten()
+}
+
+fn apply_restore_plan(windows: &AppWindowRefs, plan: &NativeRestorePlan) -> bool {
+    let Some(slide) = windows.slide.upgrade() else {
+        return false;
+    };
+    let available = slide
+        .window()
+        .with_winit_window(|native| {
+            !native_window_placement_is_unsupported(native)
+                && native.available_monitors().any(|m| m == plan.target)
+        })
+        .unwrap_or(false);
+    if !available {
+        return false;
+    }
+    set_slide_logical_size(windows, plan.planned.logical_inner_size);
+    slide
+        .window()
+        .with_winit_window(|native| {
+            set_desktop_position(
+                native,
+                PixelPoint {
+                    x: plan.planned.position[0],
+                    y: plan.planned.position[1],
+                },
+            );
+        })
+        .is_some()
+}
+
+fn prepare_startup_placement(windows: AppWindowRefs, generation: u64, attempt: usize) {
+    if !windows.placement.current(generation) {
+        return;
+    }
+    let plan = build_restore_plan(&windows, windows.placement.remembered.borrow().as_ref());
+    let Some(plan) = plan else {
+        if attempt < DISPLAY_SWAP_VERIFY_DELAYS.len() {
+            Timer::single_shot(DISPLAY_SWAP_VERIFY_DELAYS[attempt], move || {
+                prepare_startup_placement(windows, generation, attempt + 1)
+            });
+        } else {
+            // Unsupported backends retain the stored section without using its size.
+            windows.placement.preserve_size.set(false);
+            windows.placement.cancel();
+        }
+        return;
+    };
+    // A first launch keeps the existing position when it is already usable.
+    if windows.placement.remembered.borrow().is_none() {
+        if let Some(slide) = windows.slide.upgrade() {
+            if window_has_available_monitor(slide.window()) {
+                windows.placement.cancel();
+                capture_slide_placement(&windows);
+                return;
+            }
+        }
+    }
+    if apply_restore_plan(&windows, &plan) {
+        verify_startup_placement(windows, plan, generation, 0);
+    } else {
+        finish_restore_fallback(windows, generation);
+    }
+}
+
+fn verify_startup_placement(
+    windows: AppWindowRefs,
+    plan: NativeRestorePlan,
+    generation: u64,
+    attempt: usize,
+) {
+    Timer::single_shot(DISPLAY_SWAP_VERIFY_DELAYS[attempt], move || {
+        if !windows.placement.current(generation) {
+            return;
+        }
+        let Some(slide) = windows.slide.upgrade() else {
+            windows.placement.cancel();
+            return;
+        };
+        let available = slide
+            .window()
+            .with_winit_window(|native| native.available_monitors().any(|m| m == plan.target))
+            .unwrap_or(false);
+        if !available {
+            finish_restore_fallback(windows, generation);
+            return;
+        }
+        let settled = slide
+            .window()
+            .with_winit_window(|native| {
+                let position = native.outer_position().ok()?;
+                let position =
+                    desktop_point(position, native.scale_factor(), cfg!(target_os = "macos"));
+                let inner = native.inner_size().to_logical::<f64>(native.scale_factor());
+                Some((position, [inner.width, inner.height]))
+            })
+            .flatten();
+        if window_has_available_monitor(slide.window()) {
+            if let Some((position, size)) = settled {
+                let moved_elsewhere =
+                    (i64::from(position.x) - i64::from(plan.planned.position[0])).abs() > 32
+                        || (i64::from(position.y) - i64::from(plan.planned.position[1])).abs() > 32;
+                let size_settled = (size[0] - plan.planned.logical_inner_size[0]).abs() < 2.0
+                    && (size[1] - plan.planned.logical_inner_size[1]).abs() < 2.0;
+                if moved_elsewhere || size_settled {
+                    // Prefer an externally moved usable window over delayed correction.
+                    windows.placement.cancel();
+                    sync_slide_chrome(&windows);
+                    capture_slide_placement(&windows);
+                    return;
+                }
+            }
+        }
+        if attempt + 1 < DISPLAY_SWAP_VERIFY_DELAYS.len() {
+            // Recompute frame compensation from actual native geometry.
+            let saved = windows.placement.remembered.borrow().clone();
+            if let Some(corrected) = build_restore_plan(&windows, saved.as_ref()) {
+                if apply_restore_plan(&windows, &corrected) {
+                    verify_startup_placement(windows, corrected, generation, attempt + 1);
+                    return;
+                }
+            }
+        }
+        finish_restore_fallback(windows, generation);
+    });
+}
+
+fn finish_restore_fallback(windows: AppWindowRefs, generation: u64) {
+    if !windows.placement.current(generation) {
+        return;
+    }
+    if let Some(slide) = windows.slide.upgrade() {
+        if !window_has_available_monitor(slide.window()) {
+            if let Some(plan) = build_restore_plan(&windows, None) {
+                apply_restore_plan(&windows, &plan);
+            }
+        }
+    }
+    windows.placement.cancel();
+    schedule_placement_capture(windows);
+}
+
+fn finish_placement_swap(windows: &AppWindowRefs, plan: &NativeSwapPlan) {
+    windows.placement.cancel();
+    if !windows.placement.enabled.get() {
+        return;
+    }
+    if plan.slide_fullscreen {
+        if let Some(target) = placement_display(&plan.slide_target) {
+            let mut record =
+                windows
+                    .placement
+                    .remembered
+                    .borrow()
+                    .clone()
+                    .unwrap_or(PlacementRecord {
+                        platform: crate::window_placement::platform().into(),
+                        source_display: target.clone(),
+                        relative_center: [0.5; 2],
+                        logical_inner_size: [1024.0, 576.0],
+                    });
+            record.retarget(target);
+            if record.valid() {
+                *windows.placement.remembered.borrow_mut() = Some(record);
+            }
+        }
+    } else {
+        capture_slide_placement(windows);
+    }
+}
+
+fn schedule_show_recovery(windows: AppWindowRefs) {
+    if !windows.placement.enabled.get() {
+        return;
+    }
+    Timer::single_shot(Duration::ZERO, move || {
+        let Some(slide) = windows.slide.upgrade() else {
+            return;
+        };
+        if !window_has_available_monitor(slide.window()) && !windows.placement.busy.get() {
+            if slide.window().is_fullscreen() {
+                if let Some(plan) = build_restore_plan(&windows, None) {
+                    let _ = slide.window().with_winit_window(|native| {
+                        native.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(
+                            plan.target,
+                        ))))
+                    });
+                }
+            } else if let Some(plan) = build_restore_plan(&windows, None) {
+                apply_restore_plan(&windows, &plan);
+            }
+        }
+        schedule_placement_capture(windows);
+    });
 }

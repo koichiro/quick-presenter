@@ -310,3 +310,27 @@ the raw binary as well as from the packaged artifact.
 | Inspect the buttons with a screen reader. | Each button exposes its operation name, rather than an empty label or SVG filename. |
 | Open the sample PDF and click next, previous, last, and first. Repeat at the document boundaries and with no PDF open. | Both windows stay synchronized; navigation clamps safely at the boundaries and is harmless without a document. |
 | Focus each navigation button with Tab and activate it with Space. Then use the existing presentation shortcuts after clicking a button. | Standard button activation and existing keyboard navigation continue to work. |
+
+## Startup Restoration
+
+Use normal GUI launches for these checks; `--smoke-open-pdf` and `--gui-smoke`
+deliberately bypass saved startup state.
+
+- Open a deck, move and resize the slide window, quit normally, and relaunch
+  without arguments. Confirm the same deck opens at page 1 with the remembered
+  slide size/position and presenter focus.
+- Repeat with an explicit different PDF; confirm it takes precedence and the
+  saved size survives opening a deck with a different aspect ratio.
+- Quit while fullscreen, including after a verified display swap; confirm the
+  next launch is windowed with the remembered normal size and destination.
+- Disconnect or rearrange displays, then relaunch or show a hidden slide window;
+  confirm usable placement and keyboard controls.
+- Remove or deny access to the remembered PDF; confirm a short error, working
+  open controls, and no automatic fallback to another recent PDF. Quit without
+  opening another deck, then confirm the next launch has no saved PDF.
+- Quit while deck B is opening over active deck A; confirm A remains remembered.
+- Run both smoke options with a different test PDF, report/log options, and a
+  failing test PDF; confirm smoke behavior is unaffected and the next normal
+  launch still restores the original record.
+- On Wayland, confirm compositor placement remains in control, the old placement
+  section is preserved, and PDF reopening still works.

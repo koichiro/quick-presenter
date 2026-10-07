@@ -29,6 +29,39 @@ to the user's `%APPDATA%` directory ACLs.
 
 Use File > Clear Recent Files to remove the saved list.
 
+## Startup Restoration
+
+Quick Presenter saves one `startup-state.json` record containing the last active
+PDF's absolute path and the audience window's last usable normal size and
+placement. Placement includes display geometry and scale, but no monitor names
+or persistent monitor IDs. It does not include PDF contents, slide images, notes,
+page index, timer, black-screen state, fullscreen intent, or presenter placement.
+Paths are readable local data (including lossless native encoding for unusual
+filenames) and can reveal deck and directory names.
+
+The record is stored beside `recent-files.txt`:
+
+- macOS: `~/Library/Application Support/Quick Presenter/startup-state.json`
+- Windows: `%APPDATA%\Quick Presenter\startup-state.json`
+- Linux: `$XDG_CONFIG_HOME/quick-presenter/startup-state.json`, or
+  `~/.config/quick-presenter/startup-state.json` when `XDG_CONFIG_HOME` is unset
+
+The app reads this record only on normal GUI startup and writes it atomically
+only on orderly exit when it changes. Unix files use owner-only mode `0600`;
+Windows uses the configuration directory's ACLs. A failed save keeps the
+previous file. Crash or forced termination may retain an older record.
+
+Remove `startup-state.json` while the app is closed to reset placement and forget
+the last PDF. File > Clear Recent Files clears only the separate recent-file list.
+An explicit startup PDF takes precedence over the remembered PDF. If the
+remembered PDF cannot be opened and no other PDF is successfully opened, orderly
+exit clears its saved path.
+
+`--smoke-open-pdf` and `--gui-smoke`, including report and log options, bypass
+startup settings completely and never replace the remembered PDF or placement.
+Wayland preserves the saved placement section while still remembering/reopening
+the PDF. Quick Presenter does not upload this record.
+
 ## Diagnostic Logs
 
 Diagnostic logs may contain local file paths, page numbers, platform lookup

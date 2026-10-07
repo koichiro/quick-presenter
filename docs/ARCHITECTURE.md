@@ -21,7 +21,7 @@ in [Presenter and Slide Display Swap](DISPLAY_SWAP.md). Slint forwards the key
 event; Rust owns monitor snapshots, the two-window swap transaction, focus
 recovery, and platform limitations.
 
-The proposed restoration of audience window placement and the last active PDF
+Restoration of audience window placement and the last active PDF
 is defined in [Slide Window and PDF Startup Restoration](SLIDE_WINDOW_PLACEMENT.md).
 Rust owns settings validation, safe placement, capture after verified display
 swaps, and startup PDF selection through the existing asynchronous open pipeline.
