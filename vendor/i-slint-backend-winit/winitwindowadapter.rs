@@ -593,6 +593,29 @@ impl WinitWindowAdapter {
             }
         }
 
+        // Publish the X11 icon before the window is mapped, rather than on a later redraw.
+        #[cfg(target_os = "linux")]
+        if !self.shared_backend_data.is_wayland
+            && let Some(window_item) = WindowInner::from_pub(self.window()).window_item()
+            && let Some(icon) = icon_to_winit(
+                window_item.as_pin_ref().icon(),
+                i_slint_core::lengths::LogicalSize::new(64., 64.)
+                    * ScaleFactor::new(self.window().scale_factor()),
+            )
+        {
+            window_attributes.window_icon = Some(icon);
+        }
+
+        // Apply the launch token to only the first native window, never to recreated windows.
+        #[cfg(all(target_os = "linux", any(feature = "wayland", feature = "x11")))]
+        {
+            use winit::platform::startup_notify::WindowAttributesExtStartupNotify;
+            if let Some(token) = self.shared_backend_data.startup_activation_token.borrow_mut().take()
+            {
+                window_attributes = window_attributes.with_activation_token(token);
+            }
+        }
+
         // Never show the window right away, as we
         //  a) need to compute the correct size based on the scale factor before it's shown on the screen (handled by set_visible)
         //  b) need to create the accesskit adapter before it's shown on the screen, as required by accesskit.
