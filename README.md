@@ -2,6 +2,7 @@
 
 [Website](https://koichiro.github.io/quick-presenter/) ·
 [Downloads](https://github.com/koichiro/quick-presenter/releases) ·
+[Changelog](CHANGELOG.md) ·
 [Privacy](https://koichiro.github.io/quick-presenter/privacy/)
 
 [![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/ci.yml)
