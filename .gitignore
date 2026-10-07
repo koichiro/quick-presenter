@@ -20,3 +20,6 @@ __pycache__/
 *.swp
 *.swo
 *~
+
+# Intermediate Cargo metadata used to generate release SBOM sidecars.
+/quick-presenter-cargo.json

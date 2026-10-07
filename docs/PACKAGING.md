@@ -1005,3 +1005,10 @@ sudo apt-get remove quick-presenter
 - Confirm installing the package does not make Quick Presenter the default PDF
   viewer unless the tester explicitly chooses that setting in the desktop
   environment.
+
+## Release SBOM Sidecars
+
+Supported release packages carry a separate CycloneDX JSON sidecar. Follow the
+[Release SBOM Policy](SBOM.md) after packaging and after any production signing,
+notarization, or stapling. Generate from the final package itself, rather than
+its staging tree. Do not add an SBOM inside an already signed app or package.

@@ -50,6 +50,9 @@ jobs:
       - name: Test PDFium fetch script
         run: python -m unittest tests/test_fetch_pdfium.py
 
+      - name: Test release SBOM policy
+        run: python -m unittest tests/test_release_sbom.py
+
       - name: Fetch PDFium
         run: python scripts/fetch_pdfium.py --clean
 

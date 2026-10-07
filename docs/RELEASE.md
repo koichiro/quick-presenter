@@ -43,7 +43,12 @@ Before publishing a release:
    build before publishing. Rerun the Windows checks on v1.0.0 after its Store
    update is certified.
 10. Complete the platform trust checks in the v1.0.0 policy below.
-11. Attach the completed manual GUI smoke reports to the GitHub release, or
+11. Verify SBOM sidecars against the final DMG and Debian package, review their
+    source/target/PDFium metadata, and attach the sidecars to the GitHub release.
+    Record package hashes and follow the [SBOM release gate](SBOM.md#release-gate).
+    Generate and publish the Windows Store submission SBOM with its post-release
+    Store update; record submission and certified package identities separately.
+12. Attach the completed manual GUI smoke reports to the GitHub release, or
     document any platform-specific waiver in the release notes before publishing.
 
 ### v1.0.0 distribution and trust policy
@@ -106,10 +111,11 @@ package upload, or artifact trust should be considered for commit SHA pinning
 before adoption. Shell-installed tools should use an explicit version or a
 locked installation mode when the tool supports it.
 
-SBOM generation is not part of the v1.0.0 release baseline. Release artifacts
-bundle Rust dependencies, platform packages, and PDFium native binaries, so the
-project will choose an artifact-level SBOM policy separately before adopting a
-tool or output format.
+Release packages require CycloneDX 1.5 JSON SBOM sidecars under the
+[Release SBOM Policy](SBOM.md). `Build Binaries` generates and verifies sidecars
+for its package artifacts. Regenerate and verify them after production signing,
+notarization, stapling, or repackaging, then attach them to the GitHub release.
+The policy documents native inventory limitations and Store submission identity.
 
 The package smoke tests are intentionally non-interactive and do not create
 Slint windows. `Build Binaries` also runs
