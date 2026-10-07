@@ -31,9 +31,9 @@ fixed muda version and preserves item identity, or rejects stale activation,
 across native menu updates. Preserve orderly Quit handling as well. Re-run the
 macOS Open Recent stress checks and startup restoration checks before removing it.
 
-## Linux startup metadata experiment (#304)
+## Linux startup metadata (#304)
 
-The backend also carries a Linux-only experiment for early shell integration:
+The backend also carries Linux-only changes for early shell integration:
 
 - Copy the Slint window icon to winit's creation attributes before mapping an
   X11 window.
@@ -48,9 +48,12 @@ module so these tests also run with the normal `cargo test` command:
 cargo test --test linux_startup_notify
 ```
 
-This experiment does not establish that GNOME shell icon latency is fixed.
-Compare launcher and direct binary startup on Wayland and X11, including initial
-presenter focus and window grouping, before treating #304 as resolved.
+The reporter confirmed improved taskbar icon timing and correct Alt+Tab icon
+grouping on GNOME. Repeated desktop-entry launches and Wayland window recreation
+checks are documented in
+[`docs/validation/ISSUE304_LINUX_DESKTOP.md`](../docs/validation/ISSUE304_LINUX_DESKTOP.md).
+Retain the app identity, early X11 icon, and one-time launch token behavior when
+upgrading the backend.
 
 ## macOS hidden-window frames
 

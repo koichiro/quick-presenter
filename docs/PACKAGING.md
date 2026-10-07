@@ -912,9 +912,11 @@ The Linux backend reads the launcher's `XDG_ACTIVATION_TOKEN` on Wayland or
 renderer helpers can inherit them, and passes the selected token to the first
 native window only. Later windows and recreated windows do not reuse it. This
 completes the client side of the desktop entry's `StartupNotify=true` contract.
-These changes are candidates for reducing the shell icon delay reported in
-[#304](https://github.com/koichiro/quick-presenter/issues/304); desktop-session
-comparison is still needed to establish whether the reported delay is resolved.
+The reporter confirmed earlier taskbar icon display, the correct Alt+Tab icon,
+and application grouping on the tested GNOME desktop. See
+[`validation/ISSUE304_LINUX_DESKTOP.md`](validation/ISSUE304_LINUX_DESKTOP.md)
+for repeated desktop-entry launches, window recreation checks, and the limits of
+this verification.
 
 The Debian package advertises Quick Presenter as an available handler for
 `application/pdf` files so desktop environments can show it in "Open With" flows.

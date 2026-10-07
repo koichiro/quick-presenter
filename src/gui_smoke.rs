@@ -55,6 +55,7 @@ pub fn run(options: GuiSmokeOptions) -> Result<()> {
 
 fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<()> {
     let windows = AppWindows::new().context("failed to create Slint windows")?;
+    crate::configure_linux_desktop_identity()?;
     crate::configure_shortcut_modifiers(&windows);
     let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState::default()));
 
