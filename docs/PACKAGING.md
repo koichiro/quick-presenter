@@ -901,6 +901,21 @@ The running Linux GUI sets the same desktop app ID, `quick-presenter`, before
 showing any Slint windows. On Wayland this becomes the window app ID; on X11 it
 maps to `WM_CLASS`, matching the installed desktop entry basename and icon name.
 
+Both windows also embed the application PNG through Slint's `Window.icon`.
+The vendored winit backend supplies that icon in the native creation attributes
+on Linux, so X11 receives `_NET_WM_ICON` before the window is mapped. Winit does
+not support window icon images on Wayland; its shell still resolves the installed
+desktop entry and hicolor icon through the app ID.
+
+The Linux backend reads the launcher's `XDG_ACTIVATION_TOKEN` on Wayland or
+`DESKTOP_STARTUP_ID` on X11 during initialization, clears both variables before
+renderer helpers can inherit them, and passes the selected token to the first
+native window only. Later windows and recreated windows do not reuse it. This
+completes the client side of the desktop entry's `StartupNotify=true` contract.
+These changes are candidates for reducing the shell icon delay reported in
+[#304](https://github.com/koichiro/quick-presenter/issues/304); desktop-session
+comparison is still needed to establish whether the reported delay is resolved.
+
 The Debian package advertises Quick Presenter as an available handler for
 `application/pdf` files so desktop environments can show it in "Open With" flows.
 It does not set Quick Presenter as the default PDF viewer and does not call

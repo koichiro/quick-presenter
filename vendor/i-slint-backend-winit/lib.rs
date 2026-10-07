@@ -119,6 +119,9 @@ mod muda;
 #[cfg(xdg_desktop_settings)]
 mod xdg_desktop_settings;
 
+#[cfg(all(target_os = "linux", any(feature = "wayland", feature = "x11")))]
+mod startup_notify;
+
 #[cfg(target_arch = "wasm32")]
 pub(crate) mod wasm_input_helper;
 
@@ -453,6 +456,8 @@ pub(crate) struct SharedBackendData {
     /// event loop or is from a stale event.
     event_loop_generation: Arc<AtomicUsize>,
     is_wayland: bool,
+    #[cfg(all(target_os = "linux", any(feature = "wayland", feature = "x11")))]
+    startup_activation_token: RefCell<Option<winit::window::ActivationToken>>,
     /// Desktop settings read from the XDG portal (cursor blink, appearance query).
     #[cfg(xdg_desktop_settings)]
     desktop_settings: xdg_desktop_settings::DesktopSettings,
@@ -529,6 +534,10 @@ impl SharedBackendData {
         let active_windows =
             Rc::<RefCell<HashMap<winit::window::WindowId, Weak<WinitWindowAdapter>>>>::default();
 
+        // Consume launcher metadata before application code starts child processes.
+        #[cfg(all(target_os = "linux", any(feature = "wayland", feature = "x11")))]
+        let startup_activation_token = startup_notify::read_and_clear_token(is_wayland);
+
         #[cfg(target_os = "ios")]
         let keyboard_notifications =
             ios::register_keyboard_notifications(Rc::downgrade(&active_windows));
@@ -560,6 +569,8 @@ impl SharedBackendData {
             event_loop_proxy,
             event_loop_generation: Default::default(),
             is_wayland,
+            #[cfg(all(target_os = "linux", any(feature = "wayland", feature = "x11")))]
+            startup_activation_token: RefCell::new(startup_activation_token),
             #[cfg(xdg_desktop_settings)]
             desktop_settings: xdg_desktop_settings::DesktopSettings::new(),
             #[cfg(target_os = "ios")]

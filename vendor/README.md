@@ -31,6 +31,27 @@ fixed muda version and preserves item identity, or rejects stale activation,
 across native menu updates. Preserve orderly Quit handling as well. Re-run the
 macOS Open Recent stress checks and startup restoration checks before removing it.
 
+## Linux startup metadata experiment (#304)
+
+The backend also carries a Linux-only experiment for early shell integration:
+
+- Copy the Slint window icon to winit's creation attributes before mapping an
+  X11 window.
+- Read and clear the launcher activation environment during backend startup,
+  then pass the token for the connected backend to the first native window only.
+
+Preserve these behaviors when upgrading the vendored crate until upstream Slint
+provides them. The application's integration harness includes the exact backend
+module so these tests also run with the normal `cargo test` command:
+
+```sh
+cargo test --test linux_startup_notify
+```
+
+This experiment does not establish that GNOME shell icon latency is fixed.
+Compare launcher and direct binary startup on Wayland and X11, including initial
+presenter focus and window grouping, before treating #304 as resolved.
+
 ## macOS hidden-window frames
 
 After hiding a macOS window, reset its first-frame state so the next Slint
