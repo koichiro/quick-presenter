@@ -32,6 +32,8 @@ background monitor-management service.
   replacement opens must never become the remembered PDF.
 - A missing, inaccessible, or invalid remembered PDF leaves the app open with
   a short presenter-facing error and the normal file-opening controls available.
+- Smoke modes open only their explicitly supplied test PDF and bypass startup
+  restoration entirely, including settings reads, placement, and exit-time saves.
 - Remember the last settled windowed placement before fullscreen or hiding.
   Fullscreen dimensions, minimized geometry, and hidden-window artifacts must
   never replace the normal size.
@@ -111,8 +113,9 @@ restoration. Do not reinterpret incomplete geometry as zero coordinates.
 
 ## Restore Planning and Application
 
-1. Load settings before showing windows. Apply the existing default size and
-   positions provisionally. Keep capture disabled during initialization.
+1. For a normal GUI launch, load settings before showing windows. Apply the
+   existing default size and positions provisionally. Keep capture disabled
+   during initialization.
 2. After the slide's native window exists and chrome is configured, capture the
    live display topology and frame insets. On Linux, run this step inside the
    deferred initial-show path, rather than before the event loop creates windows.
@@ -156,7 +159,8 @@ ordering that brings the presenter forward.
 
 ## Automatic PDF Reopening
 
-Choose exactly one startup PDF in Rust after loading settings:
+Classify the execution mode before accessing user settings. For a normal GUI
+launch, load settings and choose exactly one startup PDF in Rust:
 
 | Request | PDF to open |
 | --- | --- |
@@ -205,6 +209,38 @@ Report a concise message such as `Could not reopen the previous PDF. Open a PDF
 to continue.` through the existing presenter error surface, with technical
 details in diagnostics. Explicit startup failures retain existing explicit-open
 error handling and must not silently open the saved PDF instead.
+
+## Smoke Mode Isolation
+
+Both `--smoke-open-pdf <PATH>` and `--gui-smoke <PATH>` disable the entire startup
+restoration feature for that process. Determine this from parsed startup options,
+before constructing the startup store, resolving its configuration path, or
+reading settings. Preserve the existing renderer-helper dispatch before normal
+CLI parsing and the existing help and CLI error paths.
+
+| Options | Restoration behavior |
+| --- | --- |
+| `--smoke-open-pdf <PATH>` | Open/render only the test PDF; no remembered-PDF or placement restoration. |
+| `--gui-smoke <PATH>` | Use only the test PDF and the smoke harness's own window setup. |
+| `--gui-smoke <PATH> --gui-smoke-report <PATH>` | Remain in GUI smoke mode; report output does not enable restoration. |
+| Either smoke mode with `--log-file <PATH>` | Remain in smoke mode; diagnostic output does not enable restoration. |
+| `--gui-smoke-report` without `--gui-smoke`, or conflicting smoke/PDF options | Keep the current CLI error; do not fall through to a normal restoring launch. |
+| `--log-file <PATH>` without a smoke mode | Normal GUI rules apply; a log destination alone is not a smoke request. |
+
+Smoke mode must not load or save `startup-state.json`, reopen a remembered PDF,
+use the saved-size preference, install restoration/capture timers or window
+observers, or register an exit-time startup-state writer. It must not update the
+user's recent-file list through automatic reopening. Ordinary exit and all smoke
+failure paths preserve user settings. Keep the harness's existing page, size,
+focus, report, error, and exit-code behavior; a failed test PDF must never trigger
+a remembered-PDF fallback or extra restoration work.
+
+Keep this policy centralized in a pure execution-mode decision shared by startup
+selection and shutdown wiring. Disabling only PDF selection is insufficient:
+otherwise restored geometry or a save of the test PDF could affect smoke results
+or the user's next launch. Restoration tests may inject temporary stores directly
+through unit/controller test boundaries; production smoke options remain isolated
+even when settings exist.
 
 ## PDF Sizing Precedence
 
@@ -260,7 +296,8 @@ preserve recent-file behavior and its existing tests. Reuse same-directory temp
 files, Unix mode `0600`, Windows replacement semantics, and temp-file cleanup.
 Existing `serde` and `serde_json` dependencies suffice.
 
-Read once at GUI startup and write at most once after the GUI event loop ends.
+For a normal GUI run, read once at startup and write at most once after the GUI
+event loop ends. Smoke runs never construct this store or register its writer.
 Save placement and last-PDF fields together in one atomic replacement. Skip only
 when the complete normalized record is unchanged. A null last-PDF value is a real
 update and must be written even if no new placement could be captured. On a
@@ -322,6 +359,15 @@ failure after commit, hot reload retaining the path, no active PDF clearing the
 saved value, and smoke/helper modes leaving user settings untouched. Verify PDF
 reopening works even when placement is unsupported or invalid.
 
+Smoke isolation tests should cover both smoke options, GUI reports, diagnostic
+output options, and CLI errors for invalid combinations. Use a fake startup store
+to assert zero reads and zero writes, zero remembered-open requests, no saved-size
+override, and no restoration timers on success and failure. Prepopulate temporary
+user settings with valid, corrupt, missing-PDF, and inaccessible-file cases;
+assert the requested smoke PDF, harness geometry, reports, and exit codes are
+unaffected and settings bytes remain unchanged after exit. Include a normal GUI
+launch with only `--log-file` to confirm that restoration still works there.
+
 Manual smoke checks on macOS, Windows, and X11:
 
 1. Move and resize the slide onto a second display, quit normally, and relaunch
@@ -341,6 +387,10 @@ Manual smoke checks on macOS, Windows, and X11:
    with a short error. Open another deck, quit, and confirm that deck reopens.
 8. Quit with no committed document or while a replacement PDF is pending; confirm
    the saved PDF is null or the previous active deck respectively.
+9. Save a PDF and unusual slide size in normal mode, then run each smoke mode
+   against a different PDF, including report/log options and a failing test PDF.
+   Confirm only the test PDF is attempted, harness geometry is unchanged, and the
+   following normal launch still restores the original PDF and placement.
 
 Implement in three stages: shared startup storage, pure placement planning, and
 PDF selection; native startup/capture and asynchronous PDF reopening with size
