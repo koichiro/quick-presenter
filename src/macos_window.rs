@@ -19,12 +19,6 @@ pub fn show_window(window: &Window, fallback_title: &str) -> bool {
     })
 }
 
-pub fn hide_window(window: &Window, fallback_title: &str) -> bool {
-    with_window(window, fallback_title, |_, window| {
-        window.orderOut(None);
-    })
-}
-
 fn with_window(
     window: &Window,
     fallback_title: &str,
