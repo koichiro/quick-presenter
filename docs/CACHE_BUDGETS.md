@@ -69,3 +69,7 @@ Do not make the budget display-aware until slide render widths become
 display-aware. That future work is tracked in issue #271 and should define how
 monitor scale factor and slide window size feed into render width selection, and
 then update the budget policy and eviction tests together.
+
+The proposed policy, code-review findings, numerical verification, and remaining
+desktop checks are recorded in
+[Display-aware rendering validation](validation/ISSUE271_DISPLAY_AWARE_RENDERING.md).
