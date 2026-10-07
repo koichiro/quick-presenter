@@ -3,10 +3,15 @@ name = "quick-presenter"
 version = "1.4.0"
 edition = "2021"
 license = "GPL-3.0-only"
+default-run = "quick-presenter"
 
 [[bin]]
 name = "quick-presenter"
 path = "src/main.rs"
+
+[[bin]]
+name = "qp"
+path = "src/bin/qp.rs"
 
 [dependencies]
 anyhow = "1.0"

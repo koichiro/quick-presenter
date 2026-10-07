@@ -185,6 +185,24 @@ Recent-file privacy behavior is documented in
 Packaged app diagnostic logs are documented in
 [docs/PACKAGING.md](docs/PACKAGING.md#diagnostic-logs).
 
+## Local Automation (Experimental)
+
+macOS and Linux development builds include `qp`, a CLI for AI agents and other
+automation tools to query and control a running Quick Presenter instance:
+
+```sh
+cargo build --bins
+# With target/debug on PATH and Quick Presenter already running:
+qp status --json
+qp next
+qp notes --json
+```
+
+The CLI uses local IPC and the same presentation operations as the GUI.
+See [CLI usage](docs/CLI.md) and the
+[Presentation Control Protocol](docs/CONTROL_PROTOCOL.md) for the initial
+command set, JSON output, errors, and current limitations.
+
 ## Build and Development
 
 Install Rust stable and Python 3, then fetch the local PDFium binary used for
