@@ -2,6 +2,8 @@
 
 This implements the sizing and cache policy in [the design](ISSUE271_DISPLAY_AWARE_RENDERING.md). The implementation PR is stacked on design PR #398.
 
+The package version is now 1.4.0 for internal releases before v1.5.0. The signed artifacts and manual observations recorded below predate this version adjustment and reported 1.5.0; their hashes and results are historical evidence. After the version change, `cargo fmt --check`, `cargo check`, and `cargo test --quiet` passed again (398 unit tests and 13 integration tests). App metadata and packaging scripts derive their version from Cargo.toml.
+
 ## Behavior
 
 - Rust samples the visible Slint slide window's physical surface width every 250 ms. Two consecutive samples in the same bucket select a new policy; hidden and zero-size surfaces do not select one. Slint's physical size is not multiplied by its scale factor again.
@@ -47,7 +49,7 @@ These manual tests used the signed candidate with SHA-256 `568f88be47499302b8b14
 
 ## Limits and observations
 
-- After closing/hiding the slide window, replacing the PDF, and raising the slide through the native window menu, one attempt showed the old backing image while the presenter showed the new document. Hidden-window recovery is not qualified by this validation. The portrait test above was repeated in a fresh launch with a visible slide window and passed.
+- After closing/hiding the slide window, replacing the PDF, and raising the slide through the native window menu, one attempt showed the old backing image while the presenter showed the new document. Hidden-window recovery is not qualified by this validation and is tracked in [#400](https://github.com/koichiro/quick-presenter/issues/400) as a v1.5.0 release blocker pending reproduction and resolution or an explicit release decision. The portrait test above was repeated in a fresh launch with a visible slide window and passed.
 - Mixed-DPI display movement, monitor disconnect/reconnect, and Windows/Linux runtime behavior remain unverified. The scale-1 external display does not qualify Retina behavior.
 - No sustained latency, process-RSS, or long-running presentation measurements were taken. Coverage was not requested and was not run.
 - User recent-document and startup settings were backed up before manual testing and restored afterwards.
