@@ -17,11 +17,11 @@ pub struct RenderPlanItem {
     pub priority: RenderPriority,
 }
 
-pub fn visible_page_render_plan(snapshot: &PageSnapshot) -> Vec<RenderPlanItem> {
+pub fn visible_page_render_plan(snapshot: &PageSnapshot, state: &AppState) -> Vec<RenderPlanItem> {
     let mut plan = vec![RenderPlanItem {
         request: RenderRequest {
             page_index: snapshot.current_index,
-            width: CURRENT_RENDER_WIDTH,
+            width: state.current_slide_request(snapshot.current_index).width,
             purpose: RenderPurpose::CurrentSlide,
         },
         priority: RenderPriority::BlockingVisible,
@@ -44,6 +44,7 @@ pub fn visible_page_render_plan(snapshot: &PageSnapshot) -> Vec<RenderPlanItem> 
 pub fn presentation_preload_render_plan(
     snapshot: &PageSnapshot,
     presentation_cache_radius: u32,
+    state: &AppState,
 ) -> Vec<RenderPlanItem> {
     presentation_preload_order(
         snapshot.current_index,
@@ -54,7 +55,7 @@ pub fn presentation_preload_render_plan(
     .map(|page_index| RenderPlanItem {
         request: RenderRequest {
             page_index,
-            width: CURRENT_RENDER_WIDTH,
+            width: state.current_slide_request(page_index).width,
             purpose: RenderPurpose::CurrentSlide,
         },
         priority: RenderPriority::Warm,
@@ -234,7 +235,7 @@ mod tests {
 
     #[test]
     fn visible_plan_includes_current_and_next_preview() {
-        let plan = visible_page_render_plan(&snapshot(1, 3));
+        let plan = visible_page_render_plan(&snapshot(1, 3), &AppState::default());
 
         assert_eq!(
             plan,
@@ -261,7 +262,7 @@ mod tests {
 
     #[test]
     fn visible_plan_omits_next_preview_on_last_page() {
-        let plan = visible_page_render_plan(&snapshot(2, 3));
+        let plan = visible_page_render_plan(&snapshot(2, 3), &AppState::default());
 
         assert_eq!(plan.len(), 1);
         assert_eq!(plan[0].request.page_index, 2);
@@ -269,7 +270,7 @@ mod tests {
 
     #[test]
     fn preload_plan_uses_warm_current_slide_requests() {
-        let plan = presentation_preload_render_plan(&snapshot(2, 5), 2);
+        let plan = presentation_preload_render_plan(&snapshot(2, 5), 2, &AppState::default());
 
         assert_eq!(
             plan.iter()
@@ -449,5 +450,24 @@ mod tests {
         );
 
         assert!(drained_commands(&state).is_empty());
+    }
+    #[test]
+    fn visible_and_preload_plans_share_effective_widths_and_keep_auxiliary_widths_fixed() {
+        let mut state = AppState::default();
+        state.render_sizing = crate::render_sizing::RenderSizingPolicy::for_surface_width(2560);
+        state.page_aspects.insert(1, 16.0 / 9.0);
+        state.page_aspects.insert(0, 0.5);
+        let snapshot = snapshot(1, 3);
+        let visible = visible_page_render_plan(&snapshot, &state);
+        assert_eq!(visible[0].request.width, 2560);
+        assert_eq!(visible[1].request.width, 600);
+        let preload = presentation_preload_render_plan(&snapshot, 2, &state);
+        assert!(preload
+            .iter()
+            .filter(|item| item.request.page_index == 0 || item.request.page_index == 2)
+            .all(|item| item.request.width == 1600));
+        assert!(thumbnail_render_plan(&snapshot, 8)
+            .iter()
+            .all(|item| item.request.width == 180));
     }
 }

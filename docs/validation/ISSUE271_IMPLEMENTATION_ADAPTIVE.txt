@@ -1,0 +1,7 @@
+2026-10-07T02:51:46.401223Z  INFO quick_presenter: visible slide render committed page_index=0 render_width=1600 cache_entries=1 cache_bytes=5760000
+2026-10-07T02:51:57.403272Z  INFO quick_presenter: slide render sizing changed physical_surface_width=Some(5120) render_width=2560 cache_budget_bytes=151554600
+2026-10-07T02:51:57.556655Z  INFO quick_presenter: visible slide render committed page_index=0 render_width=2560 cache_entries=13 cache_bytes=33418560
+2026-10-07T02:52:19.027656Z  INFO quick_presenter: slide render sizing changed physical_surface_width=Some(1024) render_width=1600 cache_budget_bytes=100663296
+2026-10-07T02:52:32.955807Z  INFO quick_presenter: slide render sizing changed physical_surface_width=Some(5120) render_width=2560 cache_budget_bytes=151554600
+2026-10-07T02:52:37.302334Z  INFO quick_presenter: visible slide render committed page_index=1 render_width=2560 cache_entries=2 cache_bytes=20505600
+2026-10-07T02:52:43.013056Z  INFO quick_presenter: slide render sizing changed physical_surface_width=Some(1024) render_width=1600 cache_budget_bytes=100663296

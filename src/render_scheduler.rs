@@ -94,6 +94,7 @@ pub enum RenderEvent {
         title: String,
         page_count: u32,
         current_page_index: u32,
+        render_width: i32,
         current_page: RenderedPagePixels,
     },
     ReloadPrepareFailed {
@@ -318,6 +319,12 @@ enum QueueKey {
     },
 }
 
+fn superseded_width(key: QueueKey, session: RenderSessionId, desired: RenderRequest) -> bool {
+    matches!(key, QueueKey::Page { session_id, request }
+        if session_id == session && request.page_index == desired.page_index
+            && request.purpose == desired.purpose && request.width != desired.width)
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum RenderWork {
     Page(RenderRequest),
@@ -364,6 +371,10 @@ impl RenderQueue {
         request: RenderRequest,
         priority: RenderPriority,
     ) -> Option<RenderJobId> {
+        self.items
+            .retain(|item| !superseded_width(item.key, session_id, request));
+        self.queued_keys
+            .retain(|key| !superseded_width(*key, session_id, request));
         let key = QueueKey::Page {
             session_id,
             request,
@@ -552,6 +563,10 @@ impl PendingRenderCommands {
                 request,
                 priority,
             } => {
+                self.works
+                    .retain(|work| !superseded_width(work.key, session_id, request));
+                self.work_keys
+                    .retain(|key| !superseded_width(*key, session_id, request));
                 self.push_work(
                     QueueKey::Page {
                         session_id,
@@ -1448,6 +1463,7 @@ fn prepare_reload_on_worker<D: RenderWorkerDocument>(
                 title,
                 page_count,
                 current_page_index,
+                render_width: target_width,
                 current_page,
             });
         }
@@ -2894,6 +2910,7 @@ mod tests {
                 title,
                 page_count,
                 current_page_index,
+                render_width,
                 current_page,
             } => {
                 assert_eq!(session_id, reload_session);
@@ -2901,6 +2918,7 @@ mod tests {
                 assert_eq!(page_count, 2);
                 assert_eq!(current_page_index, 1);
                 assert_eq!(current_page.pixels.width(), 320);
+                assert_eq!(render_width, 320);
             }
             other => panic!("expected prepared reload event, got {other:?}"),
         }
@@ -3339,5 +3357,45 @@ mod tests {
         assert!(state.queue.is_empty());
         assert_eq!(state.active_session, Some(session));
         assert!(cancellation.is_cancelled(session));
+    }
+    #[test]
+    fn both_queue_layers_coalesce_widths_without_dropping_other_pages_or_sessions() {
+        let session = RenderSessionId(1);
+        let old = request(0, RenderPurpose::CurrentSlide);
+        let desired = RenderRequest { width: 2560, ..old };
+        let other = request(1, RenderPurpose::CurrentSlide);
+        let mut pending = PendingRenderCommands::new(8);
+        let mut queue = RenderQueue::default();
+        for (session_id, request) in [
+            (session, old),
+            (session, other),
+            (RenderSessionId(2), old),
+            (session, desired),
+        ] {
+            pending.push(RenderCommand::RenderPage {
+                session_id,
+                request,
+                priority: RenderPriority::Warm,
+            });
+            queue.push(session_id, request, RenderPriority::Warm);
+        }
+        assert_eq!(pending.works.len(), 3);
+        assert_eq!(queue.items.len(), 3);
+        assert!(!pending.work_keys.contains(&QueueKey::Page {
+            session_id: session,
+            request: old
+        }));
+        assert!(!queue.queued_keys.contains(&QueueKey::Page {
+            session_id: session,
+            request: old
+        }));
+        assert!(pending.work_keys.contains(&QueueKey::Page {
+            session_id: session,
+            request: desired
+        }));
+        assert!(queue.queued_keys.contains(&QueueKey::Page {
+            session_id: session,
+            request: desired
+        }));
     }
 }

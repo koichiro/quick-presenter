@@ -25,6 +25,7 @@ pub mod presentation;
 pub mod recent;
 pub mod render_controller;
 pub mod render_scheduler;
+pub mod render_sizing;
 pub mod renderer_helper;
 pub mod renderer_limits;
 pub mod renderer_process;
@@ -228,6 +229,7 @@ fn main() -> Result<()> {
     set_application_icon();
     remove_macos_native_about_menu_item();
     let _slide_chrome_sync_timer = start_slide_chrome_sync(window_refs.clone());
+    let _render_sizing_timer = start_render_sizing_updates(window_refs.clone(), state.clone());
     window_controller::start_slide_placement(window_refs.clone());
 
     if let Some(pdf) = startup_pdf {
@@ -1444,7 +1446,7 @@ fn fitted_slide_window_content_size(
 }
 
 fn enqueue_visible_page_renders(state: &AppState, snapshot: &PageSnapshot) {
-    enqueue_render_plan_if_missing(state, visible_page_render_plan(snapshot));
+    enqueue_render_plan_if_missing(state, visible_page_render_plan(snapshot, state));
 }
 
 #[cfg(test)]
@@ -1677,7 +1679,7 @@ fn schedule_presentation_preload(state: Rc<RefCell<AppState>>, snapshot: PageSna
 
         enqueue_render_plan_if_missing(
             &state,
-            presentation_preload_render_plan(&snapshot, PRESENTATION_CACHE_RADIUS),
+            presentation_preload_render_plan(&snapshot, PRESENTATION_CACHE_RADIUS, &state),
         );
     });
 }
@@ -1718,6 +1720,26 @@ fn start_render_event_updates(windows: AppWindowRefs, state: Rc<RefCell<AppState
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, RENDER_EVENT_POLL_INTERVAL, move || {
         let _ = drain_render_events(&windows, &state);
+    });
+    timer
+}
+
+fn start_render_sizing_updates(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
+    let timer = Timer::default();
+    let mut samples = render_sizing::SizingSamples::default();
+    timer.start(TimerMode::Repeated, Duration::from_millis(250), move || {
+        let width = window_controller::slide_surface_width(&windows);
+        let mut state = state.borrow_mut();
+        let Some(policy) = samples.observe(width, state.render_sizing) else { return; };
+        state.update_render_sizing(policy, PRESENTATION_CACHE_RADIUS);
+        tracing::info!(physical_surface_width = ?width, render_width = policy.current_width(),
+            cache_budget_bytes = policy.cache_budget().max_estimated_bytes, "slide render sizing changed");
+        if let Some(snapshot) = state.presentation.snapshot() {
+            enqueue_visible_page_renders(&state, &snapshot);
+            enqueue_render_plan_if_missing(&state, presentation_preload_render_plan(
+                &snapshot, PRESENTATION_CACHE_RADIUS, &state));
+            apply_snapshot_to_windows(&windows, &state, &snapshot);
+        }
     });
     timer
 }
@@ -2030,6 +2052,7 @@ fn handle_render_event(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, e
             title,
             page_count,
             current_page_index,
+            render_width,
             current_page,
         } => handle_reload_prepared(
             windows,
@@ -2039,6 +2062,7 @@ fn handle_render_event(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, e
             page_count,
             current_page_index,
             current_page.into(),
+            render_width,
         ),
         RenderEvent::ReloadPrepareFailed {
             session_id,
@@ -2056,6 +2080,7 @@ fn handle_reload_prepared(
     page_count: u32,
     current_page_index: u32,
     current_page: RenderedPage,
+    render_width: i32,
 ) {
     let now = Instant::now();
     let snapshot = {
@@ -2092,6 +2117,7 @@ fn handle_reload_prepared(
             page_count,
             current_page_index,
             current_page,
+            render_width,
             PRESENTATION_CACHE_RADIUS,
         ) else {
             if let Some(scheduler) = state.render_scheduler.as_ref() {
@@ -2296,6 +2322,26 @@ fn handle_page_rendered(
             return;
         };
         if let Some(snapshot) = outcome.snapshot.as_ref() {
+            if request == state.current_slide_request(snapshot.current_index) {
+                let (cache_entries, cache_bytes) = state.render_cache.usage();
+                tracing::info!(
+                    page_index = request.page_index,
+                    render_width = request.width,
+                    cache_entries,
+                    cache_bytes,
+                    "visible slide render committed"
+                );
+            }
+            if request.purpose == RenderPurpose::CurrentSlide
+                && request.width == CURRENT_RENDER_WIDTH
+            {
+                // A baseline render discovered page geometry. Upgrade only if it fits.
+                enqueue_visible_page_renders(&state, snapshot);
+                enqueue_render_plan_if_missing(
+                    &state,
+                    presentation_preload_render_plan(snapshot, PRESENTATION_CACHE_RADIUS, &state),
+                );
+            }
             if request.purpose == RenderPurpose::Thumbnail {
                 if let Some(presenter) = windows.presenter.upgrade() {
                     sync_thumbnail_model(&presenter, &state, snapshot);

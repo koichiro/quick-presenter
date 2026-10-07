@@ -6,7 +6,7 @@ use crate::{
     notes::SpeakerNotes,
     presentation::{PageSnapshot, PresentationState},
     render_scheduler::RenderSessionId,
-    rendering::{CacheContext, RenderPurpose, RenderRequest, RenderedPage},
+    rendering::{RenderPurpose, RenderRequest, RenderedPage},
     timer::{timer_transition_for_page_change, TimerTransition},
 };
 
@@ -42,6 +42,18 @@ pub fn apply_session_command(
     let after = state.presentation.snapshot();
     update_elapsed_timer_for_page_change(before.as_ref(), after.as_ref(), state, now);
     let snapshot = (before != after).then_some(after).flatten();
+
+    if let Some(snapshot) = snapshot.as_ref() {
+        if let Some(page) = state
+            .render_cache
+            .peek(state.current_slide_request(snapshot.current_index))
+        {
+            state.audience_slide.last_good_current = Some(page);
+        }
+        if let Some(context) = state.cache_context(crate::PRESENTATION_CACHE_RADIUS) {
+            state.render_cache.retain_with_context(context);
+        }
+    }
 
     SessionCommandOutcome {
         snapshot,
@@ -120,6 +132,7 @@ pub fn commit_render_opened_state(
     state.audience_slide.last_good_current = None;
     state.audience_slide.failed_current_page = None;
     state.render_cache.clear();
+    state.page_aspects.clear();
     state.notes = SpeakerNotes::empty();
     state.presentation = PresentationState::open_document(title, page_count);
     state.thumbnails = ThumbnailState {
@@ -150,6 +163,7 @@ pub fn commit_render_reloaded_state(
     page_count: u32,
     current_page_index: u32,
     current_page: RenderedPage,
+    render_width: i32,
     presentation_cache_radius: u32,
 ) -> Option<PageSnapshot> {
     if page_count == 0 {
@@ -161,6 +175,7 @@ pub fn commit_render_reloaded_state(
 
     state.render_generation = state.render_generation.wrapping_add(1);
     state.render_cache.clear();
+    state.page_aspects.clear();
     state.notes = SpeakerNotes::empty();
     state.presentation = PresentationState::open_document_at(title, page_count, current_page_index);
     let snapshot = state.presentation.snapshot()?;
@@ -168,20 +183,19 @@ pub fn commit_render_reloaded_state(
     state.thumbnails = ThumbnailState {
         total_pages: page_count,
     };
+    state
+        .page_aspects
+        .insert(current_page_index, current_page.aspect_ratio);
     state.audience_slide.last_good_current = Some(current_page.clone());
     state.audience_slide.failed_current_page = None;
     state.render_cache.insert_with_context(
         RenderRequest {
             page_index: current_page_index,
-            width: crate::render_controller::CURRENT_RENDER_WIDTH,
+            width: render_width,
             purpose: RenderPurpose::CurrentSlide,
         },
         current_page,
-        Some(CacheContext {
-            current_index: current_page_index,
-            total_pages: page_count,
-            presentation_radius: presentation_cache_radius,
-        }),
+        state.cache_context(presentation_cache_radius),
     );
     state.status_text = "PDF reloaded.".to_owned();
     Some(snapshot)
@@ -232,26 +246,24 @@ pub fn commit_page_rendered_state(
     }
 
     let snapshot = state.presentation.snapshot();
-    let cache_context = snapshot.as_ref().map(|snapshot| CacheContext {
-        current_index: snapshot.current_index,
-        total_pages: snapshot.total_pages,
-        presentation_radius: presentation_cache_radius,
-    });
+    let is_visible_current_slide = snapshot
+        .as_ref()
+        .filter(|snapshot| request == state.current_slide_request(snapshot.current_index));
+    if request.purpose == RenderPurpose::CurrentSlide {
+        // Auxiliary images have rounded, low-resolution geometry. Keep the first
+        // current-slide observation stable until the document session changes.
+        state
+            .page_aspects
+            .entry(request.page_index)
+            .or_insert(page.aspect_ratio);
+    }
+    let cache_context = state.cache_context(presentation_cache_radius);
     state
         .render_cache
         .insert_with_context(request, page.clone(), cache_context);
-    if let Some(snapshot) = snapshot.as_ref() {
-        state.render_cache.retain_presentation_window(
-            snapshot.current_index,
-            snapshot.total_pages,
-            presentation_cache_radius,
-        );
+    if let Some(context) = cache_context {
+        state.render_cache.retain_with_context(context);
     }
-
-    let is_visible_current_slide = snapshot.as_ref().filter(|snapshot| {
-        request.purpose == RenderPurpose::CurrentSlide
-            && request.page_index == snapshot.current_index
-    });
 
     let initial_fit_aspect_ratio = is_visible_current_slide.and_then(|_| {
         state
@@ -262,7 +274,9 @@ pub fn commit_page_rendered_state(
     });
     if is_visible_current_slide.is_some() {
         state.audience_slide.last_good_current = Some(page);
-        state.audience_slide.failed_current_page = None;
+        if state.audience_slide.failed_current_page.take().is_some() {
+            state.status_text = "Ready".to_owned();
+        }
     }
 
     Some(PageRenderedOutcome {
@@ -285,10 +299,10 @@ pub fn commit_page_render_failed_state(
         return false;
     }
 
-    let is_visible_current_slide = state.presentation.snapshot().is_some_and(|snapshot| {
-        request.purpose == RenderPurpose::CurrentSlide
-            && request.page_index == snapshot.current_index
-    });
+    let is_visible_current_slide = state
+        .presentation
+        .snapshot()
+        .is_some_and(|snapshot| request == state.current_slide_request(snapshot.current_index));
 
     if is_visible_current_slide {
         state.audience_slide.failed_current_page = Some(request.page_index);
@@ -425,6 +439,7 @@ mod tests {
             6,
             3,
             rendered_page(4.0 / 3.0),
+            1600,
             2,
         )
         .unwrap();
@@ -458,6 +473,7 @@ mod tests {
             2,
             1,
             rendered_page(1.0),
+            1600,
             2,
         )
         .is_none());
@@ -468,6 +484,7 @@ mod tests {
             2,
             99,
             rendered_page(1.0),
+            1600,
             2,
         )
         .unwrap();
@@ -1176,5 +1193,133 @@ mod tests {
         assert_eq!(state.pending_open, None);
         assert_eq!(state.status_text, "Rendering stopped. Open the PDF again.");
         assert_eq!(state.audience_slide.failed_current_page, Some(0));
+    }
+    #[test]
+    fn width_change_keeps_last_good_and_rejects_stale_success_and_failure() {
+        let mut state = AppState::default();
+        let session = state.render_sessions.begin_open_session();
+        commit_render_opened_state(&mut state, session, "Deck".into(), 4, "Ready".into()).unwrap();
+        let baseline = current_slide_request(0);
+        commit_page_rendered_state(&mut state, session, baseline, rendered_page(16.0 / 9.0), 2)
+            .unwrap();
+        state.update_render_sizing(
+            crate::render_sizing::RenderSizingPolicy::for_surface_width(2560),
+            2,
+        );
+        assert!(state.audience_slide.last_good_current.is_some());
+        let desired = state.current_slide_request(0);
+        assert_eq!(desired.width, 2560);
+        commit_page_rendered_state(&mut state, session, desired, rendered_page(4.0 / 3.0), 2)
+            .unwrap();
+        commit_page_rendered_state(&mut state, session, baseline, rendered_page(16.0 / 9.0), 2)
+            .unwrap();
+        assert_eq!(
+            state
+                .audience_slide
+                .last_good_current
+                .as_ref()
+                .unwrap()
+                .aspect_ratio,
+            4.0 / 3.0
+        );
+        assert!(!commit_page_render_failed_state(
+            &mut state, session, baseline
+        ));
+        assert_eq!(state.audience_slide.failed_current_page, None);
+        assert_eq!(state.status_text, "Ready");
+    }
+
+    #[test]
+    fn baseline_discovery_and_reload_use_the_latest_policy_without_mislabeling_pixels() {
+        let mut state = AppState::default();
+        state.update_render_sizing(
+            crate::render_sizing::RenderSizingPolicy::for_surface_width(2560),
+            2,
+        );
+        let session = state.render_sessions.begin_open_session();
+        commit_render_opened_state(&mut state, session, "Deck".into(), 2, "Ready".into()).unwrap();
+        assert_eq!(state.current_slide_request(0).width, 1600);
+        let result = commit_page_rendered_state(
+            &mut state,
+            session,
+            current_slide_request(0),
+            rendered_page(16.0 / 9.0),
+            2,
+        )
+        .unwrap();
+        assert!(result.initial_fit_aspect_ratio.is_some());
+        assert_eq!(state.current_slide_request(0).width, 2560);
+        let reload = state.render_sessions.begin_reload_session();
+        commit_render_reloaded_state(
+            &mut state,
+            reload,
+            "Deck".into(),
+            2,
+            0,
+            rendered_page(16.0 / 9.0),
+            1600,
+            2,
+        )
+        .unwrap();
+        assert_eq!(state.current_slide_request(0).width, 2560);
+        assert!(state.render_cache.peek(current_slide_request(0)).is_some());
+        assert!(state
+            .render_cache
+            .peek(state.current_slide_request(0))
+            .is_none());
+        assert!(state.audience_slide.last_good_current.is_some());
+    }
+
+    #[test]
+    fn navigation_uses_page_geometry_and_does_not_accept_previous_page_completion() {
+        let mut state = AppState::default();
+        let session = state.render_sessions.begin_open_session();
+        commit_render_opened_state(&mut state, session, "Deck".into(), 3, "Ready".into()).unwrap();
+        state.page_aspects.insert(0, 16.0 / 9.0);
+        state.page_aspects.insert(1, 0.5);
+        state.update_render_sizing(
+            crate::render_sizing::RenderSizingPolicy::for_surface_width(2560),
+            2,
+        );
+        let old = state.current_slide_request(0);
+        apply_session_command(&mut state, PresentationCommand::NextPage, Instant::now());
+        assert_eq!(state.current_slide_request(1).width, 1600);
+        commit_page_rendered_state(
+            &mut state,
+            session,
+            current_slide_request(1),
+            rendered_page(0.5),
+            2,
+        )
+        .unwrap();
+        commit_page_rendered_state(&mut state, session, old, rendered_page(16.0 / 9.0), 2).unwrap();
+        assert_eq!(
+            state
+                .audience_slide
+                .last_good_current
+                .as_ref()
+                .unwrap()
+                .aspect_ratio,
+            0.5
+        );
+        assert!(!commit_page_render_failed_state(&mut state, session, old));
+    }
+    #[test]
+    fn policy_changes_clear_only_failures_for_a_replaced_visible_request() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 2),
+            ..AppState::default()
+        };
+        state.page_aspects.insert(0, 0.5);
+        state.audience_slide.failed_current_page = Some(0);
+        state.status_text = "Could not render this page.".into();
+        let large = crate::render_sizing::RenderSizingPolicy::for_surface_width(2560);
+        state.update_render_sizing(large, 2);
+        assert_eq!(state.audience_slide.failed_current_page, Some(0));
+        assert_eq!(state.status_text, "Could not render this page.");
+        state.page_aspects.insert(0, 16.0 / 9.0);
+        state.update_render_sizing(crate::render_sizing::RenderSizingPolicy::default(), 2);
+        assert_eq!(state.audience_slide.failed_current_page, None);
+        assert_eq!(state.status_text, "Ready");
     }
 }

@@ -13,6 +13,16 @@ use crate::window_placement::{
 use crate::{PresenterWindow, SlideWindow};
 
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
+
+/// Slint already returns physical client pixels. Do not apply scale a second time.
+pub fn slide_surface_width(windows: &AppWindowRefs) -> Option<u32> {
+    let slide = windows.slide.upgrade()?;
+    let window = slide.window();
+    let size = window.size();
+    let scale = window.scale_factor();
+    (window.is_visible() && size.width > 0 && size.height > 0 && scale.is_finite() && scale > 0.0)
+        .then_some(size.width)
+}
 const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
 const DISPLAY_SWAP_VERIFY_DELAYS: [Duration; 3] = [
     Duration::from_millis(150),
