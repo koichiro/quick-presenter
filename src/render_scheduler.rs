@@ -233,6 +233,12 @@ impl RenderSessionTracker {
         session_id
     }
 
+    pub fn close(&mut self) {
+        self.committed_session = None;
+        self.pending_open_session = None;
+        self.pending_reload_session = None;
+    }
+
     pub fn current_session(&self) -> Option<RenderSessionId> {
         self.committed_session
     }

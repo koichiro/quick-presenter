@@ -265,6 +265,11 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         },
     );
 
+    #[cfg(unix)]
+    {
+        crate::control_smoke::run(&windows, state.clone(), options.pdf_path.clone())?;
+        report.pass("local control operates through the GUI and isolated renderer");
+    }
     check_hidden_slide_recovery(&windows, &state, report)?;
 
     Ok(())

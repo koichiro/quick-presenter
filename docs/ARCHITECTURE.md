@@ -35,6 +35,16 @@ the Rust diagnostics boundary. The v1.0.0 retention design is documented in
 [Diagnostic Log Retention](DIAGNOSTIC_LOG_RETENTION.md); Slint and presentation
 state do not manage log lifecycle.
 
+## Local presentation control
+
+The experimental [Presentation Control Protocol](CONTROL_PROTOCOL.md) exposes
+GUI-owned presentation state through local IPC. Typed, bounded requests are
+dispatched on the existing event loop, using shared navigation/black-screen
+commands and the existing asynchronous PDF open pipeline. The server owns no
+independent presentation state. `qp` uses the protocol library without Slint
+initialization or PDFium access. Renderer IPC and presentation control IPC
+remain separate boundaries.
+
 ## PDFium ownership
 
 `src/pdf.rs` keeps PDFium initialization behind a helper-process-global
