@@ -7,6 +7,9 @@ on:
       - '.github/workflows/build-binaries.yml'
       - '.cargo/audit.toml'
       - 'scripts/audit_deps.sh'
+      - 'scripts/release_sbom.py'
+      - 'scripts/sbom*'
+      - 'tests/test_release_sbom.py'
       - 'scripts/build_*'
       - 'scripts/stage_*'
       - 'scripts/sign_*'
@@ -1110,6 +1113,30 @@ jobs:
           name: ${{ matrix.artifact-name }}-gui-smoke
           path: artifacts/${{ matrix.artifact-name }}/gui-smoke
           if-no-files-found: ignore
+
+      - name: Generate and verify release SBOM sidecars
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo install cargo-cyclonedx --version 0.5.9 --locked
+          python -m pip install -r scripts/sbom-requirements.txt
+          python -m unittest tests/test_release_sbom.py
+          target="$(rustc -vV | sed -n 's/^host: //p')"
+          SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          export SOURCE_DATE_EPOCH
+          # Metadata must use the dependencies already fetched by the release build.
+          CARGO_NET_OFFLINE=true cargo cyclonedx --format json --spec-version 1.5 \
+            --target "$target" --no-build-deps --override-filename quick-presenter-cargo
+          git diff --exit-code -- Cargo.lock
+          found=0
+          while IFS= read -r -d '' package; do
+            python scripts/release_sbom.py --cargo-bom quick-presenter-cargo.json \
+              --artifact "$package" --target "$target" --schema-cache "$RUNNER_TEMP/sbom-schemas"
+            python scripts/release_sbom.py --cargo-bom quick-presenter-cargo.json \
+              --artifact "$package" --target "$target" --schema-cache "$RUNNER_TEMP/sbom-schemas" --verify
+            found=$((found + 1))
+          done < <(find artifacts -type f \( -name '*.dmg' -o -name '*.deb' -o -name '*.msix' \) -print0)
+          test "$found" -gt 0
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
