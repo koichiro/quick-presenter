@@ -1,6 +1,6 @@
 # Issue #271 implementation validation
 
-This implements the sizing and cache policy in [the design](ISSUE271_DISPLAY_AWARE_RENDERING.md). The implementation PR is stacked on design PR #398.
+This implements the sizing and cache policy in [the design](ISSUE271_DISPLAY_AWARE_RENDERING.md), merged in design PR #398. The replacement implementation PR targets main after the original stacked PR #399 closed when its base branch was deleted.
 
 The package version is now 1.4.0 for internal releases before v1.5.0. The signed artifacts and manual observations recorded below predate this version adjustment and reported 1.5.0; their hashes and results are historical evidence. After the version change, `cargo fmt --check`, `cargo check`, and `cargo test --quiet` passed again (398 unit tests and 13 integration tests). App metadata and packaging scripts derive their version from Cargo.toml.
 
