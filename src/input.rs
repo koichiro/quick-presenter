@@ -9,6 +9,8 @@ pub enum PresentationCommand {
     JumpToPage(u32),
     ExitSlideFullscreen,
     ToggleBlackScreen,
+    SetBlackScreen(bool),
+    Close,
 }
 
 pub fn apply_presentation_command(
@@ -21,7 +23,10 @@ pub fn apply_presentation_command(
         PresentationCommand::FirstPage => presentation.first_page(),
         PresentationCommand::LastPage => presentation.last_page(),
         PresentationCommand::JumpToPage(page_index) => presentation.jump_to_page_index(page_index),
-        PresentationCommand::ExitSlideFullscreen | PresentationCommand::ToggleBlackScreen => {}
+        PresentationCommand::ExitSlideFullscreen
+        | PresentationCommand::ToggleBlackScreen
+        | PresentationCommand::SetBlackScreen(_)
+        | PresentationCommand::Close => {}
     }
 }
 

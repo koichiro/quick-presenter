@@ -22,6 +22,14 @@ pub fn apply_session_command(
     command: PresentationCommand,
     now: Instant,
 ) -> SessionCommandOutcome {
+    if command == PresentationCommand::Close {
+        close_presentation_state(state);
+        return SessionCommandOutcome {
+            snapshot: None,
+            slide_fullscreen: None,
+        };
+    }
+
     if command == PresentationCommand::ExitSlideFullscreen {
         return SessionCommandOutcome {
             snapshot: None,
@@ -33,6 +41,15 @@ pub fn apply_session_command(
         state.black_screen.toggle();
         return SessionCommandOutcome {
             snapshot: state.presentation.snapshot(),
+            slide_fullscreen: None,
+        };
+    }
+
+    if let PresentationCommand::SetBlackScreen(value) = command {
+        let changed = state.black_screen.is_active() != value;
+        state.black_screen.set_active(value);
+        return SessionCommandOutcome {
+            snapshot: changed.then(|| state.presentation.snapshot()).flatten(),
             slide_fullscreen: None,
         };
     }
@@ -133,6 +150,8 @@ pub fn commit_render_opened_state(
     state.audience_slide.failed_current_page = None;
     state.render_cache.clear();
     state.page_aspects.clear();
+    state.control.document_revision += 1;
+    state.control.notes_state = quick_presenter::control::protocol::NotesState::Loading;
     state.notes = SpeakerNotes::empty();
     state.presentation = PresentationState::open_document(title, page_count);
     state.thumbnails = ThumbnailState {
@@ -176,6 +195,8 @@ pub fn commit_render_reloaded_state(
     state.render_generation = state.render_generation.wrapping_add(1);
     state.render_cache.clear();
     state.page_aspects.clear();
+    state.control.document_revision += 1;
+    state.control.notes_state = quick_presenter::control::protocol::NotesState::Loading;
     state.notes = SpeakerNotes::empty();
     state.presentation = PresentationState::open_document_at(title, page_count, current_page_index);
     let snapshot = state.presentation.snapshot()?;
@@ -229,6 +250,11 @@ pub fn commit_speaker_notes_loaded_state(
         return false;
     }
 
+    state.control.notes_state = if status_text == "Ready" {
+        quick_presenter::control::protocol::NotesState::Ready
+    } else {
+        quick_presenter::control::protocol::NotesState::Failed
+    };
     state.notes = notes;
     state.status_text = status_text;
     true
@@ -324,9 +350,43 @@ pub fn commit_render_worker_failed_state(
     if let Some(snapshot) = state.presentation.snapshot() {
         state.audience_slide.failed_current_page = Some(snapshot.current_index);
     }
+    if state.control.notes_state == quick_presenter::control::protocol::NotesState::Loading {
+        state.control.notes_state = quick_presenter::control::protocol::NotesState::Failed;
+    }
     state.status_text = "Rendering stopped. Open the PDF again.".to_owned();
     state.pending_open = None;
     true
+}
+
+pub fn close_presentation_state(state: &mut AppState) {
+    let changed = state.presentation.snapshot().is_some() || state.pending_open.is_some();
+    if let Some(scheduler) = state.render_scheduler.as_ref() {
+        scheduler.request_shutdown();
+    }
+    if let Some(watcher) = state.pdf_watcher.as_mut() {
+        if let Err(error) = watcher.replace_target(None) {
+            tracing::warn!(error = %error, "Could not clear PDF watch target");
+        }
+    }
+    state.hot_reload = Default::default();
+    state.render_sessions.close();
+    state.pending_open = None;
+    state.automatic_reopen = None;
+    state.active_document_path = None;
+    state.presentation = PresentationState::empty();
+    state.render_generation = state.render_generation.wrapping_add(1);
+    state.render_cache.clear();
+    state.page_aspects.clear();
+    state.audience_slide = Default::default();
+    state.thumbnails = Default::default();
+    state.notes = SpeakerNotes::empty();
+    if changed {
+        state.control.document_revision += 1;
+    }
+    state.control.notes_state = quick_presenter::control::protocol::NotesState::Empty;
+    state.black_screen.set_active(false);
+    state.timer.reset();
+    state.status_text = "Open a PDF to begin.".to_owned();
 }
 
 fn update_elapsed_timer_for_page_change(
