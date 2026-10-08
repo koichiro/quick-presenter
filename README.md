@@ -234,8 +234,17 @@ python3 scripts/stats.py                  # Current working tree
 python3 scripts/stats.py --ref origin/main # Locally fetched main revision
 ```
 
-The report separates application implementation, tests, build/tools, and website
-code. Code lines exclude comments and blank lines. Rust items marked with
+The report uses a Rails-stats-style table with `Name`, `Files`, `Lines`, `LOC`,
+and `LOC %` columns. Rows separate Rust application code, native bridges, Slint
+UI, build/tools, website languages, Rust unit/integration tests, Python tests,
+and test fixtures. `Lines` counts original physical lines, including comments
+and blanks; `LOC` excludes comments and blanks. Physical lines touching test-only
+Rust items are assigned to tests once, so padded split files do not inflate totals.
+`LOC %` uses total LOC. The footer shows non-test `Code LOC` (including build/tools
+and website), `Test LOC`, and `Code to Test Ratio: 1:<test/code>`, plus the test
+share when considering only application implementation and tests.
+
+Rust items marked with
 `#[cfg(test)]` or a compound predicate requiring `test` (such as
 `#[cfg(all(test, unix))]`) are counted as tests, including inline test modules and
 test-only helpers. Predicates such as `#[cfg(any(test, unix))]` remain implementation

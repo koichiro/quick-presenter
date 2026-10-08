@@ -87,6 +87,42 @@ fn production() {}
         self.assertIn("fn production", implementation)
         self.assertNotIn("fn production", tests)
 
+    def test_physical_lines_are_partitioned_without_padding(self):
+        source = '''// Application comment
+fn production() {}
+
+#[cfg(test)]
+mod tests {
+    // Test comment
+
+    fn example() {}
+}
+fn after() {}
+'''
+        parts = stats.source_parts("src/example.rs", source)
+        self.assertEqual(sum(lines for _, _, lines in parts), len(source.splitlines()))
+        self.assertEqual(parts[0][2], 4)
+        self.assertEqual(parts[1][2], 6)
+        for name, expected in (("tests/example.rs", "Rust integration tests"),
+                               ("tests/test_example.py", "Python tests"),
+                               ("tests/fixtures/generate.py", "Test fixtures"),
+                               ("ui/app.slint", "Slint UI")):
+            self.assertEqual(stats.source_parts(name, "example\n")[0][0], expected)
+
+    def test_report_totals_use_unique_files_and_explicit_ratio(self):
+        groups = {
+            "Rust application": {"files": {"src/example.rs"}, "lines": 20, "code": 10},
+            "Rust unit tests": {"files": {"src/example.rs"}, "lines": 8, "code": 5},
+            "Build and tools": {"files": {"build.rs"}, "lines": 4, "code": 2},
+        }
+        output = stats.format_report(groups, "example")
+        total = next(line for line in output.splitlines() if line.startswith("| Total"))
+        self.assertEqual([cell.strip() for cell in total.split("|")[1:-1]],
+                         ["Total", "2", "32", "17", "100.00%"])
+        self.assertIn("Code LOC: 12     Test LOC: 5     Code to Test Ratio: 1:0.42", output)
+        self.assertIn("Test share (application + tests): 33.33%", output)
+        self.assertIn("Code to Test Ratio: n/a", stats.format_report({}, "empty"))
+
 
 if __name__ == "__main__":
     unittest.main()
