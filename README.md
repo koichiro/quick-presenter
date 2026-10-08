@@ -194,11 +194,13 @@ and other automation tools to query and control a running Quick Presenter instan
 cargo build --bins
 # With target/debug on PATH and Quick Presenter already running:
 qp status --json
+qp timer elapsed --json
 qp next
 qp notes --json
 qp slide --json
 qp context --json
 qp context --full --json
+qp watch --json
 ```
 
 The CLI uses local IPC and the same presentation operations as the GUI.

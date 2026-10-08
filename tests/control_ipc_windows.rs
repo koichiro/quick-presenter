@@ -224,6 +224,89 @@ fn qp_executable_keeps_json_stdout_clean_and_reports_exit_categories() {
     assert_eq!(json["text"][0], source);
     assert_eq!(json["truncated"], false);
 
+    let child = thread::spawn(|| {
+        ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+            .args(["timer", "elapsed", "--json"])
+            .output()
+            .unwrap()
+    });
+    let pending = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(matches!(pending.request.command, Command::TimerElapsed(_)));
+    pending
+        .response
+        .send(Response::success(
+            pending.request.id,
+            Reply::TimerElapsed {
+                session_id: "test-session".into(),
+                document_revision: 1,
+                timer: TimerStatus {
+                    running: true,
+                    elapsed_seconds: 42,
+                },
+            },
+        ))
+        .unwrap();
+    let output = child.join().unwrap();
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["elapsed_seconds"], 42);
+    for lagged in [false, true] {
+        use quick_presenter::control::events::{EventHub, EVENT_BUFFER};
+        let child = thread::spawn(|| {
+            ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+                .args(["watch", "--json"])
+                .output()
+                .unwrap()
+        });
+        let mut pending = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        let mut hub = EventHub::default();
+        hub.subscribe(pending.watch.take().unwrap());
+        for _ in 0..if lagged { EVENT_BUFFER + 1 } else { 1 } {
+            hub.publish(&status(), Event::PageChanged { page: 2, pages: 5 });
+        }
+        pending
+            .response
+            .send(Response::success(
+                pending.request.id,
+                Reply::Watching {
+                    state: status(),
+                    sequence: 0,
+                },
+            ))
+            .unwrap();
+        if !lagged {
+            drop(hub);
+        }
+        let output = child.join().unwrap();
+        assert_eq!(output.status.code(), Some(if lagged { 11 } else { 10 }));
+        let events: Vec<EventEnvelope> = std::str::from_utf8(&output.stdout)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(events.len(), if lagged { 1 } else { 2 });
+        assert!(matches!(events[0].event, Event::Snapshot { .. }));
+        let error: ControlError = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(
+            error.code,
+            if lagged {
+                ErrorCode::EventsLagged
+            } else {
+                ErrorCode::Cancelled
+            }
+        );
+    }
+    for verb in ["start", "stop", "reset"] {
+        let output = ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+            .args(["timer", verb, "--json"])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(receiver.try_recv().is_err());
+    }
+
     let output = ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
         .args(["goto", "0", "--json"])
         .output()
