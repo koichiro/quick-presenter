@@ -358,3 +358,13 @@ version rather than following the application release number.
 `qp --version --json` is local CLI metadata, not an IPC request. Its
 `application_version` identifies the CLI build and `protocol_version` identifies
 the protocol it supports. It is available even when Quick Presenter is closed.
+
+
+## CLI-triggered GUI startup
+
+When `qp open` cannot connect because no server is running, its CLI-only startup
+adapter launches the companion GUI and probes `presentation.status` until ready.
+It then sends the ordinary `presentation.open` request once. Concurrent CLI
+startup is serialized with an OS lock. This does not add protocol methods or
+move file loading into the CLI. Other commands do not start the GUI. See
+[CLI startup](CLI.md#starting-a-presentation-from-the-cli) for deadlines and errors.

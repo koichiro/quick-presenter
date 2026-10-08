@@ -191,7 +191,8 @@ Windows, macOS, and Linux packages include `qp`, a CLI for AI agents
 and other automation tools to query and control a running Quick Presenter instance:
 
 ```sh
-# With qp on PATH and Quick Presenter already running:
+# With qp on PATH:
+qp open slides.pdf --json
 qp status --json
 qp timer elapsed --json
 qp next
@@ -202,7 +203,8 @@ qp context --full --json
 qp watch --json
 ```
 
-The CLI uses local IPC and the same presentation operations as the GUI.
+`qp open` starts the GUI if needed. The CLI uses local IPC and the same
+presentation operations as the GUI.
 See [CLI usage](docs/CLI.md) and the
 [Presentation Control Protocol](docs/CONTROL_PROTOCOL.md) for the initial
 command set, JSON output, errors, and current limitations.

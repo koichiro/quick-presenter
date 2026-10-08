@@ -41,7 +41,7 @@ fn run(args: Vec<std::ffi::OsString>) -> Result<(), ControlError> {
                         })
                 });
             }
-            let response = client::send(&request)?;
+            let response = quick_presenter::control::launch::send(&request)?;
             match response.outcome {
                 Outcome::Error(error) => return Err(error),
                 Outcome::Result(reply) => client::format_reply(&reply, options.json)
