@@ -227,6 +227,13 @@ scripts/coverage.sh
 Detailed packaging, release, keyboard, and speaker-note behavior is documented
 under [docs/](docs/).
 
+Source statistics are reported with (requires `cloc`; `brew install cloc` on macOS):
+
+```sh
+python3 scripts/stats.py
+python3 scripts/stats.py --ref origin/main
+```
+
 ## Releases
 
 Quick Presenter is an OSS project focused on reliable PDF presentation
