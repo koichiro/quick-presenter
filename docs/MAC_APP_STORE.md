@@ -88,7 +88,14 @@ cargo fmt --check
 cargo check
 cargo test
 cargo build --release --locked
+python3 scripts/check_macos_store_private_apis.py target/release/quick-presenter
 ```
+
+The repository pins winit 0.30.13 to a local copy with its unused macOS blur
+implementation disabled. The Slide window's transparent title bar uses public
+AppKit APIs separately. The binary check is mandatory because source-level
+non-use alone did not remove winit's private CoreGraphics imports from linked
+executables. Keep this check when replacing the local copy with a newer winit.
 
 When sharing a Cargo target directory between checkouts, pass the resulting
 binary's actual path to the package script and confirm it came from this build.
@@ -109,8 +116,8 @@ MACOS_STORE_BUILD_NUMBER=10001 scripts/package_macos_app_store.sh \
 The script checks the profile's Bundle ID and distribution type, embeds the
 profile, removes download quarantine attributes from the generated app only
 before signing (Store error `ITMS-91109`), generates the app/team entitlements,
-signs nested code, and produces a
-signed `productbuild` package. Marketing version comes from Cargo; Store build
+rejects private CGS imports in every bundled Mach-O file, signs nested code,
+and produces a signed `productbuild` package. Marketing version comes from Cargo; Store build
 numbers must increase independently. Upload the package using Apple's
 Transporter. Successful local signing alone does not establish Store support.
 

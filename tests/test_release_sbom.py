@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import tomllib
 import unittest
 import zipfile
 
@@ -17,6 +18,18 @@ REVISION = "a" * 40
 
 
 class ReleaseSbomTests(unittest.TestCase):
+    def test_repository_path_patches_match_sbom_provenance_layout(self):
+        repo = Path(__file__).resolve().parents[1]
+        manifest = tomllib.loads((repo / "Cargo.toml").read_text(encoding="utf-8"))
+        for name, patch in manifest.get("patch", {}).get("crates-io", {}).items():
+            if "path" not in patch:
+                continue
+            with self.subTest(crate=name):
+                local = (repo / patch["path"]).resolve()
+                self.assertEqual(local, (repo / "vendor" / name).resolve())
+                package = tomllib.loads((local / "Cargo.toml").read_text(encoding="utf-8"))["package"]
+                self.assertEqual(package["name"], name)
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

@@ -15,6 +15,7 @@ mkdir -p "$dest"
 dest="$(cd "$dest" && pwd)"
 scripts/stage_macos_app_bundle.sh "$dest" "$binary"
 app="$dest/Quick Presenter.app"
+python3 scripts/check_macos_store_private_apis.py "$app"
 profile_plist="$dest/profile.plist"
 security cms -D -i "$profile" > "$profile_plist"
 
