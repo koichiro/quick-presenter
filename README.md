@@ -227,32 +227,11 @@ scripts/coverage.sh
 Detailed packaging, release, keyboard, and speaker-note behavior is documented
 under [docs/](docs/).
 
-Source statistics require Python 3 and `cloc` (`brew install cloc` on macOS):
+Source statistics are reported with (requires `cloc`; `brew install cloc` on macOS):
 
 ```sh
-python3 scripts/stats.py                  # Current working tree
-python3 scripts/stats.py --ref origin/main # Locally fetched main revision
+python3 scripts/stats.py
 ```
-
-The report uses a Rails-stats-style table with `Name`, `Files`, `Lines`, `LOC`,
-and `LOC %` columns. Rows separate Rust application code, native bridges, Slint
-UI, build/tools, website languages, Rust unit/integration tests, Python tests,
-and test fixtures. `Lines` counts original physical lines, including comments
-and blanks; `LOC` excludes comments and blanks. Physical lines touching test-only
-Rust items are assigned to tests once, so padded split files do not inflate totals.
-`LOC %` uses total LOC. The footer shows non-test `Code LOC` (including build/tools
-and website), `Test LOC`, and `Code to Test Ratio: 1:<test/code>`, plus the test
-share when considering only application implementation and tests.
-
-Rust items marked with
-`#[cfg(test)]` or a compound predicate requiring `test` (such as
-`#[cfg(all(test, unix))]`) are counted as tests, including inline test modules and
-test-only helpers. Predicates such as `#[cfg(any(test, unix))]` remain implementation
-code. All supported platforms are counted, regardless of the host.
-The `tests/` category includes fixture-generation code. Vendor code, documents,
-configuration files, and binary assets are excluded. File counts overlap when a
-Rust file contains both implementation and tests. This is a source-level
-classification, not a macro-expanding Rust compiler analysis.
 
 ## Releases
 
