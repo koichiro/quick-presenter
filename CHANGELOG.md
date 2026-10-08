@@ -1,5 +1,75 @@
 # Changelog
 
+## [1.4.0](https://github.com/koichiro/quick-presenter/releases/tag/v1.4.0) — 2026-10-08
+
+Release ahead of v1.5.0 to validate signed packages and the next Microsoft Store
+update. GitHub publication and Microsoft Store certification are separate;
+publishing this release does not confirm that the Store-installed app is 1.4.0.
+
+### Added
+
+- Swap presenter and audience displays with the **X** shortcut from either
+  focused window, preserving the presentation state
+  ([#386](https://github.com/koichiro/quick-presenter/pull/386)).
+- Remember slide-window placement and the last active PDF, with safe restoration
+  when the saved display or document is unavailable
+  ([#31](https://github.com/koichiro/quick-presenter/issues/31), [#397](https://github.com/koichiro/quick-presenter/pull/397)).
+- Publish artifact-bound CycloneDX 1.5 SBOM sidecars for release packages,
+  including Rust dependencies, bundled PDFium evidence, package/payload hashes,
+  and the limits of the native component inventory
+  ([#265](https://github.com/koichiro/quick-presenter/issues/265), [#403](https://github.com/koichiro/quick-presenter/pull/403)).
+- Document measured speaker-note PDF compatibility for PowerPoint, Keynote,
+  Google Slides, and Beamer. Visible notes-page layouts do not become supported
+  presenter-note metadata
+  ([#168](https://github.com/koichiro/quick-presenter/issues/168), [#410](https://github.com/koichiro/quick-presenter/pull/410)).
+
+### Changed
+
+- Automatically fit speaker-note text to the available presenter area using
+  bounded 12–24 px font sizes, and improve multiline spacing. This replaces the
+  proposed manual size controls with automatic sizing
+  ([#260](https://github.com/koichiro/quick-presenter/issues/260), [#391](https://github.com/koichiro/quick-presenter/pull/391)).
+- Use icon-based presenter navigation with accessible names and tooltips while
+  preserving keyboard navigation
+  ([#106](https://github.com/koichiro/quick-presenter/issues/106), [#395](https://github.com/koichiro/quick-presenter/pull/395)).
+- Adapt current-slide render width to the visible audience surface within
+  1600–2560 px and bound cache budgets to 96–192 MiB. Preserve the last good
+  image during replacement renders and keep tall pages within renderer limits
+  ([#271](https://github.com/koichiro/quick-presenter/issues/271), [#401](https://github.com/koichiro/quick-presenter/pull/401)).
+- Extract speaker notes only from the tested Marp and Beamer annotation
+  fingerprints instead of treating arbitrary PDF comments as presenter notes
+  ([#158](https://github.com/koichiro/quick-presenter/issues/158), [#390](https://github.com/koichiro/quick-presenter/pull/390)).
+- Update `serde`, `serde_json`, and `libc`
+  ([#392](https://github.com/koichiro/quick-presenter/pull/392), [#394](https://github.com/koichiro/quick-presenter/pull/394), [#393](https://github.com/koichiro/quick-presenter/pull/393)).
+
+### Fixed
+
+- Refresh native Open Recent entries after opening or clearing PDFs without
+  rebuilding the native menu structure
+  ([#181](https://github.com/koichiro/quick-presenter/issues/181), [#252](https://github.com/koichiro/quick-presenter/issues/252), [#389](https://github.com/koichiro/quick-presenter/pull/389)).
+- Restore Slint's window lifecycle when revealing hidden macOS audience windows,
+  preventing stale slide content after navigation or PDF reload
+  ([#400](https://github.com/koichiro/quick-presenter/issues/400), [#404](https://github.com/koichiro/quick-presenter/pull/404)).
+- Improve Linux application-icon availability, desktop identity, and launcher
+  startup handling across initial and recreated windows
+  ([#304](https://github.com/koichiro/quick-presenter/issues/304), [#405](https://github.com/koichiro/quick-presenter/pull/405)).
+- Explain missing macOS signing before PDF playback, rather than attempting to
+  use an untrusted renderer bundle
+  ([#388](https://github.com/koichiro/quick-presenter/pull/388)).
+
+### Security
+
+- Move PDFium parsing, rendering, and note extraction into supervised helper
+  processes with bounded versioned IPC, brokered PDF access, deadlines,
+  resource limits, and controlled failure recovery
+  ([#241](https://github.com/koichiro/quick-presenter/issues/241), [#378](https://github.com/koichiro/quick-presenter/pull/378), [#379](https://github.com/koichiro/quick-presenter/pull/379), [#380](https://github.com/koichiro/quick-presenter/pull/380)).
+- Apply platform renderer confinement: signed XPC and App Sandbox on macOS,
+  AppContainer on Windows, and Landlock/seccomp on Linux
+  ([#381](https://github.com/koichiro/quick-presenter/pull/381), [#382](https://github.com/koichiro/quick-presenter/pull/382), [#383](https://github.com/koichiro/quick-presenter/pull/383)).
+- Document the PDFium update cadence, vulnerability response, and renderer
+  isolation policy. Bundled PDFium remains pinned to `chromium/8076`
+  ([#377](https://github.com/koichiro/quick-presenter/pull/377)).
+
 ## [1.0.1](https://github.com/koichiro/quick-presenter/releases/tag/v1.0.1) — 2026-10-02
 
 ### Fixed
