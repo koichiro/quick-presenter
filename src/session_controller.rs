@@ -22,6 +22,21 @@ pub fn apply_session_command(
     command: PresentationCommand,
     now: Instant,
 ) -> SessionCommandOutcome {
+    // Close publishes its own transition for callers outside command dispatch.
+    if command == PresentationCommand::Close {
+        return apply_session_command_inner(state, command, now);
+    }
+    let before = crate::control_state::snapshot(state, now);
+    let outcome = apply_session_command_inner(state, command, now);
+    crate::control_state::publish_changes(state, before, now);
+    outcome
+}
+
+fn apply_session_command_inner(
+    state: &mut AppState,
+    command: PresentationCommand,
+    now: Instant,
+) -> SessionCommandOutcome {
     if command == PresentationCommand::Close {
         close_presentation_state(state);
         return SessionCommandOutcome {
@@ -145,6 +160,7 @@ pub fn commit_render_opened_state(
         return None;
     }
 
+    let before = crate::control_state::snapshot(state, Instant::now());
     state.render_generation = state.render_generation.wrapping_add(1);
     state.audience_slide.last_good_current = None;
     state.audience_slide.failed_current_page = None;
@@ -166,6 +182,7 @@ pub fn commit_render_opened_state(
     state.active_document_path = loaded_path.clone();
     state.automatic_reopen = None;
 
+    crate::control_state::publish_changes(state, before, Instant::now());
     Some(OpenedSessionOutcome {
         snapshot: state.presentation.snapshot(),
         loaded_path,
@@ -194,6 +211,7 @@ pub fn commit_render_reloaded_state(
         return None;
     }
 
+    let before = crate::control_state::snapshot(state, Instant::now());
     state.render_generation = state.render_generation.wrapping_add(1);
     state.render_cache.clear();
     state.page_aspects.clear();
@@ -223,6 +241,7 @@ pub fn commit_render_reloaded_state(
         state.cache_context(presentation_cache_radius),
     );
     state.status_text = "PDF reloaded.".to_owned();
+    crate::control_state::publish_reload(state, before, Instant::now());
     Some(snapshot)
 }
 
@@ -363,6 +382,7 @@ pub fn commit_render_worker_failed_state(
 }
 
 pub fn close_presentation_state(state: &mut AppState) {
+    let before = crate::control_state::snapshot(state, Instant::now());
     let changed = state.presentation.snapshot().is_some() || state.pending_open.is_some();
     if let Some(scheduler) = state.render_scheduler.as_ref() {
         scheduler.request_shutdown();
@@ -393,6 +413,7 @@ pub fn close_presentation_state(state: &mut AppState) {
     state.black_screen.set_active(false);
     state.timer.reset();
     state.status_text = "Open a PDF to begin.".to_owned();
+    crate::control_state::publish_changes(state, before, Instant::now());
 }
 
 fn update_elapsed_timer_for_page_change(

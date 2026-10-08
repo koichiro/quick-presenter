@@ -16,6 +16,7 @@ In another terminal:
 
 ```sh
 ./target/debug/qp status --json
+./target/debug/qp timer elapsed --json
 ./target/debug/qp next --json
 ./target/debug/qp prev
 ./target/debug/qp goto 5
@@ -28,6 +29,7 @@ In another terminal:
 ./target/debug/qp context --full --json
 ./target/debug/qp open "slides with spaces.pdf" --json
 ./target/debug/qp close
+./target/debug/qp watch --json
 ```
 
 After adding the binary directory to PATH, the same commands use `qp` directly.
@@ -41,7 +43,8 @@ integration for `qp` is not included in this initial change.
 ## Machine-readable output
 
 `--json` is available for every implemented command. Successful stdout contains
-one JSON object and a newline, with no logs or human decoration. Unlike the IPC
+one JSON object and a newline, with no logs or human decoration.
+`watch --json` streams one event per line (NDJSON) until interrupted. Unlike the IPC
 response, CLI output omits the request envelope and exposes the result fields
 alongside `protocol_version`:
 
@@ -58,7 +61,8 @@ qp context --json | jq '.next'
 qp next --json | jq '.state.page'
 ```
 
-Failures leave stdout empty. With `--json`, stderr contains one JSON error object
+Single-response failures leave stdout empty. A failing watch retains already
+printed complete events and reports its terminal error only on stderr. With `--json`, stderr contains one JSON error object
 such as `{"code":"NO_PRESENTATION","message":"No presentation is currently open."}`.
 Without `--json`, stderr contains a diagnostic. Scripts should check the exit
 code or JSON error code instead of matching English messages.
@@ -77,6 +81,7 @@ code or JSON error code instead of matching English messages.
 | 8 | `BUSY`, `NOTES_LOADING` |
 | 9 | `TIMEOUT` |
 | 10 | `OPEN_FAILED`, `NOTES_FAILED`, `TEXT_FAILED`, `CANCELLED` |
+| 11 | `EVENTS_LAGGED` (reconnect for a fresh snapshot) |
 
 Pages are one-based. End-of-deck navigation succeeds without advancing and
 returns `changed: false`. `blackout on/off` sets an explicit state. `close`
@@ -85,7 +90,7 @@ and note extraction; an empty note is different from unavailable notes.
 
 Timeouts and disconnections can have an uncertain mutation outcome. Query
 `status` before retrying `next` or `prev`. There is one controllable instance
-per user/runtime directory. Event watching and explicit timer control are not implemented in this initial interface.
+per user/runtime directory. Explicit timer mutation is unavailable in this version.
 See [Control Protocol](CONTROL_PROTOCOL.md) for transport, completion semantics,
 state fields, and compatibility expectations.
 
@@ -124,3 +129,46 @@ one-million-PDFium-character guard. These limits yield `TEXT_FAILED` rather than
 successful shortened text. The server bounds assembled responses to 32 MiB
 and preserves its 30-second response deadline. Failed or incomplete transfers
 leave stdout empty and report a typed error on stderr.
+
+
+## Read elapsed time
+
+```sh
+qp timer elapsed
+qp timer elapsed --json | jq '.elapsed_seconds'
+```
+
+Human output is whole elapsed seconds and a newline. JSON includes
+`protocol_version`, `kind: timer_elapsed`, `session_id`, `document_revision`,
+`running`, and `elapsed_seconds`. No open deck yields `NO_PRESENTATION`.
+`qp timer elapsed` is the only timer command and has no state-changing side
+effects. Existing GUI navigation still starts the timer
+when leaving page one and resets it when returning to page one; opening and
+closing a PDF retain their existing reset behavior.
+
+## Watch presentation changes
+
+```sh
+qp watch
+qp watch --json
+qp watch --json | jq --unbuffered 'select(.event == "page.changed") | .page'
+```
+
+Every watch begins with `presentation.snapshot`, containing current state and
+its sequence baseline. Later events include `presentation.opened`,
+`presentation.reloaded`, `presentation.closed`, `page.changed`,
+`blackout.changed`. Timer lifecycle events are not exposed. Watching never
+changes the presentation or timer.
+All lines include `protocol_version`, `session_id`, `document_revision`, and
+`sequence`; page numbers remain one-based. Each line is flushed immediately.
+Transport heartbeats stay invisible to stdout.
+
+A watch remains connected across document close/open and idle periods. Stop
+with Ctrl-C. Up to four simultaneous watchers are allowed, reserving connection
+capacity for commands. Each has a 64-event queue. A slow consumer is disconnected
+with `EVENTS_LAGGED` / exit 11 when a typed error can still be delivered; a blocked
+or broken transport may instead produce `IPC_FAILURE` or `TIMEOUT`. Reconnect to
+receive a fresh snapshot. Events are not replayed and the CLI does not reconnect
+automatically. This stream reports committed domain changes, not render or note
+readiness acknowledgements or timer ticks; query `status`, `context`, or
+`timer elapsed` when those data are needed.

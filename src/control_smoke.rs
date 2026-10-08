@@ -94,6 +94,19 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
     call(path, Command::GoTo(PageParams { page: 1 }))?;
     ready(path)?;
     anyhow::ensure!(
+        matches!(
+            call(path, Command::TimerElapsed(Empty {}))?,
+            Reply::TimerElapsed {
+                timer: TimerStatus {
+                    running: false,
+                    elapsed_seconds: 0
+                },
+                ..
+            }
+        ),
+        "elapsed query changed timer"
+    );
+    anyhow::ensure!(
         matches!(call(path, Command::Slide(ContentParams::default()))?, Reply::Slide { content, .. } if content.page == 1 && !content.text.is_empty()),
         "slide text missing"
     );

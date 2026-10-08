@@ -4,6 +4,7 @@ use quick_presenter::control::protocol::{NotesState, RenderState, Status, TimerS
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 pub struct ControlMetadata {
+    pub events: quick_presenter::control::events::EventHub,
     pub session_id: String,
     pub document_revision: u64,
     pub notes_state: NotesState,
@@ -24,6 +25,7 @@ impl Default for ControlMetadata {
             .unwrap_or_default()
             .as_nanos();
         Self {
+            events: Default::default(),
             session_id: format!(
                 "{:x}-{time:x}-{:x}",
                 std::process::id(),
@@ -71,6 +73,50 @@ pub fn snapshot(state: &AppState, now: Instant) -> Status {
         opening: state.pending_open.is_some(),
         render_state,
         notes_state: state.control.notes_state,
+    }
+}
+
+/// Called at committed domain transitions, not by sampling the UI on a timer.
+pub fn publish_changes(state: &mut AppState, before: Status, now: Instant) {
+    publish_changes_inner(state, before, now, false);
+}
+pub fn publish_reload(state: &mut AppState, before: Status, now: Instant) {
+    publish_changes_inner(state, before, now, true);
+}
+fn publish_changes_inner(state: &mut AppState, before: Status, now: Instant, reloaded: bool) {
+    use quick_presenter::control::protocol::Event;
+    let after = snapshot(state, now);
+    if before.document_revision != after.document_revision {
+        let event = if after.page.is_none() {
+            Event::Closed {}
+        } else if reloaded {
+            Event::Reloaded {
+                state: after.clone(),
+            }
+        } else {
+            Event::Opened {
+                state: after.clone(),
+            }
+        };
+        state.control.events.publish(&after, event);
+    } else if before.page != after.page {
+        if let Some(page) = after.page {
+            state.control.events.publish(
+                &after,
+                Event::PageChanged {
+                    page,
+                    pages: after.pages,
+                },
+            );
+        }
+    }
+    if before.blackout != after.blackout {
+        state.control.events.publish(
+            &after,
+            Event::BlackoutChanged {
+                value: after.blackout,
+            },
+        );
     }
 }
 
@@ -144,6 +190,85 @@ mod tests {
     use super::*;
     use crate::{render_scheduler::RenderSessionId, session_controller::*};
     use quick_presenter::control::protocol::SlideText;
+    #[test]
+    fn timer_changes_do_not_publish_control_events() {
+        use quick_presenter::control::events;
+        let mut state = AppState::default();
+        let (subscriber, receiver) = events::channel();
+        assert!(state.control.events.subscribe(subscriber));
+        let now = Instant::now();
+        let before = snapshot(&state, now);
+        state.timer.start(now);
+        publish_changes(&mut state, before, now);
+        let before = snapshot(&state, now + std::time::Duration::from_secs(10));
+        state.timer.reset();
+        publish_changes(&mut state, before, now + std::time::Duration::from_secs(10));
+        assert!(receiver.events.try_recv().is_err());
+        assert_eq!(state.control.events.sequence(), 0);
+    }
+    #[test]
+    fn every_committed_domain_change_is_ordered_including_gui_actions() {
+        use crate::{input::PresentationCommand, rendering::RenderedPage, view_sync};
+        use quick_presenter::control::{events, protocol::Event};
+        let mut state = AppState::default();
+        let (subscriber, receiver) = events::channel();
+        assert!(state.control.events.subscribe(subscriber));
+        let session = begin_open_pdf_state(&mut state, "/slides/deck.pdf".into());
+        commit_render_opened_state(&mut state, session, "Deck".into(), 3, "Ready".into()).unwrap();
+        let now = Instant::now();
+        apply_session_command(&mut state, PresentationCommand::NextPage, now);
+        apply_session_command(&mut state, PresentationCommand::NextPage, now);
+        apply_session_command(&mut state, PresentationCommand::NextPage, now); // Boundary no-op.
+        apply_session_command(&mut state, PresentationCommand::SetBlackScreen(true), now);
+        apply_session_command(&mut state, PresentationCommand::SetBlackScreen(true), now); // Idempotent.
+        apply_session_command(&mut state, PresentationCommand::FirstPage, now);
+        let session = begin_open_pdf_state(&mut state, "/slides/deck.pdf".into());
+        commit_render_opened_state(&mut state, session, "Deck".into(), 3, "Ready".into()).unwrap();
+        let reload = state.render_sessions.begin_reload_session();
+        commit_render_reloaded_state(
+            &mut state,
+            reload,
+            "Deck".into(),
+            3,
+            0,
+            RenderedPage {
+                image: view_sync::placeholder_slide().image,
+                aspect_ratio: 1.0,
+                estimated_bytes: 4,
+            },
+            640,
+            2,
+        )
+        .unwrap();
+        close_presentation_state(&mut state);
+        close_presentation_state(&mut state); // Idempotent.
+        let events: Vec<_> = receiver.events.try_iter().collect();
+        let kinds: Vec<_> = events
+            .iter()
+            .map(|e| match e.event {
+                Event::Opened { .. } => "opened",
+                Event::Reloaded { .. } => "reloaded",
+                Event::Closed {} => "closed",
+                Event::PageChanged { .. } => "page",
+                Event::BlackoutChanged { .. } => "blackout",
+                _ => "unexpected",
+            })
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                "opened", "page", "page", "blackout", "page", "opened", "blackout", "reloaded",
+                "closed"
+            ]
+        );
+        for (index, event) in events.iter().enumerate() {
+            assert_eq!(event.sequence, index as u64 + 1);
+        }
+        assert_eq!(
+            events.last().unwrap().document_revision,
+            state.control.document_revision
+        );
+    }
     #[test]
     fn full_cache_is_separate_bounded_and_invalidated_with_document_lifecycle() {
         let mut state = AppState::default();

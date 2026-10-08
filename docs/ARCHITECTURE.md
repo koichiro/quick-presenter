@@ -157,3 +157,15 @@ serialized response bytes. The client reconstructs one typed logical response,
 validating identity, ordering, and aggregate size before output. Native character
 and full-page byte guards, bounded caches, and existing watchdogs remain in
 force. Ordinary queries keep the compact single-frame response contract.
+
+
+### Control event delivery
+
+Committed session commands and open/reload/close transitions publish typed
+control events directly from the existing presentation owner. The event hub
+stores sequence numbers and bounded subscribers, not a second presentation
+state. Watch registration captures an atomic status/sequence baseline on the
+same UI event loop. IPC worker threads deliver frames and invisible heartbeats;
+slow watchers are removed without blocking GUI transitions. `qp watch --json`
+flushes NDJSON events. `qp timer elapsed` only reads the existing timer; no
+state-changing timer command is exposed in this version.

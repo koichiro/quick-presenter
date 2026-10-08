@@ -324,3 +324,108 @@ fn qp_full_queries_reassemble_large_unicode_responses_before_json_output() {
         assert_eq!(content["truncated"], false);
     }
 }
+
+#[test]
+fn qp_watch_flushes_ndjson_and_keeps_terminal_errors_on_stderr() {
+    use quick_presenter::control::events::{EventHub, EVENT_BUFFER};
+    let root = Directory::new();
+    let directory = root.0.join("quick-presenter");
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&directory)
+        .unwrap();
+    let (_server, requests) = ControlServer::bind(&directory.join("control.sock")).unwrap();
+    for lagged in [false, true] {
+        let path = root.0.clone();
+        let child = thread::spawn(move || {
+            ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+                .env("XDG_RUNTIME_DIR", path)
+                .args(["watch", "--json"])
+                .output()
+                .unwrap()
+        });
+        let mut pending = requests.recv_timeout(Duration::from_secs(2)).unwrap();
+        let mut hub = EventHub::default();
+        hub.subscribe(pending.watch.take().unwrap());
+        if lagged {
+            for _ in 0..=EVENT_BUFFER {
+                hub.publish(&status(), Event::PageChanged { page: 2, pages: 5 });
+            }
+        } else {
+            hub.publish(&status(), Event::PageChanged { page: 2, pages: 5 });
+        }
+        pending
+            .response
+            .send(Response::success(
+                pending.request.id,
+                Reply::Watching {
+                    state: status(),
+                    sequence: 0,
+                },
+            ))
+            .unwrap();
+        if !lagged {
+            drop(hub);
+        }
+        let output = child.join().unwrap();
+        assert_eq!(output.status.code(), Some(if lagged { 11 } else { 10 }));
+        let error: ControlError = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(
+            error.code,
+            if lagged {
+                ErrorCode::EventsLagged
+            } else {
+                ErrorCode::Cancelled
+            }
+        );
+        let events: Vec<EventEnvelope> = std::str::from_utf8(&output.stdout)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert!(matches!(events[0].event, Event::Snapshot { .. }));
+        assert_eq!(events.len(), if lagged { 1 } else { 2 });
+    }
+    for args in [
+        ["timer", "start", "--json"],
+        ["timer", "stop", "--json"],
+        ["timer", "reset", "--json"],
+    ] {
+        let output = ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+            .env("XDG_RUNTIME_DIR", &root.0)
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(requests.try_recv().is_err());
+    }
+    let path = root.0.clone();
+    let query = thread::spawn(move || {
+        ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+            .env("XDG_RUNTIME_DIR", path)
+            .args(["timer", "elapsed", "--json"])
+            .output()
+            .unwrap()
+    });
+    let pending = requests.recv_timeout(Duration::from_secs(2)).unwrap();
+    pending
+        .response
+        .send(Response::success(
+            pending.request.id,
+            Reply::TimerElapsed {
+                session_id: "test-session".into(),
+                document_revision: 1,
+                timer: TimerStatus {
+                    running: true,
+                    elapsed_seconds: 42,
+                },
+            },
+        ))
+        .unwrap();
+    let output = query.join().unwrap();
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["elapsed_seconds"], 42);
+}

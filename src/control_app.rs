@@ -112,7 +112,7 @@ impl Dispatcher {
         }
         self.queries = waiting;
         for _ in 0..8 {
-            let Ok(pending) = self.receiver.try_recv() else {
+            let Ok(mut pending) = self.receiver.try_recv() else {
                 break;
             };
             if pending.is_expired() {
@@ -129,6 +129,33 @@ impl Dispatcher {
                     &pending,
                     Reply::Status(control_state::snapshot(&state.borrow(), Instant::now())),
                 ),
+                Command::TimerElapsed(_) => match timer_reply(&state.borrow(), Instant::now()) {
+                    Ok(result) => reply(&pending, result),
+                    Err(error) => reply_error(&pending, error.code, &error.message),
+                },
+                Command::Watch(_) => {
+                    let mut state = state.borrow_mut();
+                    let subscribed = pending
+                        .watch
+                        .take()
+                        .is_some_and(|subscriber| state.control.events.subscribe(subscriber));
+                    match subscribed {
+                        true => {
+                            reply(
+                                &pending,
+                                Reply::Watching {
+                                    state: control_state::snapshot(&state, Instant::now()),
+                                    sequence: state.control.events.sequence(),
+                                },
+                            );
+                        }
+                        false => reply_error(
+                            &pending,
+                            ErrorCode::Busy,
+                            "Event subscriber limit reached.",
+                        ),
+                    }
+                }
                 Command::Notes(_) => match notes_reply(&state.borrow()) {
                     Ok(result) => reply(&pending, result),
                     Err(error) => reply_error(&pending, error.code, &error.message),
@@ -397,6 +424,21 @@ fn navigation_command(
         }
     })
 }
+fn timer_reply(state: &AppState, now: Instant) -> Result<Reply, ControlError> {
+    let snapshot = control_state::snapshot(state, now);
+    if snapshot.page.is_none() {
+        return Err(ControlError::new(
+            ErrorCode::NoPresentation,
+            "No presentation is currently open.",
+        ));
+    }
+    Ok(Reply::TimerElapsed {
+        session_id: snapshot.session_id,
+        document_revision: snapshot.document_revision,
+        timer: snapshot.timer,
+    })
+}
+
 fn notes_reply(state: &AppState) -> Result<Reply, ControlError> {
     let page = state.presentation.snapshot().ok_or_else(|| {
         ControlError::new(
@@ -430,6 +472,49 @@ fn notes_reply(state: &AppState) -> Result<Reply, ControlError> {
 mod tests {
     use super::*;
     use crate::{presentation::PresentationState, session_controller::apply_session_command};
+    #[test]
+    fn elapsed_query_only_observes_the_existing_timer() {
+        use crate::session_controller::*;
+        let mut state = AppState::default();
+        let session = begin_open_pdf_state(&mut state, "/slides/deck.pdf".into());
+        commit_render_opened_state(&mut state, session, "Deck".into(), 3, "Ready".into()).unwrap();
+        let now = Instant::now();
+        assert!(matches!(
+            timer_reply(&state, now).unwrap(),
+            Reply::TimerElapsed {
+                timer: TimerStatus {
+                    running: false,
+                    elapsed_seconds: 0
+                },
+                ..
+            }
+        ));
+        state.timer.start(now);
+        let before = control_state::snapshot(&state, now + Duration::from_secs(123));
+        let sequence = state.control.events.sequence();
+        for _ in 0..3 {
+            assert!(matches!(
+                timer_reply(&state, now + Duration::from_secs(123)).unwrap(),
+                Reply::TimerElapsed {
+                    timer: TimerStatus {
+                        running: true,
+                        elapsed_seconds: 123
+                    },
+                    ..
+                }
+            ));
+        }
+        assert_eq!(
+            control_state::snapshot(&state, now + Duration::from_secs(123)),
+            before
+        );
+        assert_eq!(state.control.events.sequence(), sequence);
+        close_presentation_state(&mut state);
+        assert_eq!(
+            timer_reply(&state, now).unwrap_err().code,
+            ErrorCode::NoPresentation
+        );
+    }
     #[test]
     fn full_queries_never_reuse_truncated_compact_cache_entries() {
         let mut state = AppState {

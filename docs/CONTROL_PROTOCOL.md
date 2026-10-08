@@ -20,8 +20,10 @@ qp -> local IPC -> bounded requests -> GUI event loop
 
 `AppState` remains the state owner. The control server never keeps its own deck,
 cursor, timer, or notes. It delivers typed requests and response channels to the
-existing event loop. Queries are snapshots of that state. Navigation and black
-screen commands share the GUI's command path; file opens share its asynchronous
+existing event loop. Queries are snapshots of that state. Timer access is
+read-only: the sole timer method retrieves elapsed time. Clients can also
+read the timer in state snapshots. Timer lifecycle events are not exposed.
+Navigation and black screen commands share the GUI's command path; file opens share its asynchronous
 open pipeline. No keyboard, mouse, accessibility, focus, or monitor simulation
 is involved. `qp` does not load PDFium or initialize Slint.
 
@@ -51,7 +53,8 @@ Additional GUI instances still work, but do not acquire that control endpoint.
 Control initialization failure is logged and does not prevent GUI playback.
 There is no TCP listener.
 
-Each connection carries one request and one logical response. Frames are a four-byte,
+Each connection carries one request and one logical response, except an accepted
+`presentation.watch` subscription, which continues with event/heartbeat responses. Frames are a four-byte,
 big-endian, nonzero JSON byte length followed by exactly that many UTF-8 bytes.
 The maximum JSON frame is 1 MiB in each direction. Large full-text responses
 use bounded transfer frames as described below. Invalid framing closes the
@@ -76,7 +79,10 @@ Malformed envelopes may receive `id: null`.
 {"protocol_version":1,"id":42,"method":"presentation.goto","params":{"page":5}}
 ```
 
-A success has `result.kind` equal to `status`, `mutation`, `notes`, `slide`, or `context`:
+Single-response queries use `result.kind` equal to `status`, `timer_elapsed`,
+`notes`, `slide`, or `context`; presentation commands use `mutation`. Watch
+and large-text transport replies are described below. The following example
+acknowledges slide navigation and includes a read-only timer snapshot:
 
 ```json
 {"protocol_version":1,"id":42,"result":{"kind":"mutation","changed":true,"state":{"session_id":"opaque-instance-id","document_revision":1,"document":"/slides/demo.pdf","page":5,"pages":12,"fullscreen":false,"blackout":false,"timer":{"running":true,"elapsed_seconds":20},"opening":false,"render_state":"rendering","notes_state":"ready"}}}
@@ -95,6 +101,8 @@ release; clients should tolerate additive result fields.
 
 | Method | Params | Result |
 | --- | --- | --- |
+| `presentation.timer.elapsed` | `{}` | `kind: timer_elapsed`, session ID, revision, running, elapsed seconds (read only) |
+| `presentation.watch` | `{}` | `kind: watching`, initial state and sequence, then event responses |
 | `presentation.status` | `{}` | `kind: status` plus state fields |
 | `presentation.next` | `{}` | Mutation with resulting state |
 | `presentation.previous` | `{}` | Mutation with resulting state |
@@ -109,8 +117,10 @@ release; clients should tolerate additive result fields.
 Pages are one-based. `goto` outside `1..=pages` fails without changing state.
 `next` at the last page and `previous` at the first page succeed with
 `changed: false`. Blackout is a state setter and repeated identical values
-succeed with `changed: false`. Navigation preserves the GUI's automatic timer
-behavior, including reset when returning to page one.
+succeed with `changed: false`. These presentation commands retain the GUI's
+existing automatic timer behavior: leaving page one starts timing and returning
+to page one resets it. These are navigation side effects, not independently
+addressable timer controls. Timer queries and subscriptions never trigger them.
 
 `open` uses an absolute UTF-8 path (at most 32 KiB, no NUL). The CLI resolves a
 relative path using its own working directory. Success means the existing helper
@@ -119,9 +129,10 @@ all notes, previews, or display updates. A failed replacement open retains the
 previous deck when available. Competing opens/file dialogs are rejected with
 `BUSY`; a GUI open can supersede an outstanding control open. `close` cancels
 pending opens/reloads, invalidates late renderer events, requests helper shutdown,
-and clears PDF, notes, cache, timer, and blackout. It leaves windows and the
-application running. Repeated close succeeds with no state change. A subsequent
-open may return `BUSY` briefly while helper shutdown finishes.
+and clears PDF, notes, cache, and blackout. The existing document-close
+lifecycle also resets the GUI-owned timer; `close` is not a standalone timer
+reset operation. It leaves windows and the application running. Repeated close
+succeeds with no state change. A subsequent open may return `BUSY` briefly while helper shutdown finishes.
 
 ## State and notes
 
@@ -133,7 +144,7 @@ open may return `BUSY` briefly while helper shutdown finishes.
 | `page`, `pages` | Logical current page and count; null and zero when closed |
 | `fullscreen` | Existing slide-window fullscreen state |
 | `blackout` | Existing audience black-screen state |
-| `timer` | Running flag and whole elapsed seconds from the existing timer |
+| `timer` | Read-only snapshot of the existing GUI-owned timer: running flag and whole elapsed seconds |
 | `opening` | A PDF open is pending; the active deck may still be available |
 | `render_state` | `empty`, `rendering`, `ready`, or `failed` for the logical current page |
 | `notes_state` | `empty`, `loading`, `ready`, or `failed` |
@@ -161,7 +172,8 @@ AI-generated content, or OCR is involved.
 current and next page content. Each content object contains `page`, `text`,
 `truncated`, and `notes`. `next` is null on the last page. Its `presentation`
 object uses the same fields as `status`, including the instance ID, document
-revision, timer, blackout, and render/notes readiness. The CLI adds
+revision, read-only timer snapshot, blackout, and render/notes readiness.
+Reading context has no effect on timing. The CLI adds
 `protocol_version: 1` to the flattened result as usual.
 
 ```json
@@ -237,15 +249,94 @@ Private renderer IPC v4 uses corresponding typed, correlated transfer envelopes
 for large helper text results. It does not raise the per-frame control limit or
 change pixel framing. The GUI still never extracts PDF text itself.
 
+## Read-only timer query
+
+The only timer method is `presentation.timer.elapsed`, with empty parameters.
+It returns the GUI-owned timer's running flag and whole elapsed seconds, requires
+an open PDF, and has no state-changing side effects. The corresponding CLI
+command is `qp timer elapsed`, optionally with `--json`.
+
+```json
+{"protocol_version":1,"id":42,"method":"presentation.timer.elapsed","params":{}}
+```
+
+```json
+{"protocol_version":1,"id":42,"result":{"kind":"timer_elapsed","session_id":"instance","document_revision":1,"running":true,"elapsed_seconds":183}}
+```
+
+Timer access is limited to the elapsed-time query. Its empty parameters reject
+state-changing fields with `INVALID_REQUEST`.
+
+`status`, `context`, and `watch` also expose timer observations only. The GUI's
+existing automatic navigation/open/close timer rules are unchanged; no query
+or subscription invokes those transitions. The event stream contains no timer
+lifecycle notifications; use the elapsed-time query for current timing.
+
+## Event subscriptions
+
+Send `presentation.watch` with empty parameters. The initial response is:
+
+```json
+{"protocol_version":1,"id":42,"result":{"kind":"watching","state":{"session_id":"instance","document_revision":1,"document":"/slides.pdf","page":1,"pages":3,"fullscreen":false,"blackout":false,"timer":{"running":false,"elapsed_seconds":0},"opening":false,"render_state":"ready","notes_state":"ready"},"sequence":12}}
+```
+
+Registration and initial state capture happen together on the presentation
+owner's event loop. The client emits that initial state as
+`presentation.snapshot`. Changes after registration continue on the same
+length-prefixed connection:
+
+```json
+{"protocol_version":1,"id":42,"result":{"kind":"event","envelope":{"protocol_version":1,"session_id":"instance","document_revision":1,"sequence":13,"event":"page.changed","page":2,"pages":3}}}
+```
+
+`qp watch --json` prints the inner envelope, one valid JSON object per line,
+with no request IDs, wrappers, logs, or transport messages.
+
+| Event | Fields beyond version/session/revision/sequence |
+| --- | --- |
+| `presentation.snapshot` | `state`: initial status (synthesized by the client) |
+| `presentation.opened` | `state`: committed PDF state, including same-file reopen |
+| `presentation.reloaded` | `state`: committed hot-reload state |
+| `presentation.closed` | No additional fields |
+| `page.changed` | `page`, `pages` |
+| `blackout.changed` | `value` |
+
+Events are emitted from committed domain transitions shared by GUI and control
+commands. No-op boundary navigation, repeated blackout settings, repeated close,
+and queries emit no changes. Sequence increases across all event types for the
+controllable instance; the initial snapshot gives the baseline. Every later event
+must have the next sequence and the same instance session ID. Document revisions
+change on open/reload/close. There is no replay; reconnect for a new snapshot.
+An open/close/reload event carries the resulting document state or revision;
+associated blackout changes follow it. Subscribing has no effect on timing.
+The stream contains no timer lifecycle events, timer ticks, or render/notes
+readiness acknowledgements.
+
+The initial handshake retains the ordinary 30-second request deadline. An
+accepted watch has no total lifetime deadline and survives document close/open.
+The server sends `kind: heartbeat` replies approximately every two seconds while
+healthy, using the same response ID/version. Clients ignore heartbeats and renew
+transport read deadlines. Each server frame write has a one-second deadline;
+watchers cannot block presentation transitions or server shutdown.
+
+Up to four watches share the existing eight-connection server. Each watch has a
+bounded 64-event queue. Queue overflow removes that subscriber and reports
+`EVENTS_LAGGED` / CLI exit 11 when the transport remains writable. Blocked/broken
+transports can instead fail with timeout/IPC errors. Terminal errors use the
+ordinary typed error envelope; complete event lines already printed remain on
+stdout, and the CLI prints errors only on stderr. Reconnect after any stream
+failure to obtain a fresh baseline. Idle disconnects release their slots after
+a heartbeat detects closure. No automatic reconnect or remote transport is added.
+
 ## Errors and current limits
 
 Errors use stable codes; human messages are diagnostic text, not API keys.
 The CLI mapping is documented in [CLI](CLI.md). Common protocol codes are
 `NO_PRESENTATION`, `INVALID_PAGE`, `INVALID_REQUEST`, `UNKNOWN_METHOD`,
 `PROTOCOL_MISMATCH`, `BUSY`, `TIMEOUT`, `OPEN_FAILED`, `NOTES_LOADING`,
-`NOTES_FAILED`, `TEXT_FAILED`, and `CANCELLED`.
+`NOTES_FAILED`, `TEXT_FAILED`, `CANCELLED`, and `EVENTS_LAGGED`.
 
-This initial interface has no event stream or explicit timer
-controls, network control, session discovery, or command replay. Renderer IPC
+This interface has no explicit timer mutations, network control, session
+discovery, or event/command replay. Renderer IPC
 is a separate private protocol and must not be exposed as the presentation
 control protocol.
