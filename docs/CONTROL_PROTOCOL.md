@@ -20,8 +20,10 @@ qp -> local IPC -> bounded requests -> GUI event loop
 
 `AppState` remains the state owner. The control server never keeps its own deck,
 cursor, timer, or notes. It delivers typed requests and response channels to the
-existing event loop. Queries are snapshots of that state. Navigation and black
-screen commands share the GUI's command path; file opens share its asynchronous
+existing event loop. Queries are snapshots of that state. Timer access is
+read-only: external clients can retrieve elapsed time and observe automatic
+timer changes, but cannot issue timer start, stop, or reset commands. Navigation
+and black screen commands share the GUI's command path; file opens share its asynchronous
 open pipeline. No keyboard, mouse, accessibility, focus, or monitor simulation
 is involved. `qp` does not load PDFium or initialize Slint.
 
@@ -77,7 +79,10 @@ Malformed envelopes may receive `id: null`.
 {"protocol_version":1,"id":42,"method":"presentation.goto","params":{"page":5}}
 ```
 
-A success has `result.kind` equal to `status`, `mutation`, `notes`, `slide`, or `context`:
+Single-response queries use `result.kind` equal to `status`, `timer_elapsed`,
+`notes`, `slide`, or `context`; presentation commands use `mutation`. Watch
+and large-text transport replies are described below. The following example
+acknowledges slide navigation and includes a read-only timer snapshot:
 
 ```json
 {"protocol_version":1,"id":42,"result":{"kind":"mutation","changed":true,"state":{"session_id":"opaque-instance-id","document_revision":1,"document":"/slides/demo.pdf","page":5,"pages":12,"fullscreen":false,"blackout":false,"timer":{"running":true,"elapsed_seconds":20},"opening":false,"render_state":"rendering","notes_state":"ready"}}}
@@ -112,8 +117,10 @@ release; clients should tolerate additive result fields.
 Pages are one-based. `goto` outside `1..=pages` fails without changing state.
 `next` at the last page and `previous` at the first page succeed with
 `changed: false`. Blackout is a state setter and repeated identical values
-succeed with `changed: false`. Navigation preserves the GUI's automatic timer
-behavior, including reset when returning to page one.
+succeed with `changed: false`. These presentation commands retain the GUI's
+existing automatic timer behavior: leaving page one starts timing and returning
+to page one resets it. These are navigation side effects, not independently
+addressable timer controls. Timer queries and subscriptions never trigger them.
 
 `open` uses an absolute UTF-8 path (at most 32 KiB, no NUL). The CLI resolves a
 relative path using its own working directory. Success means the existing helper
@@ -122,9 +129,10 @@ all notes, previews, or display updates. A failed replacement open retains the
 previous deck when available. Competing opens/file dialogs are rejected with
 `BUSY`; a GUI open can supersede an outstanding control open. `close` cancels
 pending opens/reloads, invalidates late renderer events, requests helper shutdown,
-and clears PDF, notes, cache, timer, and blackout. It leaves windows and the
-application running. Repeated close succeeds with no state change. A subsequent
-open may return `BUSY` briefly while helper shutdown finishes.
+and clears PDF, notes, cache, and blackout. The existing document-close
+lifecycle also resets the GUI-owned timer; `close` is not a standalone timer
+reset operation. It leaves windows and the application running. Repeated close
+succeeds with no state change. A subsequent open may return `BUSY` briefly while helper shutdown finishes.
 
 ## State and notes
 
@@ -136,7 +144,7 @@ open may return `BUSY` briefly while helper shutdown finishes.
 | `page`, `pages` | Logical current page and count; null and zero when closed |
 | `fullscreen` | Existing slide-window fullscreen state |
 | `blackout` | Existing audience black-screen state |
-| `timer` | Running flag and whole elapsed seconds from the existing timer |
+| `timer` | Read-only snapshot of the existing GUI-owned timer: running flag and whole elapsed seconds |
 | `opening` | A PDF open is pending; the active deck may still be available |
 | `render_state` | `empty`, `rendering`, `ready`, or `failed` for the logical current page |
 | `notes_state` | `empty`, `loading`, `ready`, or `failed` |
@@ -164,7 +172,8 @@ AI-generated content, or OCR is involved.
 current and next page content. Each content object contains `page`, `text`,
 `truncated`, and `notes`. `next` is null on the last page. Its `presentation`
 object uses the same fields as `status`, including the instance ID, document
-revision, timer, blackout, and render/notes readiness. The CLI adds
+revision, read-only timer snapshot, blackout, and render/notes readiness.
+Reading context does not start, stop, or reset timing. The CLI adds
 `protocol_version: 1` to the flattened result as usual.
 
 ```json
@@ -242,12 +251,29 @@ change pixel framing. The GUI still never extracts PDF text itself.
 
 ## Read-only timer query
 
-`presentation.timer.elapsed` returns the GUI-owned timer's running flag and
-whole elapsed seconds. It requires an open PDF and has no state-changing side
-effects. There are no `presentation.timer.start`, `.stop`, or `.reset` methods;
-those names yield `UNKNOWN_METHOD`. Parameters are empty and reject attempted
-mutation fields. The GUI's existing automatic navigation/open/close timer rules
-are unchanged. Timer events below only observe those rules.
+The only timer method is `presentation.timer.elapsed`, with empty parameters.
+It returns the GUI-owned timer's running flag and whole elapsed seconds, requires
+an open PDF, and has no state-changing side effects. The corresponding CLI
+command is `qp timer elapsed`, optionally with `--json`.
+
+```json
+{"protocol_version":1,"id":42,"method":"presentation.timer.elapsed","params":{}}
+```
+
+```json
+{"protocol_version":1,"id":42,"result":{"kind":"timer_elapsed","session_id":"instance","document_revision":1,"running":true,"elapsed_seconds":183}}
+```
+
+There are no `presentation.timer.start`, `presentation.timer.stop`, or
+`presentation.timer.reset` methods; those names yield `UNKNOWN_METHOD`.
+Parameters that attempt to change timing yield `INVALID_REQUEST`.
+`qp timer start`, `qp timer stop`, `qp timer reset`, and the short CLI forms
+`qp start`, `qp stop`, and `qp reset` are unavailable.
+
+`status`, `context`, and `watch` also expose timer observations only. The GUI's
+existing automatic navigation/open/close timer rules are unchanged; no query
+or subscription invokes those transitions. Timer events below are notifications
+of automatic state changes, never callable operations.
 
 ## Event subscriptions
 
@@ -277,8 +303,8 @@ with no request IDs, wrappers, logs, or transport messages.
 | `presentation.closed` | No additional fields |
 | `page.changed` | `page`, `pages` |
 | `blackout.changed` | `value` |
-| `timer.started` | `timer`: observed automatic running/elapsed state |
-| `timer.reset` | `timer`: observed automatic reset state |
+| `timer.started` | Read-only notification of automatic start; `timer` contains the observed state |
+| `timer.reset` | Read-only notification of automatic reset; `timer` contains the observed state |
 
 Events are emitted from committed domain transitions shared by GUI and control
 commands. No-op boundary navigation, repeated blackout settings, repeated close,
@@ -287,7 +313,9 @@ controllable instance; the initial snapshot gives the baseline. Every later even
 must have the next sequence and the same instance session ID. Document revisions
 change on open/reload/close. There is no replay; reconnect for a new snapshot.
 An open/close/reload event carries the resulting document state or revision;
-associated blackout/timer changes follow it. No render/notes readiness events or
+associated blackout changes and read-only timer notifications follow it.
+Subscribing does not cause timer changes; `timer.started` and `timer.reset` are
+event names, not request methods. No render/notes readiness events or
 per-second timer ticks are promised.
 
 The initial handshake retains the ordinary 30-second request deadline. An
