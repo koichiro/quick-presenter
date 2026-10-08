@@ -28,6 +28,10 @@ impl Request {
 pub enum Command {
     #[serde(rename = "presentation.status")]
     Status(Empty),
+    #[serde(rename = "presentation.timer.elapsed")]
+    TimerElapsed(Empty),
+    #[serde(rename = "presentation.watch")]
+    Watch(Empty),
     #[serde(rename = "presentation.next")]
     Next(Empty),
     #[serde(rename = "presentation.previous")]
@@ -99,6 +103,20 @@ pub enum Outcome {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Reply {
     Status(Status),
+    TimerElapsed {
+        session_id: String,
+        document_revision: u64,
+        #[serde(flatten)]
+        timer: TimerStatus,
+    },
+    Watching {
+        state: Status,
+        sequence: u64,
+    },
+    Event {
+        envelope: EventEnvelope,
+    },
+    Heartbeat {},
     Transfer {
         chunk: TransferChunk,
     },
@@ -172,10 +190,12 @@ pub enum ErrorCode {
     TextFailed,
     Cancelled,
     UnsupportedPlatform,
+    EventsLagged,
 }
 impl ErrorCode {
     pub fn exit_code(self) -> i32 {
         match self {
+            Self::EventsLagged => 11,
             Self::NotRunning => 3,
             Self::NoPresentation => 4,
             Self::InvalidPage => 5,
@@ -312,6 +332,37 @@ pub enum RenderState {
     Failed,
 }
 
+/// Ordered owner-state changes. Sequence is instance-wide; watches start with a snapshot.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EventEnvelope {
+    pub protocol_version: u32,
+    pub session_id: String,
+    pub document_revision: u64,
+    pub sequence: u64,
+    #[serde(flatten)]
+    pub event: Event,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "event")]
+pub enum Event {
+    #[serde(rename = "presentation.snapshot")]
+    Snapshot { state: Status },
+    #[serde(rename = "presentation.opened")]
+    Opened { state: Status },
+    #[serde(rename = "presentation.reloaded")]
+    Reloaded { state: Status },
+    #[serde(rename = "presentation.closed")]
+    Closed {},
+    #[serde(rename = "page.changed")]
+    PageChanged { page: u32, pages: u32 },
+    #[serde(rename = "blackout.changed")]
+    BlackoutChanged { value: bool },
+    #[serde(rename = "timer.started")]
+    TimerStarted { timer: TimerStatus },
+    #[serde(rename = "timer.reset")]
+    TimerReset { timer: TimerStatus },
+}
+
 pub fn decode_request(bytes: &[u8]) -> Result<Request, Response> {
     #[derive(Deserialize)]
     struct Header {
@@ -336,6 +387,8 @@ pub fn decode_request(bytes: &[u8]) -> Result<Request, Response> {
     if !matches!(
         header.method.as_str(),
         "presentation.status"
+            | "presentation.timer.elapsed"
+            | "presentation.watch"
             | "presentation.next"
             | "presentation.previous"
             | "presentation.goto"
@@ -417,6 +470,33 @@ pub fn write_frame(writer: &mut impl Write, value: &impl Serialize) -> io::Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn elapsed_and_watch_requests_are_versioned_but_timer_mutation_is_unavailable() {
+        for command in [Command::TimerElapsed(Empty {}), Command::Watch(Empty {})] {
+            let request = Request::new(42, command);
+            assert_eq!(
+                decode_request(&serde_json::to_vec(&request).unwrap()).unwrap(),
+                request
+            );
+        }
+        for method in [
+            "presentation.timer.start",
+            "presentation.timer.stop",
+            "presentation.timer.reset",
+        ] {
+            let request =
+                format!(r#"{{"protocol_version":1,"id":42,"method":"{method}","params":{{}}}}"#);
+            assert!(matches!(
+                decode_request(request.as_bytes()).unwrap_err().outcome,
+                Outcome::Error(ControlError {
+                    code: ErrorCode::UnknownMethod,
+                    ..
+                })
+            ));
+        }
+        assert!(matches!(decode_request(br#"{"protocol_version":1,"id":42,"method":"presentation.timer.elapsed","params":{"reset":true}}"#).unwrap_err().outcome,
+            Outcome::Error(ControlError { code: ErrorCode::InvalidRequest, .. })));
+    }
     #[test]
     fn context_roundtrip_and_worst_case_escaped_text_fit_frame_budget() {
         let slide = SlideText {

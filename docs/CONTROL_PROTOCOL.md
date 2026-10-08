@@ -51,7 +51,8 @@ Additional GUI instances still work, but do not acquire that control endpoint.
 Control initialization failure is logged and does not prevent GUI playback.
 There is no TCP listener.
 
-Each connection carries one request and one logical response. Frames are a four-byte,
+Each connection carries one request and one logical response, except an accepted
+`presentation.watch` subscription, which continues with event/heartbeat responses. Frames are a four-byte,
 big-endian, nonzero JSON byte length followed by exactly that many UTF-8 bytes.
 The maximum JSON frame is 1 MiB in each direction. Large full-text responses
 use bounded transfer frames as described below. Invalid framing closes the
@@ -95,6 +96,8 @@ release; clients should tolerate additive result fields.
 
 | Method | Params | Result |
 | --- | --- | --- |
+| `presentation.timer.elapsed` | `{}` | `kind: timer_elapsed`, session ID, revision, running, elapsed seconds (read only) |
+| `presentation.watch` | `{}` | `kind: watching`, initial state and sequence, then event responses |
 | `presentation.status` | `{}` | `kind: status` plus state fields |
 | `presentation.next` | `{}` | Mutation with resulting state |
 | `presentation.previous` | `{}` | Mutation with resulting state |
@@ -237,15 +240,81 @@ Private renderer IPC v4 uses corresponding typed, correlated transfer envelopes
 for large helper text results. It does not raise the per-frame control limit or
 change pixel framing. The GUI still never extracts PDF text itself.
 
+## Read-only timer query
+
+`presentation.timer.elapsed` returns the GUI-owned timer's running flag and
+whole elapsed seconds. It requires an open PDF and has no state-changing side
+effects. There are no `presentation.timer.start`, `.stop`, or `.reset` methods;
+those names yield `UNKNOWN_METHOD`. Parameters are empty and reject attempted
+mutation fields. The GUI's existing automatic navigation/open/close timer rules
+are unchanged. Timer events below only observe those rules.
+
+## Event subscriptions
+
+Send `presentation.watch` with empty parameters. The initial response is:
+
+```json
+{"protocol_version":1,"id":42,"result":{"kind":"watching","state":{"session_id":"instance","document_revision":1,"document":"/slides.pdf","page":1,"pages":3,"fullscreen":false,"blackout":false,"timer":{"running":false,"elapsed_seconds":0},"opening":false,"render_state":"ready","notes_state":"ready"},"sequence":12}}
+```
+
+Registration and initial state capture happen together on the presentation
+owner's event loop. The client emits that initial state as
+`presentation.snapshot`. Changes after registration continue on the same
+length-prefixed connection:
+
+```json
+{"protocol_version":1,"id":42,"result":{"kind":"event","envelope":{"protocol_version":1,"session_id":"instance","document_revision":1,"sequence":13,"event":"page.changed","page":2,"pages":3}}}
+```
+
+`qp watch --json` prints the inner envelope, one valid JSON object per line,
+with no request IDs, wrappers, logs, or transport messages.
+
+| Event | Fields beyond version/session/revision/sequence |
+| --- | --- |
+| `presentation.snapshot` | `state`: initial status (synthesized by the client) |
+| `presentation.opened` | `state`: committed PDF state, including same-file reopen |
+| `presentation.reloaded` | `state`: committed hot-reload state |
+| `presentation.closed` | No additional fields |
+| `page.changed` | `page`, `pages` |
+| `blackout.changed` | `value` |
+| `timer.started` | `timer`: observed automatic running/elapsed state |
+| `timer.reset` | `timer`: observed automatic reset state |
+
+Events are emitted from committed domain transitions shared by GUI and control
+commands. No-op boundary navigation, repeated blackout settings, repeated close,
+and queries emit no changes. Sequence increases across all event types for the
+controllable instance; the initial snapshot gives the baseline. Every later event
+must have the next sequence and the same instance session ID. Document revisions
+change on open/reload/close. There is no replay; reconnect for a new snapshot.
+An open/close/reload event carries the resulting document state or revision;
+associated blackout/timer changes follow it. No render/notes readiness events or
+per-second timer ticks are promised.
+
+The initial handshake retains the ordinary 30-second request deadline. An
+accepted watch has no total lifetime deadline and survives document close/open.
+The server sends `kind: heartbeat` replies approximately every two seconds while
+healthy, using the same response ID/version. Clients ignore heartbeats and renew
+transport read deadlines. Each server frame write has a one-second deadline;
+watchers cannot block presentation transitions or server shutdown.
+
+Up to four watches share the existing eight-connection server. Each watch has a
+bounded 64-event queue. Queue overflow removes that subscriber and reports
+`EVENTS_LAGGED` / CLI exit 11 when the transport remains writable. Blocked/broken
+transports can instead fail with timeout/IPC errors. Terminal errors use the
+ordinary typed error envelope; complete event lines already printed remain on
+stdout, and the CLI prints errors only on stderr. Reconnect after any stream
+failure to obtain a fresh baseline. Idle disconnects release their slots after
+a heartbeat detects closure. No automatic reconnect or remote transport is added.
+
 ## Errors and current limits
 
 Errors use stable codes; human messages are diagnostic text, not API keys.
 The CLI mapping is documented in [CLI](CLI.md). Common protocol codes are
 `NO_PRESENTATION`, `INVALID_PAGE`, `INVALID_REQUEST`, `UNKNOWN_METHOD`,
 `PROTOCOL_MISMATCH`, `BUSY`, `TIMEOUT`, `OPEN_FAILED`, `NOTES_LOADING`,
-`NOTES_FAILED`, `TEXT_FAILED`, and `CANCELLED`.
+`NOTES_FAILED`, `TEXT_FAILED`, `CANCELLED`, and `EVENTS_LAGGED`.
 
-This initial interface has no event stream or explicit timer
-controls, network control, session discovery, or command replay. Renderer IPC
+This interface has no explicit timer mutations, network control, session
+discovery, or event/command replay. Renderer IPC
 is a separate private protocol and must not be exposed as the presentation
 control protocol.

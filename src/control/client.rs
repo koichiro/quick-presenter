@@ -13,7 +13,7 @@ pub enum CliRequest {
     Help,
     Run(CliOptions),
 }
-pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n\nCommands:\n  status             Query presentation state\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (relative to the CLI working directory)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n\nLocal control is experimental and supports Windows, macOS, and Linux.\n";
+pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n\nCommands:\n  status             Query presentation state\n  timer elapsed      Read elapsed seconds (no timer mutation)\n  watch              Stream presentation events (NDJSON with --json)\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (relative to the CLI working directory)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n\nLocal control is experimental and supports Windows, macOS, and Linux.\n";
 
 pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest, ControlError> {
     let mut args: Vec<_> = args.into_iter().collect();
@@ -40,6 +40,8 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest
     }
     let command = match (first, args.len()) {
         ("status", 1) => Command::Status(Empty {}),
+        ("watch", 1) => Command::Watch(Empty {}),
+        ("timer", 2) if args[1] == "elapsed" => Command::TimerElapsed(Empty {}),
         ("next", 1) => Command::Next(Empty {}),
         ("prev", 1) => Command::Previous(Empty {}),
         ("close", 1) => Command::Close(Empty {}),
@@ -200,6 +202,8 @@ fn validate_response(request: &Request, bytes: &[u8]) -> Result<Response, Contro
     let matches = match (&request.command, &response.outcome) {
         (_, Outcome::Error(_)) => true,
         (Command::Status(_), Outcome::Result(Reply::Status(_))) => true,
+        (Command::TimerElapsed(_), Outcome::Result(Reply::TimerElapsed { .. })) => true,
+        (Command::Watch(_), Outcome::Result(Reply::Watching { .. })) => true,
         (Command::Notes(_), Outcome::Result(Reply::Notes { .. })) => true,
         (Command::Slide(_), Outcome::Result(Reply::Slide { .. })) => true,
         (Command::Context(_), Outcome::Result(Reply::Context { .. })) => true,
@@ -245,6 +249,153 @@ pub fn send_to(_path: &Path, _request: &Request) -> Result<Response, ControlErro
         "Local control is not implemented for this platform.",
     ))
 }
+pub fn watch(
+    request: &Request,
+    on_event: impl FnMut(EventEnvelope) -> Result<(), ControlError>,
+) -> Result<(), ControlError> {
+    watch_to(
+        &super::transport::endpoint().map_err(ipc_error)?,
+        request,
+        on_event,
+    )
+}
+#[cfg(any(unix, windows))]
+pub fn watch_to(
+    path: &Path,
+    request: &Request,
+    on_event: impl FnMut(EventEnvelope) -> Result<(), ControlError>,
+) -> Result<(), ControlError> {
+    if !matches!(request.command, Command::Watch(_)) {
+        return Err(invalid());
+    }
+    #[cfg(unix)]
+    let mut stream = {
+        super::transport::validate_socket(path).map_err(ipc_error)?;
+        let stream = std::os::unix::net::UnixStream::connect(path).map_err(ipc_error)?;
+        stream
+            .set_write_timeout(Some(std::time::Duration::from_secs(1)))
+            .map_err(ipc_error)?;
+        stream
+            .set_read_timeout(Some(REQUEST_TIMEOUT + std::time::Duration::from_secs(2)))
+            .map_err(ipc_error)?;
+        stream
+    };
+    #[cfg(windows)]
+    let mut stream = {
+        let mut stream =
+            super::transport::windows::connect(path, std::time::Duration::from_secs(1))
+                .map_err(ipc_error)?;
+        stream.set_deadlines(
+            REQUEST_TIMEOUT + std::time::Duration::from_secs(2),
+            std::time::Duration::from_secs(1),
+        );
+        stream
+    };
+    write_frame(&mut stream, request).map_err(ipc_error)?;
+    // On Windows deadlines are absolute and must be renewed after the handshake.
+    receive_watch(&mut stream, request, on_event, |stream| {
+        #[cfg(windows)]
+        stream.set_deadlines(
+            std::time::Duration::from_secs(5),
+            std::time::Duration::from_secs(1),
+        );
+        #[cfg(unix)]
+        let _ = stream;
+    })
+}
+#[cfg(not(any(unix, windows)))]
+pub fn watch_to(
+    _path: &Path,
+    _request: &Request,
+    _on_event: impl FnMut(EventEnvelope) -> Result<(), ControlError>,
+) -> Result<(), ControlError> {
+    Err(ControlError::new(
+        ErrorCode::UnsupportedPlatform,
+        "Local control is not implemented for this platform.",
+    ))
+}
+fn receive_watch<R: io::Read>(
+    reader: &mut R,
+    request: &Request,
+    mut on_event: impl FnMut(EventEnvelope) -> Result<(), ControlError>,
+    mut renew: impl FnMut(&mut R),
+) -> Result<(), ControlError> {
+    let bytes = read_frame(reader).map_err(ipc_error)?;
+    let response = validate_response(request, &bytes)?;
+    let (state, mut sequence) = match response.outcome {
+        Outcome::Result(Reply::Watching { state, sequence }) => (state, sequence),
+        Outcome::Error(error) => return Err(error),
+        _ => return Err(invalid()),
+    };
+    let session_id = state.session_id.clone();
+    on_event(EventEnvelope {
+        protocol_version: PROTOCOL_VERSION,
+        session_id: session_id.clone(),
+        document_revision: state.document_revision,
+        sequence,
+        event: Event::Snapshot { state },
+    })?;
+    loop {
+        renew(reader);
+        let bytes = read_frame(reader).map_err(ipc_error)?;
+        let response: Response = serde_json::from_slice(&bytes)
+            .map_err(|_| ControlError::new(ErrorCode::IpcFailure, "Malformed event response."))?;
+        if response.protocol_version != PROTOCOL_VERSION || response.id != Some(request.id) {
+            return Err(ControlError::new(
+                ErrorCode::IpcFailure,
+                "Event response identity mismatch.",
+            ));
+        }
+        match response.outcome {
+            Outcome::Result(Reply::Heartbeat {}) => {}
+            Outcome::Error(error) => return Err(error),
+            Outcome::Result(Reply::Event { envelope })
+                if envelope.protocol_version == PROTOCOL_VERSION
+                    && envelope.session_id == session_id
+                    && sequence.checked_add(1) == Some(envelope.sequence) =>
+            {
+                sequence = envelope.sequence;
+                on_event(envelope)?;
+            }
+            _ => {
+                return Err(ControlError::new(
+                    ErrorCode::IpcFailure,
+                    "Invalid or out-of-order event.",
+                ))
+            }
+        }
+    }
+}
+pub fn format_event(envelope: &EventEnvelope, json: bool) -> Result<String, serde_json::Error> {
+    if json {
+        return serde_json::to_string(envelope).map(|s| s + "\n");
+    }
+    Ok(match &envelope.event {
+        Event::Snapshot { state } => format!(
+            "Snapshot: page {} / {}\n",
+            state.page.unwrap_or(0),
+            state.pages
+        ),
+        Event::Opened { state } => format!(
+            "Opened: {}; pages: {}\n",
+            state.document.as_deref().unwrap_or_default(),
+            state.pages
+        ),
+        Event::Reloaded { state } => format!(
+            "Reloaded: page {} / {}\n",
+            state.page.unwrap_or(0),
+            state.pages
+        ),
+        Event::Closed {} => "Presentation closed\n".into(),
+        Event::PageChanged { page, pages } => format!("Page: {page} / {pages}\n"),
+        Event::BlackoutChanged { value } => format!("Blackout: {value}\n"),
+        Event::TimerStarted { timer } => {
+            format!("Timer started: {} seconds\n", timer.elapsed_seconds)
+        }
+        Event::TimerReset { .. } => "Timer reset\n".into(),
+    })
+}
+
 pub fn format_reply(reply: &Reply, json: bool) -> Result<String, serde_json::Error> {
     if json {
         #[derive(serde::Serialize)]
@@ -260,6 +411,10 @@ pub fn format_reply(reply: &Reply, json: bool) -> Result<String, serde_json::Err
         .map(|s| s + "\n");
     }
     Ok(match reply {
+        Reply::TimerElapsed { timer, .. } => format!("{}\n", timer.elapsed_seconds),
+        Reply::Watching { .. } | Reply::Event { .. } | Reply::Heartbeat {} => {
+            "Event transport\n".into()
+        }
         Reply::Transfer { .. } => "Transport fragment\n".into(),
         Reply::Status(state) => format!(
             "{}\nPage: {} / {}\nBlackout: {}\nRender: {:?}; notes: {:?}\n",
@@ -326,6 +481,103 @@ mod tests {
         match parse_args(args.iter().map(OsString::from)).unwrap() {
             CliRequest::Run(options) => options.command,
             _ => panic!("expected command"),
+        }
+    }
+    #[test]
+    fn elapsed_and_watch_parse_without_exposing_timer_mutation() {
+        assert_eq!(
+            parse(&["timer", "elapsed", "--json"]),
+            Command::TimerElapsed(Empty {})
+        );
+        assert_eq!(parse(&["watch", "--json"]), Command::Watch(Empty {}));
+        for args in [
+            &["timer", "start"][..],
+            &["timer", "stop"],
+            &["timer", "reset"],
+            &["start"],
+            &["stop"],
+            &["reset"],
+            &["timer", "elapsed", "--full"],
+            &["watch", "--full"],
+        ] {
+            assert!(parse_args(args.iter().map(OsString::from)).is_err());
+        }
+        let reply = Reply::TimerElapsed {
+            session_id: "session".into(),
+            document_revision: 1,
+            timer: TimerStatus {
+                running: true,
+                elapsed_seconds: 42,
+            },
+        };
+        assert_eq!(format_reply(&reply, false).unwrap(), "42\n");
+        let json: serde_json::Value =
+            serde_json::from_str(&format_reply(&reply, true).unwrap()).unwrap();
+        assert_eq!(json["elapsed_seconds"], 42);
+        assert_eq!(json["running"], true);
+    }
+    #[test]
+    fn watch_validates_identity_sequence_and_ignores_transport_heartbeats() {
+        use std::io::Cursor;
+        let state: Status = serde_json::from_str(r#"{"session_id":"test","document_revision":1,"document":null,"page":null,"pages":0,"fullscreen":false,"blackout":false,"timer":{"running":false,"elapsed_seconds":0},"opening":false,"render_state":"empty","notes_state":"empty"}"#).unwrap();
+        let initial = Response::success(
+            1,
+            Reply::Watching {
+                state: state.clone(),
+                sequence: 7,
+            },
+        );
+        let envelope = EventEnvelope {
+            protocol_version: 1,
+            session_id: "test".into(),
+            document_revision: 2,
+            sequence: 8,
+            event: Event::Closed {},
+        };
+        let request = Request::new(1, Command::Watch(Empty {}));
+        for mode in 0..5 {
+            let mut event = envelope.clone();
+            let mut response_id = 1;
+            match mode {
+                1 => event.sequence = 9,
+                2 => event.session_id = "wrong".into(),
+                3 => event.protocol_version = 2,
+                4 => response_id = 2,
+                _ => {}
+            }
+            let mut bytes = Vec::new();
+            write_frame(&mut bytes, &initial).unwrap();
+            write_frame(&mut bytes, &Response::success(1, Reply::Heartbeat {})).unwrap();
+            write_frame(
+                &mut bytes,
+                &Response::success(response_id, Reply::Event { envelope: event }),
+            )
+            .unwrap();
+            write_frame(
+                &mut bytes,
+                &Response::error(Some(1), ErrorCode::EventsLagged, "reconnect"),
+            )
+            .unwrap();
+            let mut output = Vec::new();
+            let error = receive_watch(
+                &mut Cursor::new(bytes),
+                &request,
+                |event| {
+                    output.push(event);
+                    Ok(())
+                },
+                |_| {},
+            )
+            .unwrap_err();
+            assert_eq!(output.len(), if mode == 0 { 2 } else { 1 });
+            assert_eq!(
+                error.code,
+                if mode == 0 {
+                    ErrorCode::EventsLagged
+                } else {
+                    ErrorCode::IpcFailure
+                }
+            );
         }
     }
     #[test]
@@ -511,7 +763,12 @@ mod tests {
             &["goto", "-1"],
             &["blackout", "toggle"],
             &["status", "extra"],
-            &["watch", "--json"],
+            &["timer", "start"],
+            &["timer", "stop"],
+            &["timer", "reset"],
+            &["start"],
+            &["stop"],
+            &["reset"],
             &["status", "--json", "--json"],
             &[],
         ] {

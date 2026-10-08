@@ -13,10 +13,58 @@ pub struct PendingRequest {
     pub deadline: Instant,
     pub cancelled: Arc<AtomicBool>,
     pub response: SyncSender<Response>,
+    pub watch: Option<super::events::Subscriber>,
 }
 impl PendingRequest {
     pub fn is_expired(&self) -> bool {
         self.cancelled.load(Ordering::Relaxed) || Instant::now() >= self.deadline
+    }
+}
+
+// Heartbeats detect disconnected idle clients and keep watches alive beyond request deadlines.
+fn stream_events(
+    receiver: &super::events::StreamReceiver,
+    stop: &AtomicBool,
+    id: u64,
+    mut write: impl FnMut(&Response) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    use super::protocol::{ErrorCode, Reply};
+    use std::{sync::mpsc::RecvTimeoutError, time::Duration};
+    let mut heartbeat_at = Instant::now() + Duration::from_secs(2);
+    loop {
+        if receiver.lagged.load(Ordering::Relaxed) {
+            return write(&Response::error(
+                Some(id),
+                ErrorCode::EventsLagged,
+                "Event subscriber fell behind; reconnect for a fresh snapshot.",
+            ));
+        }
+        if stop.load(Ordering::Relaxed) {
+            return write(&Response::error(
+                Some(id),
+                ErrorCode::Cancelled,
+                "Control server is stopping.",
+            ));
+        }
+        match receiver.events.recv_timeout(Duration::from_millis(50)) {
+            Ok(envelope) => write(&Response::success(id, Reply::Event { envelope }))?,
+            Err(RecvTimeoutError::Disconnected) => {
+                return write(&Response::error(
+                    Some(id),
+                    if receiver.lagged.load(Ordering::Relaxed) {
+                        ErrorCode::EventsLagged
+                    } else {
+                        ErrorCode::Cancelled
+                    },
+                    "Event subscription ended; reconnect.",
+                ))
+            }
+            Err(RecvTimeoutError::Timeout) => {}
+        }
+        if Instant::now() >= heartbeat_at {
+            write(&Response::success(id, Reply::Heartbeat {}))?;
+            heartbeat_at = Instant::now() + Duration::from_secs(2);
+        }
     }
 }
 
@@ -228,7 +276,16 @@ mod unix {
             Err(response) => return protocol::write_frame(&mut stream, &response),
         };
         let id = request.id;
-        let cancelled = Arc::new(AtomicBool::new(false));
+        let (watch, event_receiver) = if matches!(request.command, protocol::Command::Watch(_)) {
+            let (subscriber, receiver) = crate::control::events::channel();
+            (Some(subscriber), Some(receiver))
+        } else {
+            (None, None)
+        };
+        let cancelled = watch
+            .as_ref()
+            .map(|subscriber| subscriber.closed.clone())
+            .unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
         let deadline = Instant::now() + protocol::REQUEST_TIMEOUT;
         let (response_sender, receiver) = mpsc::sync_channel(1);
         let pending = PendingRequest {
@@ -236,6 +293,7 @@ mod unix {
             deadline,
             cancelled: cancelled.clone(),
             response: response_sender,
+            watch,
         };
         if sender.try_send(pending).is_err() {
             return protocol::write_frame(
@@ -261,13 +319,31 @@ mod unix {
             }
             match receiver.recv_timeout(Duration::from_millis(50)) {
                 Ok(response) => {
-                    return protocol::write_response(
+                    protocol::write_response(
                         &mut DeadlineWriter {
                             stream: &mut stream,
                             deadline,
                         },
                         &response,
-                    )
+                    )?;
+                    if matches!(
+                        response.outcome,
+                        protocol::Outcome::Result(protocol::Reply::Watching { .. })
+                    ) {
+                        let receiver = event_receiver.as_ref().ok_or_else(|| {
+                            io::Error::new(io::ErrorKind::InvalidData, "Missing event subscription")
+                        })?;
+                        return super::stream_events(receiver, &stop, id, |response| {
+                            protocol::write_frame(
+                                &mut DeadlineWriter {
+                                    stream: &mut stream,
+                                    deadline: Instant::now() + IO_TIMEOUT,
+                                },
+                                response,
+                            )
+                        });
+                    }
+                    return Ok(());
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -400,7 +476,16 @@ mod windows {
             Err(response) => return protocol::write_frame(&mut stream, &response),
         };
         let id = request.id;
-        let cancelled = Arc::new(AtomicBool::new(false));
+        let (watch, event_receiver) = if matches!(request.command, protocol::Command::Watch(_)) {
+            let (subscriber, receiver) = crate::control::events::channel();
+            (Some(subscriber), Some(receiver))
+        } else {
+            (None, None)
+        };
+        let cancelled = watch
+            .as_ref()
+            .map(|subscriber| subscriber.closed.clone())
+            .unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
         let deadline = Instant::now() + protocol::REQUEST_TIMEOUT;
         let (response_sender, receiver) = mpsc::sync_channel(1);
         let pending = PendingRequest {
@@ -408,6 +493,7 @@ mod windows {
             deadline,
             cancelled: cancelled.clone(),
             response: response_sender,
+            watch,
         };
         if sender.try_send(pending).is_err() {
             return protocol::write_frame(
@@ -435,7 +521,20 @@ mod windows {
                 Ok(response) => {
                     let remaining = deadline.saturating_duration_since(Instant::now());
                     stream.set_deadlines(remaining, remaining);
-                    return protocol::write_response(&mut stream, &response);
+                    protocol::write_response(&mut stream, &response)?;
+                    if matches!(
+                        response.outcome,
+                        protocol::Outcome::Result(protocol::Reply::Watching { .. })
+                    ) {
+                        let receiver = event_receiver.as_ref().ok_or_else(|| {
+                            io::Error::new(io::ErrorKind::InvalidData, "Missing event subscription")
+                        })?;
+                        return super::stream_events(receiver, &stop, id, |response| {
+                            stream.set_deadlines(IO_TIMEOUT, IO_TIMEOUT);
+                            protocol::write_frame(&mut stream, response)
+                        });
+                    }
+                    return Ok(());
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
