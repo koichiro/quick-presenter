@@ -295,14 +295,17 @@ mod tests {
     use super::*;
     #[test]
     fn commands_roundtrip() {
+        let absolute_pdf = std::env::current_dir()
+            .unwrap()
+            .join("slides/demo.pdf")
+            .to_string_lossy()
+            .into_owned();
         for command in [
             Command::Status(Empty {}),
             Command::Next(Empty {}),
             Command::Previous(Empty {}),
             Command::GoTo(PageParams { page: 5 }),
-            Command::Open(OpenParams {
-                file: "/slides/demo.pdf".into(),
-            }),
+            Command::Open(OpenParams { file: absolute_pdf }),
             Command::Close(Empty {}),
             Command::Blackout(BlackoutParams { value: true }),
             Command::Notes(Empty {}),

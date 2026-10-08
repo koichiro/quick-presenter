@@ -1,9 +1,10 @@
 # Presentation Control Protocol v1 (experimental)
 
-Development builds expose a local automation interface on macOS and Linux.
-`qp` is its first client. The wire types live in `src/control/protocol.rs` and
-contain no Slint types. This is an initial implementation, not a declaration
-that the complete automation feature is ready for release.
+Development builds expose a local automation interface on Windows, macOS, and
+Linux. `qp` is its first client. The wire types live in
+`src/control/protocol.rs` and contain no Slint types. This is an initial
+implementation, not a declaration that the complete automation feature is
+ready for release.
 
 ## Ownership and architecture
 
@@ -38,11 +39,17 @@ After acquiring the lock, the server can recover a stale, same-user socket,
 but never removes a regular file, a symlink, or a live endpoint. Shutdown
 removes only the socket inode it created; the lock file may remain.
 
+On Windows, the endpoint is the byte-mode Named Pipe
+`\\.\pipe\quick-presenter`. The first pipe instance atomically owns the name,
+remote clients are rejected, and the Windows default pipe DACL limits write
+access to the creator account, administrators, and LocalSystem. Other local
+users cannot send control requests. No filesystem cleanup or stale-pipe recovery
+is needed because Windows removes an instance when its last handle is closed.
+
 There is one controllable application instance per user/runtime directory.
 Additional GUI instances still work, but do not acquire that control endpoint.
 Control initialization failure is logged and does not prevent GUI playback.
-There is no TCP listener. Windows currently reports `UNSUPPORTED_PLATFORM`;
-a Windows GUI build retains its existing behavior.
+There is no TCP listener.
 
 Each connection carries one request and one response. Frames are a four-byte,
 big-endian, nonzero JSON byte length followed by exactly that many UTF-8 bytes.
@@ -148,6 +155,6 @@ The CLI mapping is documented in [CLI](CLI.md). Common protocol codes are
 `NOTES_FAILED`, and `CANCELLED`.
 
 This initial interface has no event stream, text/context query, explicit timer
-controls, Windows Named Pipe, network control, session discovery, or command
-replay. Renderer IPC is a separate private protocol and must not be exposed as
-the presentation control protocol.
+controls, network control, session discovery, or command replay. Renderer IPC
+is a separate private protocol and must not be exposed as the presentation
+control protocol.

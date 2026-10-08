@@ -256,9 +256,175 @@ mod unix {
 }
 #[cfg(unix)]
 pub use unix::ControlServer;
-#[cfg(not(unix))]
+
+#[cfg(windows)]
+mod windows {
+    use super::*;
+    use crate::control::{
+        protocol::{self, ErrorCode},
+        transport::{self, windows as pipe},
+    };
+    use std::{
+        io,
+        path::Path,
+        sync::mpsc,
+        thread::{self, JoinHandle},
+        time::Duration,
+    };
+
+    const MAX_CLIENTS: usize = 8;
+    const IO_TIMEOUT: Duration = Duration::from_secs(1);
+
+    pub struct ControlServer {
+        stop: Arc<AtomicBool>,
+        thread: Option<JoinHandle<()>>,
+    }
+
+    impl ControlServer {
+        pub fn start() -> io::Result<(Self, Receiver<PendingRequest>)> {
+            Self::bind(&transport::endpoint()?)
+        }
+
+        pub fn bind(path: &Path) -> io::Result<(Self, Receiver<PendingRequest>)> {
+            // Creating the first instance synchronously makes endpoint ownership atomic and
+            // reports a second GUI instance before its listener thread is started.
+            let first = pipe::create_server(path, true)?;
+            let stop = Arc::new(AtomicBool::new(false));
+            let stop_thread = stop.clone();
+            let path = path.to_owned();
+            let (sender, receiver) = mpsc::sync_channel(MAX_CLIENTS);
+            let thread = thread::Builder::new()
+                .name("presentation-control".into())
+                .spawn(move || {
+                    let mut waiting = Some(first);
+                    let mut clients: Vec<JoinHandle<()>> = Vec::new();
+                    while !stop_thread.load(Ordering::Relaxed) {
+                        let mut index = 0;
+                        while index < clients.len() {
+                            if clients[index].is_finished() {
+                                let _ = clients.swap_remove(index).join();
+                            } else {
+                                index += 1;
+                            }
+                        }
+                        let Some(pipe) = waiting.take() else {
+                            break;
+                        };
+                        match pipe::accept(&pipe, &stop_thread) {
+                            Ok(true) if clients.len() < MAX_CLIENTS => {
+                                let sender = sender.clone();
+                                let stop = stop_thread.clone();
+                                if let Ok(client) = thread::Builder::new()
+                                    .name("control-client".into())
+                                    .spawn(move || {
+                                        let _ = serve(pipe, sender, stop);
+                                    })
+                                {
+                                    clients.push(client);
+                                }
+                            }
+                            Ok(true) | Ok(false) => drop(pipe),
+                            Err(_) => break,
+                        }
+                        if !stop_thread.load(Ordering::Relaxed) {
+                            match pipe::create_server(&path, false) {
+                                Ok(next) => waiting = Some(next),
+                                Err(_) => break,
+                            }
+                        }
+                    }
+                    drop(waiting);
+                    for client in clients {
+                        let _ = client.join();
+                    }
+                })?;
+            Ok((
+                Self {
+                    stop,
+                    thread: Some(thread),
+                },
+                receiver,
+            ))
+        }
+    }
+
+    impl Drop for ControlServer {
+        fn drop(&mut self) {
+            self.stop.store(true, Ordering::Relaxed);
+            if let Some(thread) = self.thread.take() {
+                let _ = thread.join();
+            }
+        }
+    }
+
+    fn serve(
+        mut stream: pipe::Pipe,
+        sender: SyncSender<PendingRequest>,
+        stop: Arc<AtomicBool>,
+    ) -> io::Result<()> {
+        stream.set_deadlines(IO_TIMEOUT, IO_TIMEOUT);
+        // One request per connection. Further clients use new pipe instances.
+        let bytes = protocol::read_frame(&mut stream)?;
+        let request = match protocol::decode_request(&bytes) {
+            Ok(request) => request,
+            Err(response) => return protocol::write_frame(&mut stream, &response),
+        };
+        let id = request.id;
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let deadline = Instant::now() + protocol::REQUEST_TIMEOUT;
+        let (response_sender, receiver) = mpsc::sync_channel(1);
+        let pending = PendingRequest {
+            request,
+            deadline,
+            cancelled: cancelled.clone(),
+            response: response_sender,
+        };
+        if sender.try_send(pending).is_err() {
+            return protocol::write_frame(
+                &mut stream,
+                &Response::error(
+                    Some(id),
+                    ErrorCode::Busy,
+                    "Control queue is full or unavailable.",
+                ),
+            );
+        }
+        loop {
+            if stop.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                cancelled.store(true, Ordering::Relaxed);
+                return protocol::write_frame(
+                    &mut stream,
+                    &Response::error(
+                        Some(id),
+                        ErrorCode::Timeout,
+                        "Control request timed out; query status before retrying a mutation.",
+                    ),
+                );
+            }
+            match receiver.recv_timeout(Duration::from_millis(50)) {
+                Ok(response) => return protocol::write_frame(&mut stream, &response),
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return protocol::write_frame(
+                        &mut stream,
+                        &Response::error(
+                            Some(id),
+                            ErrorCode::Cancelled,
+                            "Presentation request was cancelled.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+pub use windows::ControlServer;
+
+#[cfg(not(any(unix, windows)))]
 pub struct ControlServer;
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 impl ControlServer {
     pub fn start() -> std::io::Result<(Self, Receiver<PendingRequest>)> {
         Err(std::io::Error::new(

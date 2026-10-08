@@ -5,9 +5,10 @@ Binaries` workflow. The workflow stages bundled PDFium, platform metadata,
 licenses, and installer or app bundle layouts before uploading artifacts.
 
 The GUI application executable is `quick-presenter` on Unix-like platforms and
-`quick-presenter.exe` on Windows. The separate `qp` binary is an experimental automation CLI for macOS and
-Linux development builds. It is not yet staged by the release package builders;
-see [CLI](CLI.md). The GUI binary keeps its existing executable name.
+`quick-presenter.exe` on Windows. The separate `qp` binary is an experimental
+automation CLI for Windows, macOS, and Linux development builds. It is not yet
+staged by the release package builders; see [CLI](CLI.md). The GUI binary keeps
+its existing executable name.
 
 ## Bundled PDFium
 
