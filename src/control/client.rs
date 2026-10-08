@@ -389,10 +389,6 @@ pub fn format_event(envelope: &EventEnvelope, json: bool) -> Result<String, serd
         Event::Closed {} => "Presentation closed\n".into(),
         Event::PageChanged { page, pages } => format!("Page: {page} / {pages}\n"),
         Event::BlackoutChanged { value } => format!("Blackout: {value}\n"),
-        Event::TimerStarted { timer } => {
-            format!("Timer started: {} seconds\n", timer.elapsed_seconds)
-        }
-        Event::TimerReset { .. } => "Timer reset\n".into(),
     })
 }
 

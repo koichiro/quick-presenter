@@ -118,23 +118,6 @@ fn publish_changes_inner(state: &mut AppState, before: Status, now: Instant, rel
             },
         );
     }
-    if !before.timer.running && after.timer.running {
-        state.control.events.publish(
-            &after,
-            Event::TimerStarted {
-                timer: after.timer.clone(),
-            },
-        );
-    } else if (before.timer.running && !after.timer.running)
-        || (before.timer.elapsed_seconds > 0 && after.timer.elapsed_seconds == 0)
-    {
-        state.control.events.publish(
-            &after,
-            Event::TimerReset {
-                timer: after.timer.clone(),
-            },
-        );
-    }
 }
 
 /// Ignore results from replaced/closed decks. Keep at most 32 small source-text entries.
@@ -208,6 +191,22 @@ mod tests {
     use crate::{render_scheduler::RenderSessionId, session_controller::*};
     use quick_presenter::control::protocol::SlideText;
     #[test]
+    fn timer_changes_do_not_publish_control_events() {
+        use quick_presenter::control::events;
+        let mut state = AppState::default();
+        let (subscriber, receiver) = events::channel();
+        assert!(state.control.events.subscribe(subscriber));
+        let now = Instant::now();
+        let before = snapshot(&state, now);
+        state.timer.start(now);
+        publish_changes(&mut state, before, now);
+        let before = snapshot(&state, now + std::time::Duration::from_secs(10));
+        state.timer.reset();
+        publish_changes(&mut state, before, now + std::time::Duration::from_secs(10));
+        assert!(receiver.events.try_recv().is_err());
+        assert_eq!(state.control.events.sequence(), 0);
+    }
+    #[test]
     fn every_committed_domain_change_is_ordered_including_gui_actions() {
         use crate::{input::PresentationCommand, rendering::RenderedPage, view_sync};
         use quick_presenter::control::{events, protocol::Event};
@@ -252,16 +251,14 @@ mod tests {
                 Event::Closed {} => "closed",
                 Event::PageChanged { .. } => "page",
                 Event::BlackoutChanged { .. } => "blackout",
-                Event::TimerStarted { .. } => "started",
-                Event::TimerReset { .. } => "reset",
                 _ => "unexpected",
             })
             .collect();
         assert_eq!(
             kinds,
             [
-                "opened", "page", "started", "page", "blackout", "page", "reset", "opened",
-                "blackout", "reloaded", "closed"
+                "opened", "page", "page", "blackout", "page", "opened", "blackout", "reloaded",
+                "closed"
             ]
         );
         for (index, event) in events.iter().enumerate() {

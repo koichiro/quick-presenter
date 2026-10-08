@@ -357,10 +357,6 @@ pub enum Event {
     PageChanged { page: u32, pages: u32 },
     #[serde(rename = "blackout.changed")]
     BlackoutChanged { value: bool },
-    #[serde(rename = "timer.started")]
-    TimerStarted { timer: TimerStatus },
-    #[serde(rename = "timer.reset")]
-    TimerReset { timer: TimerStatus },
 }
 
 pub fn decode_request(bytes: &[u8]) -> Result<Request, Response> {

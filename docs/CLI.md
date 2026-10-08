@@ -157,8 +157,8 @@ qp watch --json | jq --unbuffered 'select(.event == "page.changed") | .page'
 Every watch begins with `presentation.snapshot`, containing current state and
 its sequence baseline. Later events include `presentation.opened`,
 `presentation.reloaded`, `presentation.closed`, `page.changed`,
-`blackout.changed`, and observations of the GUI's automatic `timer.started`
-and `timer.reset` transitions. Watching never changes the presentation or timer.
+`blackout.changed`. Timer lifecycle events are not exposed. Watching never
+changes the presentation or timer.
 All lines include `protocol_version`, `session_id`, `document_revision`, and
 `sequence`; page numbers remain one-based. Each line is flushed immediately.
 Transport heartbeats stay invisible to stdout.

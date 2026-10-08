@@ -22,7 +22,7 @@ qp -> local IPC -> bounded requests -> GUI event loop
 cursor, timer, or notes. It delivers typed requests and response channels to the
 existing event loop. Queries are snapshots of that state. Timer access is
 read-only: the sole timer method retrieves elapsed time. Clients can also
-observe automatic timer changes through state snapshots and event notifications.
+read the timer in state snapshots. Timer lifecycle events are not exposed.
 Navigation and black screen commands share the GUI's command path; file opens share its asynchronous
 open pipeline. No keyboard, mouse, accessibility, focus, or monitor simulation
 is involved. `qp` does not load PDFium or initialize Slint.
@@ -269,8 +269,8 @@ state-changing fields with `INVALID_REQUEST`.
 
 `status`, `context`, and `watch` also expose timer observations only. The GUI's
 existing automatic navigation/open/close timer rules are unchanged; no query
-or subscription invokes those transitions. Timer events below are notifications
-of automatic state changes, never callable operations.
+or subscription invokes those transitions. The event stream contains no timer
+lifecycle notifications; use the elapsed-time query for current timing.
 
 ## Event subscriptions
 
@@ -300,8 +300,6 @@ with no request IDs, wrappers, logs, or transport messages.
 | `presentation.closed` | No additional fields |
 | `page.changed` | `page`, `pages` |
 | `blackout.changed` | `value` |
-| `timer.started` | Read-only notification of automatic start; `timer` contains the observed state |
-| `timer.reset` | Read-only notification of automatic reset; `timer` contains the observed state |
 
 Events are emitted from committed domain transitions shared by GUI and control
 commands. No-op boundary navigation, repeated blackout settings, repeated close,
@@ -310,10 +308,9 @@ controllable instance; the initial snapshot gives the baseline. Every later even
 must have the next sequence and the same instance session ID. Document revisions
 change on open/reload/close. There is no replay; reconnect for a new snapshot.
 An open/close/reload event carries the resulting document state or revision;
-associated blackout changes and read-only timer notifications follow it.
-Subscribing does not cause timer changes; `timer.started` and `timer.reset` are
-event names, not request methods. No render/notes readiness events or
-per-second timer ticks are promised.
+associated blackout changes follow it. Subscribing has no effect on timing.
+The stream contains no timer lifecycle events, timer ticks, or render/notes
+readiness acknowledgements.
 
 The initial handshake retains the ordinary 30-second request deadline. An
 accepted watch has no total lifetime deadline and survives document close/open.
