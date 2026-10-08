@@ -231,6 +231,7 @@ Source statistics are reported with (requires `cloc`; `brew install cloc` on mac
 
 ```sh
 python3 scripts/stats.py
+python3 scripts/stats.py --ref origin/main
 ```
 
 ## Releases
