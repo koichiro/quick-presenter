@@ -38,6 +38,15 @@ on:
       - 'scripts/check_windows_msix_sandbox.ps1'
       - 'src/render_scheduler.rs'
       - 'tests/renderer_process.rs'
+      - 'src/bin/qp.rs'
+      - 'src/control/**'
+      - 'tests/control*.rs'
+      - 'tests/fixtures/control-v1.json'
+      - 'tests/fixtures/control-launch-gui.py'
+      - 'scripts/check_qp.py'
+      - 'tests/test_cli_packaging.py'
+      - 'docs/CLI.md'
+      - 'docs/CONTROL_PROTOCOL.md'
   push:
     tags:
       - 'v*'
@@ -138,8 +147,18 @@ jobs:
       - name: Test renderer process boundary
         run: cargo test --test renderer_process
 
-      - name: Build release binary
-        run: cargo build --release --bin quick-presenter
+      - name: Test control protocol and CLI on each platform
+        run: cargo test --lib --test control_contract --test control_events --test control_ipc --test control_ipc_windows --test control_launch
+
+      - name: Build release binaries
+        run: cargo build --release --bins
+
+      - name: Verify standalone CLI
+        shell: bash
+        run: |
+          cli_name=qp
+          if [[ "$RUNNER_OS" == "Windows" ]]; then cli_name=qp.exe; fi
+          python scripts/check_qp.py "target/release/$cli_name"
 
       - name: Read package version
         shell: bash
@@ -222,7 +241,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           scripts/sign_windows_artifacts.ps1 `
-            -Path 'target/release/${{ matrix.binary-name }}' `
+            -Path @('target/release/${{ matrix.binary-name }}', 'target/release/qp.exe') `
             -PfxPath '${{ steps.windows-signing.outputs.pfx_path }}' `
             -PfxPassword $env:WINDOWS_SIGNING_CERT_PASSWORD `
             -TimestampUrl '${{ steps.windows-signing.outputs.timestamp_url }}' `
@@ -240,13 +259,20 @@ jobs:
           mkdir -p "$artifact_dir/gui-smoke"
 
           cp "target/release/${{ matrix.binary-name }}" "$artifact_dir/"
+          cli_name=qp
+          if [[ "$RUNNER_OS" == "Windows" ]]; then cli_name=qp.exe; fi
+          cp "target/release/$cli_name" "$artifact_dir/"
+          mkdir -p "$artifact_dir/docs"
+          cp docs/CLI.md docs/CONTROL_PROTOCOL.md "$artifact_dir/docs/"
           cp -R pdfium "$artifact_dir/pdfium"
 
           cat > "$artifact_dir/README.txt" <<README
           Quick Presenter packaged artifact.
 
           This archive contains the release package for this platform, plus
-          the raw quick-presenter executable and PDFium files used to build or validate it.
+          the raw quick-presenter executable, qp automation CLI, and PDFium files used to build or validate it.
+          CLI usage and the protocol contract are in docs/CLI.md and docs/CONTROL_PROTOCOL.md.
+          The packaged CLI supports local automation and read-only elapsed-time queries.
 
           Supported v1.0.0 installation paths:
 
@@ -293,6 +319,10 @@ jobs:
           resources="$app/Contents/Resources"
 
           test -x "$executable"
+          test -x "$app/Contents/MacOS/qp"
+          python scripts/check_qp.py "$app/Contents/MacOS/qp"
+          test -s "$resources/docs/CLI.md"
+          test -s "$resources/docs/CONTROL_PROTOCOL.md"
           test -s "$plist"
           test -s "$resources/QuickPresenter.icns"
           test -s "$resources/pdfium/LICENSE"
@@ -354,6 +384,9 @@ jobs:
           test -d "$app"
           test -L "$mount_dir/Applications"
           test -x "$app/Contents/MacOS/quick-presenter"
+          test -x "$app/Contents/MacOS/qp"
+          python scripts/check_qp.py "$app/Contents/MacOS/qp"
+          test -s "$resources/docs/CLI.md"
           test -s "$app/Contents/Info.plist"
           test -s "$resources/QuickPresenter.icns"
           test -s "$resources/pdfium/LICENSE"
@@ -449,6 +482,12 @@ jobs:
 
           test -x "$extract_dir/usr/lib/quick-presenter/quick-presenter"
           test -L "$extract_dir/usr/bin/quick-presenter"
+          test -x "$extract_dir/usr/lib/quick-presenter/qp"
+          test -L "$extract_dir/usr/bin/qp"
+          test -s "$extract_dir/usr/share/doc/quick-presenter/CLI.md"
+          test -s "$extract_dir/usr/share/doc/quick-presenter/CONTROL_PROTOCOL.md"
+          test "$(stat -c '%a' "$extract_dir/usr/lib/quick-presenter/qp")" = "755"
+          python scripts/check_qp.py "$extract_dir/usr/bin/qp"
           test -s "$extract_dir/usr/lib/quick-presenter/pdfium/LICENSE"
           test -s "$extract_dir/usr/lib/quick-presenter/pdfium/VERSION"
           test -d "$extract_dir/usr/lib/quick-presenter/pdfium/licenses"
@@ -491,6 +530,7 @@ jobs:
 
           sudo apt-get install -y "$deb"
           trap 'sudo apt-get remove -y quick-presenter || true' EXIT
+          python3 scripts/check_qp.py /usr/bin/qp
           env -u PDFIUM_DYNAMIC_LIB_PATH -u QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE \
             python3 scripts/check_renderer_sandbox.py /usr/lib/quick-presenter/quick-presenter "$pdf"
           test -s /usr/share/applications/mimeinfo.cache
@@ -599,6 +639,8 @@ jobs:
           }
 
           $installDir = $exe.Directory.FullName
+          python scripts/check_qp.py (Join-Path $installDir 'qp.exe')
+          if ($LASTEXITCODE -ne 0) { throw "Extracted MSI CLI validation failed" }
           $pdfiumDir = Join-Path $installDir 'pdfium'
           $licenseDir = Join-Path $installDir 'licenses'
 
@@ -673,6 +715,8 @@ jobs:
               if (Test-Path $installLog) { Get-Content $installLog -Tail 120 }
               throw "Installed MSI executable missing at the explicit INSTALLFOLDER: $exe"
             }
+            python scripts/check_qp.py (Join-Path $installDir 'qp.exe')
+            if ($LASTEXITCODE -ne 0) { throw 'Installed MSI CLI validation failed' }
             python scripts/check_renderer_sandbox.py $exe $pdf
             if ($LASTEXITCODE -ne 0) { throw 'Installed MSI renderer denial gate failed' }
           } finally {
@@ -794,7 +838,15 @@ jobs:
             throw "Unpacked MSIX layout is missing Square150x150Logo.png"
           }
 
+          python scripts/check_qp.py (Join-Path $extractDir 'qp.exe')
+          if ($LASTEXITCODE -ne 0) { throw "MSIX CLI validation failed" }
+          if (-not (Test-Path (Join-Path $extractDir 'docs/CONTROL_PROTOCOL.md'))) {
+            throw "MSIX is missing the control protocol documentation"
+          }
           $manifestText = Get-Content $manifest -Raw
+          if ($manifestText -notmatch 'Alias="qp\.exe"' -or $manifestText -notmatch 'Executable="qp\.exe"') {
+            throw "MSIX manifest is missing the qp execution alias"
+          }
           if ($manifestText -notmatch 'Name="QuickPresenter\.QuickPresenter"') {
             throw "MSIX manifest has unexpected identity name"
           }
@@ -938,7 +990,15 @@ jobs:
             throw "Store MSIX layout contains unsafe package paths: $badNames"
           }
 
+          python scripts/check_qp.py (Join-Path $extractDir 'qp.exe')
+          if ($LASTEXITCODE -ne 0) { throw "MSIX CLI validation failed" }
+          if (-not (Test-Path (Join-Path $extractDir 'docs/CONTROL_PROTOCOL.md'))) {
+            throw "MSIX is missing the control protocol documentation"
+          }
           $manifestText = Get-Content $manifest -Raw
+          if ($manifestText -notmatch 'Alias="qp\.exe"' -or $manifestText -notmatch 'Executable="qp\.exe"') {
+            throw "MSIX manifest is missing the qp execution alias"
+          }
           if ($manifestText -notmatch 'Name="KoichiroOhba\.QuickPresenter"') {
             throw "Store MSIX manifest has unexpected identity name"
           }

@@ -206,12 +206,17 @@ pub(crate) mod windows {
                         ptr::null_mut(),
                     )
                 };
-                if ok != 0 {
+                if ok != 0 && written != 0 {
                     return Ok(written as usize);
                 }
-                let error = unsafe { GetLastError() };
-                if error != ERROR_NO_DATA {
-                    return Err(io::Error::from_raw_os_error(error as i32));
+                // PIPE_NOWAIT can succeed with zero bytes when its buffer is
+                // full. Retry within the deadline rather than returning a
+                // WriteZero error that truncates large response transfers.
+                if ok == 0 {
+                    let error = unsafe { GetLastError() };
+                    if error != ERROR_NO_DATA {
+                        return Err(io::Error::from_raw_os_error(error as i32));
+                    }
                 }
                 if Instant::now() >= self.write_deadline {
                     return Err(io::Error::new(

@@ -140,7 +140,11 @@ fn qp_executable_keeps_json_stdout_clean_and_reports_exit_categories() {
         ))
         .unwrap();
     let output = child.join().unwrap();
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(output.stderr.is_empty());
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["page"], 1);
@@ -181,7 +185,11 @@ fn qp_executable_keeps_json_stdout_clean_and_reports_exit_categories() {
             .send(Response::success(pending.request.id, reply))
             .unwrap();
         let output = child.join().unwrap();
-        assert!(output.status.success());
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         assert!(output.stderr.is_empty());
         let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(json["kind"], name);
@@ -218,7 +226,11 @@ fn qp_executable_keeps_json_stdout_clean_and_reports_exit_categories() {
         ))
         .unwrap();
     let output = child.join().unwrap();
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(output.stderr.is_empty());
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["text"][0], source);
@@ -247,7 +259,11 @@ fn qp_executable_keeps_json_stdout_clean_and_reports_exit_categories() {
         ))
         .unwrap();
     let output = child.join().unwrap();
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(output.stderr.is_empty());
     let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(value["elapsed_seconds"], 42);

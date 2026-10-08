@@ -42,6 +42,52 @@ try {
     $package = Get-AppxPackage -Name $packageName
     if (-not $package) { throw 'Test MSIX was not installed' }
     $exe = Join-Path $package.InstallLocation 'quick-presenter.exe'
+    python (Join-Path $PSScriptRoot 'check_qp.py') (Join-Path $package.InstallLocation 'qp.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Installed MSIX CLI validation failed' }
+    # Exercise Windows' registered console alias, not just the unpacked file.
+    $alias = Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps/qp.exe'
+    $version = & $alias --version --json
+    if ($LASTEXITCODE -ne 0) { throw 'MSIX CLI execution alias failed' }
+    $metadata = $version | ConvertFrom-Json
+    $cliMetadata = & (Join-Path $package.InstallLocation 'qp.exe') --version --json | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or $metadata.protocol_version -ne 1 -or
+        $metadata.application_version -ne $cliMetadata.application_version) {
+        throw 'MSIX CLI execution alias returned unexpected version metadata'
+    }
+    # Verify CLI-triggered startup in the installed package context. This runner
+    # is disposable, and only this package's exact GUI path is cleaned up.
+    $pdf = Join-Path $repo 'tests/fixtures/marp-speaker-notes.pdf'
+    $existingGui = @(Get-Process -Name quick-presenter -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -eq $exe })
+    if ($existingGui.Count -ne 0) { throw 'Expected no running Store GUI before CLI startup test' }
+    try {
+        $opened = & $alias open $pdf --json | ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0 -or $opened.kind -ne 'mutation') {
+            throw 'MSIX CLI could not start the GUI and open the fixture'
+        }
+        $deadline = (Get-Date).AddSeconds(30)
+        do {
+            $snapshot = & $alias status --json | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw 'MSIX CLI startup status failed' }
+            if (-not $snapshot.opening -and $snapshot.render_state -eq 'ready') { break }
+            Start-Sleep -Milliseconds 100
+        } while ((Get-Date) -lt $deadline)
+        if ($snapshot.render_state -ne 'ready' -or $snapshot.page -ne 1 -or $snapshot.pages -lt 1) {
+            throw 'MSIX CLI startup did not produce a ready presentation'
+        }
+        $gui = @(Get-Process -Name quick-presenter -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -eq $exe })
+        if ($gui.Count -ne 1) { throw 'Expected one GUI after CLI startup' }
+        $reopened = & $alias open $pdf --json | ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0 -or $reopened.state.session_id -ne $snapshot.session_id) {
+            throw 'MSIX CLI did not reuse the running GUI'
+        }
+        $closed = & $alias close --json | ConvertFrom-Json
+        if ($LASTEXITCODE -ne 0 -or $null -ne $closed.state.document) { throw 'MSIX CLI close failed' }
+    } finally {
+        Get-Process -Name quick-presenter -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -eq $exe } | Stop-Process -Force
+    }
     $manifest = Get-AppxPackageManifest -Package $package.PackageFullName
     $appId = [string]$manifest.Package.Applications.Application.Id
     $python = (Get-Command python.exe).Source
