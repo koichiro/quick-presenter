@@ -1,0 +1,29 @@
+% Compile a wrapper defining \researchmode before inputting this file.
+\documentclass[aspectratio=169]{beamer}
+\usepackage{pgfpages}
+\usepackage{pdfcomment}
+\providecommand{\researchmode}{hide notes}
+\expandafter\setbeameroption\expandafter{\researchmode}
+\newcommand{\researchnote}[1]{%
+  \note{#1}%
+  \ifdefined\annotationnotes
+    \pdfcomment[icon=Note,opacity=0,author={Quick Presenter}]{#1}%
+  \fi
+}
+\title{Speaker-note PDF research}
+\author{Quick Presenter}
+\date{}
+\setbeamertemplate{navigation symbols}{}
+\begin{document}
+\begin{frame}{Slide Alpha}
+  Visible content Alpha.
+  \researchnote{QP168-NOTE-ALPHA: Say the opening words.}
+\end{frame}
+\begin{frame}{Slide Beta}
+  Visible content Beta.
+  \researchnote{QP168-NOTE-BETA: Say the closing words.}
+\end{frame}
+\begin{frame}{Slide Gamma}
+  Visible content Gamma. This slide has no speaker notes.
+\end{frame}
+\end{document}
