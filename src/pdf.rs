@@ -114,6 +114,35 @@ impl PdfDocumentState {
         self.page_count
     }
 
+    pub fn slide_text(
+        &self,
+        page_index: u32,
+        full: bool,
+    ) -> Result<quick_presenter::control::protocol::SlideText> {
+        anyhow::ensure!(page_index < self.page_count, "page outside document");
+        let page = self.document.pages().get(page_index as i32)?;
+        let text = page.text()?;
+        // Bound native string allocation before calling PDFium's bulk extractor.
+        anyhow::ensure!(
+            (0..=1_000_000).contains(&text.len()),
+            "page text character count exceeds limit"
+        );
+        let source = text.all();
+        if full {
+            anyhow::ensure!(
+                source.len() <= quick_presenter::control::protocol::MAX_FULL_SLIDE_TEXT_BYTES,
+                "full page text exceeds safety limit"
+            );
+            Ok(quick_presenter::control::protocol::SlideText {
+                page: page_index + 1,
+                text: source.lines().map(str::to_owned).collect(),
+                truncated: false,
+            })
+        } else {
+            Ok(bounded_slide_text(page_index + 1, source))
+        }
+    }
+
     pub fn render_page(&self, page_index: u32, target_width: i32) -> Result<Image> {
         Ok(Image::from_rgba8(
             self.render_page_pixels(page_index, target_width)?,
@@ -966,6 +995,11 @@ mod tests {
         );
         assert_eq!(document.page_count(), 2);
 
+        assert!(!document.slide_text(0, true).unwrap().truncated);
+        assert_eq!(
+            document.slide_text(0, true).unwrap().text,
+            document.slide_text(0, false).unwrap().text
+        );
         let first_page = document
             .render_page(0, 200)
             .expect("first page should render");
@@ -1161,6 +1195,19 @@ mod tests {
         assert!(note.contains("End of the long speaker note."));
     }
 
+    #[test]
+    fn source_text_normalization_has_explicit_utf8_safe_bounds() {
+        let empty = bounded_slide_text(1, String::new());
+        assert!(empty.text.is_empty());
+        assert!(!empty.truncated);
+        let lines = bounded_slide_text(2, "Title\r\n\r\n日本語\n".into());
+        assert_eq!(lines.text, ["Title", "", "日本語"]);
+        let text = bounded_slide_text(3, "日".repeat(20_000));
+        assert!(text.truncated);
+        assert!(text.text[0].len() <= quick_presenter::control::protocol::MAX_SLIDE_TEXT_BYTES);
+        assert!(text.text[0].ends_with('日'));
+    }
+
     fn pdfium_test_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
@@ -1238,5 +1285,25 @@ mod tests {
             contents.len(),
             contents
         )
+    }
+}
+
+fn bounded_slide_text(
+    page: u32,
+    mut source: String,
+) -> quick_presenter::control::protocol::SlideText {
+    use quick_presenter::control::protocol::{SlideText, MAX_SLIDE_TEXT_BYTES};
+    let truncated = source.len() > MAX_SLIDE_TEXT_BYTES;
+    if truncated {
+        let mut end = MAX_SLIDE_TEXT_BYTES;
+        while !source.is_char_boundary(end) {
+            end -= 1;
+        }
+        source.truncate(end);
+    }
+    SlideText {
+        page,
+        text: source.lines().map(str::to_owned).collect(),
+        truncated,
     }
 }
