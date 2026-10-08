@@ -419,7 +419,7 @@ impl Helper {
             let frame = (|| {
                 let mut header = [0; 14];
                 stdout.read_exact(&mut header).map_err(|e| e.to_string())?;
-                if &header[..4] != b"QPRP" || header[4..6] != 2u16.to_le_bytes() {
+                if &header[..4] != b"QPRP" || header[4..6] != 4u16.to_le_bytes() {
                     return Err("protocol mismatch".into());
                 }
                 let len = u32::from_le_bytes(header[6..10].try_into().unwrap()) as usize;
@@ -455,7 +455,7 @@ impl Helper {
         .unwrap();
         let input = self.input.as_mut().unwrap();
         input.write_all(b"QPRP").unwrap();
-        input.write_all(&2u16.to_le_bytes()).unwrap();
+        input.write_all(&4u16.to_le_bytes()).unwrap();
         input
             .write_all(&(control.len() as u32).to_le_bytes())
             .unwrap();
@@ -637,4 +637,28 @@ fn helper_faults_do_not_abort_the_broker_executable() {
         );
         assert!(String::from_utf8_lossy(&output.stderr).contains("Renderer helper failed"));
     }
+}
+
+#[test]
+fn helper_extracts_page_text_without_pixels_and_rejects_out_of_range_page() {
+    let mut helper = Helper::new(None);
+    helper.open();
+    let (text, pixels) = helper.request(7, json!({"kind":"TextPage","page_index":0,"full":false}));
+    assert!(pixels.is_empty());
+    assert_eq!(text["kind"], "TextLoaded");
+    assert_eq!(text["content"]["page"], 1);
+    assert_eq!(text["content"]["truncated"], false);
+    let lines = text["content"]["text"].as_array().unwrap();
+    assert!(!lines.is_empty());
+    assert!(lines.iter().all(Value::is_string));
+    let (failed, _) = helper.request(7, json!({"kind":"TextPage","page_index":3,"full":false}));
+    assert_eq!(failed["kind"], "Failed");
+    assert_eq!(failed["code"], "TextFailed");
+    // A page-level query failure leaves normal rendering operational.
+    assert_eq!(
+        helper
+            .request(7, json!({"kind":"Render","page_index":0,"width":100}))
+            .0["kind"],
+        "Pixels"
+    );
 }

@@ -22,6 +22,10 @@ In another terminal:
 ./target/debug/qp blackout on
 ./target/debug/qp blackout off
 ./target/debug/qp notes --json
+./target/debug/qp slide --json
+./target/debug/qp context --json
+./target/debug/qp slide --full --json
+./target/debug/qp context --full --json
 ./target/debug/qp open "slides with spaces.pdf" --json
 ./target/debug/qp close
 ```
@@ -48,6 +52,9 @@ alongside `protocol_version`:
 ```sh
 qp status --json | jq '.page'
 qp notes --json | jq -r '.notes'
+qp slide --json | jq -r '.text[]'
+qp context --json | jq -r '.current.notes'
+qp context --json | jq '.next'
 qp next --json | jq '.state.page'
 ```
 
@@ -69,7 +76,7 @@ code or JSON error code instead of matching English messages.
 | 7 | `IPC_FAILURE`, `UNSUPPORTED_PLATFORM` |
 | 8 | `BUSY`, `NOTES_LOADING` |
 | 9 | `TIMEOUT` |
-| 10 | `OPEN_FAILED`, `NOTES_FAILED`, `CANCELLED` |
+| 10 | `OPEN_FAILED`, `NOTES_FAILED`, `TEXT_FAILED`, `CANCELLED` |
 
 Pages are one-based. End-of-deck navigation succeeds without advancing and
 returns `changed: false`. `blackout on/off` sets an explicit state. `close`
@@ -78,7 +85,42 @@ and note extraction; an empty note is different from unavailable notes.
 
 Timeouts and disconnections can have an uncertain mutation outcome. Query
 `status` before retrying `next` or `prev`. There is one controllable instance
-per user/runtime directory. Event watching, slide/context extraction, and
-explicit timer control are not implemented in this initial interface.
+per user/runtime directory. Event watching and explicit timer control are not implemented in this initial interface.
 See [Control Protocol](CONTROL_PROTOCOL.md) for transport, completion semantics,
 state fields, and compatibility expectations.
+
+## Source context for automation
+
+`qp slide` prints the current page's PDF text. `qp context` combines current
+and next page text and speaker notes with presentation state in one query.
+The JSON contract is documented in [Control Protocol](CONTROL_PROTOCOL.md).
+The next page is null at the end of the deck. Image-only pages have an empty
+text array; there is no OCR. Text is a maximum 4 KiB UTF-8 prefix per page,
+with an explicit `truncated` flag. Add `--full` to `slide` or `context` to obtain
+unabridged text with `truncated: false`. Other commands reject `--full`. Both
+human and JSON output support it. PDF source order may differ from reading order.
+
+After opening a deck, notes can still be loading. `context` reports
+`NOTES_LOADING` with exit 8 until notes are ready; `slide` works independently.
+A page or document change during a pending query reports `CANCELLED` with exit
+10. Retry the query to obtain the new page. `TEXT_FAILED` is distinct from
+successful empty text, and `TIMEOUT` bounds a stalled query.
+
+An external agent can use `qp context --json`, generate and speak narration
+with its own tools, then call `qp next --json`. Check `.state.page` or `.changed`
+to detect the last page. Quick Presenter supplies only source information and
+presentation control; the agent owns narration and the wait for audio completion.
+
+```sh
+qp slide --full --json | jq -r '.text[]'
+qp context --full --json | jq -r '.current.text[]'
+qp context --full --json | jq -r '.next.text[]?'
+```
+
+Full source results use the same output schema as compact results. Large IPC
+responses are reassembled internally; stdout still contains exactly one JSON
+object and a newline. Full pages retain a 4 MiB safety limit and the existing
+one-million-PDFium-character guard. These limits yield `TEXT_FAILED` rather than
+successful shortened text. The server bounds assembled responses to 32 MiB
+and preserves its 30-second response deadline. Failed or incomplete transfers
+leave stdout empty and report a typed error on stderr.

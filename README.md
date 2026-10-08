@@ -196,6 +196,9 @@ cargo build --bins
 qp status --json
 qp next
 qp notes --json
+qp slide --json
+qp context --json
+qp context --full --json
 ```
 
 The CLI uses local IPC and the same presentation operations as the GUI.

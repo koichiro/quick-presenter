@@ -317,6 +317,19 @@ impl HelperClient {
             _ => bail!("missing render response"),
         }
     }
+    pub fn text_page(
+        &mut self,
+        index: u32,
+        full: bool,
+    ) -> Result<quick_presenter::control::protocol::SlideText> {
+        let frame = self.broker.text_page(index, full)?;
+        match self.exchange(frame, Operation::Text)? {
+            Some(RenderEvent::SlideTextLoaded { result, .. }) => {
+                result.map_err(|message| anyhow::anyhow!(message))
+            }
+            _ => bail!("missing text response"),
+        }
+    }
     pub fn notes_page(&mut self, index: u32) -> Result<Vec<(u32, String)>> {
         let frame = self.broker.notes_page(index)?;
         match self.exchange(frame, Operation::Notes)? {
@@ -468,6 +481,17 @@ impl RemoteDocument {
                 .client
                 .borrow_mut()
                 .render_with_priority(request, priority);
+        }
+        result
+    }
+    pub fn text_page(
+        &self,
+        index: u32,
+        full: bool,
+    ) -> Result<quick_presenter::control::protocol::SlideText> {
+        let result = self.client.borrow_mut().text_page(index, full);
+        if result.is_err() && self.recover() {
+            return self.client.borrow_mut().text_page(index, full);
         }
         result
     }
@@ -659,7 +683,8 @@ pub(crate) fn run_with_input(mut input: Option<std::fs::File>) -> Result<()> {
                 &message,
                 request_fault(&message, document.as_ref()).as_deref()
             ),
-            (Message::Hello {}, Some("hang-on-handshake"))
+            (Message::TextPage { .. }, Some("hang-on-text"))
+                | (Message::Hello {}, Some("hang-on-handshake"))
                 | (Message::Open { .. }, Some("hang-on-open"))
                 | (Message::Shutdown {}, Some("hang-on-shutdown"))
                 | (
@@ -828,6 +853,14 @@ pub(crate) fn run_with_input(mut input: Option<std::fs::File>) -> Result<()> {
                         }
                     }
                     Err(error) => failure(FailureCode::RenderFailed, &error.to_string()),
+                }
+            }
+            Message::TextPage { page_index, full } => {
+                ensure!(session == Some(session_id), "wrong document session");
+                let doc = document.as_ref().context("document not open")?;
+                match doc.slide_text(page_index, full) {
+                    Ok(content) => Message::TextLoaded { content },
+                    Err(error) => failure(FailureCode::TextFailed, &error.to_string()),
                 }
             }
             Message::NotesPage { page_index } => {

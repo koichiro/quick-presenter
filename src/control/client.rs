@@ -13,7 +13,7 @@ pub enum CliRequest {
     Help,
     Run(CliOptions),
 }
-pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json]\n\nCommands:\n  status             Query presentation state\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (relative to the CLI working directory)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n\nLocal control is experimental and supports Windows, macOS, and Linux.\n";
+pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n\nCommands:\n  status             Query presentation state\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (relative to the CLI working directory)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n\nLocal control is experimental and supports Windows, macOS, and Linux.\n";
 
 pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest, ControlError> {
     let mut args: Vec<_> = args.into_iter().collect();
@@ -25,17 +25,27 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest
     if json_count > 1 {
         return Err(invalid());
     }
-    args.retain(|arg| arg != "--json");
+    let full_count = args.iter().filter(|arg| *arg == "--full").count();
+    if full_count > 1 {
+        return Err(invalid());
+    }
+    let full = full_count == 1;
+    args.retain(|arg| arg != "--json" && arg != "--full");
     let first = args
         .first()
         .and_then(|arg| arg.to_str())
         .ok_or_else(invalid)?;
+    if full && !matches!(first, "slide" | "context") {
+        return Err(invalid());
+    }
     let command = match (first, args.len()) {
         ("status", 1) => Command::Status(Empty {}),
         ("next", 1) => Command::Next(Empty {}),
         ("prev", 1) => Command::Previous(Empty {}),
         ("close", 1) => Command::Close(Empty {}),
         ("notes", 1) => Command::Notes(Empty {}),
+        ("slide", 1) => Command::Slide(ContentParams { full }),
+        ("context", 1) => Command::Context(ContentParams { full }),
         ("goto", 2) => {
             let page = args[1]
                 .to_str()
@@ -110,8 +120,7 @@ pub fn send_to(path: &Path, request: &Request) -> Result<Response, ControlError>
         .set_read_timeout(Some(REQUEST_TIMEOUT + std::time::Duration::from_secs(2)))
         .map_err(ipc_error)?;
     write_frame(&mut stream, request).map_err(ipc_error)?;
-    let bytes = read_frame(&mut stream).map_err(ipc_error)?;
-    validate_response(request, &bytes)
+    receive_response(&mut stream, request)
 }
 
 #[cfg(windows)]
@@ -123,8 +132,54 @@ pub fn send_to(path: &Path, request: &Request) -> Result<Response, ControlError>
         std::time::Duration::from_secs(1),
     );
     write_frame(&mut stream, request).map_err(ipc_error)?;
-    let bytes = read_frame(&mut stream).map_err(ipc_error)?;
-    validate_response(request, &bytes)
+    receive_response(&mut stream, request)
+}
+
+fn receive_response(
+    reader: &mut impl io::Read,
+    request: &Request,
+) -> Result<Response, ControlError> {
+    let bytes = read_frame(reader).map_err(ipc_error)?;
+    let first: Response = serde_json::from_slice(&bytes).map_err(|_| {
+        ipc_error(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Malformed control response",
+        ))
+    })?;
+    let Outcome::Result(Reply::Transfer { chunk }) = first.outcome else {
+        return validate_response(request, &bytes);
+    };
+    let invalid = || ControlError::new(ErrorCode::IpcFailure, "Invalid response transfer.");
+    if !request.command.full_text()
+        || first.protocol_version != PROTOCOL_VERSION
+        || first.id != Some(request.id)
+        || !chunk.valid()
+        || chunk.sequence != 0
+    {
+        return Err(invalid());
+    }
+    let total = chunk.total_bytes;
+    let mut assembled = chunk.data;
+    let mut sequence = 1;
+    while assembled.len() < total as usize {
+        let bytes = read_frame(reader).map_err(ipc_error)?;
+        let fragment: Response = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
+        let Outcome::Result(Reply::Transfer { chunk }) = fragment.outcome else {
+            return Err(invalid());
+        };
+        if fragment.protocol_version != PROTOCOL_VERSION
+            || fragment.id != Some(request.id)
+            || !chunk.valid()
+            || chunk.total_bytes != total
+            || chunk.sequence != sequence
+            || chunk.data.len() > (total as usize).saturating_sub(assembled.len())
+        {
+            return Err(invalid());
+        }
+        assembled.extend_from_slice(&chunk.data);
+        sequence += 1;
+    }
+    validate_response(request, &assembled)
 }
 
 fn validate_response(request: &Request, bytes: &[u8]) -> Result<Response, ControlError> {
@@ -146,6 +201,8 @@ fn validate_response(request: &Request, bytes: &[u8]) -> Result<Response, Contro
         (_, Outcome::Error(_)) => true,
         (Command::Status(_), Outcome::Result(Reply::Status(_))) => true,
         (Command::Notes(_), Outcome::Result(Reply::Notes { .. })) => true,
+        (Command::Slide(_), Outcome::Result(Reply::Slide { .. })) => true,
+        (Command::Context(_), Outcome::Result(Reply::Context { .. })) => true,
         (
             Command::Next(_)
             | Command::Previous(_)
@@ -157,6 +214,21 @@ fn validate_response(request: &Request, bytes: &[u8]) -> Result<Response, Contro
         ) => true,
         _ => false,
     };
+    if request.command.full_text() {
+        let truncated = match &response.outcome {
+            Outcome::Result(Reply::Slide { content, .. }) => content.truncated,
+            Outcome::Result(Reply::Context { current, next, .. }) => {
+                current.slide.truncated || next.as_ref().is_some_and(|s| s.slide.truncated)
+            }
+            _ => false,
+        };
+        if truncated {
+            return Err(ControlError::new(
+                ErrorCode::IpcFailure,
+                "Full source response was truncated.",
+            ));
+        }
+    }
     if !matches {
         return Err(ControlError::new(
             ErrorCode::IpcFailure,
@@ -188,6 +260,7 @@ pub fn format_reply(reply: &Reply, json: bool) -> Result<String, serde_json::Err
         .map(|s| s + "\n");
     }
     Ok(match reply {
+        Reply::Transfer { .. } => "Transport fragment\n".into(),
         Reply::Status(state) => format!(
             "{}\nPage: {} / {}\nBlackout: {}\nRender: {:?}; notes: {:?}\n",
             state.document.as_deref().unwrap_or("No presentation open"),
@@ -205,6 +278,44 @@ pub fn format_reply(reply: &Reply, json: bool) -> Result<String, serde_json::Err
             state.blackout
         ),
         Reply::Notes { notes, .. } => format!("{notes}\n"),
+        Reply::Slide { content, pages, .. } => format!(
+            "Page: {} / {}{}\n{}\n",
+            content.page,
+            pages,
+            if content.truncated {
+                " (text truncated)"
+            } else {
+                ""
+            },
+            content.text.join("\n")
+        ),
+        Reply::Context {
+            presentation,
+            current,
+            next,
+        } => {
+            let describe = |s: &SlideContext| {
+                format!(
+                    "Page: {}{}\n{}\nNotes:\n{}\n",
+                    s.slide.page,
+                    if s.slide.truncated {
+                        " (text truncated)"
+                    } else {
+                        ""
+                    },
+                    s.slide.text.join("\n"),
+                    s.notes
+                )
+            };
+            format!(
+                "{}\nCurrent:\n{}Next:\n{}",
+                presentation.document.as_deref().unwrap_or_default(),
+                describe(current),
+                next.as_ref()
+                    .map(describe)
+                    .unwrap_or_else(|| "End of presentation\n".into())
+            )
+        }
     })
 }
 
@@ -218,6 +329,163 @@ mod tests {
         }
     }
     #[test]
+    fn full_option_is_scoped_and_large_utf8_responses_reassemble() {
+        assert_eq!(
+            parse(&["slide", "--full", "--json"]),
+            Command::Slide(ContentParams { full: true })
+        );
+        assert_eq!(
+            parse(&["--full", "context"]),
+            Command::Context(ContentParams { full: true })
+        );
+        for args in [
+            &["status", "--full"][..],
+            &["notes", "--full"],
+            &["slide", "--full", "--full"],
+            &["goto", "5", "--full"],
+        ] {
+            assert!(parse_args(args.iter().map(OsString::from)).is_err());
+        }
+        let source = "日本語\n".repeat(150_000);
+        let response = Response::success(
+            42,
+            Reply::Slide {
+                session_id: "session".into(),
+                document_revision: 1,
+                pages: 1,
+                content: SlideText {
+                    page: 1,
+                    text: vec![source.clone()],
+                    truncated: false,
+                },
+            },
+        );
+        let request = Request::new(42, Command::Slide(ContentParams { full: true }));
+        let mut wire = Vec::new();
+        write_response(&mut wire, &response).unwrap();
+        let decoded = receive_response(&mut wire.as_slice(), &request).unwrap();
+        assert_eq!(decoded, response);
+        let mut frames = wire.as_slice();
+        let mut count = 0;
+        while !frames.is_empty() {
+            let data = read_frame(&mut frames).unwrap();
+            assert!(data.len() <= MAX_FRAME_BYTES);
+            let frame: Response = serde_json::from_slice(&data).unwrap();
+            assert!(
+                matches!(frame.outcome, Outcome::Result(Reply::Transfer { chunk }) if chunk.valid())
+            );
+            count += 1;
+        }
+        assert!(count > 1);
+        assert!(receive_response(
+            &mut wire.as_slice(),
+            &Request::new(42, Command::Slide(ContentParams::default()))
+        )
+        .is_err());
+        let short = Response::success(
+            42,
+            Reply::Slide {
+                session_id: "session".into(),
+                document_revision: 1,
+                pages: 1,
+                content: SlideText {
+                    page: 1,
+                    text: vec!["prefix".into()],
+                    truncated: true,
+                },
+            },
+        );
+        assert!(validate_response(&request, &serde_json::to_vec(&short).unwrap()).is_err());
+    }
+    #[test]
+    fn response_transfers_reject_bad_sequences_limits_ids_and_truncation() {
+        let request = Request::new(7, Command::Context(ContentParams { full: true }));
+        let first = TransferChunk {
+            sequence: 0,
+            total_bytes: (MAX_FRAME_BYTES + 1) as u32,
+            data: vec![b'x'; TRANSFER_CHUNK_BYTES],
+        };
+        let frame = |id, chunk| Response::success(id, Reply::Transfer { chunk });
+        for bad in [
+            TransferChunk {
+                sequence: 0,
+                ..first.clone()
+            },
+            TransferChunk {
+                sequence: 1,
+                total_bytes: u32::MAX,
+                ..first.clone()
+            },
+            TransferChunk {
+                sequence: 1,
+                data: vec![],
+                ..first.clone()
+            },
+        ] {
+            let mut wire = Vec::new();
+            write_frame(&mut wire, &frame(7, first.clone())).unwrap();
+            write_frame(&mut wire, &frame(7, bad)).unwrap();
+            assert_eq!(
+                receive_response(&mut wire.as_slice(), &request)
+                    .unwrap_err()
+                    .code,
+                ErrorCode::IpcFailure
+            );
+        }
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &frame(7, first.clone())).unwrap();
+        assert!(receive_response(&mut wire.as_slice(), &request).is_err());
+        write_frame(
+            &mut wire,
+            &frame(
+                8,
+                TransferChunk {
+                    sequence: 1,
+                    ..first
+                },
+            ),
+        )
+        .unwrap();
+        assert!(receive_response(&mut wire.as_slice(), &request).is_err());
+    }
+    #[test]
+    fn context_output_and_response_validation_preserve_the_contract() {
+        let reply = Reply::Slide {
+            session_id: "test".into(),
+            document_revision: 2,
+            pages: 3,
+            content: SlideText {
+                page: 2,
+                text: vec!["Original 日本語".into()],
+                truncated: false,
+            },
+        };
+        let response = Response::success(1, reply.clone());
+        let bytes = serde_json::to_vec(&response).unwrap();
+        assert!(validate_response(
+            &Request::new(1, Command::Slide(ContentParams::default())),
+            &bytes
+        )
+        .is_ok());
+        assert_eq!(
+            validate_response(
+                &Request::new(1, Command::Context(ContentParams::default())),
+                &bytes
+            )
+            .unwrap_err()
+            .code,
+            ErrorCode::IpcFailure
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&format_reply(&reply, true).unwrap()).unwrap();
+        assert_eq!(json["text"][0], "Original 日本語");
+        assert_eq!(json["truncated"], false);
+        assert_eq!(json["page"], 2);
+        assert!(format_reply(&reply, false)
+            .unwrap()
+            .contains("Original 日本語"));
+    }
+    #[test]
     fn parses_supported_commands() {
         assert_eq!(parse(&["status", "--json"]), Command::Status(Empty {}));
         assert_eq!(parse(&["goto", "5"]), Command::GoTo(PageParams { page: 5 }));
@@ -229,7 +497,7 @@ mod tests {
             parse(&["blackout", "off"]),
             Command::Blackout(BlackoutParams { value: false })
         );
-        for name in ["next", "prev", "close", "notes"] {
+        for name in ["next", "prev", "close", "notes", "slide", "context"] {
             parse(&[name, "--json"]);
         }
         assert!(
@@ -243,7 +511,7 @@ mod tests {
             &["goto", "-1"],
             &["blackout", "toggle"],
             &["status", "extra"],
-            &["context", "--json"],
+            &["watch", "--json"],
             &["status", "--json", "--json"],
             &[],
         ] {

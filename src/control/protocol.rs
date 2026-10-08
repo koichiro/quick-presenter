@@ -42,11 +42,30 @@ pub enum Command {
     Blackout(BlackoutParams),
     #[serde(rename = "presentation.notes")]
     Notes(Empty),
+    #[serde(rename = "presentation.slide")]
+    Slide(ContentParams),
+    #[serde(rename = "presentation.context")]
+    Context(ContentParams),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Empty {}
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContentParams {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub full: bool,
+}
+impl Command {
+    pub fn full_text(&self) -> bool {
+        matches!(
+            self,
+            Self::Slide(ContentParams { full: true }) | Self::Context(ContentParams { full: true })
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PageParams {
@@ -80,6 +99,21 @@ pub enum Outcome {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Reply {
     Status(Status),
+    Transfer {
+        chunk: TransferChunk,
+    },
+    Slide {
+        session_id: String,
+        document_revision: u64,
+        pages: u32,
+        #[serde(flatten)]
+        content: SlideText,
+    },
+    Context {
+        presentation: Status,
+        current: SlideContext,
+        next: Option<SlideContext>,
+    },
     Mutation {
         changed: bool,
         state: Status,
@@ -135,6 +169,7 @@ pub enum ErrorCode {
     OpenFailed,
     NotesLoading,
     NotesFailed,
+    TextFailed,
     Cancelled,
     UnsupportedPlatform,
 }
@@ -149,10 +184,97 @@ impl ErrorCode {
             Self::IpcFailure | Self::UnsupportedPlatform => 7,
             Self::Busy | Self::NotesLoading => 8,
             Self::Timeout => 9,
-            Self::OpenFailed | Self::NotesFailed | Self::Cancelled => 10,
+            Self::OpenFailed | Self::NotesFailed | Self::TextFailed | Self::Cancelled => 10,
         }
     }
 }
+pub const MAX_ASSEMBLED_BYTES: usize = 32 * 1024 * 1024;
+pub const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
+pub const MAX_FULL_SLIDE_TEXT_BYTES: usize = 4 * 1024 * 1024;
+/// Transport-only fragments of a serialized typed response. Never application state.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TransferChunk {
+    pub sequence: u32,
+    pub total_bytes: u32,
+    pub data: Vec<u8>,
+}
+impl TransferChunk {
+    pub fn valid(&self) -> bool {
+        let total = self.total_bytes as usize;
+        total > MAX_FRAME_BYTES
+            && total <= MAX_ASSEMBLED_BYTES
+            && !self.data.is_empty()
+            && self.data.len() <= TRANSFER_CHUNK_BYTES
+            && self.sequence < (MAX_ASSEMBLED_BYTES / TRANSFER_CHUNK_BYTES) as u32
+    }
+}
+
+pub fn serialize_bounded(value: &impl Serialize, limit: usize) -> io::Result<Vec<u8>> {
+    struct Buffer {
+        bytes: Vec<u8>,
+        limit: usize,
+    }
+    impl Write for Buffer {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if bytes.len() > self.limit.saturating_sub(self.bytes.len()) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Serialized response exceeds limit",
+                ));
+            }
+            self.bytes.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut buffer = Buffer {
+        bytes: Vec::new(),
+        limit,
+    };
+    serde_json::to_writer(&mut buffer, value)?;
+    Ok(buffer.bytes)
+}
+
+pub fn write_response(writer: &mut impl Write, response: &Response) -> io::Result<()> {
+    let bytes = serialize_bounded(response, MAX_ASSEMBLED_BYTES)?;
+    if bytes.len() <= MAX_FRAME_BYTES {
+        return write_frame(writer, response);
+    }
+    for (sequence, data) in bytes.chunks(TRANSFER_CHUNK_BYTES).enumerate() {
+        let fragment = Response {
+            protocol_version: response.protocol_version,
+            id: response.id,
+            outcome: Outcome::Result(Reply::Transfer {
+                chunk: TransferChunk {
+                    sequence: sequence as u32,
+                    total_bytes: bytes.len() as u32,
+                    data: data.to_vec(),
+                },
+            }),
+        };
+        write_frame(writer, &fragment)?;
+    }
+    Ok(())
+}
+
+/// PDF source text in PDFium order. Truncation is explicit; no OCR or generated content.
+pub const MAX_SLIDE_TEXT_BYTES: usize = 4 * 1024;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SlideText {
+    pub page: u32,
+    pub text: Vec<String>,
+    pub truncated: bool,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SlideContext {
+    #[serde(flatten)]
+    pub slide: SlideText,
+    pub notes: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Status {
     pub session_id: String,
@@ -221,6 +343,8 @@ pub fn decode_request(bytes: &[u8]) -> Result<Request, Response> {
             | "presentation.close"
             | "presentation.blackout"
             | "presentation.notes"
+            | "presentation.slide"
+            | "presentation.context"
     ) {
         return Err(Response::error(
             Some(header.id),
@@ -294,6 +418,54 @@ pub fn write_frame(writer: &mut impl Write, value: &impl Serialize) -> io::Resul
 mod tests {
     use super::*;
     #[test]
+    fn context_roundtrip_and_worst_case_escaped_text_fit_frame_budget() {
+        let slide = SlideText {
+            page: 1,
+            text: vec!["\u{1}".repeat(MAX_SLIDE_TEXT_BYTES)],
+            truncated: true,
+        };
+        let current = SlideContext {
+            slide,
+            notes: "\u{1}".repeat(64 * 1024),
+        };
+        let next = SlideContext {
+            slide: SlideText {
+                page: 2,
+                ..current.slide.clone()
+            },
+            notes: current.notes.clone(),
+        };
+        let presentation = Status {
+            session_id: "session".into(),
+            document_revision: 1,
+            document: Some("\u{1}".repeat(32768)),
+            page: Some(1),
+            pages: 2,
+            fullscreen: false,
+            blackout: false,
+            timer: TimerStatus {
+                running: true,
+                elapsed_seconds: 12,
+            },
+            opening: false,
+            render_state: RenderState::Ready,
+            notes_state: NotesState::Ready,
+        };
+        let response = Response::success(
+            42,
+            Reply::Context {
+                presentation,
+                current,
+                next: Some(next),
+            },
+        );
+        let mut frame = Vec::new();
+        write_frame(&mut frame, &response).unwrap();
+        let decoded: Response =
+            serde_json::from_slice(&read_frame(&mut frame.as_slice()).unwrap()).unwrap();
+        assert_eq!(decoded, response);
+    }
+    #[test]
     fn commands_roundtrip() {
         let absolute_pdf = std::env::current_dir()
             .unwrap()
@@ -309,6 +481,8 @@ mod tests {
             Command::Close(Empty {}),
             Command::Blackout(BlackoutParams { value: true }),
             Command::Notes(Empty {}),
+            Command::Slide(ContentParams::default()),
+            Command::Context(ContentParams::default()),
         ] {
             let request = Request::new(42, command);
             let mut bytes = Vec::new();

@@ -6,6 +6,10 @@ use crate::{
     rendering::{RenderRequest, RenderedPagePixels},
 };
 use anyhow::{bail, ensure, Context, Result};
+use quick_presenter::control::protocol::{
+    serialize_bounded, SlideText, TransferChunk, MAX_ASSEMBLED_BYTES, MAX_FULL_SLIDE_TEXT_BYTES,
+    MAX_SLIDE_TEXT_BYTES, TRANSFER_CHUNK_BYTES,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -13,7 +17,7 @@ use std::{
     path::PathBuf,
 };
 
-pub const VERSION: u16 = 2;
+pub const VERSION: u16 = 4;
 pub const MAX_CONTROL_BYTES: usize = 1024 * 1024;
 pub use crate::renderer_limits::{MAX_DIMENSION, MAX_PAGES, MAX_PIXEL_BYTES};
 pub const MAX_PATH_BYTES: usize = 32_768;
@@ -47,6 +51,16 @@ pub enum Message {
     NotesPage {
         page_index: u32,
     },
+    TextPage {
+        page_index: u32,
+        full: bool,
+    },
+    Transfer {
+        chunk: TransferChunk,
+    },
+    TextLoaded {
+        content: SlideText,
+    },
     Close {},
     Shutdown {},
     Opened {
@@ -76,6 +90,7 @@ pub enum FailureCode {
     LimitExceeded,
     RenderFailed,
     NotesFailed,
+    TextFailed,
     Internal,
 }
 
@@ -179,7 +194,7 @@ impl Envelope {
         ensure!(global == (self.session_id == 0), "invalid session ID");
         match &self.message {
             Message::Open { path } => path.validate()?,
-            Message::NotesPage { page_index } => {
+            Message::NotesPage { page_index } | Message::TextPage { page_index, .. } => {
                 ensure!(*page_index < MAX_PAGES, "page index exceeds limit")
             }
             Message::Render { page_index, width } => {
@@ -211,6 +226,19 @@ impl Envelope {
                     );
                 }
             }
+            Message::TextLoaded { content } => {
+                ensure!((1..=MAX_PAGES).contains(&content.page), "invalid text page");
+                ensure!(
+                    content.text.len() <= MAX_FULL_SLIDE_TEXT_BYTES,
+                    "too many text lines"
+                );
+                ensure!(
+                    content.text.iter().map(String::len).sum::<usize>()
+                        <= MAX_FULL_SLIDE_TEXT_BYTES,
+                    "slide text exceeds limit"
+                );
+            }
+            Message::Transfer { chunk } => ensure!(chunk.valid(), "invalid transfer fragment"),
             Message::Failed { message, .. } => {
                 ensure!(message.len() <= MAX_TEXT_BYTES, "error exceeds limit")
             }
@@ -239,9 +267,31 @@ impl<T: Write> Framed<T> {
             frame.pixels.len() == expected,
             "pixel payload length mismatch"
         );
-        let mut control = ControlBuffer(Vec::new());
-        serde_json::to_writer(&mut control, &frame.envelope)?;
-        let control = control.0;
+        let control = serialize_bounded(&frame.envelope, MAX_ASSEMBLED_BYTES)?;
+        if control.len() > MAX_CONTROL_BYTES {
+            ensure!(
+                matches!(frame.envelope.message, Message::TextLoaded { .. })
+                    && frame.pixels.is_empty(),
+                "only source text may use transfer frames"
+            );
+            for (sequence, data) in control.chunks(TRANSFER_CHUNK_BYTES).enumerate() {
+                self.send(&Frame {
+                    envelope: Envelope {
+                        request_id: frame.envelope.request_id,
+                        session_id: frame.envelope.session_id,
+                        message: Message::Transfer {
+                            chunk: TransferChunk {
+                                sequence: sequence as u32,
+                                total_bytes: control.len() as u32,
+                                data: data.to_vec(),
+                            },
+                        },
+                    },
+                    pixels: Vec::new(),
+                })?;
+            }
+            return Ok(());
+        }
         self.stream.write_all(&MAGIC)?;
         self.stream.write_all(&VERSION.to_le_bytes())?;
         self.stream
@@ -260,6 +310,62 @@ impl<T: Read> Framed<T> {
 
     /// Correlate metadata before allocating or reading a pixel payload.
     pub fn receive_checked(
+        &mut self,
+        validate: impl Fn(&Envelope) -> Result<()>,
+    ) -> Result<Option<Frame>> {
+        let Some(first) = self.receive_fragment(&validate)? else {
+            return Ok(None);
+        };
+        let Message::Transfer { chunk } = &first.envelope.message else {
+            return Ok(Some(first));
+        };
+        ensure!(chunk.sequence == 0, "transfer starts out of order");
+        let total = chunk.total_bytes;
+        let mut control = chunk.data.clone();
+        let mut sequence = 1;
+        while control.len() < total as usize {
+            let frame = self
+                .receive_fragment(|envelope| {
+                    ensure!(
+                        envelope.request_id == first.envelope.request_id
+                            && envelope.session_id == first.envelope.session_id,
+                        "uncorrelated transfer"
+                    );
+                    let Message::Transfer { chunk } = &envelope.message else {
+                        bail!("unexpected transfer response");
+                    };
+                    ensure!(
+                        chunk.sequence == sequence
+                            && chunk.total_bytes == total
+                            && chunk.data.len() <= (total as usize).saturating_sub(control.len()),
+                        "invalid transfer sequence or size"
+                    );
+                    validate(envelope)
+                })?
+                .context("truncated transfer")?;
+            let Message::Transfer { chunk } = frame.envelope.message else {
+                unreachable!();
+            };
+            control.extend_from_slice(&chunk.data);
+            sequence += 1;
+        }
+        let envelope: Envelope =
+            serde_json::from_slice(&control).context("invalid assembled envelope")?;
+        ensure!(
+            envelope.request_id == first.envelope.request_id
+                && envelope.session_id == first.envelope.session_id
+                && matches!(envelope.message, Message::TextLoaded { .. }),
+            "invalid assembled response"
+        );
+        ensure!(envelope.validate()? == 0, "unexpected assembled pixels");
+        validate(&envelope)?;
+        Ok(Some(Frame {
+            envelope,
+            pixels: Vec::new(),
+        }))
+    }
+
+    fn receive_fragment(
         &mut self,
         validate: impl FnOnce(&Envelope) -> Result<()>,
     ) -> Result<Option<Frame>> {
@@ -306,23 +412,6 @@ impl<T: Read> Framed<T> {
     }
 }
 
-struct ControlBuffer(Vec<u8>);
-impl Write for ControlBuffer {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        if bytes.len() > MAX_CONTROL_BYTES.saturating_sub(self.0.len()) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "control frame exceeds limit",
-            ));
-        }
-        self.0.extend_from_slice(bytes);
-        Ok(bytes.len())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
 /// Broker adapter tracks outstanding requests without owning presentation state.
 /// One instance belongs to one helper/session. Candidate helpers use another instance.
 pub struct Broker {
@@ -339,6 +428,7 @@ enum Pending {
     Render(RenderRequest, RenderJobId),
     Notes,
     NotesPage(u32),
+    TextPage(u32, bool),
     Close,
     Shutdown,
 }
@@ -465,6 +555,24 @@ impl Broker {
             Message::NotesPage { page_index },
         )
     }
+    pub fn text_page(&mut self, page_index: u32, full: bool) -> Result<Frame> {
+        ensure!(
+            self.ready
+                && !self
+                    .pending
+                    .values()
+                    .any(|p| matches!(p, Pending::Close | Pending::Shutdown)),
+            "helper is not ready for text"
+        );
+        ensure!(
+            page_index < self.page_count.context("document not open")?,
+            "page outside document"
+        );
+        self.request(
+            Pending::TextPage(page_index, full),
+            Message::TextPage { page_index, full },
+        )
+    }
     fn check_session(&self, session: RenderSessionId) -> Result<()> {
         ensure!(session == self.session, "stale session");
         Ok(())
@@ -506,12 +614,30 @@ impl Broker {
                     "notes outside document"
                 );
             }
+            (Pending::TextPage(_, true), Message::Transfer { .. }) => {}
+            (Pending::TextPage(index, full), Message::TextLoaded { content }) => {
+                ensure!(content.page == index + 1, "text for unexpected page");
+                if *full {
+                    ensure!(!content.truncated, "full text cannot be truncated");
+                } else {
+                    ensure!(
+                        content.text.len() <= MAX_SLIDE_TEXT_BYTES
+                            && content.text.iter().map(String::len).sum::<usize>()
+                                <= MAX_SLIDE_TEXT_BYTES,
+                        "compact text exceeds limit"
+                    );
+                }
+            }
             (Pending::NotesPage(index), Message::NotesLoaded { pages }) => ensure!(
                 pages.iter().all(|p| p.page_number == index + 1),
                 "notes for unexpected page"
             ),
             (
-                Pending::Open | Pending::Render(_, _) | Pending::Notes | Pending::NotesPage(_),
+                Pending::Open
+                | Pending::Render(_, _)
+                | Pending::Notes
+                | Pending::NotesPage(_)
+                | Pending::TextPage(_, _),
                 Message::Failed { .. },
             ) => {}
             _ => bail!("unexpected response kind"),
@@ -568,6 +694,22 @@ impl Broker {
                         pages.iter().map(|n| (n.page_number, n.text.clone())),
                     ),
                     status_text: "Ready".into(),
+                })
+            }
+            (Pending::TextPage(index, full), Message::TextLoaded { content }) => {
+                Some(RenderEvent::SlideTextLoaded {
+                    full: *full,
+                    session_id: self.session,
+                    page_index: *index,
+                    result: Ok(content.clone()),
+                })
+            }
+            (Pending::TextPage(index, full), Message::Failed { message, .. }) => {
+                Some(RenderEvent::SlideTextLoaded {
+                    full: *full,
+                    session_id: self.session,
+                    page_index: *index,
+                    result: Err(message.clone()),
                 })
             }
             (Pending::Open, Message::Failed { message, .. }) => Some(RenderEvent::OpenFailed {
@@ -645,6 +787,107 @@ mod tests {
             },
             pixels: Vec::new(),
         }
+    }
+    #[test]
+    fn full_helper_text_transfers_preserve_utf8_and_reject_uncorrelated_fragments() {
+        let mut broker = opened_broker();
+        let request = broker.text_page(0, true).unwrap();
+        let content = SlideText {
+            page: 1,
+            text: vec!["日".repeat(500_000)],
+            truncated: false,
+        };
+        let full = response(&request, Message::TextLoaded { content });
+        let mut writer = Framed::new(Vec::new());
+        writer.send(&full).unwrap();
+        let bytes = writer.into_inner();
+        let accepted = broker
+            .read_response(&mut Framed::new(Cursor::new(bytes.clone())))
+            .unwrap()
+            .unwrap();
+        assert_eq!(accepted, full);
+        assert!(matches!(
+            broker.accept(accepted).unwrap(),
+            Some(RenderEvent::SlideTextLoaded {
+                full: true,
+                result: Ok(_),
+                ..
+            })
+        ));
+        assert!(broker
+            .read_response(&mut Framed::new(Cursor::new(bytes)))
+            .is_err());
+        let mut broker = opened_broker();
+        let request = broker.text_page(0, true).unwrap();
+        let chunk = TransferChunk {
+            sequence: 0,
+            total_bytes: (MAX_CONTROL_BYTES + 1) as u32,
+            data: vec![b'x'; TRANSFER_CHUNK_BYTES],
+        };
+        let mut writer = Framed::new(Vec::new());
+        writer
+            .send(&response(
+                &request,
+                Message::Transfer {
+                    chunk: chunk.clone(),
+                },
+            ))
+            .unwrap();
+        let mut wrong = response(
+            &request,
+            Message::Transfer {
+                chunk: TransferChunk {
+                    sequence: 1,
+                    ..chunk
+                },
+            },
+        );
+        wrong.envelope.session_id += 1;
+        writer.send(&wrong).unwrap();
+        assert!(broker
+            .read_response(&mut Framed::new(Cursor::new(writer.into_inner())))
+            .is_err());
+    }
+    #[test]
+    fn broker_rejects_uncorrelated_and_oversized_text_before_accepting() {
+        let mut broker = opened_broker();
+        let request = broker.text_page(0, false).unwrap();
+        let content = SlideText {
+            page: 1,
+            text: vec!["Source 日本語".into()],
+            truncated: false,
+        };
+        let good = response(
+            &request,
+            Message::TextLoaded {
+                content: content.clone(),
+            },
+        );
+        let mut wrong = good.clone();
+        wrong.envelope.session_id += 1;
+        assert!(broker.accept(wrong).is_err());
+        let mut wrong_page = content.clone();
+        wrong_page.page = 2;
+        assert!(broker
+            .accept(response(
+                &request,
+                Message::TextLoaded {
+                    content: wrong_page
+                }
+            ))
+            .is_err());
+        let huge = SlideText {
+            text: vec!["x".repeat(MAX_SLIDE_TEXT_BYTES + 1)],
+            ..content
+        };
+        assert!(broker
+            .accept(response(&request, Message::TextLoaded { content: huge }))
+            .is_err());
+        assert!(matches!(
+            broker.accept(good.clone()).unwrap(),
+            Some(RenderEvent::SlideTextLoaded { result: Ok(_), .. })
+        ));
+        assert!(broker.accept(good).is_err());
     }
     fn opened_broker() -> Broker {
         let mut broker = Broker::new(RenderSessionId(9)).unwrap();
