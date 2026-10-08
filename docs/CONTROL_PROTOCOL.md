@@ -1,7 +1,7 @@
 # Presentation Control Protocol v1 (experimental)
 
-Development builds expose a local automation interface on Windows, macOS, and
-Linux. `qp` is its first client. The wire types live in
+Quick Presenter exposes a local automation interface on Windows, macOS, and
+Linux in development builds and the supported packages described in [CLI](CLI.md). `qp` is its first client. The wire types live in
 `src/control/protocol.rs` and contain no Slint types. This is an initial
 implementation, not a declaration that the complete automation feature is
 ready for release.
@@ -340,3 +340,31 @@ This interface has no explicit timer mutations, network control, session
 discovery, or event/command replay. Renderer IPC
 is a separate private protocol and must not be exposed as the presentation
 control protocol.
+
+## Compatibility validation
+
+`tests/fixtures/control-v1.json` records historical request, response, event,
+and error examples. `tests/control_contract.rs` checks their typed decoding,
+required JSON fields, NDJSON formatting, and exit-code mapping. Open-request
+paths follow the host OS's absolute-path syntax. These fixtures complement
+command and IPC behavior tests; they are not a replacement for them.
+
+Within protocol v1, preserve existing method names, required fields, field types,
+numbering, and error semantics. Clients should ignore additional object fields.
+New event variants require explicit compatibility design because existing typed
+clients reject unknown event names. Breaking changes require a new protocol
+version rather than following the application release number.
+
+`qp --version --json` is local CLI metadata, not an IPC request. Its
+`application_version` identifies the CLI build and `protocol_version` identifies
+the protocol it supports. It is available even when Quick Presenter is closed.
+
+
+## CLI-triggered GUI startup
+
+When `qp open` cannot connect because no server is running, its CLI-only startup
+adapter launches the companion GUI and probes `presentation.status` until ready.
+It then sends the ordinary `presentation.open` request once. Concurrent CLI
+startup is serialized with an OS lock. This does not add protocol methods or
+move file loading into the CLI. Other commands do not start the GUI. See
+[CLI startup](CLI.md#starting-a-presentation-from-the-cli) for deadlines and errors.

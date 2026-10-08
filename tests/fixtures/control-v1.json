@@ -1,0 +1,431 @@
+{
+  "requests": [
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.status",
+      "params": {}
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.timer.elapsed",
+      "params": {}
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.watch",
+      "params": {}
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.next",
+      "params": {}
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.previous",
+      "params": {}
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.goto",
+      "params": {
+        "page": 2
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.open",
+      "params": {
+        "file": "/slides/demo.pdf"
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.close",
+      "params": {}
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.blackout",
+      "params": {
+        "value": true
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.notes",
+      "params": {}
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.slide",
+      "params": {}
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.context",
+      "params": {}
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.slide",
+      "params": {
+        "full": true
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "method": "presentation.context",
+      "params": {
+        "full": true
+      }
+    }
+  ],
+  "responses": [
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "result": {
+        "kind": "status",
+        "session_id": "contract-session",
+        "document_revision": 4,
+        "document": "/slides/demo.pdf",
+        "page": 2,
+        "pages": 3,
+        "fullscreen": false,
+        "blackout": false,
+        "timer": {
+          "running": true,
+          "elapsed_seconds": 42
+        },
+        "opening": false,
+        "render_state": "ready",
+        "notes_state": "ready"
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "result": {
+        "kind": "mutation",
+        "changed": false,
+        "state": {
+          "session_id": "contract-session",
+          "document_revision": 4,
+          "document": "/slides/demo.pdf",
+          "page": 2,
+          "pages": 3,
+          "fullscreen": false,
+          "blackout": false,
+          "timer": {
+            "running": true,
+            "elapsed_seconds": 42
+          },
+          "opening": false,
+          "render_state": "ready",
+          "notes_state": "ready"
+        }
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "result": {
+        "kind": "notes",
+        "session_id": "contract-session",
+        "document_revision": 4,
+        "page": 2,
+        "notes": "Original notes\nSecond line"
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "result": {
+        "kind": "slide",
+        "session_id": "contract-session",
+        "document_revision": 4,
+        "pages": 3,
+        "page": 2,
+        "text": [
+          "Architecture",
+          "日本語"
+        ],
+        "truncated": false
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "result": {
+        "kind": "context",
+        "presentation": {
+          "session_id": "contract-session",
+          "document_revision": 4,
+          "document": "/slides/demo.pdf",
+          "page": 2,
+          "pages": 3,
+          "fullscreen": false,
+          "blackout": false,
+          "timer": {
+            "running": true,
+            "elapsed_seconds": 42
+          },
+          "opening": false,
+          "render_state": "ready",
+          "notes_state": "ready"
+        },
+        "current": {
+          "page": 2,
+          "text": [
+            "Architecture",
+            "日本語"
+          ],
+          "truncated": false,
+          "notes": "Original notes\nSecond line"
+        },
+        "next": {
+          "page": 3,
+          "text": [],
+          "truncated": false,
+          "notes": ""
+        }
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "result": {
+        "kind": "context",
+        "presentation": {
+          "session_id": "contract-session",
+          "document_revision": 4,
+          "document": "/slides/demo.pdf",
+          "page": 2,
+          "pages": 3,
+          "fullscreen": false,
+          "blackout": false,
+          "timer": {
+            "running": true,
+            "elapsed_seconds": 42
+          },
+          "opening": false,
+          "render_state": "ready",
+          "notes_state": "ready"
+        },
+        "current": {
+          "page": 2,
+          "text": [
+            "Architecture",
+            "日本語"
+          ],
+          "truncated": false,
+          "notes": "Original notes\nSecond line"
+        },
+        "next": null
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "result": {
+        "kind": "timer_elapsed",
+        "session_id": "contract-session",
+        "document_revision": 4,
+        "running": true,
+        "elapsed_seconds": 42
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "result": {
+        "kind": "watching",
+        "state": {
+          "session_id": "contract-session",
+          "document_revision": 4,
+          "document": "/slides/demo.pdf",
+          "page": 2,
+          "pages": 3,
+          "fullscreen": false,
+          "blackout": false,
+          "timer": {
+            "running": true,
+            "elapsed_seconds": 42
+          },
+          "opening": false,
+          "render_state": "ready",
+          "notes_state": "ready"
+        },
+        "sequence": 5
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "result": {
+        "kind": "heartbeat"
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "result": {
+        "kind": "event",
+        "envelope": {
+          "protocol_version": 1,
+          "session_id": "contract-session",
+          "document_revision": 4,
+          "sequence": 4,
+          "event": "page.changed",
+          "page": 2,
+          "pages": 3
+        }
+      }
+    },
+    {
+      "protocol_version": 1,
+      "id": 42,
+      "result": {
+        "kind": "transfer",
+        "chunk": {
+          "sequence": 0,
+          "total_bytes": 1100000,
+          "data": [
+            123,
+            34,
+            112,
+            114
+          ]
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "protocol_version": 1,
+      "session_id": "contract-session",
+      "document_revision": 4,
+      "sequence": 0,
+      "event": "presentation.snapshot",
+      "state": {
+        "session_id": "contract-session",
+        "document_revision": 4,
+        "document": "/slides/demo.pdf",
+        "page": 2,
+        "pages": 3,
+        "fullscreen": false,
+        "blackout": false,
+        "timer": {
+          "running": true,
+          "elapsed_seconds": 42
+        },
+        "opening": false,
+        "render_state": "ready",
+        "notes_state": "ready"
+      }
+    },
+    {
+      "protocol_version": 1,
+      "session_id": "contract-session",
+      "document_revision": 4,
+      "sequence": 1,
+      "event": "presentation.opened",
+      "state": {
+        "session_id": "contract-session",
+        "document_revision": 4,
+        "document": "/slides/demo.pdf",
+        "page": 2,
+        "pages": 3,
+        "fullscreen": false,
+        "blackout": false,
+        "timer": {
+          "running": true,
+          "elapsed_seconds": 42
+        },
+        "opening": false,
+        "render_state": "ready",
+        "notes_state": "ready"
+      }
+    },
+    {
+      "protocol_version": 1,
+      "session_id": "contract-session",
+      "document_revision": 4,
+      "sequence": 2,
+      "event": "presentation.reloaded",
+      "state": {
+        "session_id": "contract-session",
+        "document_revision": 4,
+        "document": "/slides/demo.pdf",
+        "page": 2,
+        "pages": 3,
+        "fullscreen": false,
+        "blackout": false,
+        "timer": {
+          "running": true,
+          "elapsed_seconds": 42
+        },
+        "opening": false,
+        "render_state": "ready",
+        "notes_state": "ready"
+      }
+    },
+    {
+      "protocol_version": 1,
+      "session_id": "contract-session",
+      "document_revision": 4,
+      "sequence": 3,
+      "event": "presentation.closed"
+    },
+    {
+      "protocol_version": 1,
+      "session_id": "contract-session",
+      "document_revision": 4,
+      "sequence": 4,
+      "event": "page.changed",
+      "page": 2,
+      "pages": 3
+    },
+    {
+      "protocol_version": 1,
+      "session_id": "contract-session",
+      "document_revision": 4,
+      "sequence": 5,
+      "event": "blackout.changed",
+      "value": true
+    }
+  ],
+  "error_exits": {
+    "NOT_RUNNING": 3,
+    "NO_PRESENTATION": 4,
+    "INVALID_PAGE": 5,
+    "INVALID_REQUEST": 2,
+    "UNKNOWN_METHOD": 2,
+    "PROTOCOL_MISMATCH": 6,
+    "IPC_FAILURE": 7,
+    "BUSY": 8,
+    "TIMEOUT": 9,
+    "OPEN_FAILED": 10,
+    "NOTES_LOADING": 8,
+    "NOTES_FAILED": 10,
+    "TEXT_FAILED": 10,
+    "CANCELLED": 10,
+    "UNSUPPORTED_PLATFORM": 7,
+    "EVENTS_LAGGED": 11
+  }
+}

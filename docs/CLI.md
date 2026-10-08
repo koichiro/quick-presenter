@@ -4,8 +4,34 @@
 Control Protocol. It is intended for automation tools and AI agents, and does
 not implement narration, AI models, or presentation business logic.
 
-This initial implementation supports Windows, macOS, and Linux development
-builds. Build both binaries from the same checkout:
+## Installation
+
+Release packages include the CLI and its documentation:
+
+| Distribution | CLI location |
+| --- | --- |
+| macOS Developer ID app/DMG | `/Applications/Quick Presenter.app/Contents/MacOS/qp` |
+| Windows Store/MSIX | `qp.exe` app execution alias (enable it in Windows Settings if disabled) |
+| Windows MSI validation package | `qp.exe` beside `quick-presenter.exe` in the installation directory |
+| Linux Debian package | `/usr/bin/qp` |
+| Raw binary artifact | `qp` or `qp.exe` beside the GUI executable |
+
+On macOS, invoke the bundled executable directly, or add a user-local link:
+
+```sh
+"/Applications/Quick Presenter.app/Contents/MacOS/qp" status --json
+mkdir -p "$HOME/.local/bin"
+ln -s "/Applications/Quick Presenter.app/Contents/MacOS/qp" "$HOME/.local/bin/qp"
+# Add $HOME/.local/bin to PATH in your shell configuration.
+```
+
+The MSI does not modify PATH. Invoke its installed `qp.exe` by full path, or
+add its directory to your user PATH. Windows Store remains the supported Windows
+distribution; MSI and direct MSIX packages are validation artifacts.
+The macOS App Store sandbox does not currently expose this control endpoint;
+use the Developer ID distribution for local automation.
+
+For development, build both binaries from the same checkout:
 
 ```sh
 cargo build --bins
@@ -36,9 +62,49 @@ After adding the binary directory to PATH, the same commands use `qp` directly.
 On macOS and Linux, the GUI and CLI must share their `XDG_RUNTIME_DIR`
 environment when it is set. Windows uses the per-machine name
 `\\.\pipe\quick-presenter` with a local-only, write-restricted Named Pipe ACL.
-The CLI does not launch the application automatically. It has its own `--help`;
-it does not replace the GUI's existing startup arguments. Installation/package
-integration for `qp` is not included in this initial change.
+`qp open <file>` starts the companion GUI when no control server is running,
+then waits for local control before sending the open request. Other commands
+require a running GUI. It has its own `--help`;
+it does not replace the GUI's existing startup arguments.
+
+## Starting a presentation from the CLI
+
+```sh
+qp open "slides with spaces.pdf" --json
+qp status --json
+```
+
+`open` first tries the running instance. If the endpoint is absent or refuses
+connections, it locates `quick-presenter` / `quick-presenter.exe` beside the
+actual CLI executable and starts it without a PDF argument. This works with
+bundled macOS binaries, Debian symlinks, Windows package aliases, and development
+builds. A standalone CLI copy cannot start a missing companion GUI. The child
+inherits the CLI environment, including `XDG_RUNTIME_DIR`, so both use the same
+endpoint. It keeps running after `qp` exits. GUI diagnostics go to the existing
+application log, never JSON stdout.
+
+Concurrent CLI startup attempts use an OS lock. After a successful status probe,
+`qp` submits the open request once through the ordinary protocol. Startup polling
+has a 15-second deadline; ordinary IPC request deadlines still apply. Startup
+exit or a missing GUI reports `NOT_RUNNING` (exit 3), startup timeout reports
+`TIMEOUT` (exit 9), and launch/permission failures report `IPC_FAILURE` (exit 7).
+An error from a reachable server never triggers startup or automatic command
+replay. If startup times out, the GUI may still finish starting; inspect it before
+retrying. `qp close` closes the document and leaves the GUI running.
+
+## Version information
+
+Version queries work without a running GUI, an IPC endpoint, or PDFium:
+
+```sh
+qp --version
+qp --version --json
+```
+
+JSON contains `application_version` (the CLI build's package version) and
+`protocol_version` (currently `1`). The application version is independent of
+the protocol version; it does not report the running GUI's version. `-V` is an
+alias for `--version`. Use CLI and GUI binaries from the same package.
 
 ## Machine-readable output
 
