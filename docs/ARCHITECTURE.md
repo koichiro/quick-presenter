@@ -168,4 +168,4 @@ state. Watch registration captures an atomic status/sequence baseline on the
 same UI event loop. IPC worker threads deliver frames and invisible heartbeats;
 slow watchers are removed without blocking GUI transitions. `qp watch --json`
 flushes NDJSON events. `qp timer elapsed` only reads the existing timer; no
-external timer start/stop/reset command is exposed in this version.
+state-changing timer command is exposed in this version.

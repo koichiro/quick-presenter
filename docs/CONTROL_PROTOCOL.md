@@ -21,9 +21,9 @@ qp -> local IPC -> bounded requests -> GUI event loop
 `AppState` remains the state owner. The control server never keeps its own deck,
 cursor, timer, or notes. It delivers typed requests and response channels to the
 existing event loop. Queries are snapshots of that state. Timer access is
-read-only: external clients can retrieve elapsed time and observe automatic
-timer changes, but cannot issue timer start, stop, or reset commands. Navigation
-and black screen commands share the GUI's command path; file opens share its asynchronous
+read-only: the sole timer method retrieves elapsed time. Clients can also
+observe automatic timer changes through state snapshots and event notifications.
+Navigation and black screen commands share the GUI's command path; file opens share its asynchronous
 open pipeline. No keyboard, mouse, accessibility, focus, or monitor simulation
 is involved. `qp` does not load PDFium or initialize Slint.
 
@@ -173,7 +173,7 @@ current and next page content. Each content object contains `page`, `text`,
 `truncated`, and `notes`. `next` is null on the last page. Its `presentation`
 object uses the same fields as `status`, including the instance ID, document
 revision, read-only timer snapshot, blackout, and render/notes readiness.
-Reading context does not start, stop, or reset timing. The CLI adds
+Reading context has no effect on timing. The CLI adds
 `protocol_version: 1` to the flattened result as usual.
 
 ```json
@@ -264,11 +264,8 @@ command is `qp timer elapsed`, optionally with `--json`.
 {"protocol_version":1,"id":42,"result":{"kind":"timer_elapsed","session_id":"instance","document_revision":1,"running":true,"elapsed_seconds":183}}
 ```
 
-There are no `presentation.timer.start`, `presentation.timer.stop`, or
-`presentation.timer.reset` methods; those names yield `UNKNOWN_METHOD`.
-Parameters that attempt to change timing yield `INVALID_REQUEST`.
-`qp timer start`, `qp timer stop`, `qp timer reset`, and the short CLI forms
-`qp start`, `qp stop`, and `qp reset` are unavailable.
+Timer access is limited to the elapsed-time query. Its empty parameters reject
+state-changing fields with `INVALID_REQUEST`.
 
 `status`, `context`, and `watch` also expose timer observations only. The GUI's
 existing automatic navigation/open/close timer rules are unchanged; no query

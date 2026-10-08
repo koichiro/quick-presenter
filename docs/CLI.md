@@ -141,9 +141,8 @@ qp timer elapsed --json | jq '.elapsed_seconds'
 Human output is whole elapsed seconds and a newline. JSON includes
 `protocol_version`, `kind: timer_elapsed`, `session_id`, `document_revision`,
 `running`, and `elapsed_seconds`. No open deck yields `NO_PRESENTATION`.
-The query never starts, stops, or resets the timer. `qp timer start`,
-`qp timer stop`, `qp timer reset`, and the short `start/stop/reset` commands
-are intentionally unavailable. Existing GUI navigation still starts the timer
+`qp timer elapsed` is the only timer command and has no state-changing side
+effects. Existing GUI navigation still starts the timer
 when leaving page one and resets it when returning to page one; opening and
 closing a PDF retain their existing reset behavior.
 
