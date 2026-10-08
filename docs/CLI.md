@@ -4,8 +4,8 @@
 Control Protocol. It is intended for automation tools and AI agents, and does
 not implement narration, AI models, or presentation business logic.
 
-This initial implementation supports macOS and Linux development builds.
-Build both binaries from the same checkout:
+This initial implementation supports Windows, macOS, and Linux development
+builds. Build both binaries from the same checkout:
 
 ```sh
 cargo build --bins
@@ -27,7 +27,9 @@ In another terminal:
 ```
 
 After adding the binary directory to PATH, the same commands use `qp` directly.
-The GUI and CLI must share their `XDG_RUNTIME_DIR` environment when it is set.
+On macOS and Linux, the GUI and CLI must share their `XDG_RUNTIME_DIR`
+environment when it is set. Windows uses the per-machine name
+`\\.\pipe\quick-presenter` with a local-only, write-restricted Named Pipe ACL.
 The CLI does not launch the application automatically. It has its own `--help`;
 it does not replace the GUI's existing startup arguments. Installation/package
 integration for `qp` is not included in this initial change.
@@ -76,7 +78,7 @@ and note extraction; an empty note is different from unavailable notes.
 
 Timeouts and disconnections can have an uncertain mutation outcome. Query
 `status` before retrying `next` or `prev`. There is one controllable instance
-per user/runtime directory. Windows, event watching, slide/context extraction,
-and explicit timer control are not implemented in this initial interface.
+per user/runtime directory. Event watching, slide/context extraction, and
+explicit timer control are not implemented in this initial interface.
 See [Control Protocol](CONTROL_PROTOCOL.md) for transport, completion semantics,
 state fields, and compatibility expectations.
