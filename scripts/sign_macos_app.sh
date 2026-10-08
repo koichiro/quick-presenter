@@ -17,6 +17,7 @@ Environment:
                           Store runtime/package gates remain required).
   MACOS_SIGNING_IDENTITY  Developer ID Application identity to use when the
                           IDENTITY argument is omitted.
+  MACOS_STORE_UI_ENTITLEMENTS Optional generated Store UI entitlements file.
 
 Example:
   MACOS_SIGNING_IDENTITY="Developer ID Application: Example (TEAMID)" \
@@ -138,7 +139,7 @@ fi
 
 echo "Signing $app_bundle"
 if [[ "$distribution_mode" == "app-store" ]]; then
-  codesign "${signing_args[@]}" --entitlements packaging/macos/Store-UI.entitlements "$app_bundle"
+  codesign "${signing_args[@]}" --entitlements "${MACOS_STORE_UI_ENTITLEMENTS:-packaging/macos/Store-UI.entitlements}" "$app_bundle"
 else
   codesign "${signing_args[@]}" "$app_bundle"
 fi

@@ -14,6 +14,14 @@
 .env
 .env.*
 
+# Local Apple signing credentials and provisioning artifacts
+*.p8
+*.p12
+*.pfx
+*.key.pem
+*.provisionprofile
+*.mobileprovision
+
 # OS/editor noise
 .DS_Store
 __pycache__/

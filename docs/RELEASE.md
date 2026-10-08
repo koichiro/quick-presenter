@@ -51,6 +51,20 @@ Before publishing a release:
 12. Attach the completed manual GUI smoke reports to the GitHub release, or
     document any platform-specific waiver in the release notes before publishing.
 
+### Mac App Store submissions
+
+For each Mac App Store submission, also complete the separate
+[Mac App Store release checklist](MAC_APP_STORE.md#release-checklist). It covers
+the exact source revision, Store build number, signing profile, sandboxed PDF
+reopening, upload processing, review submission, and Store-installed validation.
+The Store package does not replace the Developer ID DMG or its notarization gate.
+
+Record upload, review submission, approval, and release as separate events. A
+Transporter delivery receipt alone does not mean the app has entered review or
+is available to customers. Preserve the corresponding source and SBOM required
+by [PACKAGING.md](PACKAGING.md#source-code-for-binary-releases) and
+[SBOM.md](SBOM.md#release-gate), including any Store-specific source changes.
+
 ### v1.0.0 distribution and trust policy
 
 The supported v1.0.0 distribution channels are intentionally narrow:

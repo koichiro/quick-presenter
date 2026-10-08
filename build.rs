@@ -21,6 +21,7 @@ fn main() {
 fn build_xpc_bridge() {
     use std::{path::PathBuf, process::Command};
     println!("cargo:rerun-if-changed=src/macos_renderer_xpc.c");
+    println!("cargo:rerun-if-changed=src/macos_file_access.c");
     let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
     let arch = match std::env::var("CARGO_CFG_TARGET_ARCH").unwrap().as_str() {
         "aarch64" => "arm64",
@@ -49,9 +50,26 @@ fn build_xpc_bridge() {
         .unwrap()
         .success());
     assert!(Command::new("xcrun")
+        .args([
+            "clang",
+            "-arch",
+            arch,
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-c",
+            "src/macos_file_access.c",
+            "-o"
+        ])
+        .arg(out.join("file-access.o"))
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("xcrun")
         .args(["libtool", "-static", "-o"])
         .arg(out.join("librenderer_xpc.a"))
         .arg(out.join("renderer-xpc.o"))
+        .arg(out.join("file-access.o"))
         .status()
         .unwrap()
         .success());
