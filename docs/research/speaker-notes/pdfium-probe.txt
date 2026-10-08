@@ -1,0 +1,15 @@
+use pdfium_render::prelude::*;
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let pdfium = Pdfium::new(Pdfium::bind_to_library("pdfium/lib/libpdfium.dylib")?);
+    for path in std::env::args().skip(1) {
+        let document = pdfium.load_pdf_from_file(&path, None)?;
+        println!("{}", std::path::Path::new(&path).file_name().unwrap().to_string_lossy());
+        for (index, page) in document.pages().iter().enumerate() {
+            let text = page.text()?.all();
+            let markers: Vec<_> = ["QP168-NOTE-ALPHA", "QP168-NOTE-BETA"].into_iter().filter(|m| text.contains(m)).collect();
+            let notes: Vec<_> = page.annotations().iter().filter(|a| a.annotation_type() == PdfPageAnnotationType::Text).filter_map(|a| a.contents()).collect();
+            println!("  page {}: visible markers={:?}; text annotation contents={:?}", index + 1, markers, notes);
+        }
+    }
+    Ok(())
+}

@@ -1,0 +1,68 @@
+pdfium-render 0.9.1 public API probe, PDFium 156.0.8076.0, 2026-10-07
+PdfPageText::all() and Text annotation contents().
+
+beamer-annotations.pdf
+  page 1: visible markers=[]; text annotation contents=["QP168-NOTE-ALPHA: Say the opening words."]
+  page 2: visible markers=[]; text annotation contents=["QP168-NOTE-BETA: Say the closing words."]
+  page 3: visible markers=[]; text annotation contents=[]
+beamer-hidden.pdf
+  page 1: visible markers=[]; text annotation contents=[]
+  page 2: visible markers=[]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+beamer-interleaved.pdf
+  page 1: visible markers=[]; text annotation contents=[]
+  page 2: visible markers=["QP168-NOTE-ALPHA"]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+  page 4: visible markers=["QP168-NOTE-BETA"]; text annotation contents=[]
+  page 5: visible markers=[]; text annotation contents=[]
+beamer-only.pdf
+  page 1: visible markers=["QP168-NOTE-ALPHA"]; text annotation contents=[]
+  page 2: visible markers=["QP168-NOTE-BETA"]; text annotation contents=[]
+beamer-second-screen.pdf
+  page 1: visible markers=["QP168-NOTE-ALPHA"]; text annotation contents=[]
+  page 2: visible markers=["QP168-NOTE-BETA"]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+google-slides.pdf
+  page 1: visible markers=[]; text annotation contents=[]
+  page 2: visible markers=[]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+google-with-notes.pdf
+  page 1: visible markers=["QP168-NOTE-ALPHA"]; text annotation contents=[]
+  page 2: visible markers=["QP168-NOTE-BETA"]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+keynote-slides.pdf
+  page 1: visible markers=[]; text annotation contents=[]
+  page 2: visible markers=[]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+keynote-with-notes.pdf
+  page 1: visible markers=["QP168-NOTE-ALPHA"]; text annotation contents=[]
+  page 2: visible markers=["QP168-NOTE-BETA"]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+
+PowerPoint follow-up (2026-10-08), same public-API probe:
+powerpoint-print-notes.pdf
+  page 1: visible markers=["QP168-NOTE-ALPHA"]; text annotation contents=[]
+  page 2: visible markers=["QP168-NOTE-BETA"]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+powerpoint-print-slides.pdf
+  page 1: visible markers=[]; text annotation contents=[]
+  page 2: visible markers=[]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+
+Activated PowerPoint Save As / Export follow-up (2026-10-08):
+powerpoint-save-as-print.pdf
+  page 1: visible markers=[]; text annotation contents=[]
+  page 2: visible markers=[]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+powerpoint-save-as-accessible.pdf
+  page 1: visible markers=[]; text annotation contents=[]
+  page 2: visible markers=[]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+powerpoint-export-print.pdf
+  page 1: visible markers=[]; text annotation contents=[]
+  page 2: visible markers=[]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]
+powerpoint-export-accessible.pdf
+  page 1: visible markers=[]; text annotation contents=[]
+  page 2: visible markers=[]; text annotation contents=[]
+  page 3: visible markers=[]; text annotation contents=[]

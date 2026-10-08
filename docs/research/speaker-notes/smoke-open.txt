@@ -1,0 +1,31 @@
+Existing debug binary smoke-open results (2026-10-07).
+Opens each PDF, renders page 1, and requests notes for every PDF page.
+This verifies successful processing, not the returned note contents.
+
+Smoke open PDF succeeded through renderer helper: title="beamer-annotations.pdf" pages=3 first_page=320x180
+Smoke open PDF succeeded through renderer helper: title="beamer-hidden.pdf" pages=3 first_page=320x180
+Smoke open PDF succeeded through renderer helper: title="beamer-interleaved.pdf" pages=5 first_page=320x180
+Smoke open PDF succeeded through renderer helper: title="beamer-only.pdf" pages=2 first_page=320x180
+Smoke open PDF succeeded through renderer helper: title="beamer-second-screen.pdf" pages=3 first_page=320x90
+Smoke open PDF succeeded through renderer helper: title="google-slides.pdf" pages=3 first_page=320x180
+Smoke open PDF succeeded through renderer helper: title="google-with-notes.pdf" pages=3 first_page=320x427
+Smoke open PDF succeeded through renderer helper: title="keynote-slides.pdf" pages=3 first_page=320x180
+Smoke open PDF succeeded through renderer helper: title="keynote-with-notes.pdf" pages=3 first_page=320x240
+
+PowerPoint follow-up (2026-10-08), existing debug binary:
+Smoke open PDF succeeded through renderer helper: title="powerpoint-print-notes.pdf" pages=3 first_page=320x453
+Smoke open PDF succeeded through renderer helper: title="powerpoint-print-slides.pdf" pages=3 first_page=320x226
+
+Activated PowerPoint Save As / Export follow-up (2026-10-08):
+powerpoint-export-accessible.pdf
+Smoke open PDF succeeded through renderer helper: title="powerpoint-export-accessible.pdf" pages=3 first_page=320x180 helper_pid=58232
+failed to initialize diagnostic log file: failed to secure diagnostic log generation: /Users/koichiro/Library/Logs/Quick Presenter/quick-presenter.log: Operation not permitted (os error 1)
+powerpoint-export-print.pdf
+Smoke open PDF succeeded through renderer helper: title="powerpoint-export-print.pdf" pages=3 first_page=320x180 helper_pid=58235
+failed to initialize diagnostic log file: failed to secure diagnostic log generation: /Users/koichiro/Library/Logs/Quick Presenter/quick-presenter.log: Operation not permitted (os error 1)
+powerpoint-save-as-accessible.pdf
+Smoke open PDF succeeded through renderer helper: title="powerpoint-save-as-accessible.pdf" pages=3 first_page=320x180 helper_pid=58238
+failed to initialize diagnostic log file: failed to secure diagnostic log generation: /Users/koichiro/Library/Logs/Quick Presenter/quick-presenter.log: Operation not permitted (os error 1)
+powerpoint-save-as-print.pdf
+Smoke open PDF succeeded through renderer helper: title="powerpoint-save-as-print.pdf" pages=3 first_page=320x180 helper_pid=58241
+failed to initialize diagnostic log file: failed to secure diagnostic log generation: /Users/koichiro/Library/Logs/Quick Presenter/quick-presenter.log: Operation not permitted (os error 1)

@@ -4,6 +4,10 @@ Quick Presenter accepts PDF files exported by common slide-authoring tools. The
 input preflight currently requires the `%PDF-` header to begin at byte zero.
 This document records representative exports used to validate that policy.
 
+Opening an exported PDF does not imply support for its speaker notes. See
+[speaker-note PDF compatibility research](SPEAKER_NOTE_COMPATIBILITY.md) for
+the separate note-format assessment and its evidence limits.
+
 ## Password-protected and encrypted PDFs
 
 Quick Presenter v1.0.0 does not support password entry. If PDFium identifies a

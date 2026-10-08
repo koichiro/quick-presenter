@@ -1,0 +1,848 @@
+[
+  {
+    "file": "beamer-annotations.pdf",
+    "sha256": "0b492316568037dd0ed92d8edaa692fd82b33163fd5fe29d3101fb8d3440c6a2",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [],
+        "annotations": [
+          {
+            "/Subtype": "/Text",
+            "/Contents": "QP168-NOTE-ALPHA: Say the opening words.",
+            "/Name": "/Note",
+            "/T": "Quick Presenter",
+            "/CA": "0",
+            "/Rect": "[129.114, 133.701, 142.663, 147.251]"
+          }
+        ],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [],
+        "annotations": [
+          {
+            "/Subtype": "/Text",
+            "/Contents": "QP168-NOTE-BETA: Say the closing words.",
+            "/Name": "/Note",
+            "/T": "Quick Presenter",
+            "/CA": "0",
+            "/Rect": "[124.008, 132.903, 137.557, 146.452]"
+          }
+        ],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/Creator": "LaTeX with Beamer class",
+      "/Title": "Speaker-note PDF research",
+      "/Author": "Quick Presenter",
+      "/Producer": "xdvipdfmx (0.1)",
+      "/CreationDate": "D:20261007131828-00'00'"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {}
+  },
+  {
+    "file": "beamer-hidden.pdf",
+    "sha256": "adc945cfa9635ca24b9793116c0cb86b6ce6328988e121c75f4b2606a42e8a51",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/Creator": "LaTeX with Beamer class",
+      "/Title": "Speaker-note PDF research",
+      "/Author": "Quick Presenter",
+      "/Producer": "xdvipdfmx (0.1)",
+      "/CreationDate": "D:20261007131825-00'00'"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {}
+  },
+  {
+    "file": "beamer-interleaved.pdf",
+    "sha256": "5b656a4ec43e11e4f353546877b1cc317b997f5d99598b4991d4b0c7dfe1f263",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-ALPHA"
+        ],
+        "annotations": [
+          {
+            "/Subtype": "/Link",
+            "/Rect": "[28.346, 239.925, 141.851, 254.5]"
+          }
+        ],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 4,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-BETA"
+        ],
+        "annotations": [
+          {
+            "/Subtype": "/Link",
+            "/Rect": "[28.346, 239.925, 141.851, 254.5]"
+          }
+        ],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 5,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/Creator": "LaTeX with Beamer class",
+      "/Title": "Speaker-note PDF research",
+      "/Author": "Quick Presenter",
+      "/Producer": "xdvipdfmx (0.1)",
+      "/CreationDate": "D:20261007131826-00'00'"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {}
+  },
+  {
+    "file": "beamer-only.pdf",
+    "sha256": "fea3ccc628705a5b9d3aaaa831e2618c763200740a1a9098eeaefaccf90fd498",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-ALPHA"
+        ],
+        "annotations": [
+          {
+            "/Subtype": "/Link",
+            "/Rect": "[28.346, 239.925, 141.851, 254.5]"
+          }
+        ],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          453.54,
+          255.12
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-BETA"
+        ],
+        "annotations": [
+          {
+            "/Subtype": "/Link",
+            "/Rect": "[28.346, 239.925, 141.851, 254.5]"
+          }
+        ],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/Creator": "LaTeX with Beamer class",
+      "/Title": "Speaker-note PDF research",
+      "/Author": "Quick Presenter",
+      "/Producer": "xdvipdfmx (0.1)",
+      "/CreationDate": "D:20261007131827-00'00'"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {}
+  },
+  {
+    "file": "beamer-second-screen.pdf",
+    "sha256": "87b017c268d6b1ccd4a3fba90d4cbbfa6fc2a22f2da9d492d6938404c15c1775",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          907.09,
+          255.12
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-ALPHA"
+        ],
+        "annotations": [
+          {
+            "/Subtype": "/Link",
+            "/Rect": "[28.346, 239.925, 141.851, 254.5]"
+          }
+        ],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          907.09,
+          255.12
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-BETA"
+        ],
+        "annotations": [
+          {
+            "/Subtype": "/Link",
+            "/Rect": "[28.346, 239.925, 141.851, 254.5]"
+          }
+        ],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          907.09,
+          255.12
+        ],
+        "visible_note_markers": [],
+        "annotations": [
+          {
+            "/Subtype": "/Link",
+            "/Rect": "[28.346, 239.925, 141.851, 254.5]"
+          }
+        ],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/Creator": "LaTeX with Beamer class",
+      "/Title": "Speaker-note PDF research",
+      "/Author": "Quick Presenter",
+      "/Producer": "xdvipdfmx (0.1)",
+      "/CreationDate": "D:20261007131827-00'00'"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {}
+  },
+  {
+    "file": "google-slides.pdf",
+    "sha256": "5eb31e4f73532648b1e060dcf60706aecfd1b657ae87a2f1a821ea86663c7333",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          720.0,
+          405.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          720.0,
+          405.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          720.0,
+          405.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/Creator": "Google",
+      "/Title": "QP168 speaker-note research"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {}
+  },
+  {
+    "file": "google-with-notes.pdf",
+    "sha256": "e2cb0ae2eedf71e2558e99581ca3c80caf0d5b3cee9108170f967edcfc10b821",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          540.0,
+          720.0
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-ALPHA"
+        ],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          540.0,
+          720.0
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-BETA"
+        ],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          540.0,
+          720.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/Creator": "Google",
+      "/Title": "QP168 speaker-note research"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {}
+  },
+  {
+    "file": "keynote-slides.pdf",
+    "sha256": "3d8509f92faf73f8d20bec5f8ac8fb390d7d443662fbfc6c94eb3d113fc3e9de",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          1920.0,
+          1080.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          1920.0,
+          1080.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          1920.0,
+          1080.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/ModDate": "D:20261007085515Z00'00'",
+      "/Producer": "macOS \u30d0\u30fc\u30b8\u30e7\u30f326.7\uff08\u30d3\u30eb\u30c925G229\uff09 Quartz PDFContext",
+      "/Creator": "Keynote",
+      "/Title": "keynote-slides",
+      "/CreationDate": "D:20261007085515Z00'00'"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {
+      "/Document": 1,
+      "/Figure": 9,
+      "/H": 3,
+      "/P": 6
+    }
+  },
+  {
+    "file": "keynote-with-notes.pdf",
+    "sha256": "96ebdbd9693ae3da6c0a9d05efeac08cd67b073449634f0c14b1e50e513ef092",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          1024.0,
+          768.0
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-ALPHA"
+        ],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          1024.0,
+          768.0
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-BETA"
+        ],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          1024.0,
+          768.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/ModDate": "D:20261007085535Z00'00'",
+      "/Producer": "macOS \u30d0\u30fc\u30b8\u30e7\u30f326.7\uff08\u30d3\u30eb\u30c925G229\uff09 Quartz PDFContext",
+      "/Creator": "Keynote",
+      "/Title": "keynote-with-notes",
+      "/CreationDate": "D:20261007085535Z00'00'"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {
+      "/Document": 1,
+      "/Figure": 9,
+      "/H": 3,
+      "/P": 8
+    }
+  },
+  {
+    "file": "powerpoint-export-accessible.pdf",
+    "sha256": "81008aa716dd8d42cdd3e78a89a01230f05e78e9679bbf915e2c2a6bac6ab9ce",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          720.0,
+          405.36
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          720.0,
+          405.36
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          720.0,
+          405.36
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/CreationDate": "D:20261008014619+00'00'",
+      "/ModDate": "D:20261008014619+00'00'"
+    },
+    "catalog_metadata_stream": true,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {
+      "/H1": 3,
+      "/P": 3,
+      "/Slide": 3,
+      "/Span": 6,
+      "/Textbox": 6
+    }
+  },
+  {
+    "file": "powerpoint-export-print.pdf",
+    "sha256": "f30c46e950deda6bb4e94bf9532ba42e4f627de3fa5de64354c416e5b91ea93e",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          720.0,
+          405.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          720.0,
+          405.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          720.0,
+          405.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/CreationDate": "D:20261008014502Z00'00'",
+      "/Producer": "macOS \u30d0\u30fc\u30b8\u30e7\u30f326.7\uff08\u30d3\u30eb\u30c925G229\uff09 Quartz PDFContext",
+      "/ModDate": "D:20261008014502Z00'00'"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {}
+  },
+  {
+    "file": "powerpoint-print-notes.pdf",
+    "sha256": "eb2506b8cabe90a31fd89575e3ea265f867405f7a0cf3920315d911e2e8a8d0f",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          595.2756,
+          841.8898
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-ALPHA"
+        ],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          595.2756,
+          841.8898
+        ],
+        "visible_note_markers": [
+          "QP168-NOTE-BETA"
+        ],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          595.2756,
+          841.8898
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/ModDate": "D:20261008004340Z00'00'",
+      "/Producer": "macOS \u30d0\u30fc\u30b8\u30e7\u30f326.7\uff08\u30d3\u30eb\u30c925G229\uff09 Quartz PDFContext",
+      "/Author": "Quick Presenter",
+      "/Title": "PowerPoint notes-page research",
+      "/Creator": "PowerPoint",
+      "/CreationDate": "D:20261008004340Z00'00'"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {}
+  },
+  {
+    "file": "powerpoint-print-slides.pdf",
+    "sha256": "ae78c4baef3336d9b3fcd5e5126b9813029a3bd119bce7fcdc9f5347b6bf2056",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          841.8898,
+          595.2756
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          841.8898,
+          595.2756
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          841.8898,
+          595.2756
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/ModDate": "D:20261008004300Z00'00'",
+      "/Producer": "macOS \u30d0\u30fc\u30b8\u30e7\u30f326.7\uff08\u30d3\u30eb\u30c925G229\uff09 Quartz PDFContext",
+      "/Author": "Quick Presenter",
+      "/Title": "PowerPoint slide-only research",
+      "/Creator": "PowerPoint",
+      "/CreationDate": "D:20261008004300Z00'00'"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {}
+  },
+  {
+    "file": "powerpoint-save-as-accessible.pdf",
+    "sha256": "7b01bb69b32bc653206f5309908847147ad7a464a6cebafbf76d7113605405e5",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          720.0,
+          405.36
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          720.0,
+          405.36
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          720.0,
+          405.36
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/CreationDate": "D:20261008014544+00'00'",
+      "/ModDate": "D:20261008014544+00'00'"
+    },
+    "catalog_metadata_stream": true,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {
+      "/H1": 3,
+      "/P": 3,
+      "/Slide": 3,
+      "/Span": 6,
+      "/Textbox": 6
+    }
+  },
+  {
+    "file": "powerpoint-save-as-print.pdf",
+    "sha256": "e8a14704973dc81cb1bc55ae3268198dd79c1abbc93fd06ac129a8f627345764",
+    "pages": [
+      {
+        "page": 1,
+        "size_pt": [
+          720.0,
+          405.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 2,
+        "size_pt": [
+          720.0,
+          405.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      },
+      {
+        "page": 3,
+        "size_pt": [
+          720.0,
+          405.0
+        ],
+        "visible_note_markers": [],
+        "annotations": [],
+        "metadata_stream": false,
+        "associated_files": false
+      }
+    ],
+    "metadata": {
+      "/CreationDate": "D:20261008014334Z00'00'",
+      "/Producer": "macOS \u30d0\u30fc\u30b8\u30e7\u30f326.7\uff08\u30d3\u30eb\u30c925G229\uff09 Quartz PDFContext",
+      "/ModDate": "D:20261008014334Z00'00'"
+    },
+    "catalog_metadata_stream": false,
+    "catalog_associated_files": false,
+    "attachments": [],
+    "structure_tags": {}
+  }
+]

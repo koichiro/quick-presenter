@@ -64,6 +64,12 @@ Future formats can be added by extending the extraction layer, but they should
 still produce the same in-memory `SpeakerNotes` model so the presenter UI does
 not need to know where the notes came from.
 
+See [speaker-note PDF compatibility research](SPEAKER_NOTE_COMPATIBILITY.md)
+for measured PowerPoint PDF saving, export, and print-to-PDF, Keynote, Google
+Slides, and native Beamer exports, provisional assessments of Windows PDF/XPS
+and Impress, and the remaining sample coverage.
+Visible notes-page text is not supported presenter-note metadata.
+
 ## Automatic presenter text size
 
 Speaker notes automatically use the largest whole-pixel font size between
