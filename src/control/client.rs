@@ -13,7 +13,7 @@ pub enum CliRequest {
     Help,
     Run(CliOptions),
 }
-pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json]\n\nCommands:\n  status             Query presentation state\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (relative to the CLI working directory)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n\nLocal control is experimental and currently supports macOS and Linux.\n";
+pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json]\n\nCommands:\n  status             Query presentation state\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (relative to the CLI working directory)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n\nLocal control is experimental and supports Windows, macOS, and Linux.\n";
 
 pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest, ControlError> {
     let mut args: Vec<_> = args.into_iter().collect();
@@ -111,7 +111,24 @@ pub fn send_to(path: &Path, request: &Request) -> Result<Response, ControlError>
         .map_err(ipc_error)?;
     write_frame(&mut stream, request).map_err(ipc_error)?;
     let bytes = read_frame(&mut stream).map_err(ipc_error)?;
-    let response: Response = serde_json::from_slice(&bytes)
+    validate_response(request, &bytes)
+}
+
+#[cfg(windows)]
+pub fn send_to(path: &Path, request: &Request) -> Result<Response, ControlError> {
+    let mut stream = super::transport::windows::connect(path, std::time::Duration::from_secs(1))
+        .map_err(ipc_error)?;
+    stream.set_deadlines(
+        REQUEST_TIMEOUT + std::time::Duration::from_secs(2),
+        std::time::Duration::from_secs(1),
+    );
+    write_frame(&mut stream, request).map_err(ipc_error)?;
+    let bytes = read_frame(&mut stream).map_err(ipc_error)?;
+    validate_response(request, &bytes)
+}
+
+fn validate_response(request: &Request, bytes: &[u8]) -> Result<Response, ControlError> {
+    let response: Response = serde_json::from_slice(bytes)
         .map_err(|_| ControlError::new(ErrorCode::IpcFailure, "Malformed control response."))?;
     if response.protocol_version != PROTOCOL_VERSION {
         return Err(ControlError::new(
@@ -148,11 +165,12 @@ pub fn send_to(path: &Path, request: &Request) -> Result<Response, ControlError>
     }
     Ok(response)
 }
-#[cfg(not(unix))]
+
+#[cfg(not(any(unix, windows)))]
 pub fn send_to(_path: &Path, _request: &Request) -> Result<Response, ControlError> {
     Err(ControlError::new(
         ErrorCode::UnsupportedPlatform,
-        "Local control currently supports macOS and Linux.",
+        "Local control is not implemented for this platform.",
     ))
 }
 pub fn format_reply(reply: &Reply, json: bool) -> Result<String, serde_json::Error> {
