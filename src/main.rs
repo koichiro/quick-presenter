@@ -16,6 +16,8 @@ pub mod gui_smoke;
 pub mod hot_reload;
 pub mod input;
 #[cfg(target_os = "macos")]
+mod macos_file_access;
+#[cfg(target_os = "macos")]
 pub mod macos_renderer;
 #[cfg(target_os = "macos")]
 pub mod macos_window;
@@ -1035,6 +1037,10 @@ fn request_pdf_file_open(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
 #[cfg(not(target_os = "linux"))]
 fn request_pdf_file_open(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
     if let Some(path) = pick_pdf_file() {
+        #[cfg(target_os = "macos")]
+        if let Err(error) = macos_file_access::remember_selected(&path) {
+            warn!(error = ?error, "could not persist selected PDF access");
+        }
         schedule_open_pdf(windows, state, path, "failed to open and render PDF");
     }
 }
@@ -1097,6 +1103,14 @@ pub(crate) fn begin_open_pdf(
                 warn!(error = %error, "could not resolve absolute PDF path");
                 path
             }
+        }
+    };
+    #[cfg(target_os = "macos")]
+    let path = match macos_file_access::restore(path.clone()) {
+        Ok(resolved) => resolved,
+        Err(error) => {
+            warn!(error = ?error, "could not restore PDF access");
+            path
         }
     };
     let title = path
@@ -1350,6 +1364,8 @@ fn record_recent_pdf(
     state: &Rc<RefCell<AppState>>,
     path: PathBuf,
 ) {
+    #[cfg(target_os = "macos")]
+    macos_file_access::committed(&path);
     let snapshot = {
         let mut state = state.borrow_mut();
         state.recent_files.add(path);
@@ -1369,6 +1385,10 @@ fn record_recent_pdf(
 }
 
 fn clear_recent_files(presenter: &Weak<PresenterWindow>, state: &Rc<RefCell<AppState>>) {
+    #[cfg(target_os = "macos")]
+    if let Err(error) = macos_file_access::clear_history() {
+        warn!(error = ?error, "could not clear PDF access history");
+    }
     let snapshot = {
         let mut state = state.borrow_mut();
         state.recent_files.clear();

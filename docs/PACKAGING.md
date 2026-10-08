@@ -124,6 +124,10 @@ is release engineering guidance, not legal advice.
 
 ## Store Submission Checklist
 
+For macOS signing, sandbox validation, and Transporter upload steps, see
+[Mac App Store distribution](MAC_APP_STORE.md). Use its per-submission checklist
+alongside the common [release gates](RELEASE.md#release-validation).
+
 Use the following public URLs and notes when preparing store submissions:
 
 - Privacy policy URL:
