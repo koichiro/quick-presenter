@@ -2049,7 +2049,8 @@ pub(crate) fn drain_render_events(
             RenderEvent::OpenFailed { .. } => drain.open_failed = true,
             RenderEvent::PageFailed { .. } => drain.page_failed = true,
             RenderEvent::WorkerFailed { .. } => drain.worker_failed = true,
-            RenderEvent::Opened { .. }
+            RenderEvent::SlideTextLoaded { .. }
+            | RenderEvent::Opened { .. }
             | RenderEvent::PageRendered { .. }
             | RenderEvent::ReloadPrepared { .. }
             | RenderEvent::ReloadPrepareFailed { .. } => {}
@@ -2061,6 +2062,20 @@ pub(crate) fn drain_render_events(
 
 fn handle_render_event(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, event: RenderEvent) {
     match event {
+        RenderEvent::SlideTextLoaded {
+            session_id,
+            page_index,
+            full,
+            result,
+        } => {
+            control_state::commit_slide_text_mode(
+                &mut state.borrow_mut(),
+                session_id,
+                page_index,
+                full,
+                result,
+            );
+        }
         RenderEvent::Opened {
             session_id,
             title,
