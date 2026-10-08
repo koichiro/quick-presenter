@@ -3,6 +3,11 @@
 The Mac App Store package is a separate channel from the Developer ID DMG.
 Store signing does not replace direct-download signing or notarization.
 
+The Store channel requires macOS 14.4 or later. Its renderer uses the native
+same-team XPC identity API to authenticate Apple-re-signed TestFlight and Store
+code. The package script sets this minimum on the app and its nested helpers;
+the Developer ID channel retains its separate minimum OS policy.
+
 Use this checklist alongside [Release Validation](RELEASE.md#release-validation),
 the [Store Submission Checklist](PACKAGING.md#store-submission-checklist),
 and the [SBOM release gate](SBOM.md#release-gate). Signing/upload preparation is
@@ -25,7 +30,8 @@ still require independent evidence.
    Store distribution profile for the app's explicit Bundle ID and signing
    certificate. Keep credentials and profiles outside Git.
 4. Choose a new `MACOS_STORE_BUILD_NUMBER`. Confirm the marketing version and
-   build number match the App Store Connect version being prepared. Generate
+   build number match the App Store Connect version being prepared. Confirm
+   the Store app and helper minimum OS versions are macOS 14.4. Generate
    the package using the commands below and retain its SHA-256 separately from
    Apple's eventual Store package identity.
 5. Verify the app's nested signatures, installer signature, embedded profile,

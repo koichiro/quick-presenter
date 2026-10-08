@@ -20,7 +20,8 @@ extern void qp_renderer_run(int document_fd);
 static const char *service_name = "org.quickpresenter.renderer";
 static atomic_bool accepted;
 static atomic_bool disconnected;
-static char *expected_peer;
+static const char *proxy_identifier = "app.quickpresenter.renderer-proxy";
+static char signing_team[64];
 static const char *probe_keys[] = {
     "QUICK_PRESENTER_SANDBOX_DENIAL_PROBE",
     "QUICK_PRESENTER_SANDBOX_CONNECT_PROBE",
@@ -32,38 +33,50 @@ static const char *probe_keys[] = {
 #endif
 };
 
-// Fixed peer IDs and our own running code's team, not a requirement copied
-// from a potentially replaced nested executable or supplied over IPC.
-static char *same_team_requirement(const char *identifier) {
-    SecCodeRef self = NULL;
+// Read our own validated signing identity; never trust a peer-supplied team or
+// the identity of a potentially replaced executable at a nested bundle path.
+static bool copy_signing_team(SecCodeRef code, char *team, size_t size) {
     CFDictionaryRef info = NULL;
-    char team[64];
-    char *result = NULL;
-    if (SecCodeCopySelf(kSecCSDefaultFlags, &self) == errSecSuccess &&
-        SecCodeCopySigningInformation(self, kSecCSSigningInformation, &info) == errSecSuccess) {
+    bool valid = false;
+    if (SecCodeCopySigningInformation(code, kSecCSSigningInformation, &info) == errSecSuccess) {
         CFStringRef value = CFDictionaryGetValue(info, kSecCodeInfoTeamIdentifier);
         if (value && CFGetTypeID(value) == CFStringGetTypeID() &&
-            CFStringGetCString(value, team, sizeof(team), kCFStringEncodingUTF8)) {
-            bool valid = strlen(team) > 0;
+            CFStringGetCString(value, team, size, kCFStringEncodingUTF8)) {
+            valid = strlen(team) > 0;
             for (size_t i = 0; team[i]; i++) if (!isalnum((unsigned char)team[i])) valid = false;
-            if (valid) {
-                result = calloc(512, 1);
-                if (result) snprintf(result, 512, "anchor apple generic and identifier \"%s\" and certificate leaf[subject.OU] = \"%s\"", identifier, team);
-            }
         }
     }
     if (info) CFRelease(info);
-    if (self) CFRelease(self);
-    return result;
+    return valid;
 }
 
-// Broker-side preflight for layout-only/ad-hoc bundles. Peer authentication
-// still runs independently in both XPC peers and must never be bypassed.
+static bool load_signing_team(void) {
+    SecCodeRef self = NULL;
+    bool valid = SecCodeCopySelf(kSecCSDefaultFlags, &self) == errSecSuccess &&
+        copy_signing_team(self, signing_team, sizeof(signing_team));
+    if (self) CFRelease(self);
+    return valid;
+}
+
+static int set_peer_identity(xpc_connection_t connection, const char *identifier) {
+    if (__builtin_available(macOS 14.4, *)) {
+        // Handles Apple re-signing for TestFlight and App Store distribution.
+        return xpc_connection_set_peer_team_identity_requirement(connection, identifier);
+    }
+    // Keep the original Developer ID policy on older systems. libXPC checks
+    // this requirement on every message in both directions. Apple re-signing
+    // requires the native same-team API above, so this is not a Store fallback.
+    char requirement[512];
+    snprintf(requirement, sizeof(requirement),
+        "anchor apple generic and identifier \"%s\" and certificate leaf[subject.OU] = \"%s\"",
+        identifier, signing_team);
+    return xpc_connection_set_peer_code_signing_requirement(connection, requirement);
+}
+
+// Broker-side preflight for layout-only/ad-hoc bundles. Both XPC peers still
+// authenticate each other independently before accessing protocol descriptors.
 bool qp_xpc_has_signing_team(void) {
-    char *requirement = same_team_requirement(service_name);
-    if (!requirement) return false;
-    free(requirement);
-    return true;
+    return load_signing_team();
 }
 
 static bool sandbox_entitlements(void) {
@@ -92,7 +105,7 @@ static void accept_peer(xpc_connection_t peer) {
     __block int pending_document = -1;
     __block bool owner = false;
     if (__builtin_available(macOS 12.0, *)) {
-        if (xpc_connection_set_peer_code_signing_requirement(peer, expected_peer)) {
+        if (set_peer_identity(peer, proxy_identifier)) {
             xpc_connection_cancel(peer); return;
         }
     } else { _exit(1); }
@@ -142,22 +155,19 @@ static void accept_peer(xpc_connection_t peer) {
 
 void qp_xpc_service(void) {
     if (!sandbox_entitlements()) { os_log_error(OS_LOG_DEFAULT, "Renderer bootstrap: sandbox entitlements rejected"); _exit(1); }
-    expected_peer = same_team_requirement("app.quickpresenter.renderer-proxy");
-    if (!expected_peer) { os_log_error(OS_LOG_DEFAULT, "Renderer bootstrap: proxy signature rejected"); _exit(1); }
+    if (!load_signing_team()) { os_log_error(OS_LOG_DEFAULT, "Renderer bootstrap: proxy signature rejected"); _exit(1); }
     xpc_main(accept_peer);
 }
 
 int qp_xpc_proxy(void) {
     if (!__builtin_available(macOS 12.0, *)) return 1;
-    char *requirement = same_team_requirement(service_name);
-    if (!requirement) { fprintf(stderr, "XPC bootstrap failed: signed peer unavailable\n"); return 1; }
+    if (!load_signing_team()) { fprintf(stderr, "XPC bootstrap failed: signed peer unavailable\n"); return 1; }
     xpc_connection_t connection = xpc_connection_create(service_name, NULL);
-    if (!connection) { free(requirement); return 1; }
+    if (!connection) return 1;
     int status = 1;
     if (__builtin_available(macOS 12.0, *)) {
-        status = xpc_connection_set_peer_code_signing_requirement(connection, requirement);
+        status = set_peer_identity(connection, service_name);
     }
-    free(requirement);
     if (status) return 1;
     // Kept for this proxy's lifetime; callbacks may arrive after startup timeout.
     dispatch_semaphore_t ready = dispatch_semaphore_create(0);

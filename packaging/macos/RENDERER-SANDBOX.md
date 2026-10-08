@@ -122,6 +122,15 @@ added so native code can inspect the UI/proxy signature. Untrusted/ad-hoc code
 and unbundled release executables fail before PDF parsing; debug-only unbundled
 helpers remain available for the existing protocol regression harness.
 
+On macOS 14.4 and later, both peers use libXPC's native same-team identity
+requirement, which supports Apple re-signing for TestFlight and App Store
+distribution. On older systems, the existing Developer ID requirement checks
+the Apple anchor, fixed identifier, and certificate OU against the running
+code's Team ID. libXPC checks every message under either policy. The certificate
+OU policy does not support Apple re-signing; Store candidates must not declare
+older macOS support without a validated same-team authentication path. Store
+packages therefore declare macOS 14.4 as their minimum supported version.
+
 The service receives an owned, read-only regular-file descriptor, checks its
 size/header, and uses PDFium's owned reader API under the existing process-global
 `OnceLock` owner. The display path is not reopened. The descriptor is consumed
