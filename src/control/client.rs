@@ -11,9 +11,10 @@ pub struct CliOptions {
 }
 pub enum CliRequest {
     Help,
+    Version { json: bool },
     Run(CliOptions),
 }
-pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n\nCommands:\n  status             Query presentation state\n  timer elapsed      Read elapsed seconds (no timer mutation)\n  watch              Stream presentation events (NDJSON with --json)\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (relative to the CLI working directory)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n\nLocal control is experimental and supports Windows, macOS, and Linux.\n";
+pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n       qp --version [--json]\n\nCommands:\n  status             Query presentation state\n  timer elapsed      Read elapsed seconds (no timer mutation)\n  watch              Stream presentation events (NDJSON with --json)\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (relative to the CLI working directory)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n\nLocal control is experimental and supports Windows, macOS, and Linux.\n";
 
 pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest, ControlError> {
     let mut args: Vec<_> = args.into_iter().collect();
@@ -35,6 +36,9 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest
         .first()
         .and_then(|arg| arg.to_str())
         .ok_or_else(invalid)?;
+    if !full && args.len() == 1 && matches!(first, "--version" | "-V") {
+        return Ok(CliRequest::Version { json });
+    }
     if full && !matches!(first, "slide" | "context") {
         return Err(invalid());
     }
@@ -366,6 +370,27 @@ fn receive_watch<R: io::Read>(
         }
     }
 }
+/// CLI build metadata is available without IPC or a running GUI.
+pub fn format_version(json: bool) -> Result<String, serde_json::Error> {
+    #[derive(serde::Serialize)]
+    struct Version {
+        application_version: &'static str,
+        protocol_version: u32,
+    }
+    let version = Version {
+        application_version: env!("CARGO_PKG_VERSION"),
+        protocol_version: PROTOCOL_VERSION,
+    };
+    if json {
+        serde_json::to_string(&version).map(|s| s + "\n")
+    } else {
+        Ok(format!(
+            "qp {} (Control Protocol v{})\n",
+            version.application_version, version.protocol_version
+        ))
+    }
+}
+
 pub fn format_event(envelope: &EventEnvelope, json: bool) -> Result<String, serde_json::Error> {
     if json {
         return serde_json::to_string(envelope).map(|s| s + "\n");
@@ -478,6 +503,31 @@ mod tests {
             CliRequest::Run(options) => options.command,
             _ => panic!("expected command"),
         }
+    }
+    #[test]
+    fn version_is_local_metadata_and_rejects_extra_arguments() {
+        for name in ["--version", "-V"] {
+            assert!(matches!(
+                parse_args([name.into()]).unwrap(),
+                CliRequest::Version { json: false }
+            ));
+            assert!(matches!(
+                parse_args([name.into(), "--json".into()]).unwrap(),
+                CliRequest::Version { json: true }
+            ));
+        }
+        for args in [
+            &["--version", "--full"][..],
+            &["--version", "status"],
+            &["--version", "--version"],
+            &["--version", "--json", "--json"],
+        ] {
+            assert!(parse_args(args.iter().map(OsString::from)).is_err());
+        }
+        let json: serde_json::Value = serde_json::from_str(&format_version(true).unwrap()).unwrap();
+        assert_eq!(json["application_version"], env!("CARGO_PKG_VERSION"));
+        assert_eq!(json["protocol_version"], 1);
+        assert!(format_version(false).unwrap().starts_with("qp "));
     }
     #[test]
     fn elapsed_and_watch_parse_without_exposing_timer_mutation() {

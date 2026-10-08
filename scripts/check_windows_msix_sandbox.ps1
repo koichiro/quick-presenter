@@ -42,6 +42,18 @@ try {
     $package = Get-AppxPackage -Name $packageName
     if (-not $package) { throw 'Test MSIX was not installed' }
     $exe = Join-Path $package.InstallLocation 'quick-presenter.exe'
+    python (Join-Path $PSScriptRoot 'check_qp.py') (Join-Path $package.InstallLocation 'qp.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Installed MSIX CLI validation failed' }
+    # Exercise Windows' registered console alias, not just the unpacked file.
+    $alias = Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps/qp.exe'
+    $version = & $alias --version --json
+    if ($LASTEXITCODE -ne 0) { throw 'MSIX CLI execution alias failed' }
+    $metadata = $version | ConvertFrom-Json
+    $cliMetadata = & (Join-Path $package.InstallLocation 'qp.exe') --version --json | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or $metadata.protocol_version -ne 1 -or
+        $metadata.application_version -ne $cliMetadata.application_version) {
+        throw 'MSIX CLI execution alias returned unexpected version metadata'
+    }
     $manifest = Get-AppxPackageManifest -Package $package.PackageFullName
     $appId = [string]$manifest.Package.Applications.Application.Id
     $python = (Get-Command python.exe).Source

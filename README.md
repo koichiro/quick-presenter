@@ -187,12 +187,11 @@ Packaged app diagnostic logs are documented in
 
 ## Local Automation (Experimental)
 
-Windows, macOS, and Linux development builds include `qp`, a CLI for AI agents
+Windows, macOS, and Linux packages include `qp`, a CLI for AI agents
 and other automation tools to query and control a running Quick Presenter instance:
 
 ```sh
-cargo build --bins
-# With target/debug on PATH and Quick Presenter already running:
+# With qp on PATH and Quick Presenter already running:
 qp status --json
 qp timer elapsed --json
 qp next

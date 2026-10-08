@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 1 || $# -gt 2 ]]; then
-  echo "Usage: $0 DEST [BINARY]" >&2
+if [[ $# -lt 1 || $# -gt 3 ]]; then
+  echo "Usage: $0 DEST [GUI_BINARY] [CLI_BINARY]" >&2
   exit 2
 fi
 
 dest="$1"
 binary="${2:-target/release/quick-presenter}"
+cli_binary="${3:-$(dirname "$binary")/qp}"
 app_name="Quick Presenter.app"
 bundle="$dest/$app_name"
 contents="$bundle/Contents"
@@ -25,6 +26,11 @@ fi
 
 if [[ ! -x "$binary" ]]; then
   echo "Missing executable binary: $binary" >&2
+  exit 1
+fi
+
+if [[ ! -x "$cli_binary" ]]; then
+  echo "Missing CLI executable: $cli_binary" >&2
   exit 1
 fi
 
@@ -63,6 +69,10 @@ mkdir -p "$macos_dir" "$resources_dir" "$license_dir"
 
 cp "$binary" "$macos_dir/quick-presenter"
 chmod 755 "$macos_dir/quick-presenter"
+cp "$cli_binary" "$macos_dir/qp"
+chmod 755 "$macos_dir/qp"
+mkdir -p "$resources_dir/docs"
+cp docs/CLI.md docs/CONTROL_PROTOCOL.md "$resources_dir/docs/"
 
 sed "s/@APP_VERSION@/$version/g" \
   packaging/macos/Info.plist.in > "$contents/Info.plist"
@@ -87,6 +97,7 @@ sed "s/@APP_VERSION@/$version/g" packaging/macos/Renderer-Info.plist.in > "$serv
 if [[ "$(uname -s)" == "Darwin" ]]; then
   find "$contents" -name '*.dylib' -type f -print0 |
     while IFS= read -r -d '' library; do codesign --force --sign - "$library"; done
+  codesign --force --sign - "$macos_dir/qp"
   codesign --force --sign - --entitlements packaging/macos/Renderer.entitlements "$service"
   codesign --force --sign - "$proxy"
   codesign --force --sign - "$bundle"

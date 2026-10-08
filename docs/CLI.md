@@ -4,8 +4,34 @@
 Control Protocol. It is intended for automation tools and AI agents, and does
 not implement narration, AI models, or presentation business logic.
 
-This initial implementation supports Windows, macOS, and Linux development
-builds. Build both binaries from the same checkout:
+## Installation
+
+Release packages include the CLI and its documentation:
+
+| Distribution | CLI location |
+| --- | --- |
+| macOS Developer ID app/DMG | `/Applications/Quick Presenter.app/Contents/MacOS/qp` |
+| Windows Store/MSIX | `qp.exe` app execution alias (enable it in Windows Settings if disabled) |
+| Windows MSI validation package | `qp.exe` beside `quick-presenter.exe` in the installation directory |
+| Linux Debian package | `/usr/bin/qp` |
+| Raw binary artifact | `qp` or `qp.exe` beside the GUI executable |
+
+On macOS, invoke the bundled executable directly, or add a user-local link:
+
+```sh
+"/Applications/Quick Presenter.app/Contents/MacOS/qp" status --json
+mkdir -p "$HOME/.local/bin"
+ln -s "/Applications/Quick Presenter.app/Contents/MacOS/qp" "$HOME/.local/bin/qp"
+# Add $HOME/.local/bin to PATH in your shell configuration.
+```
+
+The MSI does not modify PATH. Invoke its installed `qp.exe` by full path, or
+add its directory to your user PATH. Windows Store remains the supported Windows
+distribution; MSI and direct MSIX packages are validation artifacts.
+The macOS App Store sandbox does not currently expose this control endpoint;
+use the Developer ID distribution for local automation.
+
+For development, build both binaries from the same checkout:
 
 ```sh
 cargo build --bins
@@ -37,8 +63,21 @@ On macOS and Linux, the GUI and CLI must share their `XDG_RUNTIME_DIR`
 environment when it is set. Windows uses the per-machine name
 `\\.\pipe\quick-presenter` with a local-only, write-restricted Named Pipe ACL.
 The CLI does not launch the application automatically. It has its own `--help`;
-it does not replace the GUI's existing startup arguments. Installation/package
-integration for `qp` is not included in this initial change.
+it does not replace the GUI's existing startup arguments.
+
+## Version information
+
+Version queries work without a running GUI, an IPC endpoint, or PDFium:
+
+```sh
+qp --version
+qp --version --json
+```
+
+JSON contains `application_version` (the CLI build's package version) and
+`protocol_version` (currently `1`). The application version is independent of
+the protocol version; it does not report the running GUI's version. `-V` is an
+alias for `--version`. Use CLI and GUI binaries from the same package.
 
 ## Machine-readable output
 

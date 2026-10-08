@@ -5,10 +5,21 @@ Binaries` workflow. The workflow stages bundled PDFium, platform metadata,
 licenses, and installer or app bundle layouts before uploading artifacts.
 
 The GUI application executable is `quick-presenter` on Unix-like platforms and
-`quick-presenter.exe` on Windows. The separate `qp` binary is an experimental
-automation CLI for Windows, macOS, and Linux development builds. It is not yet
-staged by the release package builders; see [CLI](CLI.md). The GUI binary keeps
-its existing executable name.
+`quick-presenter.exe` on Windows. The separate `qp` / `qp.exe` automation CLI
+is included in raw binary artifacts
+and platform packages. macOS places it in `Contents/MacOS/qp`; Windows places it
+beside the GUI and MSIX registers a console app execution alias; Debian installs
+`/usr/lib/quick-presenter/qp` with a `/usr/bin/qp` link. CLI and protocol docs are
+bundled as well. See [CLI installation](CLI.md#installation) for supported
+distributions and PATH setup. The GUI keeps its existing executable name.
+
+Package builders require both binaries from the same build. The macOS builder
+accepts an optional third CLI path, Debian accepts `--cli-binary`, and Windows
+builders accept `-CliBinary`; by default they use the GUI binary's sibling CLI.
+Signing covers both Windows executables and the macOS CLI inside the app bundle.
+`scripts/check_qp.py` checks the staged CLI from an unrelated directory without
+GUI/IPC/PDFium access, including JSON version output and rejection of timer
+mutation commands. Package CI also checks installed/extracted CLI paths.
 
 ## Bundled PDFium
 
@@ -292,7 +303,11 @@ Quick Presenter.app/
     Info.plist
     MacOS/
       quick-presenter
+      qp
     Resources/
+      docs/
+        CLI.md
+        CONTROL_PROTOCOL.md
       QuickPresenter.icns
       pdfium/
         VERSION
@@ -368,7 +383,7 @@ To stage the app bundle locally:
 
 ```sh
 python3 scripts/fetch_pdfium.py --clean
-cargo build --release --bin quick-presenter
+cargo build --release --bins
 scripts/stage_macos_app_bundle.sh /tmp/quick-presenter-macos
 ```
 
@@ -570,6 +585,10 @@ The installed layout is:
 ```text
 Quick Presenter/
   quick-presenter.exe
+  qp.exe
+  docs/
+    CLI.md
+    CONTROL_PROTOCOL.md
   pdfium/
     VERSION
     LICENSE
@@ -587,7 +606,7 @@ To build the MSI locally on Windows:
 
 ```powershell
 python scripts/fetch_pdfium.py --clean
-cargo build --release --bin quick-presenter
+cargo build --release --bins
 dotnet tool install --global wix
 scripts/build_windows_msi.ps1
 ```
@@ -615,7 +634,7 @@ state. Use a real Windows machine for final acceptance.
 Manual verification:
 
 - Download the `quick-presenter-windows-x64` artifact or build locally with
-  `cargo build --release --bin quick-presenter`.
+  `cargo build --release --bins`.
 - Inspect `quick-presenter.exe` in Explorer.
 - Run `scripts/build_windows_msi.ps1` on Windows.
 - Install `artifacts/quick-presenter-windows-x64/QuickPresenter-<version>.msi`.
@@ -722,7 +741,7 @@ To build an MSIX with the current Store identity:
 
 ```powershell
 python scripts/fetch_pdfium.py --clean
-cargo build --release --bin quick-presenter
+cargo build --release --bins
 scripts/build_windows_msix.ps1 -StoreIdentity
 ```
 
@@ -814,7 +833,7 @@ To build the unsigned MSIX locally on Windows:
 
 ```powershell
 python scripts/fetch_pdfium.py --clean
-cargo build --release --bin quick-presenter
+cargo build --release --bins
 scripts/build_windows_msix.ps1
 ```
 
@@ -948,7 +967,7 @@ To build the Debian package locally on Ubuntu:
 
 ```sh
 python3 scripts/fetch_pdfium.py --clean
-cargo build --release --bin quick-presenter
+cargo build --release --bins
 scripts/build_linux_deb.sh
 ```
 

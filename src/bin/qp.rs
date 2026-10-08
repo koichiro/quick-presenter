@@ -23,6 +23,8 @@ fn main() {
 fn run(args: Vec<std::ffi::OsString>) -> Result<(), ControlError> {
     let output = match client::parse_args(args)? {
         CliRequest::Help => client::HELP.into(),
+        CliRequest::Version { json } => client::format_version(json)
+            .map_err(|e| ControlError::new(ErrorCode::IpcFailure, e.to_string()))?,
         CliRequest::Run(options) => {
             let request = Request::new(1, options.command);
             if matches!(request.command, Command::Watch(_)) {
