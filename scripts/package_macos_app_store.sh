@@ -40,11 +40,17 @@ entitlements["com.apple.application-identifier"] = app_id
 entitlements["com.apple.developer.team-identifier"] = team
 entitlements_path.write_bytes(plistlib.dumps(entitlements))
 info["CFBundleVersion"] = os.environ.get("MACOS_STORE_BUILD_NUMBER", info["CFBundleVersion"])
+# Store re-signing requires the native same-team XPC identity API.
+info["LSMinimumSystemVersion"] = "14.4"
 info["NSHumanReadableCopyright"] = "Copyright © 2026 Koichiro Ohba"
 info["LSApplicationCategoryType"] = "public.app-category.productivity"
 info["DTSDKName"] = "macosx" + subprocess.check_output(["xcrun", "--sdk", "macosx", "--show-sdk-version"], text=True).strip()
 info["BuildMachineOSBuild"] = subprocess.check_output(["sw_vers", "-buildVersion"], text=True).strip()
 info_path.write_bytes(plistlib.dumps(info))
+for nested_info_path in (app / "Contents").glob("**/Contents/Info.plist"):
+    nested_info = plistlib.loads(nested_info_path.read_bytes())
+    nested_info["LSMinimumSystemVersion"] = "14.4"
+    nested_info_path.write_bytes(plistlib.dumps(nested_info))
 PY
 
 cp -X "$profile" "$app/Contents/embedded.provisionprofile"
