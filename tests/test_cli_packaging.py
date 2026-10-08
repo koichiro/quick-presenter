@@ -89,6 +89,8 @@ class CliPackagingTests(unittest.TestCase):
               "d": "http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"}
         app = manifest.find("f:Applications/f:Application", ns)
         self.assertEqual(app.attrib["Executable"], "quick-presenter.exe")
+        # MakeAppx requires multi-instance activation for a console alias.
+        self.assertEqual(app.attrib["{" + ns["d"] + "}SupportsMultipleInstances"], "true")
         extension = app.find("f:Extensions/u:Extension", ns)
         self.assertEqual(extension.attrib["Executable"], "qp.exe")
         self.assertEqual(extension.attrib["Category"], "windows.appExecutionAlias")

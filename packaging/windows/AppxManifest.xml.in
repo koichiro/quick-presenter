@@ -33,7 +33,8 @@
     <Application
       Id="QuickPresenter"
       Executable="quick-presenter.exe"
-      EntryPoint="Windows.FullTrustApplication">
+      EntryPoint="Windows.FullTrustApplication"
+      desktop4:SupportsMultipleInstances="true">
       <uap:VisualElements
         DisplayName="Quick Presenter"
         Description="Present PDF slide decks reliably"
