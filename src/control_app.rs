@@ -22,6 +22,13 @@ pub struct ControlRuntime {
 struct Dispatcher {
     receiver: Receiver<PendingRequest>,
     opening: Option<(RenderSessionId, u64, PendingRequest)>,
+    queries: Vec<ContentQuery>,
+}
+struct ContentQuery {
+    revision: u64,
+    page: u32,
+    pending: PendingRequest,
+    retry_at: Instant,
 }
 impl ControlRuntime {
     pub fn install(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> std::io::Result<Self> {
@@ -46,6 +53,7 @@ impl ControlRuntime {
         let mut dispatcher = Dispatcher {
             receiver,
             opening: None,
+            queries: Vec::new(),
         };
         let timer = Timer::default();
         timer.start(TimerMode::Repeated, Duration::from_millis(16), move || {
@@ -74,6 +82,35 @@ impl Dispatcher {
                 }
             }
         }
+        let mut waiting = Vec::new();
+        for mut query in self.queries.drain(..) {
+            if query.pending.is_expired() {
+                reply_error(
+                    &query.pending,
+                    ErrorCode::Timeout,
+                    "Slide text extraction timed out.",
+                );
+                continue;
+            }
+            let state = state.borrow();
+            match content_reply(
+                &state,
+                &query.pending.request.command,
+                query.revision,
+                query.page,
+            ) {
+                Ok(Some(result)) => reply(&query.pending, result),
+                Err(error) => reply_error(&query.pending, error.code, &error.message),
+                Ok(None) => {
+                    if Instant::now() >= query.retry_at {
+                        request_content(&state, &query.pending.request.command, query.page);
+                        query.retry_at = Instant::now() + Duration::from_millis(250);
+                    }
+                    waiting.push(query);
+                }
+            }
+        }
+        self.queries = waiting;
         for _ in 0..8 {
             let Ok(pending) = self.receiver.try_recv() else {
                 break;
@@ -96,6 +133,28 @@ impl Dispatcher {
                     Ok(result) => reply(&pending, result),
                     Err(error) => reply_error(&pending, error.code, &error.message),
                 },
+                Command::Slide(_) | Command::Context(_) => {
+                    let state = state.borrow();
+                    let revision = state.control.document_revision;
+                    let page = state
+                        .presentation
+                        .snapshot()
+                        .map(|p| p.current_number)
+                        .unwrap_or(0);
+                    match content_reply(&state, &command, revision, page) {
+                        Ok(Some(result)) => reply(&pending, result),
+                        Err(error) => reply_error(&pending, error.code, &error.message),
+                        Ok(None) => {
+                            request_content(&state, &command, page);
+                            self.queries.push(ContentQuery {
+                                revision,
+                                page,
+                                pending,
+                                retry_at: Instant::now() + Duration::from_millis(250),
+                            });
+                        }
+                    }
+                }
                 Command::Open(params) => {
                     if self.opening.is_some()
                         || state.borrow().pending_open.is_some()
@@ -167,6 +226,107 @@ impl Dispatcher {
         }
     }
 }
+fn content_pages(state: &AppState, command: &Command, page: u32) -> Vec<u32> {
+    let mut pages = vec![page - 1];
+    if matches!(command, Command::Context(_))
+        && state
+            .presentation
+            .snapshot()
+            .is_some_and(|p| page < p.total_pages)
+    {
+        pages.push(page);
+    }
+    pages
+}
+fn request_content(state: &AppState, command: &Command, page: u32) {
+    if let (Some(scheduler), Some(session)) = (
+        &state.render_scheduler,
+        state.render_sessions.current_session(),
+    ) {
+        for index in content_pages(state, command, page) {
+            if !state
+                .control
+                .text_cache(command.full_text())
+                .contains_key(&index)
+            {
+                scheduler.extract_slide_text(session, index, command.full_text());
+            }
+        }
+    }
+}
+/// Queries wait off the UI thread and only return a consistent owner-state snapshot.
+fn content_reply(
+    state: &AppState,
+    command: &Command,
+    revision: u64,
+    page: u32,
+) -> Result<Option<Reply>, ControlError> {
+    if state.control.document_revision != revision
+        || state
+            .presentation
+            .snapshot()
+            .is_some_and(|p| p.current_number != page)
+    {
+        return Err(ControlError::new(
+            ErrorCode::Cancelled,
+            "Presentation changed during the query; request the context again.",
+        ));
+    }
+    let snapshot = state.presentation.snapshot().ok_or_else(|| {
+        ControlError::new(
+            ErrorCode::NoPresentation,
+            "No presentation is currently open.",
+        )
+    })?;
+    if matches!(command, Command::Context(_)) {
+        notes_reply(state)?;
+    }
+    let mut text = Vec::new();
+    for index in content_pages(state, command, page) {
+        match state.control.text_cache(command.full_text()).get(&index) {
+            Some(Ok(content)) => text.push(content),
+            Some(Err(_)) => {
+                return Err(ControlError::new(
+                    ErrorCode::TextFailed,
+                    "PDF text extraction failed.",
+                ))
+            }
+            None if state.render_scheduler.as_ref().is_some_and(|scheduler| {
+                scheduler.lifecycle() != crate::render_scheduler::RenderWorkerLifecycle::Running
+            }) =>
+            {
+                return Err(ControlError::new(
+                    ErrorCode::TextFailed,
+                    "Renderer is unavailable for PDF text extraction.",
+                ));
+            }
+            None => return Ok(None),
+        }
+    }
+    let current = (*text.remove(0)).clone();
+    if matches!(command, Command::Slide(_)) {
+        return Ok(Some(Reply::Slide {
+            session_id: state.control.session_id.clone(),
+            document_revision: revision,
+            pages: snapshot.total_pages,
+            content: current,
+        }));
+    }
+    let with_notes = |slide: SlideText| SlideContext {
+        notes: state
+            .notes
+            .note_for_page_number(slide.page)
+            .unwrap_or_default()
+            .to_owned(),
+        slide,
+    };
+    Ok(Some(Reply::Context {
+        presentation: control_state::snapshot(state, Instant::now()),
+        current: with_notes(current),
+        next: text.into_iter().next().cloned().map(with_notes),
+    }))
+}
+
 fn open_completion(
     state: &AppState,
     session: RenderSessionId,
@@ -270,6 +430,149 @@ fn notes_reply(state: &AppState) -> Result<Reply, ControlError> {
 mod tests {
     use super::*;
     use crate::{presentation::PresentationState, session_controller::apply_session_command};
+    #[test]
+    fn full_queries_never_reuse_truncated_compact_cache_entries() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 1),
+            ..AppState::default()
+        };
+        state.control.notes_state = NotesState::Ready;
+        state.control.slide_text.insert(
+            0,
+            Ok(SlideText {
+                page: 1,
+                text: vec!["prefix".into()],
+                truncated: true,
+            }),
+        );
+        let command = Command::Context(ContentParams { full: true });
+        assert!(content_reply(&state, &command, 0, 1).unwrap().is_none());
+        let source = "Full source 日本語".repeat(1_000);
+        state.control.full_slide_text.insert(
+            0,
+            Ok(SlideText {
+                page: 1,
+                text: vec![source.clone()],
+                truncated: false,
+            }),
+        );
+        assert!(
+            matches!(content_reply(&state, &command, 0, 1).unwrap(), Some(Reply::Context { current, next: None, .. }) if current.slide.text == [source] && !current.slide.truncated)
+        );
+        assert!(
+            matches!(content_reply(&state, &Command::Slide(ContentParams::default()), 0, 1).unwrap(), Some(Reply::Slide { content, .. }) if content.truncated)
+        );
+    }
+    #[test]
+    fn stopped_workers_fail_missing_text_immediately_but_cached_source_remains_readable() {
+        use crate::render_scheduler::{RenderScheduler, RenderWorkerLifecycle};
+        for lifecycle in [
+            RenderWorkerLifecycle::Failed,
+            RenderWorkerLifecycle::Stopped,
+            RenderWorkerLifecycle::ShutdownRequested,
+        ] {
+            let mut state = AppState {
+                presentation: PresentationState::open_document("Deck", 1),
+                render_scheduler: Some(RenderScheduler::without_worker_with_lifecycle_for_test(
+                    lifecycle,
+                )),
+                ..AppState::default()
+            };
+            state.control.notes_state = NotesState::Ready;
+            for command in [
+                Command::Slide(ContentParams::default()),
+                Command::Context(ContentParams::default()),
+            ] {
+                assert_eq!(
+                    content_reply(&state, &command, 0, 1).unwrap_err().code,
+                    ErrorCode::TextFailed
+                );
+            }
+            state.control.slide_text.insert(
+                0,
+                Ok(SlideText {
+                    page: 1,
+                    text: vec!["Retained source".into()],
+                    truncated: false,
+                }),
+            );
+            assert!(matches!(
+                content_reply(&state, &Command::Slide(ContentParams::default()), 0, 1).unwrap(),
+                Some(Reply::Slide { .. })
+            ));
+        }
+    }
+    #[test]
+    fn context_is_consistent_handles_end_of_deck_and_preserves_source_notes() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 2),
+            ..AppState::default()
+        };
+        state.control.notes_state = NotesState::Ready;
+        let context = Command::Context(ContentParams::default());
+        assert!(content_reply(&state, &context, 0, 1).unwrap().is_none());
+        for page in 1..=2 {
+            state.control.slide_text.insert(
+                page - 1,
+                Ok(SlideText {
+                    page,
+                    text: vec![format!("Slide {page} 日本語")],
+                    truncated: false,
+                }),
+            );
+        }
+        state.notes =
+            crate::notes::SpeakerNotes::from_page_notes([(2, "Original note\n日本語".into())]);
+        match content_reply(&state, &context, 0, 1).unwrap().unwrap() {
+            Reply::Context {
+                presentation,
+                current,
+                next,
+            } => {
+                assert_eq!(presentation.page, Some(1));
+                assert!(current.notes.is_empty());
+                assert_eq!(current.slide.text, ["Slide 1 日本語"]);
+                assert_eq!(next.unwrap().notes, "Original note\n日本語");
+            }
+            _ => panic!("expected context"),
+        }
+        apply_session_command(&mut state, PresentationCommand::NextPage, Instant::now());
+        assert!(matches!(
+            content_reply(&state, &context, 0, 2).unwrap(),
+            Some(Reply::Context { next: None, .. })
+        ));
+        assert_eq!(
+            content_reply(&state, &context, 0, 1).unwrap_err().code,
+            ErrorCode::Cancelled
+        );
+        assert_eq!(
+            content_reply(&state, &context, 1, 2).unwrap_err().code,
+            ErrorCode::Cancelled
+        );
+        state.control.notes_state = NotesState::Loading;
+        assert_eq!(
+            content_reply(&state, &context, 0, 2).unwrap_err().code,
+            ErrorCode::NotesLoading
+        );
+        let slide = Command::Slide(ContentParams::default());
+        assert!(matches!(
+            content_reply(&state, &slide, 0, 2).unwrap(),
+            Some(Reply::Slide { .. })
+        ));
+        state.control.slide_text.insert(1, Err("failure".into()));
+        assert_eq!(
+            content_reply(&state, &slide, 0, 2).unwrap_err().code,
+            ErrorCode::TextFailed
+        );
+        apply_session_command(&mut state, PresentationCommand::Close, Instant::now());
+        assert!(state.control.slide_text.is_empty());
+        assert_eq!(
+            content_reply(&state, &slide, state.control.document_revision, 0)
+                .unwrap_err()
+                .code,
+            ErrorCode::NoPresentation
+        );
+    }
     #[test]
     fn validated_navigation_uses_shared_state_transitions() {
         let mut state = AppState {
