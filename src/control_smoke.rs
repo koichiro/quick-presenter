@@ -94,6 +94,30 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
     call(path, Command::GoTo(PageParams { page: 1 }))?;
     ready(path)?;
     anyhow::ensure!(
+        matches!(call(path, Command::Slide(Empty {}))?, Reply::Slide { content, .. } if content.page == 1 && !content.text.is_empty()),
+        "slide text missing"
+    );
+    let total = match call(path, Command::Context(Empty {}))? {
+        Reply::Context {
+            presentation,
+            current,
+            next,
+        } => {
+            anyhow::ensure!(
+                current.slide.page == 1 && next.as_ref().is_some_and(|s| s.slide.page == 2),
+                "context page mismatch"
+            );
+            presentation.pages
+        }
+        _ => anyhow::bail!("missing context"),
+    };
+    call(path, Command::GoTo(PageParams { page: total }))?;
+    anyhow::ensure!(
+        matches!(call(path, Command::Context(Empty {}))?, Reply::Context { current, next: None, .. } if current.slide.page == total),
+        "end-of-deck context mismatch"
+    );
+    call(path, Command::GoTo(PageParams { page: 1 }))?;
+    anyhow::ensure!(
         matches!(
             call(path, Command::Notes(Empty {}))?,
             Reply::Notes { page: 1, .. }
@@ -143,6 +167,8 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
         "close did not clear the PDF"
     );
     expect_error(path, Command::Notes(Empty {}), ErrorCode::NoPresentation)?;
+    expect_error(path, Command::Slide(Empty {}), ErrorCode::NoPresentation)?;
+    expect_error(path, Command::Context(Empty {}), ErrorCode::NoPresentation)?;
     // Worker shutdown is asynchronous. Retry only the explicitly rejected BUSY open.
     for _ in 0..100 {
         let response = client::send_to(

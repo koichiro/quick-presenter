@@ -6,6 +6,7 @@ use crate::{
     rendering::{RenderRequest, RenderedPagePixels},
 };
 use anyhow::{bail, ensure, Context, Result};
+use quick_presenter::control::protocol::{SlideText, MAX_SLIDE_TEXT_BYTES};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -13,7 +14,7 @@ use std::{
     path::PathBuf,
 };
 
-pub const VERSION: u16 = 2;
+pub const VERSION: u16 = 3;
 pub const MAX_CONTROL_BYTES: usize = 1024 * 1024;
 pub use crate::renderer_limits::{MAX_DIMENSION, MAX_PAGES, MAX_PIXEL_BYTES};
 pub const MAX_PATH_BYTES: usize = 32_768;
@@ -47,6 +48,12 @@ pub enum Message {
     NotesPage {
         page_index: u32,
     },
+    TextPage {
+        page_index: u32,
+    },
+    TextLoaded {
+        content: SlideText,
+    },
     Close {},
     Shutdown {},
     Opened {
@@ -76,6 +83,7 @@ pub enum FailureCode {
     LimitExceeded,
     RenderFailed,
     NotesFailed,
+    TextFailed,
     Internal,
 }
 
@@ -179,7 +187,7 @@ impl Envelope {
         ensure!(global == (self.session_id == 0), "invalid session ID");
         match &self.message {
             Message::Open { path } => path.validate()?,
-            Message::NotesPage { page_index } => {
+            Message::NotesPage { page_index } | Message::TextPage { page_index } => {
                 ensure!(*page_index < MAX_PAGES, "page index exceeds limit")
             }
             Message::Render { page_index, width } => {
@@ -210,6 +218,17 @@ impl Envelope {
                         "document notes exceed limit"
                     );
                 }
+            }
+            Message::TextLoaded { content } => {
+                ensure!((1..=MAX_PAGES).contains(&content.page), "invalid text page");
+                ensure!(
+                    content.text.len() <= MAX_SLIDE_TEXT_BYTES,
+                    "too many text lines"
+                );
+                ensure!(
+                    content.text.iter().map(String::len).sum::<usize>() <= MAX_SLIDE_TEXT_BYTES,
+                    "slide text exceeds limit"
+                );
             }
             Message::Failed { message, .. } => {
                 ensure!(message.len() <= MAX_TEXT_BYTES, "error exceeds limit")
@@ -339,6 +358,7 @@ enum Pending {
     Render(RenderRequest, RenderJobId),
     Notes,
     NotesPage(u32),
+    TextPage(u32),
     Close,
     Shutdown,
 }
@@ -465,6 +485,24 @@ impl Broker {
             Message::NotesPage { page_index },
         )
     }
+    pub fn text_page(&mut self, page_index: u32) -> Result<Frame> {
+        ensure!(
+            self.ready
+                && !self
+                    .pending
+                    .values()
+                    .any(|p| matches!(p, Pending::Close | Pending::Shutdown)),
+            "helper is not ready for text"
+        );
+        ensure!(
+            page_index < self.page_count.context("document not open")?,
+            "page outside document"
+        );
+        self.request(
+            Pending::TextPage(page_index),
+            Message::TextPage { page_index },
+        )
+    }
     fn check_session(&self, session: RenderSessionId) -> Result<()> {
         ensure!(session == self.session, "stale session");
         Ok(())
@@ -506,12 +544,19 @@ impl Broker {
                     "notes outside document"
                 );
             }
+            (Pending::TextPage(index), Message::TextLoaded { content }) => {
+                ensure!(content.page == index + 1, "text for unexpected page")
+            }
             (Pending::NotesPage(index), Message::NotesLoaded { pages }) => ensure!(
                 pages.iter().all(|p| p.page_number == index + 1),
                 "notes for unexpected page"
             ),
             (
-                Pending::Open | Pending::Render(_, _) | Pending::Notes | Pending::NotesPage(_),
+                Pending::Open
+                | Pending::Render(_, _)
+                | Pending::Notes
+                | Pending::NotesPage(_)
+                | Pending::TextPage(_),
                 Message::Failed { .. },
             ) => {}
             _ => bail!("unexpected response kind"),
@@ -568,6 +613,20 @@ impl Broker {
                         pages.iter().map(|n| (n.page_number, n.text.clone())),
                     ),
                     status_text: "Ready".into(),
+                })
+            }
+            (Pending::TextPage(index), Message::TextLoaded { content }) => {
+                Some(RenderEvent::SlideTextLoaded {
+                    session_id: self.session,
+                    page_index: *index,
+                    result: Ok(content.clone()),
+                })
+            }
+            (Pending::TextPage(index), Message::Failed { message, .. }) => {
+                Some(RenderEvent::SlideTextLoaded {
+                    session_id: self.session,
+                    page_index: *index,
+                    result: Err(message.clone()),
                 })
             }
             (Pending::Open, Message::Failed { message, .. }) => Some(RenderEvent::OpenFailed {
@@ -645,6 +704,47 @@ mod tests {
             },
             pixels: Vec::new(),
         }
+    }
+    #[test]
+    fn broker_rejects_uncorrelated_and_oversized_text_before_accepting() {
+        let mut broker = opened_broker();
+        let request = broker.text_page(0).unwrap();
+        let content = SlideText {
+            page: 1,
+            text: vec!["Source 日本語".into()],
+            truncated: false,
+        };
+        let good = response(
+            &request,
+            Message::TextLoaded {
+                content: content.clone(),
+            },
+        );
+        let mut wrong = good.clone();
+        wrong.envelope.session_id += 1;
+        assert!(broker.accept(wrong).is_err());
+        let mut wrong_page = content.clone();
+        wrong_page.page = 2;
+        assert!(broker
+            .accept(response(
+                &request,
+                Message::TextLoaded {
+                    content: wrong_page
+                }
+            ))
+            .is_err());
+        let huge = SlideText {
+            text: vec!["x".repeat(MAX_SLIDE_TEXT_BYTES + 1)],
+            ..content
+        };
+        assert!(broker
+            .accept(response(&request, Message::TextLoaded { content: huge }))
+            .is_err());
+        assert!(matches!(
+            broker.accept(good.clone()).unwrap(),
+            Some(RenderEvent::SlideTextLoaded { result: Ok(_), .. })
+        ));
+        assert!(broker.accept(good).is_err());
     }
     fn opened_broker() -> Broker {
         let mut broker = Broker::new(RenderSessionId(9)).unwrap();

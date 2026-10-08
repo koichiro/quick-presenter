@@ -42,6 +42,10 @@ pub enum Command {
     Blackout(BlackoutParams),
     #[serde(rename = "presentation.notes")]
     Notes(Empty),
+    #[serde(rename = "presentation.slide")]
+    Slide(Empty),
+    #[serde(rename = "presentation.context")]
+    Context(Empty),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -80,6 +84,18 @@ pub enum Outcome {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Reply {
     Status(Status),
+    Slide {
+        session_id: String,
+        document_revision: u64,
+        pages: u32,
+        #[serde(flatten)]
+        content: SlideText,
+    },
+    Context {
+        presentation: Status,
+        current: SlideContext,
+        next: Option<SlideContext>,
+    },
     Mutation {
         changed: bool,
         state: Status,
@@ -135,6 +151,7 @@ pub enum ErrorCode {
     OpenFailed,
     NotesLoading,
     NotesFailed,
+    TextFailed,
     Cancelled,
     UnsupportedPlatform,
 }
@@ -149,10 +166,25 @@ impl ErrorCode {
             Self::IpcFailure | Self::UnsupportedPlatform => 7,
             Self::Busy | Self::NotesLoading => 8,
             Self::Timeout => 9,
-            Self::OpenFailed | Self::NotesFailed | Self::Cancelled => 10,
+            Self::OpenFailed | Self::NotesFailed | Self::TextFailed | Self::Cancelled => 10,
         }
     }
 }
+/// PDF source text in PDFium order. Truncation is explicit; no OCR or generated content.
+pub const MAX_SLIDE_TEXT_BYTES: usize = 4 * 1024;
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SlideText {
+    pub page: u32,
+    pub text: Vec<String>,
+    pub truncated: bool,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SlideContext {
+    #[serde(flatten)]
+    pub slide: SlideText,
+    pub notes: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Status {
     pub session_id: String,
@@ -221,6 +253,8 @@ pub fn decode_request(bytes: &[u8]) -> Result<Request, Response> {
             | "presentation.close"
             | "presentation.blackout"
             | "presentation.notes"
+            | "presentation.slide"
+            | "presentation.context"
     ) {
         return Err(Response::error(
             Some(header.id),
@@ -294,6 +328,54 @@ pub fn write_frame(writer: &mut impl Write, value: &impl Serialize) -> io::Resul
 mod tests {
     use super::*;
     #[test]
+    fn context_roundtrip_and_worst_case_escaped_text_fit_frame_budget() {
+        let slide = SlideText {
+            page: 1,
+            text: vec!["\u{1}".repeat(MAX_SLIDE_TEXT_BYTES)],
+            truncated: true,
+        };
+        let current = SlideContext {
+            slide,
+            notes: "\u{1}".repeat(64 * 1024),
+        };
+        let next = SlideContext {
+            slide: SlideText {
+                page: 2,
+                ..current.slide.clone()
+            },
+            notes: current.notes.clone(),
+        };
+        let presentation = Status {
+            session_id: "session".into(),
+            document_revision: 1,
+            document: Some("\u{1}".repeat(32768)),
+            page: Some(1),
+            pages: 2,
+            fullscreen: false,
+            blackout: false,
+            timer: TimerStatus {
+                running: true,
+                elapsed_seconds: 12,
+            },
+            opening: false,
+            render_state: RenderState::Ready,
+            notes_state: NotesState::Ready,
+        };
+        let response = Response::success(
+            42,
+            Reply::Context {
+                presentation,
+                current,
+                next: Some(next),
+            },
+        );
+        let mut frame = Vec::new();
+        write_frame(&mut frame, &response).unwrap();
+        let decoded: Response =
+            serde_json::from_slice(&read_frame(&mut frame.as_slice()).unwrap()).unwrap();
+        assert_eq!(decoded, response);
+    }
+    #[test]
     fn commands_roundtrip() {
         let absolute_pdf = std::env::current_dir()
             .unwrap()
@@ -309,6 +391,8 @@ mod tests {
             Command::Close(Empty {}),
             Command::Blackout(BlackoutParams { value: true }),
             Command::Notes(Empty {}),
+            Command::Slide(Empty {}),
+            Command::Context(Empty {}),
         ] {
             let request = Request::new(42, command);
             let mut bytes = Vec::new();

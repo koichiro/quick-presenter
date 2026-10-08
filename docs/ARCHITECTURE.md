@@ -133,3 +133,19 @@ must be opened and have their current page rendered in a separate candidate
 helper before they can replace the last good document. The watcher boundary,
 debounce and retry policy, worker transaction, cache invalidation, and platform
 verification plan are defined in [PDF Hot Reload](PDF_HOT_RELOAD.md).
+
+### On-demand presentation source queries
+
+The local control adapter requests current/next page source text through
+`RenderCommand::ExtractSlideText`. The scheduler places this work at background
+priority, deduplicates pending page requests, and sends it to the existing
+isolated PDFium helper. Private renderer IPC v3 adds bounded, correlated text
+request/reply types; public Presentation Control Protocol remains v1.
+
+The helper extracts PDF text without OCR. The GUI owner caches at most 32 small
+source results, keyed by page within the committed renderer session. Open,
+reload, and close invalidate the cache; stale results are rejected. Pending
+control queries record the page and document revision, and return a typed
+cancellation if those change. The adapter assembles current/next text, existing
+`SpeakerNotes`, and presentation state on the event loop without blocking it.
+`qp` only parses requests and formats responses.

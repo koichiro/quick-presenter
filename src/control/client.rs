@@ -13,7 +13,7 @@ pub enum CliRequest {
     Help,
     Run(CliOptions),
 }
-pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json]\n\nCommands:\n  status             Query presentation state\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (relative to the CLI working directory)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n\nLocal control is experimental and supports Windows, macOS, and Linux.\n";
+pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json]\n\nCommands:\n  status             Query presentation state\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (relative to the CLI working directory)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text\n  context            Read current and next page text and notes\n\nLocal control is experimental and supports Windows, macOS, and Linux.\n";
 
 pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest, ControlError> {
     let mut args: Vec<_> = args.into_iter().collect();
@@ -36,6 +36,8 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest
         ("prev", 1) => Command::Previous(Empty {}),
         ("close", 1) => Command::Close(Empty {}),
         ("notes", 1) => Command::Notes(Empty {}),
+        ("slide", 1) => Command::Slide(Empty {}),
+        ("context", 1) => Command::Context(Empty {}),
         ("goto", 2) => {
             let page = args[1]
                 .to_str()
@@ -146,6 +148,8 @@ fn validate_response(request: &Request, bytes: &[u8]) -> Result<Response, Contro
         (_, Outcome::Error(_)) => true,
         (Command::Status(_), Outcome::Result(Reply::Status(_))) => true,
         (Command::Notes(_), Outcome::Result(Reply::Notes { .. })) => true,
+        (Command::Slide(_), Outcome::Result(Reply::Slide { .. })) => true,
+        (Command::Context(_), Outcome::Result(Reply::Context { .. })) => true,
         (
             Command::Next(_)
             | Command::Previous(_)
@@ -205,6 +209,44 @@ pub fn format_reply(reply: &Reply, json: bool) -> Result<String, serde_json::Err
             state.blackout
         ),
         Reply::Notes { notes, .. } => format!("{notes}\n"),
+        Reply::Slide { content, pages, .. } => format!(
+            "Page: {} / {}{}\n{}\n",
+            content.page,
+            pages,
+            if content.truncated {
+                " (text truncated)"
+            } else {
+                ""
+            },
+            content.text.join("\n")
+        ),
+        Reply::Context {
+            presentation,
+            current,
+            next,
+        } => {
+            let describe = |s: &SlideContext| {
+                format!(
+                    "Page: {}{}\n{}\nNotes:\n{}\n",
+                    s.slide.page,
+                    if s.slide.truncated {
+                        " (text truncated)"
+                    } else {
+                        ""
+                    },
+                    s.slide.text.join("\n"),
+                    s.notes
+                )
+            };
+            format!(
+                "{}\nCurrent:\n{}Next:\n{}",
+                presentation.document.as_deref().unwrap_or_default(),
+                describe(current),
+                next.as_ref()
+                    .map(describe)
+                    .unwrap_or_else(|| "End of presentation\n".into())
+            )
+        }
     })
 }
 
@@ -218,6 +260,36 @@ mod tests {
         }
     }
     #[test]
+    fn context_output_and_response_validation_preserve_the_contract() {
+        let reply = Reply::Slide {
+            session_id: "test".into(),
+            document_revision: 2,
+            pages: 3,
+            content: SlideText {
+                page: 2,
+                text: vec!["Original 日本語".into()],
+                truncated: false,
+            },
+        };
+        let response = Response::success(1, reply.clone());
+        let bytes = serde_json::to_vec(&response).unwrap();
+        assert!(validate_response(&Request::new(1, Command::Slide(Empty {})), &bytes).is_ok());
+        assert_eq!(
+            validate_response(&Request::new(1, Command::Context(Empty {})), &bytes)
+                .unwrap_err()
+                .code,
+            ErrorCode::IpcFailure
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&format_reply(&reply, true).unwrap()).unwrap();
+        assert_eq!(json["text"][0], "Original 日本語");
+        assert_eq!(json["truncated"], false);
+        assert_eq!(json["page"], 2);
+        assert!(format_reply(&reply, false)
+            .unwrap()
+            .contains("Original 日本語"));
+    }
+    #[test]
     fn parses_supported_commands() {
         assert_eq!(parse(&["status", "--json"]), Command::Status(Empty {}));
         assert_eq!(parse(&["goto", "5"]), Command::GoTo(PageParams { page: 5 }));
@@ -229,7 +301,7 @@ mod tests {
             parse(&["blackout", "off"]),
             Command::Blackout(BlackoutParams { value: false })
         );
-        for name in ["next", "prev", "close", "notes"] {
+        for name in ["next", "prev", "close", "notes", "slide", "context"] {
             parse(&[name, "--json"]);
         }
         assert!(
@@ -243,7 +315,7 @@ mod tests {
             &["goto", "-1"],
             &["blackout", "toggle"],
             &["status", "extra"],
-            &["context", "--json"],
+            &["watch", "--json"],
             &["status", "--json", "--json"],
             &[],
         ] {
