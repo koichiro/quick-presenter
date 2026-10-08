@@ -227,6 +227,24 @@ scripts/coverage.sh
 Detailed packaging, release, keyboard, and speaker-note behavior is documented
 under [docs/](docs/).
 
+Source statistics require Python 3 and `cloc` (`brew install cloc` on macOS):
+
+```sh
+python3 scripts/stats.py                  # Current working tree
+python3 scripts/stats.py --ref origin/main # Locally fetched main revision
+```
+
+The report separates application implementation, tests, build/tools, and website
+code. Code lines exclude comments and blank lines. Rust items marked with
+`#[cfg(test)]` or a compound predicate requiring `test` (such as
+`#[cfg(all(test, unix))]`) are counted as tests, including inline test modules and
+test-only helpers. Predicates such as `#[cfg(any(test, unix))]` remain implementation
+code. All supported platforms are counted, regardless of the host.
+The `tests/` category includes fixture-generation code. Vendor code, documents,
+configuration files, and binary assets are excluded. File counts overlap when a
+Rust file contains both implementation and tests. This is a source-level
+classification, not a macro-expanding Rust compiler analysis.
+
 ## Releases
 
 Quick Presenter is an OSS project focused on reliable PDF presentation
