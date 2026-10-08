@@ -30,7 +30,7 @@ mod unix {
     use std::sync::mpsc;
     use std::{
         fs::{self, File, OpenOptions},
-        io::{self, Read},
+        io::{self, Read, Write},
         os::{
             fd::AsRawFd,
             unix::{
@@ -190,11 +190,33 @@ mod unix {
             self.stream.read(bytes)
         }
     }
+    struct DeadlineWriter<'a> {
+        stream: &'a mut UnixStream,
+        deadline: Instant,
+    }
+    impl Write for DeadlineWriter<'_> {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            let remaining = self
+                .deadline
+                .checked_duration_since(Instant::now())
+                .filter(|d| !d.is_zero())
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::TimedOut, "Control response timed out")
+                })?;
+            self.stream.set_write_timeout(Some(remaining))?;
+            self.stream.write(bytes)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            self.stream.flush()
+        }
+    }
     fn serve(
         mut stream: UnixStream,
         sender: SyncSender<PendingRequest>,
         stop: Arc<AtomicBool>,
     ) -> io::Result<()> {
+        // Accepted sockets inherit O_NONBLOCK on macOS. Use blocking I/O with deadlines.
+        stream.set_nonblocking(false)?;
         stream.set_write_timeout(Some(IO_TIMEOUT))?;
         // One request per connection. Further clients can reuse the protocol through new connections.
         let bytes = protocol::read_frame(&mut DeadlineReader {
@@ -238,7 +260,15 @@ mod unix {
                 );
             }
             match receiver.recv_timeout(Duration::from_millis(50)) {
-                Ok(response) => return protocol::write_frame(&mut stream, &response),
+                Ok(response) => {
+                    return protocol::write_response(
+                        &mut DeadlineWriter {
+                            stream: &mut stream,
+                            deadline,
+                        },
+                        &response,
+                    )
+                }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     return protocol::write_frame(
@@ -402,7 +432,11 @@ mod windows {
                 );
             }
             match receiver.recv_timeout(Duration::from_millis(50)) {
-                Ok(response) => return protocol::write_frame(&mut stream, &response),
+                Ok(response) => {
+                    let remaining = deadline.saturating_duration_since(Instant::now());
+                    stream.set_deadlines(remaining, remaining);
+                    return protocol::write_response(&mut stream, &response);
+                }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => {
                     return protocol::write_frame(

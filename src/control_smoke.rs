@@ -94,10 +94,10 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
     call(path, Command::GoTo(PageParams { page: 1 }))?;
     ready(path)?;
     anyhow::ensure!(
-        matches!(call(path, Command::Slide(Empty {}))?, Reply::Slide { content, .. } if content.page == 1 && !content.text.is_empty()),
+        matches!(call(path, Command::Slide(ContentParams::default()))?, Reply::Slide { content, .. } if content.page == 1 && !content.text.is_empty()),
         "slide text missing"
     );
-    let total = match call(path, Command::Context(Empty {}))? {
+    let total = match call(path, Command::Context(ContentParams::default()))? {
         Reply::Context {
             presentation,
             current,
@@ -111,9 +111,17 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
         }
         _ => anyhow::bail!("missing context"),
     };
+    anyhow::ensure!(
+        matches!(call(path, Command::Slide(ContentParams { full: true }))?, Reply::Slide { content, .. } if content.page == 1 && !content.truncated),
+        "full slide unavailable"
+    );
+    anyhow::ensure!(
+        matches!(call(path, Command::Context(ContentParams { full: true }))?, Reply::Context { current, next: Some(next), .. } if !current.slide.truncated && !next.slide.truncated),
+        "full context unavailable"
+    );
     call(path, Command::GoTo(PageParams { page: total }))?;
     anyhow::ensure!(
-        matches!(call(path, Command::Context(Empty {}))?, Reply::Context { current, next: None, .. } if current.slide.page == total),
+        matches!(call(path, Command::Context(ContentParams::default()))?, Reply::Context { current, next: None, .. } if current.slide.page == total),
         "end-of-deck context mismatch"
     );
     call(path, Command::GoTo(PageParams { page: 1 }))?;
@@ -167,8 +175,16 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
         "close did not clear the PDF"
     );
     expect_error(path, Command::Notes(Empty {}), ErrorCode::NoPresentation)?;
-    expect_error(path, Command::Slide(Empty {}), ErrorCode::NoPresentation)?;
-    expect_error(path, Command::Context(Empty {}), ErrorCode::NoPresentation)?;
+    expect_error(
+        path,
+        Command::Slide(ContentParams::default()),
+        ErrorCode::NoPresentation,
+    )?;
+    expect_error(
+        path,
+        Command::Context(ContentParams::default()),
+        ErrorCode::NoPresentation,
+    )?;
     // Worker shutdown is asynchronous. Retry only the explicitly rejected BUSY open.
     for _ in 0..100 {
         let response = client::send_to(

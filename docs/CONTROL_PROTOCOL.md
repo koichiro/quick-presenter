@@ -51,9 +51,10 @@ Additional GUI instances still work, but do not acquire that control endpoint.
 Control initialization failure is logged and does not prevent GUI playback.
 There is no TCP listener.
 
-Each connection carries one request and one response. Frames are a four-byte,
+Each connection carries one request and one logical response. Frames are a four-byte,
 big-endian, nonzero JSON byte length followed by exactly that many UTF-8 bytes.
-The maximum JSON frame is 1 MiB in each direction. Invalid framing closes the
+The maximum JSON frame is 1 MiB in each direction. Large full-text responses
+use bounded transfer frames as described below. Invalid framing closes the
 connection. JSON/envelope errors receive typed errors where framing permits.
 
 There are at most eight active clients and eight queued requests. Request
@@ -102,8 +103,8 @@ release; clients should tolerate additive result fields.
 | `presentation.close` | `{}` | Mutation with empty presentation state |
 | `presentation.blackout` | `{"value":true}` | Mutation with resulting state |
 | `presentation.notes` | `{}` | `kind: notes`, session ID, revision, page, notes |
-| `presentation.slide` | `{}` | `kind: slide`, session ID, revision, pages, page text |
-| `presentation.context` | `{}` | `kind: context`, presentation state, current and next page text/notes |
+| `presentation.slide` | `{}` or `{"full":true}` | `kind: slide`, session ID, revision, pages, page text |
+| `presentation.context` | `{}` or `{"full":true}` | `kind: context`, presentation state, current and next page text/notes |
 
 Pages are one-based. `goto` outside `1..=pages` fails without changing state.
 `next` at the last page and `previous` at the first page succeed with
@@ -169,8 +170,8 @@ revision, timer, blackout, and render/notes readiness. The CLI adds
 
 Text extraction runs on demand inside the existing isolated PDFium helper,
 through the bounded render scheduler at background priority. It never opens
-PDFium in the UI or CLI. Only queried pages are extracted; at most 32 page
-results are cached. Committed open/reload and close clear that source cache,
+PDFium in the UI or CLI. Only queried pages are extracted; at most 32 compact page
+results and two full page results are cached separately. Committed open/reload and close clear that source cache,
 and results from old renderer sessions are ignored. Existing note extraction
 and its `SpeakerNotes` model supply both pages' notes.
 
@@ -182,7 +183,11 @@ AI summaries, or narration are generated.
 
 Each page's text is bounded to a UTF-8-safe 4 KiB prefix, with `truncated: true`
 when shortened. This leaves room for both pages' existing speaker notes and
-worst-case JSON escaping within the 1 MiB control frame. Pages exceeding one
+worst-case JSON escaping within the 1 MiB control frame for ordinary queries.
+With `params: {"full":true}`, both methods return unabridged source text and
+`truncated: false`. Full text never silently falls back to a compact prefix.
+Each full page has a 4 MiB UTF-8 safety limit; exceeding it returns `TEXT_FAILED`.
+Pages exceeding one
 million PDFium text characters are rejected before bulk string allocation.
 Native operations retain the helper's five-second watchdog. Extraction failure
 returns `TEXT_FAILED` (cached until the next committed open/reload). If the
@@ -201,6 +206,36 @@ the query returns `CANCELLED`; request it again. A timeout yields `TIMEOUT`.
 Successful context fields are assembled together from the owner state, so they
 never mix documents or current/next page numbers. As with status, this describes
 the logical presentation, not a compositor-frame acknowledgement.
+
+### Full-text response transfers
+
+The `full` parameter defaults to false, so existing `{}` requests keep the
+single-frame compact contract. A full response that fits in 1 MiB also uses
+one ordinary response frame. Larger responses are serialized once from the
+typed, consistent owner-state result and split into transport-only replies:
+
+```json
+{"protocol_version":1,"id":42,"result":{"kind":"transfer","chunk":{"sequence":0,"total_bytes":1500000,"data":[123,34,112,114]}}}
+```
+
+The example omits most payload bytes. `data` contains bytes of the original
+serialized response, not application state or an independently interpreted JSON
+object. Sequences start at zero and increase by one. Each chunk carries at most
+64 KiB of data, the same ID/version, and the same `total_bytes`. Every outer
+frame is independently valid JSON and remains under the 1 MiB frame limit.
+UTF-8 code points can cross byte-chunk boundaries; decode only after reassembly.
+
+The aggregate response is bounded to 32 MiB. Clients must reject invalid totals,
+empty/oversized chunks, wrong IDs/versions, duplicate or missing sequences, and
+incomplete transfers. After collecting exactly `total_bytes`, decode and validate
+the original typed response. Transfer frames are accepted only for requests
+with `full: true`. `qp` implements reassembly in its protocol client and prints
+only the final single JSON object; no fragments or partial output reach stdout.
+
+The existing 30-second server response deadline also bounds the whole transfer.
+Private renderer IPC v4 uses corresponding typed, correlated transfer envelopes
+for large helper text results. It does not raise the per-frame control limit or
+change pixel framing. The GUI still never extracts PDF text itself.
 
 ## Errors and current limits
 

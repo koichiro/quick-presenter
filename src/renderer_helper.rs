@@ -320,8 +320,9 @@ impl HelperClient {
     pub fn text_page(
         &mut self,
         index: u32,
+        full: bool,
     ) -> Result<quick_presenter::control::protocol::SlideText> {
-        let frame = self.broker.text_page(index)?;
+        let frame = self.broker.text_page(index, full)?;
         match self.exchange(frame, Operation::Text)? {
             Some(RenderEvent::SlideTextLoaded { result, .. }) => {
                 result.map_err(|message| anyhow::anyhow!(message))
@@ -483,10 +484,14 @@ impl RemoteDocument {
         }
         result
     }
-    pub fn text_page(&self, index: u32) -> Result<quick_presenter::control::protocol::SlideText> {
-        let result = self.client.borrow_mut().text_page(index);
+    pub fn text_page(
+        &self,
+        index: u32,
+        full: bool,
+    ) -> Result<quick_presenter::control::protocol::SlideText> {
+        let result = self.client.borrow_mut().text_page(index, full);
         if result.is_err() && self.recover() {
-            return self.client.borrow_mut().text_page(index);
+            return self.client.borrow_mut().text_page(index, full);
         }
         result
     }
@@ -850,10 +855,10 @@ pub(crate) fn run_with_input(mut input: Option<std::fs::File>) -> Result<()> {
                     Err(error) => failure(FailureCode::RenderFailed, &error.to_string()),
                 }
             }
-            Message::TextPage { page_index } => {
+            Message::TextPage { page_index, full } => {
                 ensure!(session == Some(session_id), "wrong document session");
                 let doc = document.as_ref().context("document not open")?;
-                match doc.slide_text(page_index) {
+                match doc.slide_text(page_index, full) {
                     Ok(content) => Message::TextLoaded { content },
                     Err(error) => failure(FailureCode::TextFailed, &error.to_string()),
                 }

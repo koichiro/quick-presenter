@@ -117,6 +117,7 @@ impl PdfDocumentState {
     pub fn slide_text(
         &self,
         page_index: u32,
+        full: bool,
     ) -> Result<quick_presenter::control::protocol::SlideText> {
         anyhow::ensure!(page_index < self.page_count, "page outside document");
         let page = self.document.pages().get(page_index as i32)?;
@@ -126,7 +127,20 @@ impl PdfDocumentState {
             (0..=1_000_000).contains(&text.len()),
             "page text character count exceeds limit"
         );
-        Ok(bounded_slide_text(page_index + 1, text.all()))
+        let source = text.all();
+        if full {
+            anyhow::ensure!(
+                source.len() <= quick_presenter::control::protocol::MAX_FULL_SLIDE_TEXT_BYTES,
+                "full page text exceeds safety limit"
+            );
+            Ok(quick_presenter::control::protocol::SlideText {
+                page: page_index + 1,
+                text: source.lines().map(str::to_owned).collect(),
+                truncated: false,
+            })
+        } else {
+            Ok(bounded_slide_text(page_index + 1, source))
+        }
     }
 
     pub fn render_page(&self, page_index: u32, target_width: i32) -> Result<Image> {
@@ -981,6 +995,11 @@ mod tests {
         );
         assert_eq!(document.page_count(), 2);
 
+        assert!(!document.slide_text(0, true).unwrap().truncated);
+        assert_eq!(
+            document.slide_text(0, true).unwrap().text,
+            document.slide_text(0, false).unwrap().text
+        );
         let first_page = document
             .render_page(0, 200)
             .expect("first page should render");

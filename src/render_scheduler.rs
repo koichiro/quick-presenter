@@ -72,6 +72,7 @@ pub enum RenderCommand {
     ExtractSlideText {
         session_id: RenderSessionId,
         page_index: u32,
+        full: bool,
     },
     Shutdown,
 }
@@ -81,6 +82,7 @@ pub enum RenderEvent {
     SlideTextLoaded {
         session_id: RenderSessionId,
         page_index: u32,
+        full: bool,
         result: Result<quick_presenter::control::protocol::SlideText, String>,
     },
     Opened {
@@ -184,8 +186,9 @@ impl RenderSchedulingPolicy {
             RenderEvent::SlideTextLoaded {
                 session_id,
                 page_index,
+                full,
                 ..
-            } => Some(RenderEventKey::SlideText(*session_id, *page_index)),
+            } => Some(RenderEventKey::SlideText(*session_id, *page_index, *full)),
             RenderEvent::SpeakerNotesLoaded { session_id, .. } => {
                 Some(RenderEventKey::SpeakerNotes(*session_id))
             }
@@ -336,6 +339,7 @@ enum QueueKey {
     SlideText {
         session_id: RenderSessionId,
         page_index: u32,
+        full: bool,
     },
     Page {
         session_id: RenderSessionId,
@@ -354,7 +358,7 @@ fn superseded_width(key: QueueKey, session: RenderSessionId, desired: RenderRequ
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum RenderWork {
-    SlideText(u32),
+    SlideText(u32, bool),
     Page(RenderRequest),
     SpeakerNotes,
 }
@@ -430,10 +434,11 @@ impl RenderQueue {
         Some(job_id)
     }
 
-    fn push_slide_text(&mut self, session_id: RenderSessionId, page_index: u32) {
+    fn push_slide_text(&mut self, session_id: RenderSessionId, page_index: u32, full: bool) {
         let key = QueueKey::SlideText {
             session_id,
             page_index,
+            full,
         };
         if self.queued_keys.contains(&key) || !self.make_room(RenderPriority::Background) {
             return;
@@ -531,7 +536,9 @@ impl QueueKey {
         match self {
             Self::Page { request, .. } => RenderWork::Page(request),
             Self::SpeakerNotes { .. } => RenderWork::SpeakerNotes,
-            Self::SlideText { page_index, .. } => RenderWork::SlideText(page_index),
+            Self::SlideText {
+                page_index, full, ..
+            } => RenderWork::SlideText(page_index, full),
         }
     }
 }
@@ -628,11 +635,13 @@ impl PendingRenderCommands {
             RenderCommand::ExtractSlideText {
                 session_id,
                 page_index,
+                full,
             } => {
                 self.push_work(
                     QueueKey::SlideText {
                         session_id,
                         page_index,
+                        full,
                     },
                     RenderPriority::Background,
                 );
@@ -746,9 +755,11 @@ impl PendingWorkCommand {
             QueueKey::SlideText {
                 session_id,
                 page_index,
+                full,
             } => RenderCommand::ExtractSlideText {
                 session_id,
                 page_index,
+                full,
             },
             QueueKey::SpeakerNotes { session_id } => {
                 RenderCommand::ExtractSpeakerNotes { session_id }
@@ -797,7 +808,7 @@ impl RenderCommandMailbox {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum RenderEventKey {
-    SlideText(RenderSessionId, u32),
+    SlideText(RenderSessionId, u32, bool),
     Open(RenderSessionId),
     Reload(RenderSessionId),
     SpeakerNotes(RenderSessionId),
@@ -955,6 +966,7 @@ trait RenderWorkerDocument {
     fn slide_text(
         &self,
         _page_index: u32,
+        _full: bool,
     ) -> anyhow::Result<quick_presenter::control::protocol::SlideText> {
         anyhow::bail!("text extraction unavailable")
     }
@@ -983,8 +995,9 @@ impl RenderWorkerDocument for RemoteDocument {
     fn slide_text(
         &self,
         page_index: u32,
+        full: bool,
     ) -> anyhow::Result<quick_presenter::control::protocol::SlideText> {
-        self.text_page(page_index)
+        self.text_page(page_index, full)
     }
     fn render_prioritized(
         &self,
@@ -1163,10 +1176,11 @@ impl RenderScheduler {
         self.process_group.visible_request(session_id)
     }
 
-    pub fn extract_slide_text(&self, session_id: RenderSessionId, page_index: u32) {
+    pub fn extract_slide_text(&self, session_id: RenderSessionId, page_index: u32, full: bool) {
         self.send(RenderCommand::ExtractSlideText {
             session_id,
             page_index,
+            full,
         });
     }
 
@@ -1421,17 +1435,18 @@ fn process_next_work<D: RenderWorkerDocument>(
                 cancellation,
             );
         }
-        RenderWork::SlideText(page_index) => {
+        RenderWork::SlideText(page_index, full) => {
             let result = state
                 .document
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("document not open"))
-                .and_then(|doc| doc.slide_text(page_index))
+                .and_then(|doc| doc.slide_text(page_index, full))
                 .map_err(|e| e.to_string());
             if !cancellation.is_cancelled(session_id) {
                 event_mailbox.send(RenderEvent::SlideTextLoaded {
                     session_id,
                     page_index,
+                    full,
                     result,
                 });
             }
@@ -1516,8 +1531,9 @@ fn handle_command<D: RenderWorkerDocument>(
         RenderCommand::ExtractSlideText {
             session_id,
             page_index,
+            full,
         } => {
-            state.queue.push_slide_text(session_id, page_index);
+            state.queue.push_slide_text(session_id, page_index, full);
         }
         RenderCommand::ExtractSpeakerNotes { session_id } => {
             state.queue.push_speaker_notes(session_id);
@@ -1814,8 +1830,8 @@ mod tests {
     fn source_text_jobs_deduplicate_and_yield_to_visible_rendering() {
         let mut queue = RenderQueue::default();
         let session = RenderSessionId(1);
-        queue.push_slide_text(session, 0);
-        queue.push_slide_text(session, 0);
+        queue.push_slide_text(session, 0, false);
+        queue.push_slide_text(session, 0, false);
         queue.push(
             session,
             RenderRequest {
@@ -1826,16 +1842,18 @@ mod tests {
             RenderPriority::BlockingVisible,
         );
         assert!(matches!(queue.pop().unwrap().2, RenderWork::Page(_)));
-        assert_eq!(queue.pop().unwrap().2, RenderWork::SlideText(0));
+        assert_eq!(queue.pop().unwrap().2, RenderWork::SlideText(0, false));
         assert!(queue.pop().is_none());
         let mut commands = PendingRenderCommands::default();
         commands.push(RenderCommand::ExtractSlideText {
             session_id: session,
             page_index: 0,
+            full: false,
         });
         commands.push(RenderCommand::ExtractSlideText {
             session_id: session,
             page_index: 0,
+            full: false,
         });
         commands.push(RenderCommand::Shutdown);
         assert!(matches!(commands.pop(), Some(RenderCommand::Shutdown)));

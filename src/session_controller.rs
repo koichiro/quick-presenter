@@ -153,6 +153,7 @@ pub fn commit_render_opened_state(
     state.control.document_revision += 1;
     state.control.notes_state = quick_presenter::control::protocol::NotesState::Loading;
     state.control.slide_text.clear();
+    state.control.full_slide_text.clear();
     state.notes = SpeakerNotes::empty();
     state.presentation = PresentationState::open_document(title, page_count);
     state.thumbnails = ThumbnailState {
@@ -199,6 +200,7 @@ pub fn commit_render_reloaded_state(
     state.control.document_revision += 1;
     state.control.notes_state = quick_presenter::control::protocol::NotesState::Loading;
     state.control.slide_text.clear();
+    state.control.full_slide_text.clear();
     state.notes = SpeakerNotes::empty();
     state.presentation = PresentationState::open_document_at(title, page_count, current_page_index);
     let snapshot = state.presentation.snapshot()?;
@@ -387,6 +389,7 @@ pub fn close_presentation_state(state: &mut AppState) {
     }
     state.control.notes_state = quick_presenter::control::protocol::NotesState::Empty;
     state.control.slide_text.clear();
+    state.control.full_slide_text.clear();
     state.black_screen.set_active(false);
     state.timer.reset();
     state.status_text = "Open a PDF to begin.".to_owned();

@@ -244,8 +244,12 @@ fn request_content(state: &AppState, command: &Command, page: u32) {
         state.render_sessions.current_session(),
     ) {
         for index in content_pages(state, command, page) {
-            if !state.control.slide_text.contains_key(&index) {
-                scheduler.extract_slide_text(session, index);
+            if !state
+                .control
+                .text_cache(command.full_text())
+                .contains_key(&index)
+            {
+                scheduler.extract_slide_text(session, index, command.full_text());
             }
         }
     }
@@ -279,8 +283,8 @@ fn content_reply(
     }
     let mut text = Vec::new();
     for index in content_pages(state, command, page) {
-        match state.control.slide_text.get(&index) {
-            Some(Ok(content)) => text.push(content.clone()),
+        match state.control.text_cache(command.full_text()).get(&index) {
+            Some(Ok(content)) => text.push(content),
             Some(Err(_)) => {
                 return Err(ControlError::new(
                     ErrorCode::TextFailed,
@@ -299,7 +303,7 @@ fn content_reply(
             None => return Ok(None),
         }
     }
-    let current = text.remove(0);
+    let current = (*text.remove(0)).clone();
     if matches!(command, Command::Slide(_)) {
         return Ok(Some(Reply::Slide {
             session_id: state.control.session_id.clone(),
@@ -319,7 +323,7 @@ fn content_reply(
     Ok(Some(Reply::Context {
         presentation: control_state::snapshot(state, Instant::now()),
         current: with_notes(current),
-        next: text.into_iter().next().map(with_notes),
+        next: text.into_iter().next().cloned().map(with_notes),
     }))
 }
 
@@ -427,6 +431,39 @@ mod tests {
     use super::*;
     use crate::{presentation::PresentationState, session_controller::apply_session_command};
     #[test]
+    fn full_queries_never_reuse_truncated_compact_cache_entries() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 1),
+            ..AppState::default()
+        };
+        state.control.notes_state = NotesState::Ready;
+        state.control.slide_text.insert(
+            0,
+            Ok(SlideText {
+                page: 1,
+                text: vec!["prefix".into()],
+                truncated: true,
+            }),
+        );
+        let command = Command::Context(ContentParams { full: true });
+        assert!(content_reply(&state, &command, 0, 1).unwrap().is_none());
+        let source = "Full source 日本語".repeat(1_000);
+        state.control.full_slide_text.insert(
+            0,
+            Ok(SlideText {
+                page: 1,
+                text: vec![source.clone()],
+                truncated: false,
+            }),
+        );
+        assert!(
+            matches!(content_reply(&state, &command, 0, 1).unwrap(), Some(Reply::Context { current, next: None, .. }) if current.slide.text == [source] && !current.slide.truncated)
+        );
+        assert!(
+            matches!(content_reply(&state, &Command::Slide(ContentParams::default()), 0, 1).unwrap(), Some(Reply::Slide { content, .. }) if content.truncated)
+        );
+    }
+    #[test]
     fn stopped_workers_fail_missing_text_immediately_but_cached_source_remains_readable() {
         use crate::render_scheduler::{RenderScheduler, RenderWorkerLifecycle};
         for lifecycle in [
@@ -442,7 +479,10 @@ mod tests {
                 ..AppState::default()
             };
             state.control.notes_state = NotesState::Ready;
-            for command in [Command::Slide(Empty {}), Command::Context(Empty {})] {
+            for command in [
+                Command::Slide(ContentParams::default()),
+                Command::Context(ContentParams::default()),
+            ] {
                 assert_eq!(
                     content_reply(&state, &command, 0, 1).unwrap_err().code,
                     ErrorCode::TextFailed
@@ -457,7 +497,7 @@ mod tests {
                 }),
             );
             assert!(matches!(
-                content_reply(&state, &Command::Slide(Empty {}), 0, 1).unwrap(),
+                content_reply(&state, &Command::Slide(ContentParams::default()), 0, 1).unwrap(),
                 Some(Reply::Slide { .. })
             ));
         }
@@ -469,7 +509,7 @@ mod tests {
             ..AppState::default()
         };
         state.control.notes_state = NotesState::Ready;
-        let context = Command::Context(Empty {});
+        let context = Command::Context(ContentParams::default());
         assert!(content_reply(&state, &context, 0, 1).unwrap().is_none());
         for page in 1..=2 {
             state.control.slide_text.insert(
@@ -514,7 +554,7 @@ mod tests {
             content_reply(&state, &context, 0, 2).unwrap_err().code,
             ErrorCode::NotesLoading
         );
-        let slide = Command::Slide(Empty {});
+        let slide = Command::Slide(ContentParams::default());
         assert!(matches!(
             content_reply(&state, &slide, 0, 2).unwrap(),
             Some(Reply::Slide { .. })

@@ -7,6 +7,10 @@ pub struct ControlMetadata {
     pub session_id: String,
     pub document_revision: u64,
     pub notes_state: NotesState,
+    pub full_slide_text: std::collections::BTreeMap<
+        u32,
+        Result<quick_presenter::control::protocol::SlideText, String>,
+    >,
     pub slide_text: std::collections::BTreeMap<
         u32,
         Result<quick_presenter::control::protocol::SlideText, String>,
@@ -28,6 +32,7 @@ impl Default for ControlMetadata {
             document_revision: 0,
             notes_state: NotesState::Empty,
             slide_text: Default::default(),
+            full_slide_text: Default::default(),
         }
     }
 }
@@ -70,10 +75,11 @@ pub fn snapshot(state: &AppState, now: Instant) -> Status {
 }
 
 /// Ignore results from replaced/closed decks. Keep at most 32 small source-text entries.
-pub fn commit_slide_text(
+pub fn commit_slide_text_mode(
     state: &mut AppState,
     session: crate::render_scheduler::RenderSessionId,
     page_index: u32,
+    full: bool,
     result: Result<quick_presenter::control::protocol::SlideText, String>,
 ) -> bool {
     if state.render_sessions.current_session() != Some(session)
@@ -84,25 +90,53 @@ pub fn commit_slide_text(
     {
         return false;
     }
-    if !state.control.slide_text.contains_key(&page_index) && state.control.slide_text.len() >= 32 {
-        // Keep current/next entries together even when revisiting an earlier page.
-        let current = state
-            .presentation
-            .snapshot()
-            .map(|p| p.current_index)
-            .unwrap_or(page_index);
-        if let Some(evicted) = state
-            .control
-            .slide_text
+    let current = state
+        .presentation
+        .snapshot()
+        .map(|p| p.current_index)
+        .unwrap_or(page_index);
+    let cache = if full {
+        &mut state.control.full_slide_text
+    } else {
+        &mut state.control.slide_text
+    };
+    let capacity = if full { 2 } else { 32 };
+    if !cache.contains_key(&page_index) && cache.len() >= capacity {
+        if let Some(evicted) = cache
             .keys()
             .copied()
             .max_by_key(|index| index.abs_diff(current))
         {
-            state.control.slide_text.remove(&evicted);
+            cache.remove(&evicted);
         }
     }
-    state.control.slide_text.insert(page_index, result);
+    cache.insert(page_index, result);
     true
+}
+
+impl ControlMetadata {
+    pub fn text_cache(
+        &self,
+        full: bool,
+    ) -> &std::collections::BTreeMap<
+        u32,
+        Result<quick_presenter::control::protocol::SlideText, String>,
+    > {
+        if full {
+            &self.full_slide_text
+        } else {
+            &self.slide_text
+        }
+    }
+}
+#[cfg(test)]
+fn commit_slide_text(
+    state: &mut AppState,
+    session: crate::render_scheduler::RenderSessionId,
+    page_index: u32,
+    result: Result<quick_presenter::control::protocol::SlideText, String>,
+) -> bool {
+    commit_slide_text_mode(state, session, page_index, false, result)
 }
 
 #[cfg(test)]
@@ -110,6 +144,45 @@ mod tests {
     use super::*;
     use crate::{render_scheduler::RenderSessionId, session_controller::*};
     use quick_presenter::control::protocol::SlideText;
+    #[test]
+    fn full_cache_is_separate_bounded_and_invalidated_with_document_lifecycle() {
+        let mut state = AppState::default();
+        let session = begin_open_pdf_state(&mut state, "/slides/full.pdf".into());
+        commit_render_opened_state(&mut state, session, "Full".into(), 5, "Ready".into()).unwrap();
+        for index in [4, 3, 0, 1] {
+            let content = SlideText {
+                page: index + 1,
+                text: vec!["x".repeat(8_000)],
+                truncated: false,
+            };
+            assert!(commit_slide_text_mode(
+                &mut state,
+                session,
+                index,
+                true,
+                Ok(content)
+            ));
+        }
+        assert_eq!(state.control.full_slide_text.len(), 2);
+        assert!(
+            state.control.full_slide_text.contains_key(&0)
+                && state.control.full_slide_text.contains_key(&1)
+        );
+        assert!(state.control.slide_text.is_empty());
+        apply_session_command(
+            &mut state,
+            crate::input::PresentationCommand::Close,
+            Instant::now(),
+        );
+        assert!(state.control.full_slide_text.is_empty());
+        assert!(!commit_slide_text_mode(
+            &mut state,
+            session,
+            0,
+            true,
+            Err("late result".into())
+        ));
+    }
     #[test]
     fn text_cache_is_bounded_and_ignores_results_after_replace_reload_or_close() {
         let mut state = AppState::default();

@@ -43,14 +43,29 @@ pub enum Command {
     #[serde(rename = "presentation.notes")]
     Notes(Empty),
     #[serde(rename = "presentation.slide")]
-    Slide(Empty),
+    Slide(ContentParams),
     #[serde(rename = "presentation.context")]
-    Context(Empty),
+    Context(ContentParams),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Empty {}
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContentParams {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub full: bool,
+}
+impl Command {
+    pub fn full_text(&self) -> bool {
+        matches!(
+            self,
+            Self::Slide(ContentParams { full: true }) | Self::Context(ContentParams { full: true })
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PageParams {
@@ -84,6 +99,9 @@ pub enum Outcome {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Reply {
     Status(Status),
+    Transfer {
+        chunk: TransferChunk,
+    },
     Slide {
         session_id: String,
         document_revision: u64,
@@ -170,6 +188,78 @@ impl ErrorCode {
         }
     }
 }
+pub const MAX_ASSEMBLED_BYTES: usize = 32 * 1024 * 1024;
+pub const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
+pub const MAX_FULL_SLIDE_TEXT_BYTES: usize = 4 * 1024 * 1024;
+/// Transport-only fragments of a serialized typed response. Never application state.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TransferChunk {
+    pub sequence: u32,
+    pub total_bytes: u32,
+    pub data: Vec<u8>,
+}
+impl TransferChunk {
+    pub fn valid(&self) -> bool {
+        let total = self.total_bytes as usize;
+        total > MAX_FRAME_BYTES
+            && total <= MAX_ASSEMBLED_BYTES
+            && !self.data.is_empty()
+            && self.data.len() <= TRANSFER_CHUNK_BYTES
+            && self.sequence < (MAX_ASSEMBLED_BYTES / TRANSFER_CHUNK_BYTES) as u32
+    }
+}
+
+pub fn serialize_bounded(value: &impl Serialize, limit: usize) -> io::Result<Vec<u8>> {
+    struct Buffer {
+        bytes: Vec<u8>,
+        limit: usize,
+    }
+    impl Write for Buffer {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if bytes.len() > self.limit.saturating_sub(self.bytes.len()) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Serialized response exceeds limit",
+                ));
+            }
+            self.bytes.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut buffer = Buffer {
+        bytes: Vec::new(),
+        limit,
+    };
+    serde_json::to_writer(&mut buffer, value)?;
+    Ok(buffer.bytes)
+}
+
+pub fn write_response(writer: &mut impl Write, response: &Response) -> io::Result<()> {
+    let bytes = serialize_bounded(response, MAX_ASSEMBLED_BYTES)?;
+    if bytes.len() <= MAX_FRAME_BYTES {
+        return write_frame(writer, response);
+    }
+    for (sequence, data) in bytes.chunks(TRANSFER_CHUNK_BYTES).enumerate() {
+        let fragment = Response {
+            protocol_version: response.protocol_version,
+            id: response.id,
+            outcome: Outcome::Result(Reply::Transfer {
+                chunk: TransferChunk {
+                    sequence: sequence as u32,
+                    total_bytes: bytes.len() as u32,
+                    data: data.to_vec(),
+                },
+            }),
+        };
+        write_frame(writer, &fragment)?;
+    }
+    Ok(())
+}
+
 /// PDF source text in PDFium order. Truncation is explicit; no OCR or generated content.
 pub const MAX_SLIDE_TEXT_BYTES: usize = 4 * 1024;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -391,8 +481,8 @@ mod tests {
             Command::Close(Empty {}),
             Command::Blackout(BlackoutParams { value: true }),
             Command::Notes(Empty {}),
-            Command::Slide(Empty {}),
-            Command::Context(Empty {}),
+            Command::Slide(ContentParams::default()),
+            Command::Context(ContentParams::default()),
         ] {
             let request = Request::new(42, command);
             let mut bytes = Vec::new();

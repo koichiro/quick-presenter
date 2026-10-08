@@ -192,6 +192,38 @@ fn qp_executable_keeps_json_stdout_clean_and_reports_exit_categories() {
         }
     }
 
+    let child = thread::spawn(move || {
+        ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+            .args(["slide", "--full", "--json"])
+            .output()
+            .unwrap()
+    });
+    let pending = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(pending.request.command.full_text());
+    let source = "日本語".repeat(150_000);
+    pending
+        .response
+        .send(Response::success(
+            pending.request.id,
+            Reply::Slide {
+                session_id: "test-session".into(),
+                document_revision: 1,
+                pages: 5,
+                content: SlideText {
+                    page: 1,
+                    text: vec![source.clone()],
+                    truncated: false,
+                },
+            },
+        ))
+        .unwrap();
+    let output = child.join().unwrap();
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["text"][0], source);
+    assert_eq!(json["truncated"], false);
+
     let output = ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
         .args(["goto", "0", "--json"])
         .output()

@@ -139,13 +139,21 @@ verification plan are defined in [PDF Hot Reload](PDF_HOT_RELOAD.md).
 The local control adapter requests current/next page source text through
 `RenderCommand::ExtractSlideText`. The scheduler places this work at background
 priority, deduplicates pending page requests, and sends it to the existing
-isolated PDFium helper. Private renderer IPC v3 adds bounded, correlated text
+isolated PDFium helper. Private renderer IPC v4 adds bounded, correlated text
 request/reply types; public Presentation Control Protocol remains v1.
 
-The helper extracts PDF text without OCR. The GUI owner caches at most 32 small
-source results, keyed by page within the committed renderer session. Open,
+The helper extracts PDF text without OCR. The GUI owner caches at most 32 compact
+source results and two full results, keyed by page within the committed renderer
+session and separated by extraction mode. Open,
 reload, and close invalidate the cache; stale results are rejected. Pending
 control queries record the page and document revision, and return a typed
 cancellation if those change. The adapter assembles current/next text, existing
 `SpeakerNotes`, and presentation state on the event loop without blocking it.
 `qp` only parses requests and formats responses.
+
+Full source queries opt into bounded response transfer frames at both IPC
+boundaries. Each carries typed sequence/length metadata and at most 64 KiB of
+serialized response bytes. The client reconstructs one typed logical response,
+validating identity, ordering, and aggregate size before output. Native character
+and full-page byte guards, bounded caches, and existing watchdogs remain in
+force. Ordinary queries keep the compact single-frame response contract.

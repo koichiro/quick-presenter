@@ -2045,12 +2045,14 @@ fn handle_render_event(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, e
         RenderEvent::SlideTextLoaded {
             session_id,
             page_index,
+            full,
             result,
         } => {
-            control_state::commit_slide_text(
+            control_state::commit_slide_text_mode(
                 &mut state.borrow_mut(),
                 session_id,
                 page_index,
+                full,
                 result,
             );
         }

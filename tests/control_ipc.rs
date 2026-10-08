@@ -168,7 +168,11 @@ fn qp_executable_keeps_json_stdout_clean_and_reports_exit_categories() {
         ))
         .unwrap();
     let output = child.join().unwrap();
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "CLI failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(output.stderr.is_empty());
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["page"], 1);
@@ -239,7 +243,11 @@ fn qp_context_and_slide_run_through_ipc_with_clean_json() {
             .send(Response::success(pending.request.id, reply))
             .unwrap();
         let output = child.join().unwrap();
-        assert!(output.status.success());
+        assert!(
+            output.status.success(),
+            "CLI failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         assert!(output.stderr.is_empty());
         let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(json["kind"], name);
@@ -249,5 +257,70 @@ fn qp_context_and_slide_run_through_ipc_with_clean_json() {
         } else {
             assert_eq!(json["text"][0], "PDF source 日本語");
         }
+    }
+}
+
+#[test]
+fn qp_full_queries_reassemble_large_unicode_responses_before_json_output() {
+    let root = Directory::new();
+    let directory = root.0.join("quick-presenter");
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&directory)
+        .unwrap();
+    let (_server, receiver) = ControlServer::bind(&directory.join("control.sock")).unwrap();
+    for name in ["slide", "context"] {
+        let path = root.0.clone();
+        let child = thread::spawn(move || {
+            ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+                .env("XDG_RUNTIME_DIR", path)
+                .args([name, "--full", "--json"])
+                .output()
+                .unwrap()
+        });
+        let pending = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(pending.request.command.full_text());
+        let source = "日本語".repeat(150_000);
+        let slide = SlideText {
+            page: 1,
+            text: vec![source.clone()],
+            truncated: false,
+        };
+        let result = if name == "slide" {
+            Reply::Slide {
+                session_id: "test-session".into(),
+                document_revision: 1,
+                pages: 5,
+                content: slide,
+            }
+        } else {
+            Reply::Context {
+                presentation: status(),
+                current: SlideContext {
+                    slide,
+                    notes: "original".into(),
+                },
+                next: None,
+            }
+        };
+        pending
+            .response
+            .send(Response::success(pending.request.id, result))
+            .unwrap();
+        let output = child.join().unwrap();
+        assert!(
+            output.status.success(),
+            "CLI failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stderr.is_empty());
+        let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let content = if name == "slide" {
+            &json
+        } else {
+            &json["current"]
+        };
+        assert_eq!(content["text"][0], source);
+        assert_eq!(content["truncated"], false);
     }
 }
