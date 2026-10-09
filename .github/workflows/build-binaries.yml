@@ -36,6 +36,8 @@ on:
       - 'src/renderer_process.rs'
       - 'scripts/check_renderer_sandbox.py'
       - 'scripts/check_windows_msix_sandbox.ps1'
+      - 'scripts/run_bounded_command.py'
+      - 'tests/test_bounded_command.py'
       - 'src/render_scheduler.rs'
       - 'tests/renderer_process.rs'
       - 'src/bin/qp.rs'
@@ -740,8 +742,20 @@ jobs:
 
       - name: Verify installed Store-identity MSIX renderer sandbox
         if: runner.os == 'Windows'
+        timeout-minutes: 10
         shell: powershell
-        run: scripts/check_windows_msix_sandbox.ps1
+        run: |
+          python -m unittest tests/test_bounded_command.py
+          if ($LASTEXITCODE -ne 0) { throw 'Bounded command regression tests failed' }
+          scripts/check_windows_msix_sandbox.ps1
+
+      - name: Upload installed Windows MSIX verification logs
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact-name }}-msix-verification-logs
+          path: ${{ runner.temp }}/quick-presenter-msix-verification
+          if-no-files-found: ignore
 
       - name: Build Windows MSIX
         if: runner.os == 'Windows'
