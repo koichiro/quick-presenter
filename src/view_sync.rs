@@ -16,6 +16,9 @@ use crate::{
 
 pub fn apply_closed_state_to_windows(windows: &AppWindowRefs) {
     apply_opening_state_to_windows(windows, "Quick Presenter");
+    if let Some(slide) = windows.slide.upgrade() {
+        slide.set_black_screen_active(false);
+    }
     if let Some(presenter) = windows.presenter.upgrade() {
         presenter.set_status_text("Open a PDF to begin.".into());
         presenter.set_has_notes(false);
@@ -112,6 +115,7 @@ pub fn apply_snapshot_to_windows(
     }
 
     if let Some(slide) = windows.slide.upgrade() {
+        slide.set_black_screen_active(state.black_screen.is_active());
         slide.set_page_aspect_ratio(audience_current.aspect_ratio);
         slide.set_page_image(if state.black_screen.is_active() {
             black_slide_image()

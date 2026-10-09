@@ -61,6 +61,7 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
 
     crate::wire_callbacks(&windows, windows.refs(), state.clone());
     crate::apply_app_metadata(&windows.presenter);
+    let _audience_ui = crate::audience_ui::AudienceUi::install(&windows, state.clone());
 
     windows.apply_initial_positions();
     windows
@@ -91,6 +92,7 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
     );
 
     check_notes_font_size(&windows, &state, report, "before opening a PDF")?;
+    check_audience_join_screen(&windows, &state, report)?;
 
     crate::begin_open_pdf(&window_refs, &state, options.pdf_path.clone());
     report.check(
@@ -148,6 +150,7 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         state.status_text == "Ready" || state.status_text.contains("notes")
     });
     check_notes_font_size(&windows, &state, report, "with a PDF open")?;
+    check_audience_join_screen(&windows, &state, report)?;
     report_presenter_progress(
         report,
         &windows,
@@ -407,6 +410,88 @@ fn report_state(
     report.check(name, verify(&state), "state matched", "state did not match");
 }
 
+fn check_audience_join_screen(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let before = state.borrow().presentation.snapshot();
+    let generation = state.borrow().render_generation;
+    let now = Instant::now();
+    let elapsed = state.borrow().timer.elapsed_at(now);
+    let presenter = &windows.presenter;
+    // A synthetic join URL keeps this UI check independent of LAN availability.
+    let url = "http://192.0.2.1:12345/join/AB12CD#k=smoke-test";
+    presenter.set_audience_url(url.into());
+    presenter.set_audience_code("AB12CD".into());
+    presenter.set_audience_qr(crate::audience_ui::qr_image(url)?);
+    presenter.invoke_audience_toggle_guide();
+    settle_presenter_notes_layout(presenter)?;
+    report.check(
+        "Audience button shows page 0 on the slide window",
+        windows.slide.get_audience_guide_visible()
+            && windows.slide.get_audience_url() == url
+            && windows.slide.get_audience_code() == "AB12CD"
+            && windows.slide.get_audience_qr().size().width > 0,
+        "join metadata reached the audience window",
+        "join screen or metadata missing",
+    );
+    report.check(
+        "page 0 preserves PDF, render generation, and timer",
+        state.borrow().presentation.snapshot() == before
+            && state.borrow().render_generation == generation
+            && state.borrow().timer.elapsed_at(now) == elapsed,
+        "presentation state unchanged",
+        "join screen changed the presentation",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(true),
+    );
+    settle_presenter_notes_layout(presenter)?;
+    let blank = windows.slide.window().take_snapshot()?;
+    let center = ((blank.height() / 2 * blank.width() + blank.width() / 2) * 4) as usize;
+    report.check(
+        "blackout renders black over the join QR code",
+        blank.as_bytes()[center..center + 3] == [0, 0, 0],
+        "center pixel is black",
+        "QR code remained visible during blackout",
+    );
+    report.check(
+        "blackout hides the page 0 join screen",
+        windows.slide.get_black_screen_active(),
+        "blackout covers join information",
+        "join information bypassed blackout",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(false),
+    );
+    crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::NextPage);
+    report.check(
+        "next from page 0 returns to the current PDF without skipping",
+        !windows.slide.get_audience_guide_visible()
+            && state.borrow().presentation.snapshot() == before,
+        "join screen dismissed without PDF navigation",
+        "PDF page skipped or join screen remained",
+    );
+    presenter.invoke_audience_toggle_guide();
+    presenter.invoke_audience_toggle_guide();
+    report.check(
+        "Audience button toggles back to PDF",
+        !state.borrow().audience_join_visible && !windows.slide.get_audience_guide_visible(),
+        "both windows returned to PDF",
+        "join screen remained active",
+    );
+    presenter.set_audience_url("".into());
+    presenter.set_audience_code("".into());
+    presenter.set_audience_qr(Default::default());
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    Ok(())
+}
+
 fn settle_notes_layout() -> Result<()> {
     slint::Timer::single_shot(Duration::from_millis(50), || {
         slint::quit_event_loop().expect("GUI smoke event loop should accept quit");
@@ -443,7 +528,7 @@ fn check_notes_font_size(
     presenter
         .window()
         .dispatch_event(slint::platform::WindowEvent::Resized {
-            size: slint::LogicalSize::new(800.0, 560.0),
+            size: slint::LogicalSize::new(800.0, 560.0 + presenter.get_audience_panel_height()),
         });
 
     presenter.set_has_notes(false);
@@ -579,7 +664,7 @@ fn check_notes_font_size(
     presenter
         .window()
         .dispatch_event(slint::platform::WindowEvent::Resized {
-            size: slint::LogicalSize::new(1200.0, 1000.0),
+            size: slint::LogicalSize::new(1200.0, 1000.0 + presenter.get_audience_panel_height()),
         });
     settle_presenter_notes_layout(presenter)?;
     report.check(
@@ -596,7 +681,7 @@ fn check_notes_font_size(
     presenter
         .window()
         .dispatch_event(slint::platform::WindowEvent::Resized {
-            size: slint::LogicalSize::new(800.0, 560.0),
+            size: slint::LogicalSize::new(800.0, 560.0 + presenter.get_audience_panel_height()),
         });
     presenter.set_current_page_aspect_ratio(0.6);
     presenter.set_use_native_menu_bar(false);

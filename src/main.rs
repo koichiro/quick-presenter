@@ -230,7 +230,7 @@ fn main() -> Result<()> {
         }
     };
     wire_callbacks(&windows, windows.refs(), state.clone());
-    let audience_ui = audience_ui::AudienceUi::install(&windows.presenter);
+    let audience_ui = audience_ui::AudienceUi::install(&windows, state.clone());
     let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
     let _render_event_timer = start_render_event_updates(windows.refs(), state.clone());
     let _pending_open_status_timer =
@@ -966,6 +966,24 @@ fn handle_presentation_command(
     state: &Rc<RefCell<AppState>>,
     command: PresentationCommand,
 ) {
+    if state.borrow().audience_join_visible
+        && matches!(
+            command,
+            PresentationCommand::NextPage
+                | PresentationCommand::PreviousPage
+                | PresentationCommand::FirstPage
+                | PresentationCommand::LastPage
+                | PresentationCommand::JumpToPage(_)
+                | PresentationCommand::Close
+        )
+    {
+        audience_ui::set_join_visible(windows, state, false);
+        // Page 0 is an independent join screen, not a page in the PDF.
+        if command == PresentationCommand::NextPage || command == PresentationCommand::PreviousPage
+        {
+            return;
+        }
+    }
     if command == PresentationCommand::Close {
         apply_session_command(&mut state.borrow_mut(), command, Instant::now());
         view_sync::apply_closed_state_to_windows(windows);
@@ -987,6 +1005,10 @@ fn handle_presentation_command(
             None
         }
     };
+
+    if let Some(slide) = windows.slide.upgrade() {
+        slide.set_black_screen_active(state.borrow().black_screen.is_active());
+    }
 
     if let Some(snapshot) = preload_snapshot {
         schedule_presentation_preload(state.clone(), snapshot);
@@ -1559,6 +1581,7 @@ fn apply_rendered_pages_to_windows(
 
     if let Some(slide) = windows.slide.upgrade() {
         slide.set_page_aspect_ratio(rendered.current.aspect_ratio);
+        slide.set_black_screen_active(state.black_screen.is_active());
         slide.set_page_image(if state.black_screen.is_active() {
             black_slide_image()
         } else {

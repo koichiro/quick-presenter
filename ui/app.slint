@@ -691,11 +691,14 @@ export component PresenterWindow inherits Window {
     in property <string> audience-address;
     in property <string> audience-status: "Stopped";
     in property <string> audience-url;
+    in property <string> audience-code;
     in property <image> audience-qr;
     in property <bool> audience-active: false;
     in property <bool> audience-can-start: false;
     in property <int> audience-count: 0;
-    property <bool> audience-panel-visible: false;
+    in property <bool> audience-guide-visible: false;
+    out property <length> audience-panel-height: 150px;
+    callback audience-toggle-guide();
     callback audience-toggle-session();
     callback audience-next-address();
     callback audience-refresh-addresses();
@@ -744,7 +747,7 @@ export component PresenterWindow inherits Window {
     property <bool> about-visible: false;
     property <int> active-menu-index: -1;
     property <length> inline-menu-height: root.use-native-menu-bar ? 0px : 28px;
-    property <length> presenter-main-height: max(0px, root.height - root.inline-menu-height - 96px);
+    property <length> presenter-main-height: max(0px, root.height - root.inline-menu-height - 96px - root.audience-panel-height);
     property <length> presenter-bottom-section-height: 200px;
     property <float> safe-current-page-aspect-ratio: root.current-page-aspect-ratio > 0 ? root.current-page-aspect-ratio : 16.0 / 9.0;
     property <float> safe-next-page-aspect-ratio: root.next-page-aspect-ratio > 0 ? root.next-page-aspect-ratio : 16.0 / 9.0;
@@ -777,9 +780,9 @@ export component PresenterWindow inherits Window {
 
     title: "Quick Presenter";
     preferred-width: 1024px;
-    preferred-height: 720px;
+    preferred-height: 870px;
     min-width: 800px;
-    min-height: 560px;
+    min-height: 710px;
     background: #202124;
     forward-focus: presenter-focus;
 
@@ -1359,39 +1362,33 @@ export component PresenterWindow inherits Window {
                 y: max(0px, parent.height - 38px);
                 width: 118px;
                 height: 30px;
-                text: root.audience-active ? "Audience (" + root.audience-count + ")" : "Audience";
-                clicked => { root.audience-panel-visible = !root.audience-panel-visible; if root.audience-panel-visible { root.audience-refresh-addresses(); } }
+                text: root.audience-guide-visible ? "Return to PDF" : "Audience";
+                clicked => { root.audience-toggle-guide(); }
             }
 
-            if root.audience-panel-visible: Rectangle {
-                x: 20px;
-                y: root.inline-menu-height + 60px;
-                width: parent.width - 40px;
-                height: min(360px, parent.height - self.y - 50px);
-                background: #202124;
-                border-color: #9aa0a6;
+            Rectangle {
+                x: 12px;
+                y: parent.height - 40px - root.audience-panel-height;
+                width: parent.width - 24px;
+                height: root.audience-panel-height;
+                background: #111315;
+                border-color: #3c4043;
                 border-width: 1px;
                 VerticalBox {
-                    padding: 16px;
-                    spacing: 8px;
-                    Text { text: "Audience Live · Local Network"; color: white; font-size: 20px; }
-                    Text { text: root.audience-status; color: white; wrap: word-wrap; }
+                    padding: 12px;
+                    spacing: 6px;
                     HorizontalBox {
-                        Text { text: root.audience-address; color: white; horizontal-stretch: 1; wrap: word-wrap; }
+                        Text { text: "Audience Live · Local Network"; color: white; font-size: 18px; horizontal-stretch: 1; }
+                        Text { text: "Connected: " + root.audience-count; color: white; }
+                        Button { text: root.audience-active ? "Stop Session" : "Start Session"; enabled: root.audience-active || root.audience-can-start; clicked => { root.audience-toggle-session(); } }
+                    }
+                    HorizontalBox {
+                        Text { text: root.audience-address; color: #d9dce0; horizontal-stretch: 1; overflow: elide; }
+                        Button { text: "Refresh addresses"; enabled: !root.audience-active; clicked => { root.audience-refresh-addresses(); } }
                         Button { text: "Next address"; enabled: !root.audience-active; clicked => { root.audience-next-address(); } }
                     }
-                    HorizontalBox {
-                        height: 160px;
-                        if root.audience-url != "": Image { source: root.audience-qr; width: 160px; height: 160px; image-fit: contain; }
-                        VerticalBox {
-                            Text { text: root.audience-url; color: white; wrap: word-wrap; }
-                            Text { text: "Join on the same LAN. HTTP is unencrypted. This initial version supports joining only."; color: #d9dce0; wrap: word-wrap; }
-                        }
-                    }
-                    HorizontalBox {
-                        Button { text: root.audience-active ? "Stop Session" : "Start Session"; enabled: root.audience-active || root.audience-can-start; clicked => { root.audience-toggle-session(); } }
-                        Button { text: "Close"; clicked => { root.audience-panel-visible = false; } }
-                    }
+                    Text { text: root.audience-status; color: #d9dce0; overflow: elide; }
+                    TextInput { text: root.audience-url == "" ? "Use Audience to show the page 0 join screen." : root.audience-url; color: #d9dce0; read-only: true; single-line: true; }
                 }
             }
 
@@ -1633,6 +1630,11 @@ export component PresenterWindow inherits Window {
 
 export component SlideWindow inherits Window {
     icon: @image-url("../assets/icons/png/quick-presenter-icon-256.png");
+    in property <bool> audience-guide-visible: false;
+    in property <bool> black-screen-active: false;
+    in property <image> audience-qr;
+    in property <string> audience-url;
+    in property <string> audience-code;
     in property <image> page-image;
     in property <float> page-aspect-ratio: 16.0 / 9.0;
     in property <length> slide-window-width: 1024px;
@@ -1802,11 +1804,28 @@ export component SlideWindow inherits Window {
         }
 
         SlideView {
+            visible: !root.audience-guide-visible;
             page-image: root.page-image;
             page-aspect-ratio: root.page-aspect-ratio;
             width: parent.width;
             height: parent.height;
         }
+
+        if root.audience-guide-visible && !root.black-screen-active: Rectangle {
+            width: parent.width;
+            height: parent.height;
+            background: #111315;
+            VerticalBox {
+                padding: min(root.width, root.height) * 0.04;
+                spacing: 12px;
+                Text { text: "Quick Presenter · Audience Live"; color: white; font-size: min(root.width, root.height) * 0.045; horizontal-alignment: center; }
+                Text { text: root.audience-code == "" ? "Page 0 · Join this session" : "Session " + root.audience-code; color: #d9dce0; font-size: 22px; horizontal-alignment: center; }
+                Image { source: root.audience-qr; image-fit: contain; image-rendering: pixelated; min-height: 100px; vertical-stretch: 1; }
+                Text { text: root.audience-url == "" ? "The presenter will start the session shortly." : root.audience-url; color: white; font-size: 18px; wrap: word-wrap; horizontal-alignment: center; }
+                Text { text: "Scan the QR code on the same Wi-Fi or LAN."; color: #d9dce0; font-size: 20px; horizontal-alignment: center; }
+            }
+        }
+        if root.black-screen-active: Rectangle { width: parent.width; height: parent.height; background: black; }
 
     }
 }

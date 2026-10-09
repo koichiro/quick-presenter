@@ -3,20 +3,30 @@
 The initial Audience Live implementation lets audience browsers join a local
 session hosted by Quick Presenter. It supports session start/stop, a join QR
 code and URL, and an authenticated live connection count. Reactions, comments,
-and presentation overlays are not included in this change.
+and animated audience-event overlays remain outside this scope.
 
 ## Use
 
 1. Connect the presenter computer and audience devices to the same LAN.
-2. Open **Audience** in the presenter window.
-3. Select an IPv4 address with **Next address** if the computer has multiple
-   interfaces, then select **Start Session**.
+2. Use the **Audience Live** controls permanently below the notes area. Select
+   an IPv4 address with **Next address** or rediscover interfaces with
+   **Refresh addresses**, then select **Start Session**.
+3. Press **Audience** to show the page 0 join screen in the presentation window.
+   It contains the audience QR code, session code, and join URL, without host
+   controls or connection diagnostics.
 4. Scan the QR code with a phone. Keep the browser page open to stay connected.
-5. Select **Stop Session** to invalidate the link and close all connections.
+5. Press **Return to PDF**, or advance once, to restore the current PDF page.
+   The join screen is separate from PDF pagination; it does not modify the PDF,
+   render generation, or timer. Blackout covers the join screen as well.
+6. Select **Stop Session** to invalidate the link, clear the join screen, and
+   close all connections.
 
-Closing the panel does not stop the session. Reopening the panel while stopped
-refreshes the available addresses. A restarted session uses a new random secret
-and may use a different OS-assigned port. Sessions do not start automatically.
+The presenter window reserves 150 logical pixels below the notes and grows its
+preferred/minimum height by the same amount, preserving the notes area. Start,
+stop, address selection, session status, and connection count stay in this area.
+Displaying or dismissing page 0 does not start or stop a session. A restarted
+session uses a new random secret and may use a different OS-assigned port.
+Sessions do not start automatically.
 
 The connection count represents authenticated WebSocket connections, not unique
 people: two browser tabs count twice. Backgrounded mobile browsers may be
@@ -87,8 +97,10 @@ The CLI endpoint and audience listener remain separate; the LAN server never
 exposes presentation-control commands.
 
 The Cargo checks passed with 483 tests, and the staged CLI contract check passed
-all 10 checks. The macOS debug GUI smoke passed all 64 checks, including the
-combined local audience and presentation-control path. The GUI smoke layout
+all 10 checks. The macOS debug GUI smoke passed all 76 checks, including the
+combined local audience and presentation-control path. The additional checks
+cover page 0 metadata, PDF/timer preservation, return navigation, and rendered
+blackout before and after opening a PDF. The GUI smoke layout
 synchronization fix from #430 resolves the five notes-sizing failures observed
 in the earlier validation. This does not qualify signed-package GUI behavior
 or mobile/Windows/Linux interoperability.

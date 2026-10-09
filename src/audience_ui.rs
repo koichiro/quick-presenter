@@ -1,6 +1,8 @@
 //! UI-thread adapter for the optional audience subsystem.
 use crate::{
+    app_state::AppState,
     audience::{self, LocalAudienceSession, SessionStatus},
+    window_controller::{AppWindowRefs, AppWindows},
     PresenterWindow,
 };
 use slint::{ComponentHandle, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, Weak};
@@ -16,7 +18,8 @@ pub struct AudienceUi {
 }
 
 impl AudienceUi {
-    pub fn install(presenter: &PresenterWindow) -> Rc<Self> {
+    pub fn install(windows: &AppWindows, state: Rc<RefCell<AppState>>) -> Rc<Self> {
+        let presenter = &windows.presenter;
         let ui = Rc::new(Self {
             session: RefCell::new(None),
             timer: Timer::default(),
@@ -24,6 +27,15 @@ impl AudienceUi {
             stopping: RefCell::new(false),
             address_index: RefCell::new(0),
             last_url: RefCell::new(String::new()),
+        });
+        let refs = windows.refs();
+        let guide_state = state.clone();
+        presenter.on_audience_toggle_guide(move || {
+            let visible = !guide_state.borrow().audience_join_visible;
+            set_join_visible(&refs, &guide_state, visible);
+            if visible {
+                crate::show_slide_window_from_menu(&refs, &guide_state);
+            }
         });
         presenter.set_audience_address(ui.address_label().into());
         let weak = Rc::downgrade(&ui);
@@ -70,6 +82,7 @@ impl AudienceUi {
         });
         let weak = Rc::downgrade(&ui);
         let window = presenter.as_weak();
+        let refs = windows.refs();
         presenter.on_audience_toggle_session(move || {
             let Some(ui) = weak.upgrade() else {
                 return;
@@ -77,9 +90,12 @@ impl AudienceUi {
             if let Some(session) = ui.session.borrow().as_ref() {
                 *ui.stopping.borrow_mut() = true;
                 session.request_stop();
+                set_join_visible(&refs, &state, false);
+                clear_join_metadata(&refs);
                 if let Some(window) = window.upgrade() {
                     window.set_audience_status("Stopping…".into());
                     window.set_audience_url("".into());
+                    window.set_audience_code("".into());
                     window.set_audience_qr(Default::default());
                 }
                 return;
@@ -97,10 +113,16 @@ impl AudienceUi {
                     }
                     let weak = Rc::downgrade(&ui);
                     let window = window.clone();
+                    let refs = refs.clone();
+                    let state = state.clone();
                     ui.timer
                         .start(TimerMode::Repeated, Duration::from_millis(100), move || {
                             if let Some(ui) = weak.upgrade() {
                                 ui.refresh(&window);
+                                sync_join_metadata(&refs);
+                                if !window.upgrade().is_some_and(|w| w.get_audience_active()) {
+                                    set_join_visible(&refs, &state, false);
+                                }
                             }
                         });
                 }
@@ -113,6 +135,7 @@ impl AudienceUi {
                 }
             }
         });
+        presenter.invoke_audience_refresh_addresses();
         ui
     }
 
@@ -143,6 +166,7 @@ impl AudienceUi {
                 if *self.stopping.borrow() {
                     return;
                 }
+                window.set_audience_code(code.clone().into());
                 window.set_audience_status(
                     format!("Connected: {} · Session {code}", snapshot.connections).into(),
                 );
@@ -182,6 +206,7 @@ impl AudienceUi {
                 window.set_audience_active(false);
                 window.set_audience_status(message.into());
                 window.set_audience_url("".into());
+                window.set_audience_code("".into());
                 window.set_audience_qr(Default::default());
                 window.set_audience_count(0);
             }
@@ -196,7 +221,35 @@ impl AudienceUi {
     }
 }
 
-fn qr_image(url: &str) -> Result<slint::Image, qrcode::types::QrError> {
+pub fn set_join_visible(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, visible: bool) {
+    state.borrow_mut().audience_join_visible = visible;
+    if let Some(presenter) = windows.presenter.upgrade() {
+        presenter.set_audience_guide_visible(visible);
+    }
+    if let Some(slide) = windows.slide.upgrade() {
+        slide.set_audience_guide_visible(visible);
+        slide.set_black_screen_active(state.borrow().black_screen.is_active());
+    }
+    sync_join_metadata(windows);
+}
+
+fn sync_join_metadata(windows: &AppWindowRefs) {
+    if let (Some(presenter), Some(slide)) = (windows.presenter.upgrade(), windows.slide.upgrade()) {
+        slide.set_audience_qr(presenter.get_audience_qr());
+        slide.set_audience_url(presenter.get_audience_url());
+        slide.set_audience_code(presenter.get_audience_code());
+    }
+}
+
+fn clear_join_metadata(windows: &AppWindowRefs) {
+    if let Some(slide) = windows.slide.upgrade() {
+        slide.set_audience_qr(Default::default());
+        slide.set_audience_url("".into());
+        slide.set_audience_code("".into());
+    }
+}
+
+pub(crate) fn qr_image(url: &str) -> Result<slint::Image, qrcode::types::QrError> {
     let qr = qrcode::QrCode::new(url)?;
     let scale = 4;
     let side = (qr.width() + 8) * scale;
