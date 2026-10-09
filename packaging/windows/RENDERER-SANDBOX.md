@@ -94,6 +94,16 @@ package and certificate are removed afterwards; this test package is not a
 release artifact. This validates installed package-context behavior, not Store
 certification or the final interactive Store activation/GUI release checklist.
 
+The installed-MSIX gate uses `scripts/run_bounded_command.py` to wait for each
+command process, rather than for output-pipe EOF or the lifetime of a GUI started
+by an execution alias. CLI operations and signing have 30-second limits; package
+installation, removal, and package-context activation have 60-second limits;
+package construction and the renderer result report have 90-second limits.
+Timeouts terminate the command process tree and retain operation-specific output
+and diagnostics in the `*-msix-verification-logs` CI artifact. The entire step
+has a 10-minute backstop. Cleanup also stops the installed GUI and any Python
+probe identified by this invocation's unique result-report path.
+
 Windows helper stderr is not the framed protocol stream. Denial-probe failures
 are bounded IPC errors before native PDF work, so setup diagnostics cannot
 corrupt the handshake or expose raw PDF/native errors through stdout.
