@@ -452,11 +452,13 @@ fn check_notes_font_size(
     report.check(
         format!("short notes automatically use 24px ({context})"),
         presenter.get_notes_font_size() == 24.0
+            && presenter.get_notes_text_y().abs() <= 1.0
             && presenter.get_notes_content_height() <= presenter.get_notes_visible_height(),
-        "short notes fit at the maximum size",
+        "short notes fit at the maximum size and start at the top of the viewport",
         format!(
-            "size={}, content={}, viewport={}",
+            "size={}, text_y={}, content={}, viewport={}",
             presenter.get_notes_font_size(),
+            presenter.get_notes_text_y(),
             presenter.get_notes_content_height(),
             presenter.get_notes_visible_height()
         ),
@@ -475,6 +477,61 @@ fn check_notes_font_size(
         "overflow remains scrollable at the minimum size",
         "overflow shrank below the minimum or did not remain scrollable",
     );
+
+    #[cfg(target_os = "linux")]
+    {
+        let typography = presenter.global::<crate::NotesTypography>();
+        let compact_height = presenter.get_notes_content_height();
+        let compact_measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        typography.set_line_height_factor(1.25);
+        settle_notes_layout()?;
+        let expanded_height = presenter.get_notes_content_height();
+        let expanded_measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        typography.set_line_height_factor(1.0);
+        settle_notes_layout()?;
+        report.check(
+            format!("Linux natural line spacing matches visible notes and sizing probes ({context})"),
+            expanded_height > compact_height * 1.2
+                && (compact_height - compact_measurement - crate::notes::NOTES_BOTTOM_PADDING).abs() <= 1.0
+                && (expanded_height - expanded_measurement - crate::notes::NOTES_BOTTOM_PADDING).abs() <= 1.0
+                && (presenter.get_notes_content_height() - compact_height).abs() <= 1.0,
+            format!("12px mixed-language notes: natural={compact_height}px, 1.25x={expanded_height}px"),
+            format!("visible/probe mismatch: natural={compact_height}/{compact_measurement}, 1.25x={expanded_height}/{expanded_measurement}"),
+        );
+
+        presenter.set_notes_text("English line\n日本語の行".into());
+        settle_notes_layout()?;
+        let lines = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        presenter.set_notes_text("English line\n\n日本語の行".into());
+        settle_notes_layout()?;
+        let one_blank = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        presenter.set_notes_text("English line\n\n\n日本語の行".into());
+        settle_notes_layout()?;
+        let two_blanks = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        report.check(
+            format!("Linux blank note lines retain compact paragraph gaps ({context})"),
+            (one_blank - lines - 6.0).abs() <= 1.0 && (two_blanks - one_blank - 6.0).abs() <= 1.0,
+            format!(
+                "12px probes: lines={lines}px, one blank={one_blank}px, two blanks={two_blanks}px"
+            ),
+            format!("unexpected blank-line spacing: {lines}, {one_blank}, {two_blanks}"),
+        );
+        presenter.set_notes_text("English paragraph\n日本語の段落\n\n".repeat(100).into());
+        settle_notes_layout()?;
+        let measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        report.check(
+            format!("Linux paragraph notes remain scrollable with matching probes ({context})"),
+            presenter.get_notes_font_size() == 12.0
+                && (presenter.get_notes_content_height()
+                    - measurement
+                    - crate::notes::NOTES_BOTTOM_PADDING)
+                    .abs()
+                    <= 1.0
+                && presenter.get_notes_content_height() > presenter.get_notes_visible_height(),
+            "paragraph gaps are included in visible content and automatic sizing",
+            "paragraph overflow or measurement mismatch",
+        );
+    }
 
     presenter.set_notes_scroll_y(
         presenter.get_notes_visible_height() - presenter.get_notes_content_height(),
