@@ -1,14 +1,49 @@
-# Presentation Control Protocol v1 (experimental)
+# Presentation Control Protocol v1
 
-Quick Presenter exposes a local automation interface on Windows, macOS, and
-Linux in development builds and the supported packages described in [CLI](CLI.md). `qp` is its first client. The wire types live in
-`src/control/protocol.rs` and contain no Slint types. This is an initial
-implementation, not a declaration that the complete automation feature is
-ready for release.
+Presentation Control Protocol v1 is the stable public automation API for
+Quick Presenter v2.0.0 and compatible later releases. It is available on Windows,
+macOS, and Linux in development builds and the supported packages described in
+[CLI](CLI.md). `qp` is its first client. The wire types live in
+`src/control/protocol.rs` and contain no Slint types.
+
+## Public API stability contract
+
+Protocol version `1` is independent of the application version. Within v1,
+compatible releases preserve:
+
+- Request/response framing, envelopes, method names, and supported parameters.
+- Existing result kinds, required JSON fields, field types, and null semantics.
+- One-based public pages, source-text/truncation semantics, command completion
+  semantics, deterministic blackout setting, and read-only timer access.
+- Event names, envelope fields, ordering/sequence semantics, and NDJSON output.
+- Machine-readable error codes and the CLI exit-code mapping.
+- The documented CLI commands/options, single-response JSON output, watch stream,
+  JSON error output, and local version metadata described in [CLI](CLI.md).
+
+Clients must tolerate additional response/result/event object fields and JSON
+key-order changes. New optional fields and methods may be added when existing
+requests retain their behavior. Request envelopes/parameters remain strictly
+typed; clients must not send unknown fields or assume a new method exists on
+an older server. There is no capability negotiation in v1.
+
+Changes that remove or rename fields/methods, change types or meanings, or
+otherwise break existing clients require a new protocol version. New event
+names, result kinds, or enum values must not be emitted to existing v1 clients
+without a compatible opt-in design or a new protocol version. This includes
+new errors on existing methods that older typed clients cannot decode.
+
+Human-readable CLI formatting, help/diagnostic wording, JSON whitespace/key
+order, GUI layout, Rust module layout, and private renderer IPC are outside
+this stability guarantee. Existing safety limits, asynchronous readiness,
+timeouts, single-instance control, and distribution exclusions remain part of
+the documented operating constraints below. Navigation responses acknowledge logical state changes; rendering and notes
+can still be pending, as described below.
 
 ## Distribution scope for v2.0.0
 
-On macOS, this protocol is supported by the Developer ID / DMG distribution.
+On macOS, this protocol is supported by nonsandboxed development builds and
+the Developer ID / DMG distribution. Developer ID signing is not a prerequisite
+for development CLI use.
 Mac App Store CLI/control support is explicitly out of scope for v2.0.0: the
 Store GUI does not provide a supported endpoint for `qp` or other controllers.
 This exclusion also covers CLI-triggered GUI startup and PDF opening. Future
@@ -58,8 +93,10 @@ access to the creator account, administrators, and LocalSystem. Other local
 users cannot send control requests. No filesystem cleanup or stale-pipe recovery
 is needed because Windows removes an instance when its last handle is closed.
 
-There is one controllable application instance per user/runtime directory.
-Additional GUI instances still work, but do not acquire that control endpoint.
+On Unix, there is one controllable application instance per user/runtime
+directory. Windows uses one fixed pipe name per machine, with access restricted
+by the creator account's pipe ACL. Additional GUI instances still work, but do
+not acquire an already-owned control endpoint.
 Control initialization failure is logged and does not prevent GUI playback.
 There is no TCP listener.
 
@@ -104,8 +141,8 @@ acknowledges slide navigation and includes a read-only timer snapshot:
 
 Unknown methods, invalid parameters, and unsupported versions fail explicitly.
 An incompatible change requires a protocol revision rather than relying on the
-application version. The initial v1 contract remains subject to review before
-release; clients should tolerate additive result fields.
+application version. Compatible additions follow the
+[public API stability contract](#public-api-stability-contract).
 
 ## Methods
 
@@ -165,7 +202,7 @@ it is not an assertion about OS scanout, focus, or visibility. During rendering
 or failure, the audience window can retain its last good image.
 
 Notes reuse the existing annotation extraction and `SpeakerNotes` model. The
-initial implementation waits for whole-document background note extraction.
+implementation waits for whole-document background note extraction.
 `NOTES_LOADING` and `NOTES_FAILED` distinguish unavailable data from an empty
 note. A ready page with no supported notes returns `notes: ""`. No second parser,
 AI-generated content, or OCR is involved.
@@ -359,11 +396,10 @@ required JSON fields, NDJSON formatting, and exit-code mapping. Open-request
 paths follow the host OS's absolute-path syntax. These fixtures complement
 command and IPC behavior tests; they are not a replacement for them.
 
-Within protocol v1, preserve existing method names, required fields, field types,
-numbering, and error semantics. Clients should ignore additional object fields.
-New event variants require explicit compatibility design because existing typed
-clients reject unknown event names. Breaking changes require a new protocol
-version rather than following the application release number.
+These compatibility fixtures protect the
+[public API stability contract](#public-api-stability-contract). Preserve their
+historical examples; extend coverage for compatible additions instead of
+rewriting fixtures to hide a breaking change.
 
 `qp --version --json` is local CLI metadata, not an IPC request. Its
 `application_version` identifies the CLI build and `protocol_version` identifies
