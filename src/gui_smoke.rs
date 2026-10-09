@@ -496,6 +496,39 @@ fn check_notes_font_size(
             format!("12px mixed-language notes: natural={compact_height}px, 1.25x={expanded_height}px"),
             format!("visible/probe mismatch: natural={compact_height}/{compact_measurement}, 1.25x={expanded_height}/{expanded_measurement}"),
         );
+
+        presenter.set_notes_text("English line\n日本語の行".into());
+        settle_notes_layout()?;
+        let lines = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        presenter.set_notes_text("English line\n\n日本語の行".into());
+        settle_notes_layout()?;
+        let one_blank = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        presenter.set_notes_text("English line\n\n\n日本語の行".into());
+        settle_notes_layout()?;
+        let two_blanks = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        report.check(
+            format!("Linux blank note lines retain compact paragraph gaps ({context})"),
+            (one_blank - lines - 6.0).abs() <= 1.0 && (two_blanks - one_blank - 6.0).abs() <= 1.0,
+            format!(
+                "12px probes: lines={lines}px, one blank={one_blank}px, two blanks={two_blanks}px"
+            ),
+            format!("unexpected blank-line spacing: {lines}, {one_blank}, {two_blanks}"),
+        );
+        presenter.set_notes_text("English paragraph\n日本語の段落\n\n".repeat(100).into());
+        settle_notes_layout()?;
+        let measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        report.check(
+            format!("Linux paragraph notes remain scrollable with matching probes ({context})"),
+            presenter.get_notes_font_size() == 12.0
+                && (presenter.get_notes_content_height()
+                    - measurement
+                    - crate::notes::NOTES_BOTTOM_PADDING)
+                    .abs()
+                    <= 1.0
+                && presenter.get_notes_content_height() > presenter.get_notes_visible_height(),
+            "paragraph gaps are included in visible content and automatic sizing",
+            "paragraph overflow or measurement mismatch",
+        );
     }
 
     presenter.set_notes_scroll_y(

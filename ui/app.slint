@@ -97,14 +97,37 @@ component CurrentSlideWithProgress inherits Rectangle {
 
 export global NotesTypography {
     in-out property <float> line-height-factor: 1.25;
+    in-out property <bool> compact-paragraphs: false;
+    pure callback paragraphs(string) -> [string];
 }
 
 // Keep visible notes and automatic sizing probes on the same typography.
-component NotesText inherits TextInput {
-    wrap: word-wrap;
-    single-line: false;
-    read-only: true;
-    line-height-factor: NotesTypography.line-height-factor;
+component NotesText inherits Rectangle {
+    in property <string> text;
+    in property <length> font-size;
+    in property <color> text-color: #f1f3f4;
+    in property <length> page-height;
+    property <[string]> paragraphs: NotesTypography.paragraphs(root.text);
+    preferred-height: paragraphs-layout.preferred-height;
+    height: self.preferred-height;
+
+    paragraphs-layout := VerticalLayout {
+        spacing: NotesTypography.compact-paragraphs ? root.font-size * 0.5 : 0px;
+        for paragraph in root.paragraphs: TextInput {
+            text: paragraph;
+            font-size: root.font-size;
+            color: root.text-color;
+            height: paragraph == "" ? 0px : self.preferred-height;
+            wrap: word-wrap;
+            single-line: false;
+            read-only: true;
+            line-height-factor: NotesTypography.line-height-factor;
+            page-height: root.page-height;
+            text-cursor-width: 0px;
+            key-pressed(event) => { reject }
+            key-released(event) => { reject }
+        }
+    }
 }
 
 component NotesMeasurement inherits NotesText {
@@ -236,11 +259,8 @@ component NotesView inherits Rectangle {
         notes-input := NotesText {
             text: root.has-notes ? root.notes-text : "No notes";
             font-size: root.has-notes ? root.font-size : 12px;
-            color: root.has-notes ? #f1f3f4 : #9aa0a6;
+            text-color: root.has-notes ? #f1f3f4 : #9aa0a6;
             page-height: scroll-view.visible-height;
-            text-cursor-width: 0px;
-            key-pressed(event) => { reject }
-            key-released(event) => { reject }
         }
     }
 }

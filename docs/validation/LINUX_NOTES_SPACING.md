@@ -11,7 +11,7 @@ The visible TextInput and all 12–24px measurement probes use one typography
 property, initialized by Rust when creating the presenter window.
 
 With the same 12px font, width, and 150 repeated mixed English/Japanese lines,
-the Linux GUI measured 2478px content height at factor 1.0 versus 3095px at
+the final Linux GUI measured 2468px content height at factor 1.0 versus 3081px at
 factor 1.25, including 10px bottom padding. This is approximately 20% less
 vertical space. The regression check also verifies that visible content height
 matches the measurement probe and returns to the original height after toggling
@@ -26,9 +26,9 @@ without relaxing its requirements.
 
 - `cargo fmt --check`: passed.
 - `cargo check --locked -j 2`: passed.
-- `cargo test --locked -j 2` with the matching installed PDFium: 476 passed.
-- Native Wayland GUI smoke: 66 passed, zero failed.
-- XWayland GUI smoke in the same physical desktop session: 66 passed,
+- `cargo test --locked -j 2` with the matching installed PDFium: 478 passed.
+- Native Wayland GUI smoke: 70 passed, zero failed.
+- XWayland GUI smoke in the same physical desktop session: 70 passed,
   zero failed. This is not a native Xorg session.
 - At an actual 800 x 560 presenter size, before/after screenshots of
   `long-speaker-notes.pdf` show tighter English line spacing at the unchanged
@@ -38,6 +38,28 @@ without relaxing its requirements.
   multiline fitting, scroll clamping after content changes, resizing, portrait
   notes layout, and preservation of presentation state during typography changes.
 
+## Compact blank lines
+
+After the initial natural-line-height change, the user confirmed improved line
+spacing but found blank lines too large. Linux now renders blank lines as
+paragraph gaps of half the font size. Single line breaks and indentation stay
+inside their paragraphs; repeated blank lines retain repeated compact gaps.
+Rust prepares only the display paragraphs. PDF notes and CLI source queries
+retain their original text, and other platforms use a single original-text
+block with their existing line spacing.
+
+At 12px, mixed English/Japanese sizing probes measured 33px for two normal
+lines, 40px with one blank line, and 46px with two blank lines. Each separator
+uses 6px spacing; independently rounded paragraph heights explain the 1px
+difference in the first comparison. Both GUI backends verify these gaps and
+that overflowing paragraph notes match visible/probe heights and remain
+scrollable. Unit tests cover single newlines, indentation, Unicode, CRLF,
+whitespace-only blank lines, repeated separators, and empty text.
+
+Before/after inspection at 800 x 560 with `long-speaker-notes.pdf` confirms
+smaller paragraph gaps. The blank-line comparison baseline is the initial
+line-height-only fix at `9fcc0e3`.
+
 The baseline is the debug package built from `5241c1b` on the `v1.9.0` branch.
 Both before/after manual windows use the same Linux desktop, font environment,
 size, and test PDF. Configuration/state are isolated in temporary directories.
@@ -45,5 +67,5 @@ Raw reports and screenshots remain in `/tmp`, rather than in the repository.
 
 No macOS or Windows desktop is available in this run, so visual equivalence to
 macOS is not claimed. Their existing line-height value is preserved. This
-change does not remove intentional blank lines from PDF annotations or impose
+change does not remove intentional blank lines from PDF source annotations or impose
 identical font metrics across operating systems.
