@@ -73,6 +73,7 @@ fn windows_job_terminates_suspended_helper_after_broker_abort() {
 
 #[cfg(all(target_os = "windows", debug_assertions))]
 fn assert_windows_job_terminates_helper(fault: &str) {
+    let _broker_guard = broker_test_guard();
     use windows_sys::Win32::{Foundation::*, System::Threading::*};
     let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
     command
@@ -114,8 +115,50 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg(debug_assertions)]
+const BROKER_TEST_TIMEOUT: Duration = if cfg!(target_os = "windows") {
+    Duration::from_secs(150)
+} else {
+    Duration::from_secs(15)
+};
+const HELPER_RESPONSE_TIMEOUT: Duration = if cfg!(target_os = "windows") {
+    Duration::from_secs(30)
+} else {
+    Duration::from_secs(15)
+};
+const HELPER_EXIT_TIMEOUT: Duration = if cfg!(target_os = "windows") {
+    Duration::from_secs(15)
+} else {
+    Duration::from_secs(5)
+};
+const FAULT_COMPLETION_BOUND: Duration = if cfg!(target_os = "windows") {
+    Duration::from_secs(30)
+} else {
+    Duration::from_secs(8)
+};
+
+#[cfg(target_os = "windows")]
+static BROKER_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(target_os = "windows")]
+fn broker_test_guard() -> std::sync::MutexGuard<'static, ()> {
+    BROKER_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn broker_test_guard() {}
+
 fn run_broker(mut command: Command) -> std::process::Output {
+    let mode = command
+        .get_args()
+        .next()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "<no-mode>".to_owned());
+    let fault = command
+        .get_envs()
+        .find(|(key, _)| *key == std::ffi::OsStr::new("QUICK_PRESENTER_HELPER_TEST_FAULT"))
+        .and_then(|(_, value)| value)
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "<none>".to_owned());
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn().unwrap();
     let stdout = child.stdout.take().unwrap();
@@ -132,23 +175,35 @@ fn run_broker(mut command: Command) -> std::process::Output {
         reader.read_to_end(&mut bytes).unwrap();
         bytes
     });
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + BROKER_TEST_TIMEOUT;
+    let mut timed_out = false;
     let status = loop {
         if let Some(status) = child.try_wait().unwrap() {
             break status;
         }
         if Instant::now() >= deadline {
+            timed_out = true;
             let _ = child.kill();
-            let _ = child.wait();
-            panic!("broker deadline exceeded");
+            break child.wait().expect("timed-out broker could not be reaped");
         }
         thread::sleep(Duration::from_millis(10));
     };
-    std::process::Output {
+    let output = std::process::Output {
         status,
         stdout: out.join().unwrap(),
         stderr: err.join().unwrap(),
+    };
+    if timed_out {
+        panic!(
+            "broker test-harness deadline exceeded after {:?}: mode={mode} fault={fault} \
+             status={:?}, stdout={}, stderr={}",
+            BROKER_TEST_TIMEOUT,
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
+    output
 }
 
 #[cfg(debug_assertions)]
@@ -196,6 +251,10 @@ fn stalled_broker_input_preserves_active_pdf_and_allows_shutdown() {
 #[test]
 #[cfg(debug_assertions)]
 fn broker_deadlines_cover_handshake_open_render_notes_and_graceful_shutdown() {
+    // Creating and deleting AppContainer profiles is serialized by Windows.
+    // Hold the guard for the complete multi-process scenario so another test
+    // cannot consume this test's harness-only elapsed-time margin between cases.
+    let _broker_guard = broker_test_guard();
     for (fault, operation) in [
         ("hang-on-handshake", "Handshake"),
         ("hang-on-open", "Open"),
@@ -215,7 +274,7 @@ fn broker_deadlines_cover_handshake_open_render_notes_and_graceful_shutdown() {
         }
         let start = Instant::now();
         let output = run_broker(command);
-        assert!(start.elapsed() < Duration::from_secs(8), "{fault}");
+        assert!(start.elapsed() < FAULT_COMPLETION_BOUND, "{fault}");
         if fault == "hang-on-shutdown" {
             assert!(output.status.success());
         } else {
@@ -236,6 +295,7 @@ fn broker_deadlines_cover_handshake_open_render_notes_and_graceful_shutdown() {
 #[test]
 #[cfg(debug_assertions)]
 fn restart_is_bounded_malformed_responses_are_not_retried_and_later_pdf_recovers() {
+    let _broker_guard = broker_test_guard();
     let directory = std::env::temp_dir().join(format!(
         "quick-presenter-recovery-{}-{}",
         std::process::id(),
@@ -311,6 +371,7 @@ fn restart_is_bounded_malformed_responses_are_not_retried_and_later_pdf_recovers
 #[test]
 #[cfg(debug_assertions)]
 fn excessive_allocation_attempt_is_rejected_without_losing_broker() {
+    let _broker_guard = broker_test_guard();
     let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
     command
         .arg("--smoke-open-pdf")
@@ -340,6 +401,7 @@ fn killed_helper_is_reaped_and_another_helper_can_open() {
 #[test]
 #[cfg(debug_assertions)]
 fn scheduler_preserves_active_deck_on_candidate_timeout_or_crash_and_shutdown_interrupts_hang() {
+    let _broker_guard = broker_test_guard();
     let directory = std::env::temp_dir().join(format!(
         "quick-presenter-candidate-{}-{}",
         std::process::id(),
@@ -466,7 +528,7 @@ impl Helper {
     }
     fn receive(&self) -> Result<(Value, Vec<u8>), String> {
         self.output
-            .recv_timeout(Duration::from_secs(15))
+            .recv_timeout(HELPER_RESPONSE_TIMEOUT)
             .expect("helper response deadline exceeded")
     }
     fn request(&mut self, session: u64, message: Value) -> (Value, Vec<u8>) {
@@ -500,7 +562,7 @@ impl Helper {
         assert_eq!(opened["page_count"], 3);
     }
     fn wait_exit(&mut self) -> std::process::ExitStatus {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + HELPER_EXIT_TIMEOUT;
         loop {
             if let Some(status) = self.child.try_wait().unwrap() {
                 return status;
@@ -599,14 +661,13 @@ fn helper_rejects_protocol_version_before_opening_pdf() {
 
 #[test]
 fn headless_smoke_uses_a_distinct_renderer_process() {
-    let output = Command::new(env!("CARGO_BIN_EXE_quick-presenter"))
-        .arg("--smoke-open-pdf")
-        .arg(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/marp-speaker-notes.pdf"
-        ))
-        .output()
-        .unwrap();
+    let _broker_guard = broker_test_guard();
+    let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+    command.arg("--smoke-open-pdf").arg(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/marp-speaker-notes.pdf"
+    ));
+    let output = run_broker(command);
     assert!(
         output.status.success(),
         "{}",
@@ -620,16 +681,17 @@ fn headless_smoke_uses_a_distinct_renderer_process() {
 #[test]
 #[cfg(debug_assertions)]
 fn helper_faults_do_not_abort_the_broker_executable() {
+    let _broker_guard = broker_test_guard();
     for fault in ["abort-on-render", "eof-on-render", "mismatch-on-render"] {
-        let output = Command::new(env!("CARGO_BIN_EXE_quick-presenter"))
+        let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+        command
             .arg("--smoke-open-pdf")
             .arg(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/tests/fixtures/marp-speaker-notes.pdf"
             ))
-            .env("QUICK_PRESENTER_HELPER_TEST_FAULT", fault)
-            .output()
-            .unwrap();
+            .env("QUICK_PRESENTER_HELPER_TEST_FAULT", fault);
+        let output = run_broker(command);
         assert!(!output.status.success());
         assert!(
             output.status.code().is_some(),
