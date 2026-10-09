@@ -1,8 +1,24 @@
-# qp CLI (experimental)
+# qp CLI
 
 `qp` opens and controls Quick Presenter through its local Presentation
 Control Protocol. It is intended for automation tools and AI agents, and does
 not implement narration, AI models, or presentation business logic.
+
+## Stable automation interface
+
+For v2.0.0, the documented command names/options, `--json` result/error fields,
+exit-code mapping, `watch --json` NDJSON stream, and `--version --json` metadata
+are stable public interfaces backed by Control Protocol v1. Application releases
+do not implicitly change the protocol version. See the
+[API stability contract](CONTROL_PROTOCOL.md#public-api-stability-contract)
+for compatible additions and breaking-change policy.
+
+Parse JSON fields and error codes rather than matching human output. JSON key
+order/whitespace and human-readable output, help, and diagnostic messages may
+change. Accept additional JSON object fields. Successful one-shot commands
+write one JSON object and a newline to stdout; errors remain on stderr and
+watch events remain independently valid JSON lines. Existing loading states,
+limits, and distribution exclusions still apply.
 
 ## Installation
 
@@ -30,13 +46,16 @@ The MSI does not modify PATH. Invoke its installed `qp.exe` by full path, or
 add its directory to your user PATH. Windows Store remains the supported Windows
 distribution; MSI and direct MSIX packages are validation artifacts.
 Mac App Store CLI/control support is explicitly out of scope for v2.0.0.
-On macOS, use the Developer ID / DMG distribution for all presentation control,
-including `qp open` GUI startup, state/content queries, navigation, and `watch`.
+For packaged macOS automation, use the Developer ID / DMG distribution for
+presentation control, including `qp open` GUI startup, state/content queries,
+navigation, and `watch`.
 The Store distribution does not provide a supported Control Protocol endpoint;
 using a separate CLI executable does not make the Store GUI controllable.
 Future sandbox-compatible support is tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422).
 
-For development, build both binaries from the same checkout:
+Nonsandboxed macOS development builds also support CLI control; Developer ID
+signing is not required for development CLI use. Build both binaries from the
+same checkout:
 
 ```sh
 cargo build --bins
@@ -160,8 +179,9 @@ closes the PDF rather than quitting the GUI. Queries report pending rendering
 and note extraction; an empty note is different from unavailable notes.
 
 Timeouts and disconnections can have an uncertain mutation outcome. Query
-`status` before retrying `next` or `prev`. There is one controllable instance
-per user/runtime directory. Explicit timer mutation is unavailable in this version.
+`status` before retrying `next` or `prev`. Unix supports one controllable instance
+per user/runtime directory; Windows uses one fixed, access-restricted pipe name
+per machine. Explicit timer mutation is unavailable in this version.
 See [Control Protocol](CONTROL_PROTOCOL.md) for transport, completion semantics,
 state fields, and compatibility expectations.
 

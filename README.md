@@ -185,11 +185,12 @@ Recent-file privacy behavior is documented in
 Packaged app diagnostic logs are documented in
 [docs/PACKAGING.md](docs/PACKAGING.md#diagnostic-logs).
 
-## Local Automation (Experimental)
+## Local Automation
 
 Supported Windows and Linux packages and macOS Developer ID / DMG builds include
 `qp`, a CLI for AI agents and other automation tools to query and control
-Quick Presenter:
+Quick Presenter. Control Protocol v1 and the documented JSON/NDJSON output and
+exit codes are stable public automation interfaces for v2.0.0:
 
 ```sh
 # With qp on PATH:
@@ -206,11 +207,12 @@ qp watch --json
 
 `qp open` starts the GUI if needed. The CLI uses local IPC and the same
 presentation operations as the GUI. **Mac App Store CLI/control support is out of
-scope for v2.0.0.** On macOS, use the Developer ID / DMG distribution for automation.
+scope for v2.0.0.** For packaged macOS automation, use the Developer ID / DMG
+distribution. Nonsandboxed development builds also support CLI control.
 Future Store support is tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422).
 See [CLI usage](docs/CLI.md) and the
-[Presentation Control Protocol](docs/CONTROL_PROTOCOL.md) for the initial
-command set, JSON output, errors, and current limitations.
+[Presentation Control Protocol](docs/CONTROL_PROTOCOL.md) for the command set,
+JSON output, errors, operating limits, and compatibility policy.
 
 ## Build and Development
 

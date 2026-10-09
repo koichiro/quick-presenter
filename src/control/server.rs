@@ -98,7 +98,7 @@ mod unix {
         thread: Option<JoinHandle<()>>,
         path: PathBuf,
         identity: (u64, u64),
-        _lock: File,
+        lock: File,
     }
     impl ControlServer {
         pub fn start() -> io::Result<(Self, Receiver<PendingRequest>)> {
@@ -204,7 +204,7 @@ mod unix {
                     thread: Some(thread),
                     path: path.to_owned(),
                     identity,
-                    _lock: lock,
+                    lock,
                 },
                 receiver,
             ))
@@ -221,6 +221,9 @@ mod unix {
                     let _ = fs::remove_file(&self.path);
                 }
             }
+            // A forked child can retain this file until exec even with O_CLOEXEC.
+            // Release ownership explicitly, after all workers and the endpoint stop.
+            unsafe { libc::flock(self.lock.as_raw_fd(), libc::LOCK_UN) };
         }
     }
     struct DeadlineReader<'a> {
