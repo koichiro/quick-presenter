@@ -11,6 +11,26 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows') {
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $work = Join-Path $env:RUNNER_TEMP ([guid]::NewGuid().ToString())
 New-Item -ItemType Directory -Path $work | Out-Null
+$logs = Join-Path $env:RUNNER_TEMP 'quick-presenter-msix-verification'
+$runner = Join-Path $PSScriptRoot 'run_bounded_command.py'
+function Invoke-BoundedCommand {
+    param([string]$Label, [string[]]$Command, [int]$Seconds = 30)
+    New-Item -ItemType Directory -Path $logs -Force | Out-Null
+    $diagnostics = Join-Path $logs ([guid]::NewGuid().ToString() + '.diagnostics')
+    Write-Host "Starting $Label (timeout $Seconds seconds)"
+    $output = & python $runner --timeout $Seconds --label $Label --log-dir $logs --diagnostics $diagnostics -- @Command
+    $exitCode = $LASTEXITCODE
+    if (Test-Path -LiteralPath $diagnostics) { Get-Content -LiteralPath $diagnostics -Encoding UTF8 | Write-Host }
+    if ($exitCode -ne 0) { throw "$Label failed with exit code $exitCode" }
+    return $output
+}
+function Invoke-BoundedPowerShell {
+    param([string]$Label, [string]$Code, [int]$Seconds = 60)
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(
+        "`$ErrorActionPreference = 'Stop'; " + $Code))
+    Invoke-BoundedCommand -Label $Label -Seconds $Seconds -Command @(
+        'powershell.exe', '-NoProfile', '-NonInteractive', '-EncodedCommand', $encoded)
+}
 $packageName = 'KoichiroOhba.QuickPresenter'
 if (Get-AppxPackage -Name $packageName) {
     throw 'Refusing to replace an existing Store package'
@@ -18,10 +38,14 @@ if (Get-AppxPackage -Name $packageName) {
 $certificate = $null
 $trusted = $null
 $package = $null
+$report = $null
 try {
     $msix = Join-Path $work 'sandbox-test.msix'
-    & (Join-Path $PSScriptRoot 'build_windows_msix.ps1') -Binary $Binary `
-        -ArtifactDir (Join-Path $work 'artifacts') -OutputMsix $msix -StoreIdentity
+    $buildScript = Join-Path $PSScriptRoot 'build_windows_msix.ps1'
+    Invoke-BoundedCommand -Label 'Build test MSIX' -Seconds 90 -Command @(
+        'powershell.exe', '-NoProfile', '-NonInteractive', '-File', $buildScript,
+        '-Binary', $Binary, '-ArtifactDir', (Join-Path $work 'artifacts'),
+        '-OutputMsix', $msix, '-StoreIdentity') | Write-Host
     if (-not (Test-Path $msix -PathType Leaf)) { throw 'Missing test MSIX' }
     $certificate = New-SelfSignedCertificate -Type Custom `
         -Subject 'CN=A3F64AFD-6298-42F8-BAC9-DB0AB1831F51' `
@@ -36,21 +60,27 @@ try {
         Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
         Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
     if (-not $signTool) { throw 'Missing signtool' }
-    & $signTool sign /fd SHA256 /s My /sha1 $certificate.Thumbprint $msix
-    if ($LASTEXITCODE -ne 0) { throw 'Test MSIX signing failed' }
-    Add-AppxPackage -Path $msix
+    Invoke-BoundedCommand -Label 'Sign test MSIX' -Command @(
+        $signTool, 'sign', '/fd', 'SHA256', '/s', 'My', '/sha1', $certificate.Thumbprint, $msix) | Write-Host
+    Invoke-BoundedPowerShell -Label 'Install test MSIX' -Code "Add-AppxPackage -Path '$msix'" | Write-Host
     $package = Get-AppxPackage -Name $packageName
     if (-not $package) { throw 'Test MSIX was not installed' }
     $exe = Join-Path $package.InstallLocation 'quick-presenter.exe'
-    python (Join-Path $PSScriptRoot 'check_qp.py') (Join-Path $package.InstallLocation 'qp.exe')
-    if ($LASTEXITCODE -ne 0) { throw 'Installed MSIX CLI validation failed' }
+    Invoke-BoundedCommand -Label 'Installed MSIX CLI contract' -Seconds 60 -Command @(
+        'python', (Join-Path $PSScriptRoot 'check_qp.py'), (Join-Path $package.InstallLocation 'qp.exe')) | Write-Host
     # Exercise Windows' registered console alias, not just the unpacked file.
     $alias = Join-Path $env:LOCALAPPDATA 'Microsoft/WindowsApps/qp.exe'
-    $version = & $alias --version --json
-    if ($LASTEXITCODE -ne 0) { throw 'MSIX CLI execution alias failed' }
+    Write-Host 'Waiting for the registered MSIX execution alias'
+    $aliasDeadline = (Get-Date).AddSeconds(30)
+    while (-not (Test-Path -LiteralPath $alias) -and (Get-Date) -lt $aliasDeadline) {
+        Start-Sleep -Milliseconds 200
+    }
+    if (-not (Test-Path -LiteralPath $alias)) { throw 'MSIX execution alias was not registered within 30 seconds' }
+    $version = Invoke-BoundedCommand -Label 'Alias version' -Command @($alias, '--version', '--json')
     $metadata = $version | ConvertFrom-Json
-    $cliMetadata = & (Join-Path $package.InstallLocation 'qp.exe') --version --json | ConvertFrom-Json
-    if ($LASTEXITCODE -ne 0 -or $metadata.protocol_version -ne 1 -or
+    $cliMetadata = Invoke-BoundedCommand -Label 'Installed CLI version' -Command @(
+        (Join-Path $package.InstallLocation 'qp.exe'), '--version', '--json') | ConvertFrom-Json
+    if ($metadata.protocol_version -ne 1 -or
         $metadata.application_version -ne $cliMetadata.application_version) {
         throw 'MSIX CLI execution alias returned unexpected version metadata'
     }
@@ -61,14 +91,13 @@ try {
         Where-Object { $_.Path -eq $exe })
     if ($existingGui.Count -ne 0) { throw 'Expected no running Store GUI before CLI startup test' }
     try {
-        $opened = & $alias open $pdf --json | ConvertFrom-Json
-        if ($LASTEXITCODE -ne 0 -or $opened.kind -ne 'mutation') {
+        $opened = Invoke-BoundedCommand -Label 'Alias open and GUI startup' -Command @($alias, 'open', $pdf, '--json') | ConvertFrom-Json
+        if ($opened.kind -ne 'mutation') {
             throw 'MSIX CLI could not start the GUI and open the fixture'
         }
         $deadline = (Get-Date).AddSeconds(30)
         do {
-            $snapshot = & $alias status --json | ConvertFrom-Json
-            if ($LASTEXITCODE -ne 0) { throw 'MSIX CLI startup status failed' }
+            $snapshot = Invoke-BoundedCommand -Label 'Alias presentation status' -Command @($alias, 'status', '--json') | ConvertFrom-Json
             if (-not $snapshot.opening -and $snapshot.render_state -eq 'ready') { break }
             Start-Sleep -Milliseconds 100
         } while ((Get-Date) -lt $deadline)
@@ -78,12 +107,12 @@ try {
         $gui = @(Get-Process -Name quick-presenter -ErrorAction SilentlyContinue |
             Where-Object { $_.Path -eq $exe })
         if ($gui.Count -ne 1) { throw 'Expected one GUI after CLI startup' }
-        $reopened = & $alias open $pdf --json | ConvertFrom-Json
-        if ($LASTEXITCODE -ne 0 -or $reopened.state.session_id -ne $snapshot.session_id) {
+        $reopened = Invoke-BoundedCommand -Label 'Alias reopen existing GUI' -Command @($alias, 'open', $pdf, '--json') | ConvertFrom-Json
+        if ($reopened.state.session_id -ne $snapshot.session_id) {
             throw 'MSIX CLI did not reuse the running GUI'
         }
-        $closed = & $alias close --json | ConvertFrom-Json
-        if ($LASTEXITCODE -ne 0 -or $null -ne $closed.state.document) { throw 'MSIX CLI close failed' }
+        $closed = Invoke-BoundedCommand -Label 'Alias close document' -Command @($alias, 'close', '--json') | ConvertFrom-Json
+        if ($null -ne $closed.state.document) { throw 'MSIX CLI close failed' }
     } finally {
         Get-Process -Name quick-presenter -ErrorAction SilentlyContinue |
             Where-Object { $_.Path -eq $exe } | Stop-Process -Force
@@ -100,8 +129,10 @@ try {
     Remove-Item Env:QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE -ErrorAction SilentlyContinue
     # Force the probe's child broker into the installed package context. The
     # broker independently asserts package identity before launching its helper.
-    Invoke-CommandInDesktopPackage -PackageFamilyName $package.PackageFamilyName `
-        -AppId $appId -Command $python -Args $arguments -PreventBreakaway
+    $family = $package.PackageFamilyName
+    Invoke-BoundedPowerShell -Label 'Launch package-identity renderer probe' -Code (
+        "Invoke-CommandInDesktopPackage -PackageFamilyName '$family' -AppId '$appId' " +
+        "-Command '$python' -Args '$arguments' -PreventBreakaway") | Write-Host
     $deadline = (Get-Date).AddSeconds(90)
     $result = $null
     while ((Get-Date) -lt $deadline) {
@@ -115,7 +146,33 @@ try {
     if (-not $result.success) { throw "Installed MSIX sandbox probe failed: $($result.error)" }
     Write-Host 'Installed Store-identity MSIX: package identity, PDF render/notes and sandbox denial gate passed'
 } finally {
-    if ($package) { Remove-AppxPackage -Package $package.PackageFullName }
-    if ($trusted) { Remove-Item -LiteralPath $trusted.PSPath }
-    if ($certificate) { Remove-Item -LiteralPath $certificate.PSPath }
+    # Installation may succeed even if its supervising command times out.
+    if (-not $package) { $package = Get-AppxPackage -Name $packageName }
+    try {
+        if ($report) {
+            # Select only the Python probe carrying this invocation's unique report.
+            Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" |
+                Where-Object { $_.CommandLine -and $_.CommandLine.Contains($report) } |
+                ForEach-Object {
+                    Invoke-BoundedCommand -Label 'Stop package renderer probe' -Seconds 15 -Command @(
+                        'taskkill.exe', '/PID', [string]$_.ProcessId, '/T', '/F') | Write-Host
+                }
+        }
+        # A timeout can occur before the inner GUI cleanup scope is entered.
+        if ($package) {
+            $installedExe = Join-Path $package.InstallLocation 'quick-presenter.exe'
+            Get-Process -Name quick-presenter -ErrorAction SilentlyContinue |
+                Where-Object { $_.Path -eq $installedExe } | Stop-Process -Force
+        }
+    } finally {
+        try {
+            if ($package) {
+                $fullName = $package.PackageFullName
+                Invoke-BoundedPowerShell -Label 'Uninstall test MSIX' -Code "Remove-AppxPackage -Package '$fullName'" | Write-Host
+            }
+        } finally {
+            if ($trusted) { Remove-Item -LiteralPath $trusted.PSPath }
+            if ($certificate) { Remove-Item -LiteralPath $certificate.PSPath }
+        }
+    }
 }
