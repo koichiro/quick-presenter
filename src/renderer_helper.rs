@@ -1013,9 +1013,19 @@ pub fn recovery_smoke(fault_path: PathBuf, valid_path: PathBuf) -> Result<()> {
 pub fn scheduler_smoke(fault_path: PathBuf, valid_path: PathBuf) -> Result<()> {
     use crate::render_scheduler::{RenderScheduler, RenderWorkerLifecycle};
     use std::time::{Duration, Instant};
+    let response_timeout = if cfg!(target_os = "windows") {
+        Duration::from_secs(90)
+    } else {
+        Duration::from_secs(8)
+    };
+    let shutdown_timeout = if cfg!(target_os = "windows") {
+        Duration::from_secs(10)
+    } else {
+        Duration::from_secs(2)
+    };
     let scheduler = RenderScheduler::start();
     let wait_event = || -> Result<RenderEvent> {
-        let deadline = Instant::now() + Duration::from_secs(8);
+        let deadline = Instant::now() + response_timeout;
         loop {
             if let Some(event) = scheduler.drain_events().into_iter().next() {
                 return Ok(event);
@@ -1073,7 +1083,7 @@ pub fn scheduler_smoke(fault_path: PathBuf, valid_path: PathBuf) -> Result<()> {
     scheduler.request_shutdown();
     while !scheduler.can_be_replaced() {
         ensure!(
-            start.elapsed() < Duration::from_secs(2),
+            start.elapsed() < shutdown_timeout,
             "shutdown remained blocked"
         );
         std::thread::sleep(Duration::from_millis(10));

@@ -18,9 +18,10 @@ def verify(binary: Path, expected_version: str) -> dict:
         environment = os.environ.copy()
         environment["XDG_RUNTIME_DIR"] = str(invalid_runtime)
         environment["PDFIUM_DYNAMIC_LIB_PATH"] = str(root / "missing-pdfium")
+
         def run(args: list[str], expected_exit: int = 0) -> str:
             process = subprocess.run([str(binary), *args], cwd=root, env=environment,
-                                     capture_output=True, text=True, timeout=10)
+                                     capture_output=True, text=True, encoding="utf-8", timeout=10)
             if process.returncode != expected_exit:
                 raise ValueError(f"qp {args} exited {process.returncode}: {process.stderr.strip()}")
             if expected_exit:

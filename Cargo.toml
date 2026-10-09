@@ -37,6 +37,14 @@ winresource = { version = "0.1.31", default-features = false }
 i-slint-backend-winit = { path = "vendor/i-slint-backend-winit" }
 winit = { path = "vendor/winit" }
 
+# The Windows renderer tests copy the complete test binary into a fresh
+# AppContainer for every helper launch. Full debug information makes that
+# executable hundreds of megabytes and lets copying/antivirus scanning consume
+# the test harness deadlines. Line-table debug information keeps useful test
+# backtraces while making those launches representative of release packaging.
+[profile.test]
+debug = 1
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.4"
 objc2-app-kit = { version = "0.3.2", default-features = false, features = [
