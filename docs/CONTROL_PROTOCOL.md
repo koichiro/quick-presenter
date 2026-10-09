@@ -6,6 +6,16 @@ Linux in development builds and the supported packages described in [CLI](CLI.md
 implementation, not a declaration that the complete automation feature is
 ready for release.
 
+## Distribution scope for v2.0.0
+
+On macOS, this protocol is supported by the Developer ID / DMG distribution.
+Mac App Store CLI/control support is explicitly out of scope for v2.0.0: the
+Store GUI does not provide a supported endpoint for `qp` or other controllers.
+This exclusion also covers CLI-triggered GUI startup and PDF opening. Future
+sandbox-compatible support is tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422); it is not a v2.0.0
+release requirement. Windows and Linux retain the distributions documented in
+[CLI installation](CLI.md#installation).
+
 ## Ownership and architecture
 
 ```text
