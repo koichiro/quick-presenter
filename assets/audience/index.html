@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quick Presenter Audience</title>
+<style>body{font:18px system-ui;background:#202124;color:#fff;max-width:36rem;margin:3rem auto;padding:1.5rem}p{line-height:1.6}button{font:inherit;padding:.7rem}</style>
+<h1>Quick Presenter</h1><h2>Audience Live</h2><p id="status" role="status">Connecting…</p>
+<p>This session supports joining only. Reactions will be available in a later update.</p>
+<button id="retry" hidden>Reconnect</button>
+<script>
+const status=document.getElementById('status'), retry=document.getElementById('retry');
+const token=new URLSearchParams(location.hash.slice(1)).get('k');
+history.replaceState(null,'',location.pathname);
+let socket;
+function connect(){
+  if(!token){status.textContent='Open the complete join link or scan the QR code.';return;}
+  retry.hidden=true;status.textContent='Connecting…';
+  socket=new WebSocket(`ws://${location.host}/ws`);
+  socket.onopen=()=>socket.send(JSON.stringify({v:1,token}));
+  socket.onmessage=event=>{try{const message=JSON.parse(event.data);if(message.type==='welcome')status.textContent='Connected to the presentation.';}catch{socket.close();}};
+  socket.onclose=()=>{status.textContent='Disconnected. Reconnect while the session is active, or scan the new QR code.';retry.hidden=false;};
+  socket.onerror=()=>{status.textContent='Unable to connect. Check that you are on the same network.';};
+}
+retry.onclick=connect;
+connect();
+</script></html>
