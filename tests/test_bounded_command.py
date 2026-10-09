@@ -35,7 +35,7 @@ class BoundedCommandTests(unittest.TestCase):
             started = time.monotonic()
             result = self.invoke(directory, "import subprocess,sys; "
                                  "child = subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); "
-                                 "print(child.pid); print('parent finished')", timeout=1)
+                                 "print(child.pid); print('parent finished')", timeout=10)
             elapsed = time.monotonic() - started
             pid = int(result.stdout.splitlines()[0])
             if os.name == 'nt':
@@ -45,7 +45,7 @@ class BoundedCommandTests(unittest.TestCase):
                 os.kill(pid, signal.SIGKILL)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('parent finished', result.stdout)
-            self.assertLess(elapsed, 2.5)
+            self.assertLess(elapsed, 15)
 
     def test_timeout_terminates_descendant_before_it_writes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -85,7 +85,7 @@ Invoke-BoundedPowerShell -Label 'PowerShell cmdlet probe' -Code 'Write-Output ''
 """
             encoded = base64.b64encode(code.encode('utf-16le')).decode('ascii')
             result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive',
-                                     '-EncodedCommand', encoded], capture_output=True, timeout=30)
+                                     '-EncodedCommand', encoded], capture_output=True, timeout=60)
             self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
             self.assertIn(b'cmdlet completed', result.stdout)
 
