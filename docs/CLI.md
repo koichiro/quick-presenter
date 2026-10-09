@@ -263,3 +263,10 @@ receive a fresh snapshot. Events are not replayed and the CLI does not reconnect
 automatically. This stream reports committed domain changes, not render or note
 readiness acknowledgements or timer ticks; query `status`, `context`, or
 `timer elapsed` when those data are needed.
+
+## Narration orchestration example
+
+See the [AI autopresentation reference](../examples/autopresent/README.md) for a
+Python external agent that opens a PDF, waits for source/notes and rendering,
+generates narration through a replaceable adapter, waits for audio completion,
+and advances safely. It includes a service-free dry-run and integration tests.
