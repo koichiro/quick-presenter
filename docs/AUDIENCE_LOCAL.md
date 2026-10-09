@@ -80,15 +80,15 @@ control protocol remains unchanged and has no Audience administration commands.
 
 ### CLI baseline integration validation
 
-Rebased onto the `v1.9.0` snapshot `e2e3f0f` on 2026-10-09, retaining the
+Integrated the `v1.9.0` snapshot `21d729b` on 2026-10-09, retaining the
 existing `qp` binary, Control Protocol v1, presentation control runtime, and
 Store bookmark entitlement. The Audience development package remains 2.9.0.
 The CLI endpoint and audience listener remain separate; the LAN server never
 exposes presentation-control commands.
 
-The Cargo checks passed with 482 tests, and the staged CLI contract check passed
-all 10 checks. The macOS debug GUI smoke passed the combined local audience and
-presentation-control path. Overall GUI smoke reported 59 passes and five
-notes-sizing failures; the unchanged `v1.9.0` snapshot produced the same five
-failing checks in the same environment. This does not qualify signed-package
-GUI behavior or mobile/Windows/Linux interoperability.
+The Cargo checks passed with 483 tests, and the staged CLI contract check passed
+all 10 checks. The macOS debug GUI smoke passed all 64 checks, including the
+combined local audience and presentation-control path. The GUI smoke layout
+synchronization fix from #430 resolves the five notes-sizing failures observed
+in the earlier validation. This does not qualify signed-package GUI behavior
+or mobile/Windows/Linux interoperability.
