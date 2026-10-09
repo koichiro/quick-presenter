@@ -65,6 +65,22 @@ Both before/after manual windows use the same Linux desktop, font environment,
 size, and test PDF. Configuration/state are isolated in temporary directories.
 Raw reports and screenshots remain in `/tmp`, rather than in the repository.
 
+## Short-note alignment
+
+The notes box is anchored at `(0, 0)` inside the scroll content. The paragraph
+layout explicitly starts at the top, and each text block uses top-left alignment.
+This prevents a short paragraph from being centered in the
+scroll viewport when its content is shorter than the available height.
+Before/after inspection of page 2 in `long-speaker-notes.pdf` checks the short
+Japanese note at the same 800 x 560 presenter size. Page 1 and both GUI suites
+also check that long-note scrolling and compact paragraph gaps remain intact.
+The short-note GUI check also verifies the notes box stays at the top of the
+viewport while fitting at 24px.
+
+The final full Rust run passes 478 tests with `--test-threads=1`; the initial
+parallel run hit an unrelated transient `Text file busy` error while launching
+the CLI fixture, and that suite passes when retried.
+
 No macOS or Windows desktop is available in this run, so visual equivalence to
 macOS is not claimed. Their existing line-height value is preserved. This
 change does not remove intentional blank lines from PDF source annotations or impose

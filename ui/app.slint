@@ -112,6 +112,7 @@ component NotesText inherits Rectangle {
     height: self.preferred-height;
 
     paragraphs-layout := VerticalLayout {
+        alignment: start;
         spacing: NotesTypography.compact-paragraphs ? root.font-size * 0.5 : 0px;
         for paragraph in root.paragraphs: TextInput {
             text: paragraph;
@@ -121,6 +122,8 @@ component NotesText inherits Rectangle {
             wrap: word-wrap;
             single-line: false;
             read-only: true;
+            horizontal-alignment: left;
+            vertical-alignment: top;
             line-height-factor: NotesTypography.line-height-factor;
             page-height: root.page-height;
             text-cursor-width: 0px;
@@ -140,6 +143,7 @@ component NotesView inherits Rectangle {
     in property <length> font-size: 12px;
     out property <length> visible-height: scroll-view.visible-height;
     out property <length> content-height: scroll-view.content-height;
+    out property <length> text-y: notes-input.y;
     in-out property <length> scroll-y <=> scroll-view.content-y;
     out property <[float]> measured-heights: [
         measure-12.preferred-height / 1px,
@@ -257,6 +261,8 @@ component NotesView inherits Rectangle {
         changed content-height => { root.clamp-scroll-position(); }
 
         notes-input := NotesText {
+            x: 0px;
+            y: 0px;
             text: root.has-notes ? root.notes-text : "No notes";
             font-size: root.has-notes ? root.font-size : 12px;
             text-color: root.has-notes ? #f1f3f4 : #9aa0a6;
@@ -694,6 +700,7 @@ export component PresenterWindow inherits Window {
     in property <float> notes-font-size: 12;
     out property <length> notes-visible-height: notes-view.visible-height;
     out property <length> notes-content-height: notes-view.content-height;
+    out property <length> notes-text-y: notes-view.text-y;
     in-out property <length> notes-scroll-y <=> notes-view.scroll-y;
     out property <[float]> notes-measured-heights: notes-view.measured-heights;
     in property <bool> slide-fullscreen: false;

@@ -452,11 +452,13 @@ fn check_notes_font_size(
     report.check(
         format!("short notes automatically use 24px ({context})"),
         presenter.get_notes_font_size() == 24.0
+            && presenter.get_notes_text_y().abs() <= 1.0
             && presenter.get_notes_content_height() <= presenter.get_notes_visible_height(),
-        "short notes fit at the maximum size",
+        "short notes fit at the maximum size and start at the top of the viewport",
         format!(
-            "size={}, content={}, viewport={}",
+            "size={}, text_y={}, content={}, viewport={}",
             presenter.get_notes_font_size(),
+            presenter.get_notes_text_y(),
             presenter.get_notes_content_height(),
             presenter.get_notes_visible_height()
         ),
