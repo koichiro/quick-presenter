@@ -697,7 +697,8 @@ export component PresenterWindow inherits Window {
     in property <bool> audience-can-start: false;
     in property <int> audience-count: 0;
     in property <bool> audience-guide-visible: false;
-    out property <length> audience-panel-height: 150px;
+    out property <length> audience-panel-height: 200px;
+    callback audience-open-url();
     callback audience-toggle-guide();
     callback audience-toggle-session();
     callback audience-next-address();
@@ -780,9 +781,9 @@ export component PresenterWindow inherits Window {
 
     title: "Quick Presenter";
     preferred-width: 1024px;
-    preferred-height: 870px;
+    preferred-height: 920px;
     min-width: 800px;
-    min-height: 710px;
+    min-height: 760px;
     background: #202124;
     forward-focus: presenter-focus;
 
@@ -1374,22 +1375,54 @@ export component PresenterWindow inherits Window {
                 background: #111315;
                 border-color: #3c4043;
                 border-width: 1px;
-                VerticalBox {
+                HorizontalBox {
                     padding: 12px;
-                    spacing: 6px;
-                    HorizontalBox {
-                        Text { text: "Audience Live · Local Network"; color: white; font-size: 18px; horizontal-stretch: 1; }
-                        Text { text: "Connected: " + root.audience-count; color: white; }
-                        Button { text: root.audience-active ? "Stop Session" : "Start Session"; enabled: root.audience-active || root.audience-can-start; clicked => { root.audience-toggle-session(); } }
+                    spacing: 12px;
+                    VerticalBox {
+                        horizontal-stretch: 1;
+                        spacing: 6px;
+                        HorizontalBox {
+                            Text { text: "Audience Live"; color: white; font-size: 18px; horizontal-stretch: 1; }
+                            Text { text: "Connected: " + root.audience-count; color: white; }
+                            Button { text: root.audience-active ? "Stop Session" : "Start Session"; enabled: root.audience-active || root.audience-can-start; clicked => { root.audience-toggle-session(); } }
+                        }
+                        HorizontalBox {
+                            Text { text: root.audience-address; color: #d9dce0; horizontal-stretch: 1; overflow: elide; }
+                            Button { text: "Refresh"; enabled: !root.audience-active; clicked => { root.audience-refresh-addresses(); } }
+                            Button { text: "Next address"; enabled: !root.audience-active; clicked => { root.audience-next-address(); } }
+                        }
+                        Text { text: root.audience-status; color: #d9dce0; wrap: word-wrap; }
+                        Rectangle {
+                            min-height: 42px;
+                            vertical-stretch: 1;
+                            Text {
+                                width: parent.width;
+                                height: parent.height;
+                                text: root.audience-url == "" ? "Audience starts a session and shows its QR code." : root.audience-url;
+                                color: root.audience-url == "" ? #9aa0a6 : #8ab4f8;
+                                wrap: word-wrap;
+                                vertical-alignment: center;
+                            }
+                            TouchArea {
+                                enabled: root.audience-url != "";
+                                mouse-cursor: pointer;
+                                clicked => { root.audience-open-url(); }
+                            }
+                        }
                     }
-                    HorizontalBox {
-                        Text { text: root.audience-address; color: #d9dce0; horizontal-stretch: 1; overflow: elide; }
-                        Button { text: "Refresh addresses"; enabled: !root.audience-active; clicked => { root.audience-refresh-addresses(); } }
-                        Button { text: "Next address"; enabled: !root.audience-active; clicked => { root.audience-next-address(); } }
+                    Rectangle {
+                        width: 190px;
+                        background: #202124;
+                        border-color: #3c4043;
+                        border-width: 1px;
+                        VerticalBox {
+                            padding: 10px;
+                            Text { text: "Audience reactions"; color: white; font-weight: 700; }
+                            Text { text: "Reactions will appear here in a future update."; color: #9aa0a6; wrap: word-wrap; vertical-stretch: 1; }
+                        }
                     }
-                    Text { text: root.audience-status; color: #d9dce0; overflow: elide; }
-                    TextInput { text: root.audience-url == "" ? "Use Audience to show the page 0 join screen." : root.audience-url; color: #d9dce0; read-only: true; single-line: true; }
                 }
+
             }
 
             Rectangle {
@@ -1635,6 +1668,7 @@ export component SlideWindow inherits Window {
     in property <image> audience-qr;
     in property <string> audience-url;
     in property <string> audience-code;
+    in property <string> audience-status;
     in property <image> page-image;
     in property <float> page-aspect-ratio: 16.0 / 9.0;
     in property <length> slide-window-width: 1024px;
@@ -1819,9 +1853,9 @@ export component SlideWindow inherits Window {
                 padding: min(root.width, root.height) * 0.04;
                 spacing: 12px;
                 Text { text: "Quick Presenter · Audience Live"; color: white; font-size: min(root.width, root.height) * 0.045; horizontal-alignment: center; }
-                Text { text: root.audience-code == "" ? "Page 0 · Join this session" : "Session " + root.audience-code; color: #d9dce0; font-size: 22px; horizontal-alignment: center; }
+                Text { text: root.audience-code == "" ? "Page 0 · Join this session" : "Page 0 · Session " + root.audience-code; color: #d9dce0; font-size: 22px; horizontal-alignment: center; }
                 Image { source: root.audience-qr; image-fit: contain; image-rendering: pixelated; min-height: 100px; vertical-stretch: 1; }
-                Text { text: root.audience-url == "" ? "The presenter will start the session shortly." : root.audience-url; color: white; font-size: 18px; wrap: word-wrap; horizontal-alignment: center; }
+                Text { text: root.audience-url == "" ? root.audience-status : root.audience-url; color: white; font-size: 18px; wrap: word-wrap; horizontal-alignment: center; }
                 Text { text: "Scan the QR code on the same Wi-Fi or LAN."; color: #d9dce0; font-size: 20px; horizontal-alignment: center; }
             }
         }

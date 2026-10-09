@@ -61,7 +61,7 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
 
     crate::wire_callbacks(&windows, windows.refs(), state.clone());
     crate::apply_app_metadata(&windows.presenter);
-    let _audience_ui = crate::audience_ui::AudienceUi::install(&windows, state.clone());
+    let _audience_ui = crate::audience_ui::AudienceUi::install_for_smoke(&windows, state.clone());
 
     windows.apply_initial_positions();
     windows
@@ -420,18 +420,25 @@ fn check_audience_join_screen(
     let now = Instant::now();
     let elapsed = state.borrow().timer.elapsed_at(now);
     let presenter = &windows.presenter;
-    // A synthetic join URL keeps this UI check independent of LAN availability.
-    let url = "http://192.0.2.1:12345/join/AB12CD#k=smoke-test";
-    presenter.set_audience_url(url.into());
-    presenter.set_audience_code("AB12CD".into());
-    presenter.set_audience_qr(crate::audience_ui::qr_image(url)?);
     presenter.invoke_audience_toggle_guide();
-    settle_presenter_notes_layout(presenter)?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    let url = presenter.get_audience_url();
+    report.check(
+        "Audience automatically starts a local session with a QR code",
+        presenter.get_audience_active()
+            && url.starts_with("http://127.0.0.1:")
+            && presenter.get_audience_qr().size().width > 0,
+        "real loopback session became ready",
+        "session or QR not ready",
+    );
     report.check(
         "Audience button shows page 0 on the slide window",
         windows.slide.get_audience_guide_visible()
             && windows.slide.get_audience_url() == url
-            && windows.slide.get_audience_code() == "AB12CD"
+            && windows.slide.get_audience_code() == presenter.get_audience_code()
             && windows.slide.get_audience_qr().size().width > 0,
         "join metadata reached the audience window",
         "join screen or metadata missing",
@@ -485,10 +492,21 @@ fn check_audience_join_screen(
         "both windows returned to PDF",
         "join screen remained active",
     );
-    presenter.set_audience_url("".into());
-    presenter.set_audience_code("".into());
-    presenter.set_audience_qr(Default::default());
-    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_active() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    report.check(
+        "Stop clears audience QR, URLs, and join screen",
+        !presenter.get_audience_active()
+            && presenter.get_audience_url().is_empty()
+            && windows.slide.get_audience_url().is_empty()
+            && windows.slide.get_audience_qr().size().width == 0
+            && !windows.slide.get_audience_guide_visible(),
+        "stale join credentials cleared",
+        "stale join information remained",
+    );
     Ok(())
 }
 

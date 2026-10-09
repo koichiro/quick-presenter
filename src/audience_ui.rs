@@ -19,6 +19,21 @@ pub struct AudienceUi {
 
 impl AudienceUi {
     pub fn install(windows: &AppWindows, state: Rc<RefCell<AppState>>) -> Rc<Self> {
+        Self::install_with_address_source(windows, state, audience::local_addresses)
+    }
+
+    pub(crate) fn install_for_smoke(
+        windows: &AppWindows,
+        state: Rc<RefCell<AppState>>,
+    ) -> Rc<Self> {
+        Self::install_with_address_source(windows, state, || Ok(vec![Ipv4Addr::LOCALHOST]))
+    }
+
+    fn install_with_address_source(
+        windows: &AppWindows,
+        state: Rc<RefCell<AppState>>,
+        addresses: fn() -> std::io::Result<Vec<Ipv4Addr>>,
+    ) -> Rc<Self> {
         let presenter = &windows.presenter;
         let ui = Rc::new(Self {
             session: RefCell::new(None),
@@ -30,8 +45,16 @@ impl AudienceUi {
         });
         let refs = windows.refs();
         let guide_state = state.clone();
+        let weak = Rc::downgrade(&ui);
         presenter.on_audience_toggle_guide(move || {
             let visible = !guide_state.borrow().audience_join_visible;
+            if visible {
+                if let (Some(ui), Some(presenter)) = (weak.upgrade(), refs.presenter.upgrade()) {
+                    if ui.session.borrow().is_none() {
+                        presenter.invoke_audience_toggle_session();
+                    }
+                }
+            }
             set_join_visible(&refs, &guide_state, visible);
             if visible {
                 crate::show_slide_window_from_menu(&refs, &guide_state);
@@ -47,7 +70,7 @@ impl AudienceUi {
             if ui.session.borrow().is_some() {
                 return;
             }
-            match audience::local_addresses() {
+            match addresses() {
                 Ok(addresses) => {
                     *ui.addresses.borrow_mut() = addresses;
                     *ui.address_index.borrow_mut() = 0;
@@ -101,6 +124,12 @@ impl AudienceUi {
                 return;
             }
             let Some(&address) = ui.addresses.borrow().get(*ui.address_index.borrow()) else {
+                if let Some(window) = window.upgrade() {
+                    window.set_audience_status(
+                        "No LAN address. Connect to Wi-Fi or Ethernet, then refresh addresses."
+                            .into(),
+                    );
+                }
                 return;
             };
             match LocalAudienceSession::start(address) {
@@ -134,6 +163,35 @@ impl AudienceUi {
                     }
                 }
             }
+        });
+        let weak = Rc::downgrade(&ui);
+        let window = presenter.as_weak();
+        presenter.on_audience_open_url(move || {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            if *ui.stopping.borrow() {
+                return;
+            }
+            let Some(SessionStatus::Running { url, .. }) = ui
+                .session
+                .borrow()
+                .as_ref()
+                .map(|session| session.snapshot().status)
+            else {
+                return;
+            };
+            let window = window.clone();
+            // Browser launching may invoke OS IPC; keep it off the UI thread.
+            std::thread::spawn(move || {
+                if webbrowser::open(&url).is_err() {
+                    let _ = window.upgrade_in_event_loop(|window| {
+                        window.set_audience_status(
+                            "Cannot open your browser. Copy the join URL instead.".into(),
+                        );
+                    });
+                }
+            });
         });
         presenter.invoke_audience_refresh_addresses();
         ui
@@ -238,6 +296,7 @@ fn sync_join_metadata(windows: &AppWindowRefs) {
         slide.set_audience_qr(presenter.get_audience_qr());
         slide.set_audience_url(presenter.get_audience_url());
         slide.set_audience_code(presenter.get_audience_code());
+        slide.set_audience_status(presenter.get_audience_status());
     }
 }
 

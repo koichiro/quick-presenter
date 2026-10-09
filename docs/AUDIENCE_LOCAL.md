@@ -11,7 +11,7 @@ and animated audience-event overlays remain outside this scope.
 2. Use the **Audience Live** controls permanently below the notes area. Select
    an IPv4 address with **Next address** or rediscover interfaces with
    **Refresh addresses**, then select **Start Session**.
-3. Press **Audience** to show the page 0 join screen in the presentation window.
+3. Press **Audience** to start a session if needed and show the page 0 join screen in the presentation window.
    It contains the audience QR code, session code, and join URL, without host
    controls or connection diagnostics.
 4. Scan the QR code with a phone. Keep the browser page open to stay connected.
@@ -21,10 +21,13 @@ and animated audience-event overlays remain outside this scope.
 6. Select **Stop Session** to invalidate the link, clear the join screen, and
    close all connections.
 
-The presenter window reserves 150 logical pixels below the notes and grows its
+The presenter window reserves 200 logical pixels below the notes and grows its
 preferred/minimum height by the same amount, preserving the notes area. Start,
 stop, address selection, session status, and connection count stay in this area.
-Displaying or dismissing page 0 does not start or stop a session. A restarted
+Audience starts a session when none is running; dismissing page 0 keeps it active.
+Click the presenter join URL to open the same audience page in your browser.
+A separate reactions area is reserved for a future update; no reaction events
+are implemented yet. A restarted
 session uses a new random secret and may use a different OS-assigned port.
 Sessions do not start automatically.
 
@@ -97,9 +100,10 @@ The CLI endpoint and audience listener remain separate; the LAN server never
 exposes presentation-control commands.
 
 The Cargo checks passed with 483 tests, and the staged CLI contract check passed
-all 10 checks. The macOS debug GUI smoke passed all 76 checks, including the
+all 10 checks. The macOS debug GUI smoke passed all 80 checks, including the
 combined local audience and presentation-control path. The additional checks
-cover page 0 metadata, PDF/timer preservation, return navigation, and rendered
+cover real automatic session start, QR/URL publication and stop cleanup,
+page 0 metadata, PDF/timer preservation, return navigation, and rendered
 blackout before and after opening a PDF. The GUI smoke layout
 synchronization fix from #430 resolves the five notes-sizing failures observed
 in the earlier validation. This does not qualify signed-package GUI behavior

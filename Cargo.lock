@@ -3949,6 +3949,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "tungstenite",
+ "webbrowser",
  "windows-sys 0.61.2",
  "winresource",
 ]
