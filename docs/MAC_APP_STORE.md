@@ -28,6 +28,12 @@ bookmarks do not grant access to every path supplied by a CLI. Future work and
 a preliminary estimate are tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422). This work is not a
 v2.0.0 Store release gate.
 
+The v2.4.0 [Store CLI IPC design](MAC_APP_STORE_CLI_IPC.md) proposes an
+App Group socket proof of concept with mutual running-code authentication and
+an XPC alternative if the identity gates fail. #431 owns IPC, #432 owns GUI
+startup/PDF authority, and #433 owns final packaging and installed validation.
+These design proposals do not establish Store CLI support.
+
 ## Release checklist
 
 1. Select a clean checkout of the intended release source, including these Store
