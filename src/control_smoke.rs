@@ -24,7 +24,8 @@ pub fn run(windows: &AppWindows, state: Rc<RefCell<AppState>>, pdf: PathBuf) -> 
     windows.presenter.hide()?;
     let (sender, receiver) = mpsc::sync_channel(1);
     let worker = thread::spawn(move || {
-        let _ = sender.send(check_commands(&path, &pdf).map_err(|error| format!("{error:#}")));
+        let _ = sender
+            .send(check_audience_coexistence(&path, &pdf).map_err(|error| format!("{error:#}")));
     });
     let result = Rc::new(RefCell::new(None));
     let result_timer = result.clone();
@@ -55,6 +56,59 @@ pub fn run(windows: &AppWindows, state: Rc<RefCell<AppState>>, pdf: PathBuf) -> 
         .take()
         .unwrap_or_else(|| Err("Control GUI smoke interrupted".into()))
         .map_err(anyhow::Error::msg)?;
+    Ok(())
+}
+// Smoke-only listener: ordinary GUI startup never enables Audience automatically.
+fn check_audience_coexistence(path: &Path, pdf: &Path) -> Result<()> {
+    use crate::audience::{LocalAudienceSession, SessionStatus};
+    use std::{
+        io::{Read, Write},
+        net::{Ipv4Addr, TcpStream},
+    };
+    let mut audience = LocalAudienceSession::start(Ipv4Addr::LOCALHOST)?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let url = loop {
+        match audience.snapshot().status {
+            SessionStatus::Running { url, .. } => break url,
+            SessionStatus::Failed(error) => anyhow::bail!("Audience smoke startup: {error}"),
+            _ => anyhow::ensure!(
+                Instant::now() < deadline,
+                "Audience smoke startup timed out"
+            ),
+        }
+        thread::sleep(Duration::from_millis(10));
+    };
+    let (public_url, token) = url.split_once("#k=").context("Audience join secret")?;
+    let (authority, route) = public_url
+        .strip_prefix("http://")
+        .context("Audience HTTP URL")?
+        .split_once('/')
+        .context("Audience join route")?;
+    let mut browser = TcpStream::connect(authority)?;
+    browser.set_read_timeout(Some(Duration::from_secs(3)))?;
+    browser.set_write_timeout(Some(Duration::from_secs(3)))?;
+    write!(
+        browser,
+        "GET /{route} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n\r\n"
+    )?;
+    let mut response = String::new();
+    browser.read_to_string(&mut response)?;
+    anyhow::ensure!(
+        response.starts_with("HTTP/1.1 200") && !response.contains(token),
+        "Audience join page failed"
+    );
+    // Exercise navigation, content queries, blackout, close and reopen while hosted.
+    let result = check_commands(path, pdf);
+    audience.shutdown();
+    result?;
+    anyhow::ensure!(
+        matches!(audience.snapshot().status, SessionStatus::Stopped),
+        "Audience did not stop"
+    );
+    anyhow::ensure!(
+        matches!(call(path, Command::Status(Empty {}))?, Reply::Status(state) if state.render_state == RenderState::Ready),
+        "Audience shutdown interrupted presentation control"
+    );
     Ok(())
 }
 fn call(path: &Path, command: Command) -> Result<Reply> {

@@ -72,3 +72,23 @@ disconnect/stop cleanup, listener release, restart secret rotation, Host/Origin
 validation, and the handshake budget. Manual release checks should include
 multiple network interfaces, denied network permissions, rapid start/stop,
 mobile background/resume, and presentation navigation during connection churn.
+
+The debug Unix GUI smoke also runs the existing presentation-control checks
+while a loopback audience server is active. It verifies join-page delivery and
+that stopping Audience leaves presentation control available. The production
+control protocol remains unchanged and has no Audience administration commands.
+
+### CLI baseline integration validation
+
+Rebased onto the `v1.9.0` snapshot `e2e3f0f` on 2026-10-09, retaining the
+existing `qp` binary, Control Protocol v1, presentation control runtime, and
+Store bookmark entitlement. The Audience development package remains 2.9.0.
+The CLI endpoint and audience listener remain separate; the LAN server never
+exposes presentation-control commands.
+
+The Cargo checks passed with 482 tests, and the staged CLI contract check passed
+all 10 checks. The macOS debug GUI smoke passed the combined local audience and
+presentation-control path. Overall GUI smoke reported 59 passes and five
+notes-sizing failures; the unchanged `v1.9.0` snapshot produced the same five
+failing checks in the same environment. This does not qualify signed-package
+GUI behavior or mobile/Windows/Linux interoperability.
