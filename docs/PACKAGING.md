@@ -21,6 +21,12 @@ Signing covers both Windows executables and the macOS CLI inside the app bundle.
 GUI/IPC/PDFium access, including JSON version output and rejection of timer
 mutation commands. Package CI also checks installed/extracted CLI paths.
 
+Mac App Store CLI/control support is explicitly out of scope for v2.0.0.
+Automation on macOS requires the Developer ID / DMG distribution; a bundled or
+separately installed CLI does not establish a supported endpoint in the Store
+GUI. See [Store limitations](MAC_APP_STORE.md#clicontrol-limitation-in-v200)
+and future work in [#422](https://github.com/koichiro/quick-presenter/issues/422).
+
 ## Bundled PDFium
 
 Release packages and binary artifacts must include PDFium. Quick Presenter does

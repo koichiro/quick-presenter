@@ -176,8 +176,8 @@ The active PDF is watched automatically. Saving it in place or replacing it
 atomically refreshes the deck while preserving the current page when possible.
 No hot reload setting is required.
 
-The Cargo package and GUI executable are both named `quick-presenter`. The short
-`qp` command name is reserved for a future automation-oriented CLI entrypoint.
+The Cargo package and GUI executable are both named `quick-presenter`. The separate
+`qp` executable provides the local automation interface described below.
 
 Keyboard controls are documented in [docs/KEYBOARD.md](docs/KEYBOARD.md).
 Recent-file privacy behavior is documented in
@@ -187,8 +187,9 @@ Packaged app diagnostic logs are documented in
 
 ## Local Automation (Experimental)
 
-Windows, macOS, and Linux packages include `qp`, a CLI for AI agents
-and other automation tools to query and control a running Quick Presenter instance:
+Supported Windows and Linux packages and macOS Developer ID / DMG builds include
+`qp`, a CLI for AI agents and other automation tools to query and control
+Quick Presenter:
 
 ```sh
 # With qp on PATH:
@@ -204,7 +205,9 @@ qp watch --json
 ```
 
 `qp open` starts the GUI if needed. The CLI uses local IPC and the same
-presentation operations as the GUI.
+presentation operations as the GUI. **Mac App Store CLI/control support is out of
+scope for v2.0.0.** On macOS, use the Developer ID / DMG distribution for automation.
+Future Store support is tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422).
 See [CLI usage](docs/CLI.md) and the
 [Presentation Control Protocol](docs/CONTROL_PROTOCOL.md) for the initial
 command set, JSON output, errors, and current limitations.
