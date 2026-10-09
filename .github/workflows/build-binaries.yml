@@ -150,7 +150,7 @@ jobs:
         run: cargo test --test renderer_process
 
       - name: Test control protocol and CLI on each platform
-        run: cargo test --lib --test control_contract --test control_events --test control_ipc --test control_ipc_windows --test control_launch
+        run: cargo test --lib --test control_contract --test control_events --test control_ipc --test control_ipc_windows --test control_lock --test control_launch
 
       - name: Build release binaries
         run: cargo build --release --bins

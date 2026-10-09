@@ -37,7 +37,7 @@ state do not manage log lifecycle.
 
 ## Local presentation control
 
-The experimental [Presentation Control Protocol](CONTROL_PROTOCOL.md) exposes
+The stable [Presentation Control Protocol v1](CONTROL_PROTOCOL.md) exposes
 GUI-owned presentation state through local IPC. Typed, bounded requests are
 dispatched on the existing event loop, using shared navigation/black-screen
 commands and the existing asynchronous PDF open pipeline. The server owns no

@@ -109,21 +109,6 @@ fn malformed_requests_do_not_enter_presentation_queue() {
     drop(server);
 }
 #[test]
-fn stale_socket_recovers_but_unsafe_paths_are_preserved() {
-    let dir = Directory::new();
-    let path = dir.socket();
-    let listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
-    drop(listener);
-    let (server, _) = ControlServer::bind(&path).unwrap();
-    drop(server);
-    fs::write(&path, "do not delete").unwrap();
-    assert!(ControlServer::bind(&path).is_err());
-    assert_eq!(fs::read_to_string(&path).unwrap(), "do not delete");
-    fs::set_permissions(&dir.0, fs::Permissions::from_mode(0o755)).unwrap();
-    assert!(ControlServer::bind(&path).is_err());
-}
-#[test]
 fn slow_or_disconnected_client_does_not_block_other_connections() {
     let dir = Directory::new();
     let path = dir.socket();

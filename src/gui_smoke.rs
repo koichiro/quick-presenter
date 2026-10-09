@@ -414,6 +414,16 @@ fn settle_notes_layout() -> Result<()> {
     slint::run_event_loop_until_quit().context("failed to process notes layout changes")
 }
 
+fn settle_presenter_notes_layout(presenter: &crate::PresenterWindow) -> Result<()> {
+    // Paragraph models are materialized by Slint's input/rendering passes, not
+    // by elapsed time alone. PointerExited runs the normal input pass without
+    // clicking controls or changing focus, even when native redraw is deferred.
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::PointerExited);
+    settle_notes_layout()
+}
+
 fn check_notes_font_size(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
@@ -438,7 +448,7 @@ fn check_notes_font_size(
 
     presenter.set_has_notes(false);
     presenter.set_notes_text("".into());
-    settle_notes_layout()?;
+    settle_presenter_notes_layout(presenter)?;
     report.check(
         format!("no-notes placeholder uses 12px ({context})"),
         presenter.get_notes_font_size() == 12.0,
@@ -448,7 +458,7 @@ fn check_notes_font_size(
 
     presenter.set_has_notes(true);
     presenter.set_notes_text("Opening remarks. 日本語のノート。".into());
-    settle_notes_layout()?;
+    settle_presenter_notes_layout(presenter)?;
     report.check(
         format!("short notes automatically use 24px ({context})"),
         presenter.get_notes_font_size() == 24.0
@@ -469,7 +479,7 @@ fn check_notes_font_size(
             .repeat(150)
             .into(),
     );
-    settle_notes_layout()?;
+    settle_presenter_notes_layout(presenter)?;
     report.check(
         format!("long notes stay readable and scrollable at 12px ({context})"),
         presenter.get_notes_font_size() == 12.0
@@ -484,11 +494,11 @@ fn check_notes_font_size(
         let compact_height = presenter.get_notes_content_height();
         let compact_measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
         typography.set_line_height_factor(1.25);
-        settle_notes_layout()?;
+        settle_presenter_notes_layout(presenter)?;
         let expanded_height = presenter.get_notes_content_height();
         let expanded_measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
         typography.set_line_height_factor(1.0);
-        settle_notes_layout()?;
+        settle_presenter_notes_layout(presenter)?;
         report.check(
             format!("Linux natural line spacing matches visible notes and sizing probes ({context})"),
             expanded_height > compact_height * 1.2
@@ -500,13 +510,13 @@ fn check_notes_font_size(
         );
 
         presenter.set_notes_text("English line\n日本語の行".into());
-        settle_notes_layout()?;
+        settle_presenter_notes_layout(presenter)?;
         let lines = presenter.get_notes_measured_heights().row_data(0).unwrap();
         presenter.set_notes_text("English line\n\n日本語の行".into());
-        settle_notes_layout()?;
+        settle_presenter_notes_layout(presenter)?;
         let one_blank = presenter.get_notes_measured_heights().row_data(0).unwrap();
         presenter.set_notes_text("English line\n\n\n日本語の行".into());
-        settle_notes_layout()?;
+        settle_presenter_notes_layout(presenter)?;
         let two_blanks = presenter.get_notes_measured_heights().row_data(0).unwrap();
         report.check(
             format!("Linux blank note lines retain compact paragraph gaps ({context})"),
@@ -517,7 +527,7 @@ fn check_notes_font_size(
             format!("unexpected blank-line spacing: {lines}, {one_blank}, {two_blanks}"),
         );
         presenter.set_notes_text("English paragraph\n日本語の段落\n\n".repeat(100).into());
-        settle_notes_layout()?;
+        settle_presenter_notes_layout(presenter)?;
         let measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
         report.check(
             format!("Linux paragraph notes remain scrollable with matching probes ({context})"),
@@ -537,7 +547,7 @@ fn check_notes_font_size(
         presenter.get_notes_visible_height() - presenter.get_notes_content_height(),
     );
     presenter.set_notes_text("日本語のノートを確認します。\n".repeat(8).into());
-    settle_notes_layout()?;
+    settle_presenter_notes_layout(presenter)?;
     let small_size = presenter.get_notes_font_size();
     let heights: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();
     let selected = (small_size as usize).saturating_sub(12);
@@ -571,7 +581,7 @@ fn check_notes_font_size(
         .dispatch_event(slint::platform::WindowEvent::Resized {
             size: slint::LogicalSize::new(1200.0, 1000.0),
         });
-    settle_notes_layout()?;
+    settle_presenter_notes_layout(presenter)?;
     report.check(
         format!("logical resize events automatically enlarge notes ({context})"),
         presenter.get_notes_font_size() > small_size,
@@ -590,7 +600,7 @@ fn check_notes_font_size(
         });
     presenter.set_current_page_aspect_ratio(0.6);
     presenter.set_use_native_menu_bar(false);
-    settle_notes_layout()?;
+    settle_presenter_notes_layout(presenter)?;
     report.check(
         format!("portrait slides and inline menus retain bounded notes sizing ({context})"),
         (12.0..=24.0).contains(&presenter.get_notes_font_size())
@@ -608,7 +618,7 @@ fn check_notes_font_size(
         .dispatch_event(slint::platform::WindowEvent::Resized {
             size: original_size.to_logical(presenter.window().scale_factor()),
         });
-    settle_notes_layout()?;
+    settle_presenter_notes_layout(presenter)?;
     report.check(
         format!("automatic sizing preserves presentation state ({context})"),
         state.borrow().presentation.snapshot() == before
