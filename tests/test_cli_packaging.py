@@ -5,7 +5,10 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 import xml.etree.ElementTree as ET
+
+from scripts import check_qp
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -98,6 +101,24 @@ class CliPackagingTests(unittest.TestCase):
         alias = extension.find("u:AppExecutionAlias", ns)
         self.assertEqual(alias.attrib["{" + ns["d"] + "}Subsystem"], "console")
         self.assertEqual(alias.find("u:ExecutionAlias", ns).attrib["Alias"], "qp.exe")
+
+    def test_qp_checker_decodes_cli_output_as_utf8_on_non_utf8_hosts(self):
+        def fake_run(command, **kwargs):
+            self.assertEqual(kwargs["encoding"], "utf-8")
+            args = command[1:]
+            if args == ["--version", "--json"]:
+                return subprocess.CompletedProcess(command, 0,
+                                                   '{"application_version":"9.9.9","protocol_version":1}\n', "")
+            if args == ["-V"]:
+                return subprocess.CompletedProcess(command, 0,
+                                                   "qp 9.9.9 (Control Protocol v1)\n", "")
+            if args == ["--help"]:
+                return subprocess.CompletedProcess(command, 0, "timer elapsed watch --full\n", "")
+            return subprocess.CompletedProcess(command, 2, "", '{"code":"INVALID_REQUEST"}\n')
+
+        with mock.patch.object(check_qp.subprocess, "run", side_effect=fake_run):
+            result = check_qp.verify(self.cli, "9.9.9")
+        self.assertEqual(result["checks"], 10)
 
 
 if __name__ == "__main__":
