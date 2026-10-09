@@ -1,0 +1,49 @@
+# Linux notes line spacing validation
+
+Date: 2026-10-09 (JST). Environment: Ubuntu 26.04.1 LTS, GNOME Wayland,
+x86_64, one 2560 x 1080 display at scale 1.0.
+
+## Change and measurement
+
+Linux now uses natural font line height (factor 1.0) for speaker notes instead
+of applying the shared 1.25 multiplier. macOS and Windows retain factor 1.25.
+The visible TextInput and all 12–24px measurement probes use one typography
+property, initialized by Rust when creating the presenter window.
+
+With the same 12px font, width, and 150 repeated mixed English/Japanese lines,
+the Linux GUI measured 2478px content height at factor 1.0 versus 3095px at
+factor 1.25, including 10px bottom padding. This is approximately 20% less
+vertical space. The regression check also verifies that visible content height
+matches the measurement probe and returns to the original height after toggling
+the factor back. This compares line spacing without changing font size.
+
+The earlier GUI smoke failure required an intermediate font size for eight
+Japanese lines in the minimum presenter layout. With natural line height,
+the largest fitting intermediate size is now selected, and the assertion passes
+without relaxing its requirements.
+
+## Results
+
+- `cargo fmt --check`: passed.
+- `cargo check --locked -j 2`: passed.
+- `cargo test --locked -j 2` with the matching installed PDFium: 476 passed.
+- Native Wayland GUI smoke: 66 passed, zero failed.
+- XWayland GUI smoke in the same physical desktop session: 66 passed,
+  zero failed. This is not a native Xorg session.
+- At an actual 800 x 560 presenter size, before/after screenshots of
+  `long-speaker-notes.pdf` show tighter English line spacing at the unchanged
+  minimum font size. `mixed-speaker-notes.pdf` is also inspected for Japanese
+  text, wrapping, and explicit paragraph breaks.
+- Both GUI suites cover 24px short notes, 12px scrolling overflow, Japanese
+  multiline fitting, scroll clamping after content changes, resizing, portrait
+  notes layout, and preservation of presentation state during typography changes.
+
+The baseline is the debug package built from `5241c1b` on the `v1.9.0` branch.
+Both before/after manual windows use the same Linux desktop, font environment,
+size, and test PDF. Configuration/state are isolated in temporary directories.
+Raw reports and screenshots remain in `/tmp`, rather than in the repository.
+
+No macOS or Windows desktop is available in this run, so visual equivalence to
+macOS is not claimed. Their existing line-height value is preserved. This
+change does not remove intentional blank lines from PDF annotations or impose
+identical font metrics across operating systems.

@@ -476,6 +476,28 @@ fn check_notes_font_size(
         "overflow shrank below the minimum or did not remain scrollable",
     );
 
+    #[cfg(target_os = "linux")]
+    {
+        let typography = presenter.global::<crate::NotesTypography>();
+        let compact_height = presenter.get_notes_content_height();
+        let compact_measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        typography.set_line_height_factor(1.25);
+        settle_notes_layout()?;
+        let expanded_height = presenter.get_notes_content_height();
+        let expanded_measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
+        typography.set_line_height_factor(1.0);
+        settle_notes_layout()?;
+        report.check(
+            format!("Linux natural line spacing matches visible notes and sizing probes ({context})"),
+            expanded_height > compact_height * 1.2
+                && (compact_height - compact_measurement - crate::notes::NOTES_BOTTOM_PADDING).abs() <= 1.0
+                && (expanded_height - expanded_measurement - crate::notes::NOTES_BOTTOM_PADDING).abs() <= 1.0
+                && (presenter.get_notes_content_height() - compact_height).abs() <= 1.0,
+            format!("12px mixed-language notes: natural={compact_height}px, 1.25x={expanded_height}px"),
+            format!("visible/probe mismatch: natural={compact_height}/{compact_measurement}, 1.25x={expanded_height}/{expanded_measurement}"),
+        );
+    }
+
     presenter.set_notes_scroll_y(
         presenter.get_notes_visible_height() - presenter.get_notes_content_height(),
     );

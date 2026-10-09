@@ -95,12 +95,16 @@ component CurrentSlideWithProgress inherits Rectangle {
     }
 }
 
+export global NotesTypography {
+    in-out property <float> line-height-factor: 1.25;
+}
+
 // Keep visible notes and automatic sizing probes on the same typography.
 component NotesText inherits TextInput {
     wrap: word-wrap;
     single-line: false;
     read-only: true;
-    line-height-factor: 1.25;
+    line-height-factor: NotesTypography.line-height-factor;
 }
 
 component NotesMeasurement inherits NotesText {
