@@ -274,6 +274,13 @@ GitHub Releases. Download and launch steps are documented in
 Packaging and signing details for maintainers are documented in
 [docs/PACKAGING.md](docs/PACKAGING.md).
 
+Mac App Store CLI development targets the
+[`v2.5.0` branch](https://github.com/koichiro/quick-presenter/tree/v2.5.0)
+and [v2.5.0 milestone](https://github.com/koichiro/quick-presenter/milestone/4),
+renamed from v2.4.0. The scope and signed-runtime acceptance gates remain
+tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422) and
+#431–#433. Store CLI support remains outside v2.0.0.
+
 ## Roadmap
 
 Quick Presenter is built around one core promise: dependable PDF playback for
