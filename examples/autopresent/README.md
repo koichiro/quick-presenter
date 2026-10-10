@@ -6,6 +6,65 @@ commands. No model, TTS provider, Python package, OBS, or streaming account is
 required. Use matching GUI/CLI binaries from a supported distribution (macOS
 Store control is not supported; development and Developer ID/DMG builds work).
 
+## Hear the speaker-note demo on macOS
+
+The checked-in [demo PDF](demo.pdf) is a four-slide, roughly one-minute talk.
+Its short audience-facing slides have complete spoken explanations embedded as
+Marp speaker notes. No model, API key, TTS service, Marp installation, or extra
+Python package is needed to play the PDF.
+
+From the repository root, with a matching development GUI and CLI built using
+`cargo build --bins`:
+
+```sh
+python3 examples/autopresent/autopresent.py examples/autopresent/demo.pdf \
+  --qp ./target/debug/qp \
+  --generate-command '["python3", "examples/autopresent/notes_narration.py"]' \
+  --play-command '["python3", "examples/autopresent/speak_macos.py"]'
+```
+
+For a Developer ID/DMG installation, replace `--qp ./target/debug/qp` with
+`--qp '/Applications/Quick Presenter.app/Contents/MacOS/qp'`. Keep the repository
+as your working directory so the relative adapter paths resolve.
+
+`notes_narration.py` returns only the **current slide's speaker notes**, verbatim.
+It stops on missing or whitespace-only notes instead of silently substituting
+slide text. `speak_macos.py` passes that narration on stdin to the built-in `say`
+command and exits only after speech finishes. It replaces its process with
+`say`, so the orchestrator can terminate playback directly on timeout. The PDF
+stays on the final slide after all four notes have been read. Keep exclusive
+control of the presentation while it runs; the concurrency limits below apply.
+
+The deck and narration are in English. To choose an installed English voice or
+adjust the speed, list voices with `say -v '?'` and replace the player argv with,
+for example:
+
+```json
+["python3", "examples/autopresent/speak_macos.py", "--voice", "Samantha", "--rate", "170"]
+```
+
+Voice availability varies by Mac; the default uses the system voice. Other
+platforms can use `notes_narration.py` with their own speech player.
+
+To inspect the notes without playing audio (this still advances the real GUI):
+
+```sh
+python3 examples/autopresent/autopresent.py examples/autopresent/demo.pdf \
+  --qp ./target/debug/qp --dry-run
+```
+
+Edit [demo.md](demo.md) to change the slides and the HTML-comment speaker notes.
+Rebuild the PDF with Marp CLI, explicitly keeping the PDF annotations:
+
+```sh
+marp --no-config --pdf --pdf-notes examples/autopresent/demo.md \
+  --output examples/autopresent/demo.pdf
+```
+
+The checked-in PDF was exported with Marp CLI 4.5.1. Marp is needed only when
+rebuilding the deck. Exporting without `--pdf-notes` removes the narration from
+the PDF and the notes-only adapter will stop.
+
 ## Try it with your PDF
 
 From the repository root:
@@ -54,13 +113,8 @@ belongs on stderr. Any failure, malformed generation response, or adapter timeou
 stops the presentation before navigation. Credentials belong in the adapter's
 own environment/configuration, not in the reference implementation.
 
-For example, a local macOS player can read stdin and wait for `say`:
-
-```python
-import subprocess
-import sys
-subprocess.run(["say", sys.stdin.read()], check=True)
-```
+The included `speak_macos.py` is a local macOS player using `say`; it can also
+play narration returned by your own model adapter.
 
 `--adapter-timeout` defaults to 300 seconds per generation/playback call;
 `--timeout` defaults to 50 seconds per qp process (allowing CLI startup and IPC
