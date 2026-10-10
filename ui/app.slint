@@ -1420,8 +1420,8 @@ export component PresenterWindow inherits Window {
                                 spacing: 4px;
                                 height: 24px;
                                 address-text := Text { text: root.audience-address; color: #9aa0a6; font-size: 11px; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
-                                next-address := Button { text: "Next Address"; width: 84px; height: 22px; enabled: !root.audience-active; clicked => { root.audience-next-address(); } }
-                                refresh-address := Button { text: "Refresh"; width: 56px; height: 22px; enabled: !root.audience-active; clicked => { root.audience-refresh-addresses(); } }
+                                next-address := Button { text: "Next Address"; height: 22px; enabled: !root.audience-active; clicked => { root.audience-next-address(); } }
+                                refresh-address := Button { text: "Refresh"; height: 22px; enabled: !root.audience-active; clicked => { root.audience-refresh-addresses(); } }
                             }
                             Rectangle { vertical-stretch: 1; }
                         }
