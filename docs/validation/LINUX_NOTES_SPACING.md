@@ -61,6 +61,8 @@ smaller paragraph gaps. The blank-line comparison baseline is the initial
 line-height-only fix at `9fcc0e3`.
 
 The baseline is the debug package built from `5241c1b` on the `v1.9.0` branch.
+That development branch was subsequently renamed to `v2.0.0`; the revision
+and package used for this historical validation are unchanged.
 Both before/after manual windows use the same Linux desktop, font environment,
 size, and test PDF. Configuration/state are isolated in temporary directories.
 Raw reports and screenshots remain in `/tmp`, rather than in the repository.
