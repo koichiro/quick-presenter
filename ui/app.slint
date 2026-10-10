@@ -1433,7 +1433,7 @@ export component PresenterWindow inherits Window {
                         border-width: 1px;
                         VerticalBox {
                             padding: 10px;
-                            Text { text: "Audience reactions · Received: " + root.audience-reaction-count; color: white; font-weight: 700; }
+                            Text { text: "Reactions: " + root.audience-reaction-count; color: white; font-weight: 700; }
                             Text {
                                 text: root.audience-recent-reactions == "" ? "Waiting for reactions…" : root.audience-recent-reactions;
                                 color: white;
