@@ -71,7 +71,8 @@ session remains active, or scan the new QR after a restart.
 
 These bounds cover the WebSocket/session layer. This initial implementation
 does not claim protection against hostile network floods or unlimited slow HTTP
-connections. Validate venue-scale load before relying on it in production.
+connections. Real-LAN multi-participant load testing is outside A6 scope;
+repeatable load validation uses local loopback connections.
 
 ## Runtime boundary
 
@@ -153,7 +154,7 @@ inputs. Presenter reception continues during blackout or slide hiding.
 `audience_ui` owns the Slint model and stops the animation timer when empty or
 suppressed. Start/stop and application shutdown clear both timers and models.
 The overlay takes no mouse or keyboard input. Physical multi-monitor changes,
-platform packaging, and mobile/venue load are tracked in
+platform packaging and mobile checks are tracked in
 [A6 release validation](AUDIENCE_RELEASE_CHECKLIST.md).
 
 A5 validation on macOS: `cargo fmt --check`, `cargo check --locked --offline`,

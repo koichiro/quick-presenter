@@ -41,14 +41,17 @@ network type, result, and relevant redacted evidence. Mark unexecuted checks
 
 | Gate | macOS | Windows | Ubuntu |
 | --- | --- | --- | --- |
-| Focused audience tests in Build Binaries | Pending CI | Pending CI | Pending CI |
+| Focused audience tests in Build Binaries | Passed at 721db22 | Passed at 721db22 | Passed at 721db22 |
 | Final installed package starts/stops LAN session | Pending | Pending | Pending |
 | Mobile join and all five reactions | Pending | Pending | Pending |
 | Page 0, PDF, blackout, hide/show, fullscreen | Pending | Pending | Pending |
 | Physical displays: swap, detach, reconnect | Pending | Pending | Pending |
 | Network loss/recovery and multiple addresses | Pending | Pending | Pending |
-| Measured venue load and presentation responsiveness | Pending | Pending | Pending |
 | Application exit releases sockets; restart rotates secret | Pending | Pending | Pending |
+
+CI evidence for `721db22`: [Build Binaries run](https://github.com/koichiro/quick-presenter/actions/runs/38026939979).
+Subsequent commits must pass their own CI runs. Windows/Linux desktop checks
+are in progress; the table does not mark them passed.
 
 Developer-build macOS/iPhone reception and macOS GUI smoke have been checked
 during A4/A5. They do not replace the final-package gates above.
@@ -93,16 +96,40 @@ and recovery without requiring users to disable their firewall globally.
   keyboard controls, and continued PDF rendering. Capture which screen receives
   the presentation window after each transition.
 
-## Venue load checks
+## Local load validation
 
-Use a controlled LAN and anonymous synthetic events. Record participant count,
-join ramp rate, reaction rate, test duration, machine specification, CPU/memory,
-and observed presentation/control latency. Start with 20 concurrent clients;
-then test 100 and 300 where resources permit. These are test scenarios, not
-Local/Self-hosted product caps. Pace connections to respect admission budgets.
+Real-LAN multi-participant load testing is outside A6 scope because the current
+validation environment cannot support it. It is not a release gate. Local and
+Self-hosted modes still have no product audience-size cap.
 
-Confirm bounded overlays (24 items), event expiry, acknowledged rate limiting,
-and no stale replay after a burst. Navigate PDFs and toggle blackout throughout.
-Verify memory stabilizes after disconnects and stopping, then repeat sessions.
-Treat busy/rate-limited replies as expected load shedding, not guaranteed
-on-screen delivery. Do not claim a supported capacity from loopback tests.
+Run the opt-in sustained loopback test:
+
+```sh
+cargo test --bin quick-presenter \
+  audience::tests::sustained_local_load_remains_bounded_and_stops_cleanly \
+  -- --ignored --exact --nocapture
+```
+
+It keeps 48 authenticated sockets open for 30 rounds, one round per second,
+with six concurrent requests per client per round (8,640 requests). It handles
+WebSocket heartbeats and records accepted/rate-limited/busy totals and maximum
+batch completion time. Every round verifies connected count, bounded draining,
+and event order; shutdown verifies event disposal, disconnected sockets, and
+listener rebinding. The short one-round case remains in normal CI.
+
+These measurements cover transport/admission/cleanup. They do not measure
+Slint frame rate, PDF-control latency, process memory, mobile reachability, or
+venue capacity. Existing GUI smoke and real desktop checks cover presentation
+behavior separately. Do not infer a supported venue capacity from loopback.
+
+### Recorded local run
+
+On 2026-10-10, the sustained loopback test on macOS 27.0.1 (arm64) passed with 48 clients,
+30 rounds, and 8,640 acknowledged requests: 1,936 accepted, 5,735 rate-limited,
+and 969 busy. Sending took 29,111 ms; the slowest complete 288-request round
+was 17 ms (batch completion time, not UI latency). Including paced joins and
+shutdown, the test took 31.35 s. The deliberately overloaded queue was drained
+only once per round. Resource shedding is expected; accepted events are not
+guaranteed displayed. Connected count stayed 48 and each drain remained at
+most 16 events. All sockets disconnected, pending events cleared, and the
+listener port rebound after shutdown.

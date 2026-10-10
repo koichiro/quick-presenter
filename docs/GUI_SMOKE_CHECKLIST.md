@@ -339,5 +339,6 @@ deliberately bypass saved startup state.
 
 When qualifying a build with Audience Live, also complete
 [A6 release validation](AUDIENCE_RELEASE_CHECKLIST.md) for the final installed
-package. Its LAN, mobile, physical-display, and load gates are separate from
-loopback GUI smoke. Record pending checks explicitly.
+package. Its LAN, mobile, and physical-display gates are separate from loopback
+GUI smoke. Multi-connection load testing uses local loopback; real-LAN
+multi-participant load is outside A6 scope. Record pending checks explicitly.
