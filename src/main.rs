@@ -8,6 +8,7 @@ pub mod app_state;
 pub mod aspect;
 pub mod audience;
 pub mod audience_events;
+pub mod audience_overlay;
 mod audience_ui;
 pub mod black_screen;
 pub mod cli;
@@ -862,7 +863,11 @@ fn wire_window_menu_callbacks(
 ) {
     if let Some(slide) = refs.slide.upgrade() {
         let state = state.clone();
+        let overlay = slide.as_weak();
         slide.window().on_close_requested(move || {
+            if let Some(slide) = overlay.upgrade() {
+                slide.invoke_audience_clear_overlay();
+            }
             state.borrow_mut().window_menu.set_slide_visible(false);
             CloseRequestResponse::HideWindow
         });
@@ -1026,6 +1031,12 @@ fn handle_presentation_command(
 
     if let Some(slide) = windows.slide.upgrade() {
         slide.set_black_screen_active(state.borrow().black_screen.is_active());
+        if matches!(
+            command,
+            PresentationCommand::SetBlackScreen(_) | PresentationCommand::ToggleBlackScreen
+        ) {
+            slide.invoke_audience_clear_overlay();
+        }
     }
 
     if let Some(snapshot) = preload_snapshot {
