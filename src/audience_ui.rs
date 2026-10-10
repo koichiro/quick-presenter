@@ -46,22 +46,6 @@ impl AudienceUi {
             last_url: RefCell::new(String::new()),
             recent: RefCell::new(VecDeque::new()),
         });
-        let refs = windows.refs();
-        let guide_state = state.clone();
-        let weak = Rc::downgrade(&ui);
-        presenter.on_audience_toggle_guide(move || {
-            let visible = !guide_state.borrow().audience_join_visible;
-            if !weak
-                .upgrade()
-                .is_some_and(|ui| ui.session.borrow().is_some() && !*ui.stopping.borrow())
-            {
-                return;
-            }
-            set_join_visible(&refs, &guide_state, visible);
-            if visible {
-                crate::show_slide_window_from_menu(&refs, &guide_state);
-            }
-        });
         presenter.set_audience_address(ui.address_label().into());
         let weak = Rc::downgrade(&ui);
         let window = presenter.as_weak();

@@ -13,16 +13,16 @@ remain outside the A4 scope.
 1. Connect the presenter computer and audience devices to the same LAN.
 2. Select an IPv4 address with **Next address**, or rediscover interfaces with
    **Refresh** in the compact connection area below the notes.
-3. Toggle **Audience Live OFF** to **Audience Live ON** using the button between
+3. Click **Audience Live ON** using the button between
    the notes and Audience Live area. This starts the server and shows the page 0
    QR code, session code, and join URL in the presentation window.
 4. Scan the QR code with a phone. All five reactions are available as soon as
    the browser joins; no separate presenter reaction switch exists.
-5. Select **Return to PDF**, or advance once, to restore the current PDF page.
-   Reception continues. **Show join screen** displays the QR again without
-   stopping or restarting the session. Page 0 does not modify PDF pagination,
+5. Advance once to restore the current PDF page. Reception continues.
+   Page 0 appears when a session starts; there is no separate join-screen toggle.
+   Page 0 does not modify PDF pagination,
    rendering state, or the timer. Blackout covers the join screen as well.
-6. Toggle **Audience Live ON** to **Audience Live OFF** to invalidate the URL,
+6. Click **Audience Live OFF** to invalidate the URL,
    clear the feed/join screen, and close all connections.
 
 The thumbnail column extends to the bottom of the main content, alongside the
@@ -30,9 +30,10 @@ Audience area, and is clipped within its own viewport. The Audience area spans
 only the notes/keys columns. Its compact connection controls take at most 280
 logical pixels (35% at narrower sizes); the reactions feed receives the remaining
 width and displays up to 36 recent reactions. The total reserved footer height
-is 240 logical pixels, including the toggle row; preferred/minimum window height
-increases by that amount to preserve the notes area. The full join URL remains
-clickable in Presenter View. Starting/stopping temporarily disables the toggle
+is 298 logical pixels, including the toggle row; preferred/minimum window height
+increases by that amount to preserve the notes area. The full join URL appears below the panel in a read-only, selectable text area.
+**Copy** copies the complete URL, and **Open URL** opens it in the browser without
+interfering with text selection. Button labels describe the action to perform. Starting/stopping temporarily disables the toggle
 until the asynchronous operation finishes. A new session resets the delivery
 count, uses a new random secret, and may have a different OS-assigned port.
 Sessions do not start automatically.

@@ -698,12 +698,11 @@ export component PresenterWindow inherits Window {
     in property <bool> audience-can-start: false;
     in property <int> audience-count: 0;
     in property <bool> audience-guide-visible: false;
-    out property <length> audience-panel-height: 240px;
+    out property <length> audience-panel-height: 298px;
     in property <bool> audience-busy: false;
     in property <string> audience-recent-reactions;
     in property <int> audience-reaction-count;
     callback audience-open-url();
-    callback audience-toggle-guide();
     callback audience-toggle-session();
     callback audience-next-address();
     callback audience-refresh-addresses();
@@ -718,6 +717,10 @@ export component PresenterWindow inherits Window {
     in property <string> notes-text: "";
     in property <float> notes-font-size: 12;
     out property <length> audience-panel-right: audience-panel.x + audience-panel.width;
+    out property <string> audience-toggle-label: audience-live-toggle.text;
+    out property <string> audience-url-text: audience-url-input.text;
+    out property <length> audience-url-top: audience-url-row.y;
+    out property <length> audience-panel-bottom: audience-panel.y + audience-panel.height;
     out property <length> audience-panel-top: audience-panel.y;
     out property <length> audience-toggle-bottom: audience-toggle-row.y + audience-live-toggle.y + audience-live-toggle.height;
     out property <length> audience-toggle-y: audience-toggle-row.y;
@@ -794,9 +797,9 @@ export component PresenterWindow inherits Window {
 
     title: "Quick Presenter";
     preferred-width: 1024px;
-    preferred-height: 960px;
+    preferred-height: 1018px;
     min-width: 800px;
-    min-height: 800px;
+    min-height: 858px;
     background: #202124;
     forward-focus: presenter-focus;
 
@@ -1380,14 +1383,9 @@ export component PresenterWindow inherits Window {
                     padding: 0px;
                     spacing: 8px;
                     audience-live-toggle := Button {
-                        text: root.audience-active ? "Audience Live ON" : "Audience Live OFF";
+                        text: root.audience-active ? "Audience Live OFF" : "Audience Live ON";
                         enabled: !root.audience-busy && (root.audience-active || root.audience-can-start);
                         clicked => { root.audience-toggle-session(); }
-                    }
-                    Button {
-                        text: root.audience-guide-visible ? "Return to PDF" : "Show join screen";
-                        enabled: root.audience-active && !root.audience-busy;
-                        clicked => { root.audience-toggle-guide(); }
                     }
                     Rectangle { horizontal-stretch: 1; }
                 }
@@ -1397,7 +1395,7 @@ export component PresenterWindow inherits Window {
                 x: main-area.x;
                 y: audience-toggle-row.y + audience-toggle-row.height + 6px;
                 width: audience-toggle-row.width;
-                height: root.audience-panel-height - 48px;
+                height: root.audience-panel-height - 106px;
                 background: #111315;
                 border-color: #3c4043;
                 border-width: 1px;
@@ -1417,23 +1415,7 @@ export component PresenterWindow inherits Window {
                                 Button { text: "Refresh"; enabled: !root.audience-active; clicked => { root.audience-refresh-addresses(); } }
                                 Button { text: "Next address"; enabled: !root.audience-active; clicked => { root.audience-next-address(); } }
                             }
-                            Rectangle {
-                                vertical-stretch: 1;
-                                Text {
-                                    width: parent.width;
-                                    height: parent.height;
-                                    text: root.audience-url == "" ? "Turn Audience Live ON to show the join QR code." : root.audience-url;
-                                    color: root.audience-url == "" ? #9aa0a6 : #8ab4f8;
-                                    wrap: word-wrap;
-                                    font-size: 12px;
-                                    vertical-alignment: center;
-                                }
-                                TouchArea {
-                                    enabled: root.audience-url != "";
-                                    mouse-cursor: pointer;
-                                    clicked => { root.audience-open-url(); }
-                                }
-                            }
+                            Rectangle { vertical-stretch: 1; }
                         }
                     }
                     audience-reactions := Rectangle {
@@ -1452,6 +1434,42 @@ export component PresenterWindow inherits Window {
                                 vertical-stretch: 1;
                             }
                         }
+                    }
+                }
+            }
+
+            audience-url-row := Rectangle {
+                x: audience-panel.x;
+                y: audience-panel.y + audience-panel.height + 6px;
+                width: audience-panel.width;
+                height: 52px;
+                background: #111315;
+                border-color: #3c4043;
+                border-width: 1px;
+                HorizontalBox {
+                    padding: 6px;
+                    spacing: 8px;
+                    Text { text: "Join URL"; color: #d9dce0; vertical-alignment: center; }
+                    audience-url-input := TextInput {
+                        text: root.audience-url;
+                        read-only: true;
+                        single-line: false;
+                        wrap: word-wrap;
+                        font-size: 12px;
+                        color: #8ab4f8;
+                        selection-background-color: #35658c;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    Button {
+                        text: "Open URL";
+                        enabled: root.audience-url != "";
+                        clicked => { root.audience-open-url(); }
+                    }
+                    Button {
+                        text: "Copy";
+                        enabled: root.audience-url != "";
+                        clicked => { audience-url-input.select-all(); audience-url-input.copy(); }
                     }
                 }
             }

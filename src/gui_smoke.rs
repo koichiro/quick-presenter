@@ -420,6 +420,12 @@ fn check_audience_join_screen(
     let now = Instant::now();
     let elapsed = state.borrow().timer.elapsed_at(now);
     let presenter = &windows.presenter;
+    report.check(
+        "Inactive Audience Live offers the ON action",
+        presenter.get_audience_toggle_label() == "Audience Live ON",
+        "start action displayed",
+        "incorrect start label",
+    );
     presenter.invoke_audience_toggle_session();
     let deadline = Instant::now() + Duration::from_secs(5);
     while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
@@ -496,11 +502,13 @@ fn check_audience_join_screen(
         "authenticated reaction displayed",
         "reaction did not reach the presenter",
     );
-    presenter.invoke_audience_toggle_guide();
-    presenter.invoke_audience_toggle_guide();
     report.check(
-        "Join-screen control returns to PDF without stopping Audience Live",
-        !state.borrow().audience_join_visible && !windows.slide.get_audience_guide_visible(),
+        "PDF navigation keeps Audience Live running",
+        !state.borrow().audience_join_visible
+            && !windows.slide.get_audience_guide_visible()
+            && presenter.get_audience_active()
+            && presenter.get_audience_toggle_label() == "Audience Live OFF"
+            && presenter.get_audience_url_text() == presenter.get_audience_url(),
         "both windows returned to PDF",
         "join screen remained active",
     );
@@ -573,7 +581,8 @@ fn check_audience_panel_layout(windows: &AppWindows, report: &mut GuiSmokeReport
                 && presenter.get_audience_panel_top()
                     >= presenter.get_audience_toggle_bottom() + 4.0
                 && presenter.get_audience_reactions_width()
-                    > presenter.get_audience_controls_width(),
+                    > presenter.get_audience_controls_width()
+                && presenter.get_audience_url_top() >= presenter.get_audience_panel_bottom() + 4.0,
             "toggle and expanded feed fit",
             "toggle placement or feed width failed",
         );
