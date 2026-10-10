@@ -1,5 +1,7 @@
 # Local Audience Sessions
 
+Audience Live targets v3.0.0 and is developed on the `v3.0.0` branch.
+
 The initial Audience Live implementation lets audience browsers join a local
 session hosted by Quick Presenter. It supports session start/stop, a join QR
 code and URL, and an authenticated live connection count. Reactions, comments,
@@ -95,7 +97,7 @@ control protocol remains unchanged and has no Audience administration commands.
 
 Integrated the `v1.9.0` snapshot `21d729b` on 2026-10-09, retaining the
 existing `qp` binary, Control Protocol v1, presentation control runtime, and
-Store bookmark entitlement. The Audience development package remains 2.9.0.
+Store bookmark entitlement. The Audience development package is 3.0.0.
 The CLI endpoint and audience listener remain separate; the LAN server never
 exposes presentation-control commands.
 

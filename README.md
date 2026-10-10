@@ -399,6 +399,10 @@ rendering, navigation, error recovery, and platform behavior. Extend integration
 through the documented CLI contract and keep editing, model inference, and
 speech orchestration outside the playback core.
 
+Audience Live development uses the `v3.0.0` branch. Optional local audience
+sessions and interaction complement presentation playback; see
+[Local Audience Sessions](docs/AUDIENCE_LOCAL.md).
+
 ## Related Projects
 
 - [Présentation.app](https://iihm.imag.fr/blanch/software/osx-presentation/) is
