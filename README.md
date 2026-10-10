@@ -274,6 +274,13 @@ GitHub Releases. Download and launch steps are documented in
 Packaging and signing details for maintainers are documented in
 [docs/PACKAGING.md](docs/PACKAGING.md).
 
+The current CLI and AI-assisted presentation work targets the
+[`v2.0.0` development branch](https://github.com/koichiro/quick-presenter/tree/v2.0.0)
+and [v2.0.0 milestone](https://github.com/koichiro/quick-presenter/milestone/2).
+This replaces the provisional `v1.9.0` development name; release publication
+and package validation remain separate gates. Mac App Store CLI support targets
+v2.4.0, and Audience Live targets v3.0.0.
+
 ## Roadmap
 
 Quick Presenter is built around one core promise: dependable PDF playback for

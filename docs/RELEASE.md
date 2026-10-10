@@ -14,6 +14,11 @@ Routine pull requests are validated by the lightweight `CI` workflow. The full
 `Build Binaries` workflow is release/package validation and does not run for
 every source-only pull request.
 
+The CLI and AI-assisted presentation release is developed on `v2.0.0`,
+renamed from the provisional `v1.9.0` branch. Its Cargo package version is
+`2.0.0`; Control Protocol remains v1. Renaming the development branch does not
+publish a release or satisfy the validation gates below.
+
 Before publishing a release:
 
 1. Set the release version in `Cargo.toml`, refresh `Cargo.lock`, and confirm
