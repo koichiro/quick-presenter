@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "test": "npm run build && node --test scripts/validate.test.mjs",
     "preview": "npm run build && node scripts/preview.mjs"
   }
 }
