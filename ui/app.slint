@@ -1389,8 +1389,20 @@ export component PresenterWindow inherits Window {
                 HorizontalBox {
                     padding: 0px;
                     spacing: 8px;
+                    Rectangle {
+                        width: 16px;
+                        height: 36px;
+                        Rectangle {
+                            x: 2px;
+                            y: (parent.height - self.height) / 2;
+                            width: 12px;
+                            height: 12px;
+                            border-radius: 6px;
+                            background: root.audience-active ? #36c56b : #666b70;
+                        }
+                    }
                     audience-live-toggle := Button {
-                        text: root.audience-active ? "Audience Live OFF" : "Audience live ON 👍";
+                        text: root.audience-active ? "Audience Live OFF 👍️" : "Audience Live ON 👍️";
                         enabled: !root.audience-busy && (root.audience-active || root.audience-can-start);
                         clicked => { root.audience-toggle-session(); }
                     }

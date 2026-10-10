@@ -71,6 +71,32 @@ fn windows_job_terminates_suspended_helper_after_broker_abort() {
     assert_windows_job_terminates_helper("QUICK_PRESENTER_HELPER_TEST_ABORT_AFTER_CREATE");
 }
 
+#[test]
+#[cfg(all(target_os = "windows", debug_assertions))]
+fn windows_sandbox_reports_pdfium_resolution_stage_without_leaking_path() {
+    let _broker_guard = broker_test_guard();
+    let missing = std::env::temp_dir().join(format!(
+        "quick-presenter-secret-pdfium-{}.dll",
+        std::process::id()
+    ));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_quick-presenter"));
+    command
+        .arg("--smoke-open-pdf")
+        .arg(fixture())
+        .env("PDFIUM_DYNAMIC_LIB_PATH", &missing);
+
+    let output = run_broker(command);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr
+            .contains("Renderer sandbox setup failed: stage=runtime-pdfium-resolve win32=Some(2)"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains(&missing.to_string_lossy().to_string()));
+    assert!(!stderr.contains("stage=runtime-grant"));
+}
+
 #[cfg(all(target_os = "windows", debug_assertions))]
 fn assert_windows_job_terminates_helper(fault: &str) {
     let _broker_guard = broker_test_guard();
