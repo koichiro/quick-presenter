@@ -179,14 +179,16 @@ mod windows {
         }
     }
     impl RuntimeDirectory {
-        fn stage(source: &Path, sid: PSID, nonce: u64) -> Result<Self> {
+        fn stage(source: &Path, sid: PSID, nonce: u64, stage: &mut &'static str) -> Result<Self> {
             use windows_sys::Win32::Security::Authorization::*;
+            *stage = "runtime-directory";
             let path = std::env::temp_dir().join(format!(
                 "quick-presenter-renderer-{}-{nonce}",
                 std::process::id()
             ));
             std::fs::create_dir(&path)?;
             let runtime = Self(path);
+            *stage = "runtime-sid";
             let mut sid_text = std::ptr::null_mut();
             checked(unsafe { ConvertSidToStringSidW(sid, &mut sid_text) })?;
             let _sid_text = LocalAllocation(sid_text.cast());
@@ -201,6 +203,7 @@ mod windows {
             let sddl = wide(OsStr::new(&format!(
                 "D:P(A;OICI;FA;;;OW)(A;OICI;FA;;;SY)(A;OICI;GRGX;;;{sid_text})"
             )));
+            *stage = "runtime-security-descriptor";
             let mut descriptor = std::ptr::null_mut();
             checked(unsafe {
                 ConvertStringSecurityDescriptorToSecurityDescriptorW(
@@ -219,6 +222,7 @@ mod windows {
                 present != 0 && !dacl.is_null(),
                 "missing renderer runtime DACL"
             );
+            *stage = "runtime-acl";
             let path = wide(runtime.0.as_os_str());
             let status = unsafe {
                 SetNamedSecurityInfoW(
@@ -231,11 +235,17 @@ mod windows {
                     std::ptr::null_mut(),
                 )
             };
-            ensure!(status == 0, "renderer runtime ACL unavailable");
+            if status != ERROR_SUCCESS {
+                return Err(io::Error::from_raw_os_error(status as i32).into());
+            }
+            *stage = "runtime-executable-copy";
             std::fs::copy(source, runtime.0.join("quick-presenter.exe"))?;
+            *stage = "runtime-pdfium-resolve";
             let library = crate::pdf::renderer_library_path()?;
+            *stage = "runtime-pdfium-directory";
             let directory = runtime.0.join("pdfium/bin");
             std::fs::create_dir_all(&directory)?;
+            *stage = "runtime-pdfium-copy";
             std::fs::copy(library, directory.join("pdfium.dll"))?;
             Ok(runtime)
         }
@@ -360,9 +370,9 @@ mod windows {
                     std::mem::size_of_val(&job_handle),
                 )?;
             }
+            stage = "runtime-source";
             let source = std::fs::canonicalize(command.get_program())?;
-            stage = "runtime-grant";
-            let runtime = RuntimeDirectory::stage(&source, sid.0, nonce)?;
+            let runtime = RuntimeDirectory::stage(&source, sid.0, nonce, &mut stage)?;
             let executable = runtime.0.join("quick-presenter.exe");
             // Production passes no arbitrary arguments: only this internal helper mode.
             ensure!(
