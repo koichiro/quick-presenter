@@ -51,6 +51,11 @@ sandbox-compatible support is tracked in [#422](https://github.com/koichiro/quic
 release requirement. Windows and Linux retain the distributions documented in
 [CLI installation](CLI.md#installation).
 
+The v2.5.0 [Store CLI IPC design](MAC_APP_STORE_CLI_IPC.md) preserves the v1
+contract while proposing a separate authenticated Store endpoint. Transport
+adoption requires signed sandbox and identity evidence; the design does not
+change the current distribution exclusion.
+
 ## Ownership and architecture
 
 ```text
