@@ -279,7 +279,7 @@ The current CLI and AI-assisted presentation work targets the
 and [v2.0.0 milestone](https://github.com/koichiro/quick-presenter/milestone/2).
 This replaces the provisional `v1.9.0` development name; release publication
 and package validation remain separate gates. Mac App Store CLI support targets
-v2.4.0, and Audience Live targets v3.0.0.
+v2.5.0, and Audience Live targets v3.0.0.
 
 ## Roadmap
 
