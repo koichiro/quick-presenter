@@ -569,7 +569,9 @@ fn check_audience_panel_layout(windows: &AppWindows, report: &mut GuiSmokeReport
         report.check(
             format!("Audience panel leaves thumbnails unobstructed ({width}x{height})"),
             presenter.get_audience_panel_right() + 8.0 <= presenter.get_thumbnails_left()
-                && presenter.get_thumbnails_bottom() > presenter.get_notes_area_bottom(),
+                && presenter.get_thumbnails_bottom() > presenter.get_notes_area_bottom()
+                && (presenter.get_thumbnails_bottom() - presenter.get_audience_url_bottom()).abs()
+                    <= 1.0,
             "thumbnail column stays beside the footer",
             "audience footer overlaps the thumbnail column",
         );

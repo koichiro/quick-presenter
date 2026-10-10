@@ -31,9 +31,9 @@ only the notes/keys columns. Its compact connection controls take at most 280
 logical pixels (35% at narrower sizes); the reactions feed receives the remaining
 width and displays up to 36 recent reactions. The total reserved footer height
 is 298 logical pixels, including the toggle row; preferred/minimum window height
-increases by that amount to preserve the notes area. The full join URL appears below the panel in a read-only, selectable text area.
-**Copy** copies the complete URL, and **Open URL** opens it in the browser without
-interfering with text selection. Button labels describe the action to perform. Starting/stopping temporarily disables the toggle
+increases by that amount to preserve the notes area. The full join URL appears alone below the panel as a clickable link that opens
+the browser. The thumbnail viewport ends at the same bottom edge, with a visible
+background and border even when the deck has few pages. Button labels describe the action to perform. Starting/stopping temporarily disables the toggle
 until the asynchronous operation finishes. A new session resets the delivery
 count, uses a new random secret, and may have a different OS-assigned port.
 Sessions do not start automatically.

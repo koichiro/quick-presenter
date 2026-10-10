@@ -718,7 +718,8 @@ export component PresenterWindow inherits Window {
     in property <float> notes-font-size: 12;
     out property <length> audience-panel-right: audience-panel.x + audience-panel.width;
     out property <string> audience-toggle-label: audience-live-toggle.text;
-    out property <string> audience-url-text: audience-url-input.text;
+    out property <string> audience-url-text: audience-url-link.text;
+    out property <length> audience-url-bottom: audience-url-row.y + audience-url-row.height;
     out property <length> audience-url-top: audience-url-row.y;
     out property <length> audience-panel-bottom: audience-panel.y + audience-panel.height;
     out property <length> audience-panel-top: audience-panel.y;
@@ -1344,7 +1345,10 @@ export component PresenterWindow inherits Window {
                     x: main-area.left-column-width + main-area.column-gap + main-area.next-column-width + main-area.column-gap;
                     y: 0px;
                     width: main-area.thumbnail-column-width;
-                    height: main-area.height + root.audience-panel-height;
+                    height: audience-url-row.y + audience-url-row.height - main-area.y - self.y;
+                    background: #111315;
+                    border-color: #3c4043;
+                    border-width: 1px;
 
                     ThumbnailPane {
                         x: 0px;
@@ -1446,30 +1450,20 @@ export component PresenterWindow inherits Window {
                 background: #111315;
                 border-color: #3c4043;
                 border-width: 1px;
-                HorizontalBox {
-                    padding: 6px;
-                    spacing: 8px;
-                    Text { text: "Join URL"; color: #d9dce0; vertical-alignment: center; }
-                    audience-url-input := TextInput {
-                        text: root.audience-url;
-                        read-only: true;
-                        single-line: false;
-                        wrap: word-wrap;
-                        font-size: 12px;
-                        color: #8ab4f8;
-                        selection-background-color: #35658c;
-                        vertical-alignment: center;
-                        horizontal-stretch: 1;
-                    }
-                    Button {
-                        text: "Open URL";
+                audience-url-link := Text {
+                    x: 8px;
+                    y: 6px;
+                    width: max(0px, parent.width - 16px);
+                    height: max(0px, parent.height - 12px);
+                    text: root.audience-url;
+                    wrap: word-wrap;
+                    font-size: 12px;
+                    color: #8ab4f8;
+                    vertical-alignment: center;
+                    TouchArea {
                         enabled: root.audience-url != "";
+                        mouse-cursor: pointer;
                         clicked => { root.audience-open-url(); }
-                    }
-                    Button {
-                        text: "Copy";
-                        enabled: root.audience-url != "";
-                        clicked => { audience-url-input.select-all(); audience-url-input.copy(); }
                     }
                 }
             }
