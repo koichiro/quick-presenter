@@ -131,7 +131,7 @@ alongside the common [release gates](RELEASE.md#release-validation).
 Use the following public URLs and notes when preparing store submissions:
 
 - Privacy policy URL:
-  `https://koichiro.github.io/quick-presenter/privacy/`
+  `https://quickpresenter.com/privacy/`
 - Project/source URL:
   `https://github.com/koichiro/quick-presenter`
 - Quick Presenter does not add custom in-app telemetry, analytics, or crash
