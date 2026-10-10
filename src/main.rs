@@ -7,6 +7,7 @@ pub mod app_metadata;
 pub mod app_state;
 pub mod aspect;
 pub mod audience;
+pub mod audience_events;
 mod audience_ui;
 pub mod black_screen;
 pub mod cli;

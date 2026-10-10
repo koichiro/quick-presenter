@@ -484,6 +484,27 @@ fn check_audience_join_screen(
         "join screen dismissed without PDF navigation",
         "PDF page skipped or join screen remained",
     );
+    submit_audience_smoke_reaction(&url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while presenter.get_audience_reaction_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    report.check(
+        "WebSocket reaction reaches Presenter View",
+        presenter.get_audience_reaction_count() == 1
+            && presenter.get_audience_recent_reactions().contains("👏"),
+        "authenticated reaction displayed",
+        "reaction did not reach the presenter",
+    );
+    presenter.invoke_audience_toggle_reactions();
+    report.check(
+        "Reactions OFF immediately clears the presenter feed",
+        !presenter.get_audience_reactions_enabled()
+            && presenter.get_audience_recent_reactions().is_empty(),
+        "feed cleared",
+        "disabled reactions remained visible",
+    );
+    presenter.invoke_audience_toggle_reactions();
     presenter.invoke_audience_toggle_guide();
     presenter.invoke_audience_toggle_guide();
     report.check(
@@ -506,6 +527,72 @@ fn check_audience_join_screen(
             && !windows.slide.get_audience_guide_visible(),
         "stale join credentials cleared",
         "stale join information remained",
+    );
+    Ok(())
+}
+
+// A minimal loopback client keeps GUI smoke independent of a new runtime dependency.
+fn submit_audience_smoke_reaction(url: &str) -> Result<()> {
+    use std::io::{Read, Write};
+    let (url, token) = url.split_once("#k=").context("missing audience token")?;
+    let authority = url
+        .strip_prefix("http://")
+        .context("invalid join URL")?
+        .split('/')
+        .next()
+        .unwrap();
+    let mut socket = std::net::TcpStream::connect(authority)?;
+    socket.set_read_timeout(Some(Duration::from_secs(2)))?;
+    socket.set_write_timeout(Some(Duration::from_secs(2)))?;
+    write!(socket, "GET /ws HTTP/1.1\r\nHost: {authority}\r\nOrigin: http://{authority}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")?;
+    let mut headers = Vec::new();
+    while !headers.ends_with(b"\r\n\r\n") && headers.len() < 4096 {
+        let mut byte = [0];
+        socket.read_exact(&mut byte)?;
+        headers.push(byte[0]);
+    }
+    anyhow::ensure!(
+        headers.starts_with(b"HTTP/1.1 101"),
+        "WebSocket upgrade failed"
+    );
+    fn send(socket: &mut std::net::TcpStream, value: serde_json::Value) -> Result<()> {
+        let payload = value.to_string().into_bytes();
+        anyhow::ensure!(payload.len() < 126, "smoke message too large");
+        let mask = [1u8, 2, 3, 4];
+        socket.write_all(&[0x81, 0x80 | payload.len() as u8])?;
+        socket.write_all(&mask)?;
+        socket.write_all(
+            &payload
+                .iter()
+                .enumerate()
+                .map(|(n, b)| b ^ mask[n % 4])
+                .collect::<Vec<_>>(),
+        )?;
+        Ok(())
+    }
+    fn read(socket: &mut std::net::TcpStream) -> Result<serde_json::Value> {
+        let mut header = [0; 2];
+        socket.read_exact(&mut header)?;
+        anyhow::ensure!(
+            header[0] == 0x81 && header[1] < 126,
+            "unexpected smoke server frame"
+        );
+        let mut payload = vec![0; header[1] as usize];
+        socket.read_exact(&mut payload)?;
+        Ok(serde_json::from_slice(&payload)?)
+    }
+    send(&mut socket, serde_json::json!({"v":1,"token":token}))?;
+    anyhow::ensure!(
+        read(&mut socket)?["type"] == "welcome",
+        "audience authentication failed"
+    );
+    send(
+        &mut socket,
+        serde_json::json!({"v":1,"type":"reaction","request_id":"smoke","kind":"applause"}),
+    )?;
+    anyhow::ensure!(
+        read(&mut socket)?["status"] == "accepted",
+        "smoke reaction rejected"
     );
     Ok(())
 }

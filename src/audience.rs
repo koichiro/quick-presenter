@@ -1,8 +1,11 @@
 //! Optional local audience session. Network tasks never access Slint or PDF state.
+use crate::audience_events::{
+    parse_reaction, AcceptedAudienceEvent, Admission, AudienceEngine, RateBudget,
+};
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, Mutex,
     },
     thread::{self, JoinHandle},
@@ -61,6 +64,8 @@ pub struct LocalAudienceSession {
     connections: Arc<AtomicUsize>,
     stop: watch::Sender<bool>,
     worker: Option<JoinHandle<()>>,
+    engine: Arc<Mutex<AudienceEngine>>,
+    settings: watch::Sender<bool>,
 }
 
 impl LocalAudienceSession {
@@ -68,6 +73,9 @@ impl LocalAudienceSession {
         let status = Arc::new(Mutex::new(SessionStatus::Starting));
         let connections = Arc::new(AtomicUsize::new(0));
         let (stop, receiver) = watch::channel(false);
+        let engine = Arc::new(Mutex::new(AudienceEngine::new(Instant::now())));
+        let worker_engine = engine.clone();
+        let (settings, settings_rx) = watch::channel(true);
         let worker_status = status.clone();
         let worker_connections = connections.clone();
         let worker = thread::Builder::new()
@@ -82,6 +90,8 @@ impl LocalAudienceSession {
                         worker_status.clone(),
                         worker_connections,
                         receiver,
+                        worker_engine,
+                        settings_rx,
                     ))
                 });
                 *worker_status.lock().unwrap_or_else(|e| e.into_inner()) = match result {
@@ -95,6 +105,8 @@ impl LocalAudienceSession {
             connections,
             stop,
             worker: Some(worker),
+            engine,
+            settings,
         })
     }
 
@@ -109,7 +121,23 @@ impl LocalAudienceSession {
         }
     }
 
+    pub fn set_reactions_enabled(&self, enabled: bool) {
+        self.engine
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .set_enabled(enabled);
+        self.settings.send_replace(enabled);
+    }
+
+    pub fn drain_events(&self) -> Vec<AcceptedAudienceEvent> {
+        self.engine
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain(Instant::now())
+    }
+
     pub fn request_stop(&self) {
+        self.set_reactions_enabled(false);
         self.stop.send_replace(true);
     }
 
@@ -146,6 +174,9 @@ struct ServerState {
     unauthenticated: Arc<Semaphore>,
     attempts: Arc<Mutex<HandshakeBudget>>,
     stop: watch::Receiver<bool>,
+    engine: Arc<Mutex<AudienceEngine>>,
+    settings: watch::Receiver<bool>,
+    next_participant: Arc<AtomicU64>,
 }
 
 fn credentials() -> std::io::Result<(String, String)> {
@@ -160,6 +191,8 @@ async fn run(
     status: Arc<Mutex<SessionStatus>>,
     connections: Arc<AtomicUsize>,
     mut stop: watch::Receiver<bool>,
+    engine: Arc<Mutex<AudienceEngine>>,
+    settings: watch::Receiver<bool>,
 ) -> std::io::Result<()> {
     let (code, secret) = credentials()?;
     let listener = tokio::net::TcpListener::bind(SocketAddr::new(address.into(), 0)).await?;
@@ -173,6 +206,9 @@ async fn run(
         unauthenticated: Arc::new(Semaphore::new(32)),
         attempts: Arc::new(Mutex::new(HandshakeBudget::new(Instant::now()))),
         stop: stop.clone(),
+        engine,
+        settings,
+        next_participant: Arc::new(AtomicU64::new(1)),
     };
     let app = Router::new()
         .route("/join/{code}", get(join_page))
@@ -294,24 +330,22 @@ async fn connection(
     drop(permit);
     state.connections.fetch_add(1, Ordering::Relaxed);
     let _count = CountGuard(state.connections.clone());
-    if !matches!(
-        tokio::time::timeout(
-            Duration::from_secs(2),
-            socket.send(Message::Text(
-                r#"{"v":1,"type":"welcome","capabilities":[]}"#.into(),
-            )),
-        )
-        .await,
-        Ok(Ok(()))
-    ) {
-        return;
-    }
+    let participant_id = state.next_participant.fetch_add(1, Ordering::Relaxed);
+    let mut settings = state.settings.clone();
+    let enabled = *settings.borrow_and_update();
+    if !send_json(&mut socket, serde_json::json!({"v":1,"type":"welcome","capabilities":["reactions"],"reactions_enabled":enabled})).await { return; }
+    let mut budget = RateBudget::new(5, 2, Instant::now());
     let mut heartbeat = tokio::time::interval(HEARTBEAT);
     heartbeat.tick().await;
     let mut waiting_for_pong = false;
     loop {
         tokio::select! {
             _ = stop.changed() => break,
+            result = settings.changed() => {
+                if result.is_err() { break; }
+                let enabled = *settings.borrow_and_update();
+                if !send_json(&mut socket, serde_json::json!({"v":1,"type":"settings","reactions_enabled":enabled})).await { break; }
+            },
             _ = heartbeat.tick() => {
                 if waiting_for_pong { break; }
                 waiting_for_pong = true;
@@ -320,11 +354,29 @@ async fn connection(
             message = socket.recv() => match message {
                 Some(Ok(Message::Pong(_))) => waiting_for_pong = false,
                 Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
-                // No event submission is supported in the session-only phase.
+                Some(Ok(Message::Text(text))) => {
+                    let Some((request_id, kind)) = parse_reaction(&text) else { break; };
+                    let now = Instant::now();
+                    let status = if budget.allow(now) {
+                        state.engine.lock().unwrap_or_else(|e| e.into_inner()).accept(kind, participant_id, now)
+                    } else { Admission::RateLimited };
+                    if !send_json(&mut socket, serde_json::json!({"v":1,"type":"result","request_id":request_id,"status":status})).await { break; }
+                },
                 _ => break,
             }
         }
     }
+}
+
+async fn send_json(socket: &mut WebSocket, value: serde_json::Value) -> bool {
+    matches!(
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            socket.send(Message::Text(value.to_string().into()))
+        )
+        .await,
+        Ok(Ok(()))
+    )
 }
 
 #[cfg(test)]
@@ -429,6 +481,97 @@ mod tests {
         let (_, next_token) = ready(&next);
         assert_ne!(token, next_token);
         next.shutdown();
+    }
+
+    #[test]
+    fn authenticated_reactions_are_delivered_bounded_and_disable_clears_pending() {
+        let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+        let (url, token) = ready(&session);
+        let mut ws = connect(&url);
+        ws.send(tungstenite::Message::Text(
+            serde_json::json!({"v":1,"token":token}).to_string().into(),
+        ))
+        .unwrap();
+        let welcome: serde_json::Value =
+            serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
+        assert_eq!(welcome["capabilities"], serde_json::json!(["reactions"]));
+        for id in 0..6 {
+            ws.send(tungstenite::Message::Text(serde_json::json!({"v":1,"type":"reaction","request_id":id.to_string(),"kind":"applause"}).to_string().into())).unwrap();
+            let reply: serde_json::Value =
+                serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
+            assert_eq!(
+                reply["status"],
+                if id < 5 { "accepted" } else { "rate_limited" }
+            );
+        }
+        let events = session.drain_events();
+        assert_eq!(events.len(), 5);
+        assert!(events.iter().all(|e| e.event
+            == crate::audience_events::AudienceEvent::Reaction {
+                kind: crate::audience_events::ReactionKind::Applause
+            }));
+        session.set_reactions_enabled(false);
+        let reply: serde_json::Value =
+            serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
+        assert_eq!(reply["reactions_enabled"], false);
+        assert!(session.drain_events().is_empty());
+        let mut second = connect(&url);
+        second
+            .send(tungstenite::Message::Text(
+                serde_json::json!({"v":1,"token":token}).to_string().into(),
+            ))
+            .unwrap();
+        second.read().unwrap();
+        second
+            .send(tungstenite::Message::Text(
+                r#"{"v":1,"type":"reaction","request_id":"disabled","kind":"heart"}"#.into(),
+            ))
+            .unwrap();
+        assert!(second
+            .read()
+            .unwrap()
+            .into_text()
+            .unwrap()
+            .contains("disabled"));
+        session.set_reactions_enabled(true);
+        second.read().unwrap();
+        second
+            .send(tungstenite::Message::Text(
+                r#"{"v":1,"type":"reaction","request_id":"enabled","kind":"heart"}"#.into(),
+            ))
+            .unwrap();
+        assert!(second
+            .read()
+            .unwrap()
+            .into_text()
+            .unwrap()
+            .contains("accepted"));
+        session.request_stop();
+        assert!(session.drain_events().is_empty());
+        session.shutdown();
+        let mut next = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+        ready(&next);
+        assert!(next.drain_events().is_empty());
+        next.shutdown();
+    }
+
+    #[test]
+    fn unrecognized_application_message_closes_without_delivery() {
+        let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+        let (url, token) = ready(&session);
+        let mut ws = connect(&url);
+        ws.send(tungstenite::Message::Text(
+            serde_json::json!({"v":1,"token":token}).to_string().into(),
+        ))
+        .unwrap();
+        ws.read().unwrap();
+        ws.send(tungstenite::Message::Text(
+            r#"{"v":1,"type":"reaction","request_id":"1","kind":"unknown"}"#.into(),
+        ))
+        .unwrap();
+        assert!(ws.read().is_err());
+        assert!(session.drain_events().is_empty());
+        session.shutdown();
     }
 
     #[test]

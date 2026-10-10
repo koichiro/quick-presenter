@@ -698,6 +698,10 @@ export component PresenterWindow inherits Window {
     in property <int> audience-count: 0;
     in property <bool> audience-guide-visible: false;
     out property <length> audience-panel-height: 200px;
+    in property <bool> audience-reactions-enabled: true;
+    in property <string> audience-recent-reactions;
+    in property <int> audience-reaction-count;
+    callback audience-toggle-reactions();
     callback audience-open-url();
     callback audience-toggle-guide();
     callback audience-toggle-session();
@@ -1418,7 +1422,9 @@ export component PresenterWindow inherits Window {
                         VerticalBox {
                             padding: 10px;
                             Text { text: "Audience reactions"; color: white; font-weight: 700; }
-                            Text { text: "Reactions will appear here in a future update."; color: #9aa0a6; wrap: word-wrap; vertical-stretch: 1; }
+                            Button { text: root.audience-reactions-enabled ? "Reactions ON" : "Reactions OFF"; clicked => { root.audience-toggle-reactions(); } }
+                            Text { text: "Received: " + root.audience-reaction-count; color: #d9dce0; }
+                            Text { text: root.audience-recent-reactions == "" ? "Waiting for reactions…" : root.audience-recent-reactions; color: white; font-size: 22px; wrap: word-wrap; vertical-stretch: 1; }
                         }
                     }
                 }

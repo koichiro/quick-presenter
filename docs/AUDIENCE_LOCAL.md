@@ -4,8 +4,9 @@ Audience Live targets v3.0.0 and is developed on the `v3.0.0` branch.
 
 The initial Audience Live implementation lets audience browsers join a local
 session hosted by Quick Presenter. It supports session start/stop, a join QR
-code and URL, and an authenticated live connection count. Reactions, comments,
-and animated audience-event overlays remain outside this scope.
+code and URL, and an authenticated live connection count. Five reactions can be sent from the
+mobile page and appear in Presenter View. Comments and presentation overlays
+remain outside the A4 scope.
 
 ## Use
 
@@ -28,8 +29,10 @@ preferred/minimum height by the same amount, preserving the notes area. Start,
 stop, address selection, session status, and connection count stay in this area.
 Audience starts a session when none is running; dismissing page 0 keeps it active.
 Click the presenter join URL to open the same audience page in your browser.
-A separate reactions area is reserved for a future update; no reaction events
-are implemented yet. A restarted
+The reactions area shows a bounded recent feed and the number of reactions
+delivered to Presenter View. Reactions ON/OFF controls admission and immediately
+clears queued events and the feed. This delivery count can be lower than the
+number of accepted inputs when events expire. A restarted
 session uses a new random secret and may use a different OS-assigned port.
 Sessions do not start automatically.
 
@@ -53,8 +56,14 @@ session remains active, or scan the new QR after a restart.
   WebSocket authentications. WebSocket frames/messages are limited to 4 KiB.
 - A session-wide handshake budget permits 20 attempts per second, including
   reconnects. This is a resource protection measure, not a participant limit.
-- Only authentication is accepted in this version. Other application messages
-  close the connection. Heartbeats detect stale connections.
+- After authentication, only version 1 reaction messages with five known kinds
+  are accepted. Invalid application messages close the connection. Heartbeats
+  detect stale connections.
+- Per connection: a burst of five reactions, refilling at two per second. Across
+  the session: a burst of 120, refilling at 120 per second. The event queue holds
+  at most 128 events, expires them after two seconds, and drains at most 16 per
+  UI poll. Resource limits do not impose a participant-count product limit.
+- See [Audience Protocol](AUDIENCE_PROTOCOL.md) for messages and response semantics.
 
 These bounds cover the WebSocket/session layer. This initial implementation
 does not claim protection against hostile network floods or unlimited slow HTTP
