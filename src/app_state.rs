@@ -22,6 +22,7 @@ use crate::{
 #[derive(Default)]
 pub struct AppState {
     pub audience_join_visible: bool,
+    pub audience_join_available: bool,
     pub control: crate::control_state::ControlMetadata,
     pub render_sizing: crate::render_sizing::RenderSizingPolicy,
     pub page_aspects: std::collections::HashMap<u32, f32>,

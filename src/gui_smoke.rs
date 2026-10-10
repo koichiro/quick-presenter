@@ -420,14 +420,20 @@ fn check_audience_join_screen(
     let now = Instant::now();
     let elapsed = state.borrow().timer.elapsed_at(now);
     let presenter = &windows.presenter;
-    presenter.invoke_audience_toggle_guide();
+    report.check(
+        "Inactive Audience Live offers the ON action",
+        presenter.get_audience_toggle_label() == "Audience Live ON",
+        "start action displayed",
+        "incorrect start label",
+    );
+    presenter.invoke_audience_toggle_session();
     let deadline = Instant::now() + Duration::from_secs(5);
     while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter)?;
     }
     let url = presenter.get_audience_url();
     report.check(
-        "Audience automatically starts a local session with a QR code",
+        "Audience Live ON starts a local session with a QR code",
         presenter.get_audience_active()
             && url.starts_with("http://127.0.0.1:")
             && presenter.get_audience_qr().size().width > 0,
@@ -435,7 +441,7 @@ fn check_audience_join_screen(
         "session or QR not ready",
     );
     report.check(
-        "Audience button shows page 0 on the slide window",
+        "Audience Live ON shows page 0 on the slide window",
         windows.slide.get_audience_guide_visible()
             && windows.slide.get_audience_url() == url
             && windows.slide.get_audience_code() == presenter.get_audience_code()
@@ -484,11 +490,69 @@ fn check_audience_join_screen(
         "join screen dismissed without PDF navigation",
         "PDF page skipped or join screen remained",
     );
-    presenter.invoke_audience_toggle_guide();
-    presenter.invoke_audience_toggle_guide();
+    if before.is_some() {
+        crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::FirstPage);
+        let first = state.borrow().presentation.snapshot();
+        let generation = state.borrow().render_generation;
+        crate::handle_presentation_command(
+            &windows.refs(),
+            state,
+            PresentationCommand::PreviousPage,
+        );
+        report.check(
+            "Previous from PDF page 1 returns to page 0 while Audience Live is ON",
+            windows.slide.get_audience_guide_visible()
+                && state.borrow().presentation.snapshot() == first
+                && state.borrow().render_generation == generation,
+            "join screen restored without rendering or PDF navigation",
+            "page 0 missing or PDF changed",
+        );
+        crate::handle_presentation_command(
+            &windows.refs(),
+            state,
+            PresentationCommand::PreviousPage,
+        );
+        report.check(
+            "Previous at page 0 remains on page 0",
+            windows.slide.get_audience_guide_visible(),
+            "lower boundary preserved",
+            "join screen dismissed at lower boundary",
+        );
+        crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::NextPage);
+        report.check(
+            "Next from restored page 0 returns to PDF page 1",
+            !windows.slide.get_audience_guide_visible()
+                && state.borrow().presentation.snapshot() == first,
+            "first PDF page restored",
+            "PDF skipped or guide remained",
+        );
+        if let Some(snapshot) = &before {
+            crate::handle_presentation_command(
+                &windows.refs(),
+                state,
+                PresentationCommand::JumpToPage(snapshot.current_index),
+            );
+        }
+    }
+    submit_audience_smoke_reaction(&url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while presenter.get_audience_reaction_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
     report.check(
-        "Audience button toggles back to PDF",
-        !state.borrow().audience_join_visible && !windows.slide.get_audience_guide_visible(),
+        "WebSocket reaction reaches Presenter View",
+        presenter.get_audience_reaction_count() == 1
+            && presenter.get_audience_recent_reactions().contains("👏"),
+        "authenticated reaction displayed",
+        "reaction did not reach the presenter",
+    );
+    report.check(
+        "PDF navigation keeps Audience Live running",
+        !state.borrow().audience_join_visible
+            && !windows.slide.get_audience_guide_visible()
+            && presenter.get_audience_active()
+            && presenter.get_audience_toggle_label() == "Audience Live OFF"
+            && presenter.get_audience_url_text() == presenter.get_audience_url(),
         "both windows returned to PDF",
         "join screen remained active",
     );
@@ -503,9 +567,146 @@ fn check_audience_join_screen(
             && presenter.get_audience_url().is_empty()
             && windows.slide.get_audience_url().is_empty()
             && windows.slide.get_audience_qr().size().width == 0
-            && !windows.slide.get_audience_guide_visible(),
+            && !windows.slide.get_audience_guide_visible()
+            && !state.borrow().audience_join_available
+            && presenter.get_audience_recent_reactions().is_empty(),
         "stale join credentials cleared",
         "stale join information remained",
+    );
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    let new_url = presenter.get_audience_url();
+    submit_audience_smoke_reaction(&new_url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while presenter.get_audience_reaction_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    report.check(
+        "Audience Live can restart with a new URL and automatically receives reactions",
+        new_url != url
+            && presenter.get_audience_reaction_count() == 1
+            && !presenter.get_audience_recent_reactions().is_empty(),
+        "new session received a reaction",
+        "restart reused credentials or failed to receive",
+    );
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_active() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    check_audience_panel_layout(windows, report)?;
+    Ok(())
+}
+
+fn check_audience_panel_layout(windows: &AppWindows, report: &mut GuiSmokeReport) -> Result<()> {
+    let presenter = &windows.presenter;
+    let size = presenter.window().size();
+    for (width, height) in [(800.0, 800.0), (1020.0, 960.0), (1200.0, 1240.0)] {
+        presenter
+            .window()
+            .dispatch_event(slint::platform::WindowEvent::Resized {
+                size: slint::LogicalSize::new(width, height),
+            });
+        settle_presenter_notes_layout(presenter)?;
+        report.check(
+            format!("Audience panel leaves thumbnails unobstructed ({width}x{height})"),
+            presenter.get_audience_panel_right() + 8.0 <= presenter.get_thumbnails_left()
+                && presenter.get_thumbnails_bottom() > presenter.get_notes_area_bottom()
+                && (presenter.get_thumbnails_bottom() - presenter.get_audience_url_bottom()).abs()
+                    <= 1.0,
+            "thumbnail column stays beside the footer",
+            "audience footer overlaps the thumbnail column",
+        );
+        report.check(
+            format!(
+                "Audience toggle follows notes and reactions have more space ({width}x{height})"
+            ),
+            presenter.get_audience_toggle_y() >= presenter.get_notes_area_bottom()
+                && presenter.get_audience_panel_top()
+                    >= presenter.get_audience_toggle_bottom() + 4.0
+                && presenter.get_audience_reactions_width()
+                    > presenter.get_audience_controls_width()
+                && presenter.get_audience_url_top() >= presenter.get_audience_panel_bottom() + 4.0
+                && presenter.get_audience_address_controls_inline(),
+            "toggle and expanded feed fit",
+            "toggle placement or feed width failed",
+        );
+    }
+    presenter.window().set_size(size);
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::Resized {
+            size: size.to_logical(presenter.window().scale_factor()),
+        });
+    settle_presenter_notes_layout(presenter)?;
+    Ok(())
+}
+
+// A minimal loopback client keeps GUI smoke independent of a new runtime dependency.
+fn submit_audience_smoke_reaction(url: &str) -> Result<()> {
+    use std::io::{Read, Write};
+    let (url, token) = url.split_once("#k=").context("missing audience token")?;
+    let authority = url
+        .strip_prefix("http://")
+        .context("invalid join URL")?
+        .split('/')
+        .next()
+        .unwrap();
+    let mut socket = std::net::TcpStream::connect(authority)?;
+    socket.set_read_timeout(Some(Duration::from_secs(2)))?;
+    socket.set_write_timeout(Some(Duration::from_secs(2)))?;
+    write!(socket, "GET /ws HTTP/1.1\r\nHost: {authority}\r\nOrigin: http://{authority}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")?;
+    let mut headers = Vec::new();
+    while !headers.ends_with(b"\r\n\r\n") && headers.len() < 4096 {
+        let mut byte = [0];
+        socket.read_exact(&mut byte)?;
+        headers.push(byte[0]);
+    }
+    anyhow::ensure!(
+        headers.starts_with(b"HTTP/1.1 101"),
+        "WebSocket upgrade failed"
+    );
+    fn send(socket: &mut std::net::TcpStream, value: serde_json::Value) -> Result<()> {
+        let payload = value.to_string().into_bytes();
+        anyhow::ensure!(payload.len() < 126, "smoke message too large");
+        let mask = [1u8, 2, 3, 4];
+        socket.write_all(&[0x81, 0x80 | payload.len() as u8])?;
+        socket.write_all(&mask)?;
+        socket.write_all(
+            &payload
+                .iter()
+                .enumerate()
+                .map(|(n, b)| b ^ mask[n % 4])
+                .collect::<Vec<_>>(),
+        )?;
+        Ok(())
+    }
+    fn read(socket: &mut std::net::TcpStream) -> Result<serde_json::Value> {
+        let mut header = [0; 2];
+        socket.read_exact(&mut header)?;
+        anyhow::ensure!(
+            header[0] == 0x81 && header[1] < 126,
+            "unexpected smoke server frame"
+        );
+        let mut payload = vec![0; header[1] as usize];
+        socket.read_exact(&mut payload)?;
+        Ok(serde_json::from_slice(&payload)?)
+    }
+    send(&mut socket, serde_json::json!({"v":1,"token":token}))?;
+    anyhow::ensure!(
+        read(&mut socket)?["type"] == "welcome",
+        "audience authentication failed"
+    );
+    send(
+        &mut socket,
+        serde_json::json!({"v":1,"type":"reaction","request_id":"smoke","kind":"applause"}),
+    )?;
+    anyhow::ensure!(
+        read(&mut socket)?["status"] == "accepted",
+        "smoke reaction rejected"
     );
     Ok(())
 }

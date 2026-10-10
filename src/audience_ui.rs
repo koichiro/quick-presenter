@@ -2,11 +2,12 @@
 use crate::{
     app_state::AppState,
     audience::{self, LocalAudienceSession, SessionStatus},
+    audience_events::AudienceEvent,
     window_controller::{AppWindowRefs, AppWindows},
     PresenterWindow,
 };
 use slint::{ComponentHandle, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, Weak};
-use std::{cell::RefCell, net::Ipv4Addr, rc::Rc, time::Duration};
+use std::{cell::RefCell, collections::VecDeque, net::Ipv4Addr, rc::Rc, time::Duration};
 
 pub struct AudienceUi {
     session: RefCell<Option<LocalAudienceSession>>,
@@ -15,6 +16,7 @@ pub struct AudienceUi {
     stopping: RefCell<bool>,
     address_index: RefCell<usize>,
     last_url: RefCell<String>,
+    recent: RefCell<VecDeque<String>>,
 }
 
 impl AudienceUi {
@@ -42,23 +44,7 @@ impl AudienceUi {
             stopping: RefCell::new(false),
             address_index: RefCell::new(0),
             last_url: RefCell::new(String::new()),
-        });
-        let refs = windows.refs();
-        let guide_state = state.clone();
-        let weak = Rc::downgrade(&ui);
-        presenter.on_audience_toggle_guide(move || {
-            let visible = !guide_state.borrow().audience_join_visible;
-            if visible {
-                if let (Some(ui), Some(presenter)) = (weak.upgrade(), refs.presenter.upgrade()) {
-                    if ui.session.borrow().is_none() {
-                        presenter.invoke_audience_toggle_session();
-                    }
-                }
-            }
-            set_join_visible(&refs, &guide_state, visible);
-            if visible {
-                crate::show_slide_window_from_menu(&refs, &guide_state);
-            }
+            recent: RefCell::new(VecDeque::new()),
         });
         presenter.set_audience_address(ui.address_label().into());
         let weak = Rc::downgrade(&ui);
@@ -110,12 +96,20 @@ impl AudienceUi {
             let Some(ui) = weak.upgrade() else {
                 return;
             };
+            if *ui.stopping.borrow() {
+                return;
+            }
             if let Some(session) = ui.session.borrow().as_ref() {
                 *ui.stopping.borrow_mut() = true;
                 session.request_stop();
+                state.borrow_mut().audience_join_available = false;
                 set_join_visible(&refs, &state, false);
                 clear_join_metadata(&refs);
                 if let Some(window) = window.upgrade() {
+                    ui.clear_reactions(&window);
+                }
+                if let Some(window) = window.upgrade() {
+                    window.set_audience_busy(true);
                     window.set_audience_status("Stopping…".into());
                     window.set_audience_url("".into());
                     window.set_audience_code("".into());
@@ -134,26 +128,35 @@ impl AudienceUi {
             };
             match LocalAudienceSession::start(address) {
                 Ok(session) => {
+                    if let Some(window) = window.upgrade() {
+                        ui.clear_reactions(&window);
+                        window.set_audience_reaction_count(0);
+                    }
                     *ui.stopping.borrow_mut() = false;
                     *ui.session.borrow_mut() = Some(session);
+                    state.borrow_mut().audience_join_available = true;
                     if let Some(window) = window.upgrade() {
                         window.set_audience_active(true);
+                        window.set_audience_busy(true);
                         window.set_audience_status("Starting…".into());
                     }
                     let weak = Rc::downgrade(&ui);
                     let window = window.clone();
-                    let refs = refs.clone();
-                    let state = state.clone();
+                    let timer_refs = refs.clone();
+                    let timer_state = state.clone();
                     ui.timer
                         .start(TimerMode::Repeated, Duration::from_millis(100), move || {
                             if let Some(ui) = weak.upgrade() {
                                 ui.refresh(&window);
-                                sync_join_metadata(&refs);
+                                sync_join_metadata(&timer_refs);
                                 if !window.upgrade().is_some_and(|w| w.get_audience_active()) {
-                                    set_join_visible(&refs, &state, false);
+                                    timer_state.borrow_mut().audience_join_available = false;
+                                    set_join_visible(&timer_refs, &timer_state, false);
                                 }
                             }
                         });
+                    set_join_visible(&refs, &state, true);
+                    crate::show_slide_window_from_menu(&refs, &state);
                 }
                 Err(error) => {
                     if let Some(window) = window.upgrade() {
@@ -205,6 +208,11 @@ impl AudienceUi {
             .unwrap_or_else(|| "No IPv4 LAN address. Connect to Wi-Fi or Ethernet.".into())
     }
 
+    fn clear_reactions(&self, window: &PresenterWindow) {
+        self.recent.borrow_mut().clear();
+        window.set_audience_recent_reactions("".into());
+    }
+
     fn refresh(&self, window: &Weak<PresenterWindow>) {
         let Some(window) = window.upgrade() else {
             return;
@@ -223,6 +231,31 @@ impl AudienceUi {
                 // A pending stop must not republish an invalid join URL.
                 if *self.stopping.borrow() {
                     return;
+                }
+                window.set_audience_busy(false);
+                let events = self
+                    .session
+                    .borrow()
+                    .as_ref()
+                    .map(LocalAudienceSession::drain_events)
+                    .unwrap_or_default();
+                if !events.is_empty() {
+                    window.set_audience_reaction_count(
+                        window
+                            .get_audience_reaction_count()
+                            .saturating_add(events.len() as i32),
+                    );
+                    let mut recent = self.recent.borrow_mut();
+                    for accepted in events {
+                        let AudienceEvent::Reaction { kind } = accepted.event;
+                        recent.push_back(kind.emoji().to_owned());
+                        if recent.len() > 36 {
+                            recent.pop_front();
+                        }
+                    }
+                    window.set_audience_recent_reactions(
+                        recent.iter().cloned().collect::<Vec<_>>().join(" ").into(),
+                    );
                 }
                 window.set_audience_code(code.clone().into());
                 window.set_audience_status(
@@ -258,10 +291,13 @@ impl AudienceUi {
                     SessionStatus::Failed(error) => format!("Audience unavailable: {error}"),
                     _ => "Stopped".into(),
                 };
+                self.clear_reactions(&window);
                 self.session.borrow_mut().take();
+                *self.stopping.borrow_mut() = false;
                 self.timer.stop();
                 self.last_url.borrow_mut().clear();
                 window.set_audience_active(false);
+                window.set_audience_busy(false);
                 window.set_audience_status(message.into());
                 window.set_audience_url("".into());
                 window.set_audience_code("".into());
