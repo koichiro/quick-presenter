@@ -133,7 +133,8 @@ passed on retry with unchanged assertions.
 
 ## Reaction overlay (A5)
 
-The presentation window draws reactions in a Slint layer above the PDF image.
+The presentation window draws reactions in a Slint layer above the PDF image
+or the page 0 join information.
 Original, bundled SVG icons keep the display independent of emoji font support;
 the mobile page and presenter feed still use native emoji. Overlay updates do
 not submit PDF render requests or modify pages, notes, or the timer.
@@ -142,8 +143,9 @@ At most 24 reactions are visible for 1.8 seconds from their server receive time.
 Positions are normalized to the current slide window and recomputed by Slint on
 resize, fullscreen, or display changes. Excess events are omitted, never queued
 for later overlay replay. A 16 ms animation timer runs only while items remain;
-the existing session poll remains 100 ms. Audience Live OFF, page 0, blackout,
-and hide/close discard the display model immediately. Restoring visibility also
+the existing session poll remains 100 ms. Audience Live OFF, blackout, and
+hide/close discard the display model immediately. Switching between page 0
+and the PDF clears existing animations; new reactions appear on either screen. Restoring visibility also
 establishes a receive-time cutoff so late delivery cannot replay suppressed
 inputs. Presenter reception continues during blackout or slide hiding.
 
@@ -180,4 +182,11 @@ without skipping, as well as compact inline address controls at three sizes.
 
 A5 integration of page 0 return navigation passed 492 Rust tests, 121 GUI
 checks, and 10 CLI contract checks on macOS, including reaction overlay
-suppression on page 0 and resumption on PDF navigation.
+the original suppression on page 0 and resumption on PDF navigation.
+Page 0 now accepts new overlays, verified by a live WebSocket reaction and
+rendered SVG pixels in GUI smoke before and after PDF loading.
+
+Page 0 overlay validation on macOS: GUI smoke passed 123 checks, including
+live WebSocket reception and visible reaction pixels above the join screen
+both before and after PDF loading. Blackout and hidden-window suppression
+continue to pass.

@@ -1910,7 +1910,7 @@ export component SlideWindow inherits Window {
                 Text { text: "Scan the QR code on the same Wi-Fi or LAN."; color: #d9dce0; font-size: 20px; horizontal-alignment: center; }
             }
         }
-        if !root.black-screen-active && !root.audience-guide-visible: Rectangle {
+        if !root.black-screen-active: Rectangle {
             width: parent.width;
             height: parent.height;
             clip: true;

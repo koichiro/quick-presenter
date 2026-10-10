@@ -458,6 +458,27 @@ fn check_audience_join_screen(
         "presentation state unchanged",
         "join screen changed the presentation",
     );
+    submit_audience_smoke_reaction(&url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while windows.slide.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    let snapshot = windows.slide.window().take_snapshot()?;
+    let colored = snapshot
+        .as_bytes()
+        .chunks_exact(4)
+        .filter(|p| p[0] > 220 && p[1] > 160 && p[1] < 230 && p[2] < 120)
+        .count();
+    report.check(
+        "Page 0 renders incoming reactions above the join information",
+        windows.slide.get_audience_guide_visible()
+            && windows.slide.get_audience_overlay().row_count() > 0
+            && colored > 5
+            && windows.slide.get_audience_url() == url
+            && state.borrow().render_generation == generation,
+        "reaction pixels visible on the join screen without PDF rendering",
+        "page 0 reaction missing or presentation changed",
+    );
     crate::handle_presentation_command(
         &windows.refs(),
         state,
@@ -537,12 +558,12 @@ fn check_audience_join_screen(
     }
     submit_audience_smoke_reaction(&url)?;
     let deadline = Instant::now() + Duration::from_secs(2);
-    while presenter.get_audience_reaction_count() == 0 && Instant::now() < deadline {
+    while presenter.get_audience_reaction_count() < 2 && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter)?;
     }
     report.check(
         "WebSocket reaction reaches Presenter View",
-        presenter.get_audience_reaction_count() == 1
+        presenter.get_audience_reaction_count() == 2
             && presenter.get_audience_recent_reactions().contains("👏"),
         "authenticated reaction displayed",
         "reaction did not reach the presenter",

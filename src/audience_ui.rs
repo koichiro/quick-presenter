@@ -238,11 +238,10 @@ impl AudienceUi {
     }
 
     fn overlay_visible(&self) -> bool {
-        self.windows.slide.upgrade().is_some_and(|slide| {
-            slide.window().is_visible()
-                && !slide.get_black_screen_active()
-                && !slide.get_audience_guide_visible()
-        })
+        self.windows
+            .slide
+            .upgrade()
+            .is_some_and(|slide| slide.window().is_visible() && !slide.get_black_screen_active())
     }
     fn clear_overlay(&self) {
         self.overlay.borrow_mut().clear(Instant::now());
