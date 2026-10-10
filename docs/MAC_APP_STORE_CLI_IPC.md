@@ -1,8 +1,8 @@
 # Mac App Store CLI IPC design
 
 Issue: [#431](https://github.com/koichiro/quick-presenter/issues/431). Parent:
-[#422](https://github.com/koichiro/quick-presenter/issues/422). Target: `v2.4.0`.
-Baseline: `21d729b658c75caf98c01ca18ba5155182c07441` on `v2.4.0`.
+[#422](https://github.com/koichiro/quick-presenter/issues/422). Target: `v2.5.0`.
+Baseline: `21d729b658c75caf98c01ca18ba5155182c07441` on `v2.5.0`.
 
 ## Proposed decision
 
@@ -31,7 +31,7 @@ on its event loop. PDFium remains in its existing isolated renderer.
 and file-authority handoff. Until that work lands, reject Store
 `presentation.open` with the existing `UNSUPPORTED_PLATFORM` error before
 dispatching to the ordinary arbitrary-path open pipeline. This is an explicit
-intermediate limitation, not completed v2.4.0 support. An authenticated CLI path
+intermediate limitation, not completed v2.5.0 support. An authenticated CLI path
 does not confer file authority. Keep protocol parsing of `Open` intact so #432
 can supply its authorized implementation.
 
