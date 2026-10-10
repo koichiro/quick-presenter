@@ -1390,7 +1390,7 @@ export component PresenterWindow inherits Window {
                     padding: 0px;
                     spacing: 8px;
                     audience-live-toggle := Button {
-                        text: root.audience-active ? "Audience Live OFF" : "Audience live ON👍";
+                        text: root.audience-active ? "Audience Live OFF" : "Audience live ON 👍";
                         enabled: !root.audience-busy && (root.audience-active || root.audience-can-start);
                         clicked => { root.audience-toggle-session(); }
                     }
