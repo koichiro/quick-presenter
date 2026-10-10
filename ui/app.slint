@@ -698,7 +698,7 @@ export component PresenterWindow inherits Window {
     in property <bool> audience-can-start: false;
     in property <int> audience-count: 0;
     in property <bool> audience-guide-visible: false;
-    out property <length> audience-panel-height: 298px;
+    out property <length> audience-panel-height: 282px;
     in property <bool> audience-busy: false;
     in property <string> audience-recent-reactions;
     in property <int> audience-reaction-count;
@@ -719,6 +719,7 @@ export component PresenterWindow inherits Window {
     out property <length> audience-panel-right: audience-panel.x + audience-panel.width;
     out property <string> audience-toggle-label: audience-live-toggle.text;
     out property <string> audience-url-text: audience-url-link.text;
+    out property <bool> audience-address-controls-inline: next-address.x >= address-text.x + address-text.width && refresh-address.x >= next-address.x + next-address.width && abs(next-address.y - refresh-address.y) < 1px;
     out property <length> audience-url-bottom: audience-url-row.y + audience-url-row.height;
     out property <length> audience-url-top: audience-url-row.y;
     out property <length> audience-panel-bottom: audience-panel.y + audience-panel.height;
@@ -798,9 +799,9 @@ export component PresenterWindow inherits Window {
 
     title: "Quick Presenter";
     preferred-width: 1024px;
-    preferred-height: 1018px;
+    preferred-height: 1002px;
     min-width: 800px;
-    min-height: 858px;
+    min-height: 842px;
     background: #202124;
     forward-focus: presenter-focus;
 
@@ -1399,7 +1400,7 @@ export component PresenterWindow inherits Window {
                 x: main-area.x;
                 y: audience-toggle-row.y + audience-toggle-row.height + 6px;
                 width: audience-toggle-row.width;
-                height: root.audience-panel-height - 106px;
+                height: root.audience-panel-height - 90px;
                 background: #111315;
                 border-color: #3c4043;
                 border-width: 1px;
@@ -1408,16 +1409,19 @@ export component PresenterWindow inherits Window {
                     padding: 10px;
                     spacing: 12px;
                     audience-controls := Rectangle {
-                        width: min(280px, parent.width * 0.35);
+                        width: min(300px, parent.width * 0.4);
                         VerticalBox {
                             padding: 0px;
                             spacing: 6px;
                             Text { text: "Connected: " + root.audience-count; color: white; font-size: 16px; }
                             Text { text: root.audience-status; color: #d9dce0; wrap: word-wrap; }
-                            Text { text: root.audience-address; color: #9aa0a6; overflow: elide; }
-                            HorizontalBox {
-                                Button { text: "Refresh"; enabled: !root.audience-active; clicked => { root.audience-refresh-addresses(); } }
-                                Button { text: "Next address"; enabled: !root.audience-active; clicked => { root.audience-next-address(); } }
+                            audience-address-row := HorizontalBox {
+                                padding: 0px;
+                                spacing: 4px;
+                                height: 24px;
+                                address-text := Text { text: root.audience-address; color: #9aa0a6; font-size: 11px; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
+                                next-address := Button { text: "Next Address"; width: 84px; height: 22px; enabled: !root.audience-active; clicked => { root.audience-next-address(); } }
+                                refresh-address := Button { text: "Refresh"; width: 56px; height: 22px; enabled: !root.audience-active; clicked => { root.audience-refresh-addresses(); } }
                             }
                             Rectangle { vertical-stretch: 1; }
                         }
@@ -1446,15 +1450,15 @@ export component PresenterWindow inherits Window {
                 x: audience-panel.x;
                 y: audience-panel.y + audience-panel.height + 6px;
                 width: audience-panel.width;
-                height: 52px;
+                height: 36px;
                 background: #111315;
                 border-color: #3c4043;
                 border-width: 1px;
                 audience-url-link := Text {
                     x: 8px;
-                    y: 6px;
+                    y: 3px;
                     width: max(0px, parent.width - 16px);
-                    height: max(0px, parent.height - 12px);
+                    height: max(0px, parent.height - 6px);
                     text: root.audience-url;
                     wrap: word-wrap;
                     font-size: 12px;

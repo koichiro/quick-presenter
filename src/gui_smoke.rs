@@ -490,6 +490,50 @@ fn check_audience_join_screen(
         "join screen dismissed without PDF navigation",
         "PDF page skipped or join screen remained",
     );
+    if before.is_some() {
+        crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::FirstPage);
+        let first = state.borrow().presentation.snapshot();
+        let generation = state.borrow().render_generation;
+        crate::handle_presentation_command(
+            &windows.refs(),
+            state,
+            PresentationCommand::PreviousPage,
+        );
+        report.check(
+            "Previous from PDF page 1 returns to page 0 while Audience Live is ON",
+            windows.slide.get_audience_guide_visible()
+                && state.borrow().presentation.snapshot() == first
+                && state.borrow().render_generation == generation,
+            "join screen restored without rendering or PDF navigation",
+            "page 0 missing or PDF changed",
+        );
+        crate::handle_presentation_command(
+            &windows.refs(),
+            state,
+            PresentationCommand::PreviousPage,
+        );
+        report.check(
+            "Previous at page 0 remains on page 0",
+            windows.slide.get_audience_guide_visible(),
+            "lower boundary preserved",
+            "join screen dismissed at lower boundary",
+        );
+        crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::NextPage);
+        report.check(
+            "Next from restored page 0 returns to PDF page 1",
+            !windows.slide.get_audience_guide_visible()
+                && state.borrow().presentation.snapshot() == first,
+            "first PDF page restored",
+            "PDF skipped or guide remained",
+        );
+        if let Some(snapshot) = &before {
+            crate::handle_presentation_command(
+                &windows.refs(),
+                state,
+                PresentationCommand::JumpToPage(snapshot.current_index),
+            );
+        }
+    }
     submit_audience_smoke_reaction(&url)?;
     let deadline = Instant::now() + Duration::from_secs(2);
     while presenter.get_audience_reaction_count() == 0 && Instant::now() < deadline {
@@ -524,6 +568,7 @@ fn check_audience_join_screen(
             && windows.slide.get_audience_url().is_empty()
             && windows.slide.get_audience_qr().size().width == 0
             && !windows.slide.get_audience_guide_visible()
+            && !state.borrow().audience_join_available
             && presenter.get_audience_recent_reactions().is_empty(),
         "stale join credentials cleared",
         "stale join information remained",
@@ -584,7 +629,8 @@ fn check_audience_panel_layout(windows: &AppWindows, report: &mut GuiSmokeReport
                     >= presenter.get_audience_toggle_bottom() + 4.0
                 && presenter.get_audience_reactions_width()
                     > presenter.get_audience_controls_width()
-                && presenter.get_audience_url_top() >= presenter.get_audience_panel_bottom() + 4.0,
+                && presenter.get_audience_url_top() >= presenter.get_audience_panel_bottom() + 4.0
+                && presenter.get_audience_address_controls_inline(),
             "toggle and expanded feed fit",
             "toggle placement or feed width failed",
         );

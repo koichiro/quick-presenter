@@ -102,6 +102,7 @@ impl AudienceUi {
             if let Some(session) = ui.session.borrow().as_ref() {
                 *ui.stopping.borrow_mut() = true;
                 session.request_stop();
+                state.borrow_mut().audience_join_available = false;
                 set_join_visible(&refs, &state, false);
                 clear_join_metadata(&refs);
                 if let Some(window) = window.upgrade() {
@@ -133,6 +134,7 @@ impl AudienceUi {
                     }
                     *ui.stopping.borrow_mut() = false;
                     *ui.session.borrow_mut() = Some(session);
+                    state.borrow_mut().audience_join_available = true;
                     if let Some(window) = window.upgrade() {
                         window.set_audience_active(true);
                         window.set_audience_busy(true);
@@ -148,6 +150,7 @@ impl AudienceUi {
                                 ui.refresh(&window);
                                 sync_join_metadata(&timer_refs);
                                 if !window.upgrade().is_some_and(|w| w.get_audience_active()) {
+                                    timer_state.borrow_mut().audience_join_available = false;
                                     set_join_visible(&timer_refs, &timer_state, false);
                                 }
                             }

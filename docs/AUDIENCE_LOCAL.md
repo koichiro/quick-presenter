@@ -19,7 +19,9 @@ remain outside the A4 scope.
 4. Scan the QR code with a phone. All five reactions are available as soon as
    the browser joins; no separate presenter reaction switch exists.
 5. Advance once to restore the current PDF page. Reception continues.
-   Page 0 appears when a session starts; there is no separate join-screen toggle.
+   Page 0 appears when a session starts; Previous from PDF page 1 returns to it
+   while the session is ON. Previous at page 0 stays there; Next restores PDF
+   page 1. There is no separate join-screen toggle.
    Page 0 does not modify PDF pagination,
    rendering state, or the timer. Blackout covers the join screen as well.
 6. Click **Audience Live OFF** to invalidate the URL,
@@ -27,10 +29,10 @@ remain outside the A4 scope.
 
 The thumbnail column extends to the bottom of the main content, alongside the
 Audience area, and is clipped within its own viewport. The Audience area spans
-only the notes/keys columns. Its compact connection controls take at most 280
-logical pixels (35% at narrower sizes); the reactions feed receives the remaining
+only the notes/keys columns. Its compact connection controls take at most 300
+logical pixels (40% at narrower sizes); the reactions feed receives the remaining
 width and displays up to 36 recent reactions. The total reserved footer height
-is 298 logical pixels, including the toggle row; preferred/minimum window height
+is 282 logical pixels, including the toggle row; preferred/minimum window height
 increases by that amount to preserve the notes area. The full join URL appears alone below the panel as a clickable link that opens
 the browser. The thumbnail viewport ends at the same bottom edge, with a visible
 background and border even when the deck has few pages. Button labels describe the action to perform. Starting/stopping temporarily disables the toggle
@@ -128,3 +130,12 @@ toggle placement and expanded reaction width at three sizes, as well as stopping
 restarting with rotated credentials, and immediate reception without a reaction
 switch. One run failed the existing fullscreen-on check; the same GUI suite
 passed on retry with unchanged assertions.
+
+Address selection and refresh use compact buttons beside the IPv4 address.
+The URL strip is 36 logical pixels high. Stopping disables page 0 navigation
+immediately, even while the asynchronous server shutdown is pending.
+
+Page 0 return navigation and compact controls validation: 489 Rust tests,
+101 GUI checks, and 10 CLI contract checks passed on macOS. The GUI covers
+returning from PDF page 1, the lower page 0 boundary, and forward navigation
+without skipping, as well as compact inline address controls at three sizes.
