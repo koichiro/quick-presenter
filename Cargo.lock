@@ -3929,6 +3929,7 @@ dependencies = [
  "anyhow",
  "axum",
  "chrono",
+ "futures-lite",
  "getrandom 0.3.4",
  "if-addrs",
  "libc",
@@ -3952,6 +3953,7 @@ dependencies = [
  "webbrowser",
  "windows-sys 0.61.2",
  "winresource",
+ "zbus",
 ]
 
 [[package]]

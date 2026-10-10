@@ -4,6 +4,12 @@ use std::time::{Duration, Instant};
 
 pub const MAX_VISIBLE: usize = 24;
 pub const LIFETIME: Duration = Duration::from_millis(1800);
+// Real XWayland drawing can block for roughly one second per frame. Only the
+// GUI smoke instance gets a wider observation budget; production stays at 1.8s.
+#[cfg(target_os = "linux")]
+pub const GUI_SMOKE_LIFETIME: Duration = Duration::from_secs(6);
+#[cfg(not(target_os = "linux"))]
+pub const GUI_SMOKE_LIFETIME: Duration = LIFETIME;
 #[derive(Clone, Copy, Debug)]
 pub struct OverlayFrame {
     pub kind: ReactionKind,
@@ -16,12 +22,27 @@ struct Active {
     started: Instant,
     slot: usize,
 }
-#[derive(Default)]
 pub struct OverlayEngine {
     active: Vec<Active>,
     cleared_at: Option<Instant>,
+    lifetime: Duration,
+}
+impl Default for OverlayEngine {
+    fn default() -> Self {
+        Self {
+            active: Vec::new(),
+            cleared_at: None,
+            lifetime: LIFETIME,
+        }
+    }
 }
 impl OverlayEngine {
+    pub fn for_gui_smoke() -> Self {
+        Self {
+            lifetime: GUI_SMOKE_LIFETIME,
+            ..Self::default()
+        }
+    }
     pub fn clear(&mut self, now: Instant) {
         self.active.clear();
         self.cleared_at = Some(now);
@@ -31,7 +52,7 @@ impl OverlayEngine {
         if self
             .cleared_at
             .is_some_and(|cutoff| event.received_at <= cutoff)
-            || now.saturating_duration_since(event.received_at) >= LIFETIME
+            || now.saturating_duration_since(event.received_at) >= self.lifetime
             || self.active.len() >= MAX_VISIBLE
         {
             return;
@@ -48,15 +69,15 @@ impl OverlayEngine {
     }
     fn expire(&mut self, now: Instant) {
         self.active
-            .retain(|a| now.saturating_duration_since(a.started) < LIFETIME);
+            .retain(|a| now.saturating_duration_since(a.started) < self.lifetime);
     }
     pub fn frames(&mut self, now: Instant) -> Vec<OverlayFrame> {
         self.expire(now);
         self.active
             .iter()
             .map(|a| {
-                let progress =
-                    now.saturating_duration_since(a.started).as_secs_f32() / LIFETIME.as_secs_f32();
+                let progress = now.saturating_duration_since(a.started).as_secs_f32()
+                    / self.lifetime.as_secs_f32();
                 OverlayFrame {
                     kind: a.kind,
                     x: 0.06 + (a.slot % 8) as f32 * 0.12,
@@ -70,6 +91,21 @@ impl OverlayEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn smoke_observation_budget_preserves_motion_expiry_and_stale_input_rejection() {
+        let now = Instant::now();
+        let mut smoke = OverlayEngine::for_gui_smoke();
+        smoke.push(&event(now), now);
+        let first = smoke.frames(now)[0];
+        let later = smoke.frames(now + GUI_SMOKE_LIFETIME / 2)[0];
+        assert!(later.y < first.y && (0.0..=1.0).contains(&later.y));
+        assert!(smoke.frames(now + GUI_SMOKE_LIFETIME).is_empty());
+        smoke.push(&event(now), now + GUI_SMOKE_LIFETIME);
+        assert!(smoke.frames(now + GUI_SMOKE_LIFETIME).is_empty());
+        let mut production = OverlayEngine::default();
+        production.push(&event(now), now);
+        assert!(production.frames(now + LIFETIME).is_empty());
+    }
     fn event(at: Instant) -> AcceptedAudienceEvent {
         AcceptedAudienceEvent {
             sequence: 1,

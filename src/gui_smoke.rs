@@ -695,6 +695,7 @@ fn check_audience_overlay(
     let presenter = &windows.presenter;
     let generation = state.borrow().render_generation;
     let first = slide.get_audience_overlay().row_data(0);
+    let observed_at = Instant::now();
     let snapshot = slide.window().take_snapshot()?;
     let colored = snapshot
         .as_bytes()
@@ -715,11 +716,11 @@ fn check_audience_overlay(
     let moving = slide.get_audience_overlay().row_data(0);
     report.check(
         "Overlay animates within resized bounds and preserves the presentation session",
-        first.zip(moving).is_some_and(|(a, b)| {
+        first.as_ref().zip(moving.as_ref()).is_some_and(|(a, b)| {
             b.y < a.y && (0.0..=1.0).contains(&b.x) && (0.0..=1.0).contains(&b.y)
         }) && state.borrow().render_generation == generation,
         "motion stays normalized and render generation unchanged",
-        "motion or rendering boundary failed",
+        format!("first={first:?}, after={moving:?}, elapsed={:?}, generation={generation}->{}, window={:?}", observed_at.elapsed(), state.borrow().render_generation, slide.window().size()),
     );
     slide.window().set_size(size);
     crate::handle_presentation_command(
@@ -779,7 +780,8 @@ fn check_audience_overlay(
         "new input displayed",
         "new input missing",
     );
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let deadline =
+        Instant::now() + crate::audience_overlay::GUI_SMOKE_LIFETIME + Duration::from_secs(2);
     while slide.get_audience_overlay().row_count() > 0 && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter)?;
     }
