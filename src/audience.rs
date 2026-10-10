@@ -542,6 +542,131 @@ mod tests {
     }
 
     #[test]
+    fn many_authenticated_clients_deliver_bounded_events_and_shutdown_cleanly() {
+        exercise_many_clients(1, Duration::ZERO);
+    }
+
+    #[test]
+    #[ignore = "explicit local sustained-load validation; takes about 30 seconds"]
+    fn sustained_local_load_remains_bounded_and_stops_cleanly() {
+        exercise_many_clients(30, Duration::from_secs(1));
+    }
+
+    fn exercise_many_clients(rounds: usize, interval: Duration) {
+        let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+        let (url, token) = ready(&session);
+        let mut clients = Vec::new();
+        // Pace joins to respect the anti-churn handshake budget, not an audience cap.
+        for batch in 0..3 {
+            if batch > 0 {
+                thread::sleep(Duration::from_millis(1100));
+            }
+            for _ in 0..16 {
+                let mut ws = connect(&url);
+                ws.send(tungstenite::Message::Text(
+                    serde_json::json!({"v":1,"token":token}).to_string().into(),
+                ))
+                .unwrap();
+                let welcome: serde_json::Value =
+                    serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
+                assert_eq!(welcome["type"], "welcome");
+                clients.push(ws);
+            }
+        }
+        assert_eq!(session.snapshot().connections, 48);
+        let started = Instant::now();
+        let mut totals = [0usize; 3];
+        let mut max_round = Duration::ZERO;
+        for round in 0..rounds {
+            let round_started = Instant::now();
+            let workers: Vec<_> = clients
+                .into_iter()
+                .enumerate()
+                .map(|(index, mut ws)| {
+                    thread::spawn(move || {
+                        let mut counts = [0usize; 3];
+                        for request in 0..6 {
+                            let id = format!("{round}-{index}-{request}");
+                            ws.send(tungstenite::Message::Text(
+                                serde_json::json!({"v":1,"type":"reaction","request_id":id,"kind":"heart"})
+                                    .to_string().into(),
+                            )).unwrap();
+                            let reply: serde_json::Value = loop {
+                                match ws.read().unwrap() {
+                                    tungstenite::Message::Text(text) => break serde_json::from_str(&text).unwrap(),
+                                    tungstenite::Message::Ping(_) => ws.flush().unwrap(),
+                                    tungstenite::Message::Pong(_) => (),
+                                    message => panic!("unexpected load-test response: {message:?}"),
+                                }
+                            };
+                            assert_eq!(reply["request_id"], id);
+                            let outcome = match reply["status"].as_str() {
+                                Some("accepted") => 0,
+                                Some("rate_limited") => 1,
+                                Some("busy") => 2,
+                                status => panic!("unexpected admission status: {status:?}"),
+                            };
+                            counts[outcome] += 1;
+                        }
+                        (ws, counts)
+                    })
+                })
+                .collect();
+            clients = workers
+                .into_iter()
+                .map(|w| {
+                    let (ws, counts) = w.join().unwrap();
+                    for (total, count) in totals.iter_mut().zip(counts) {
+                        *total += count;
+                    }
+                    ws
+                })
+                .collect();
+            let events = session.drain_events();
+            assert!(!events.is_empty());
+            assert!(events.len() <= 16);
+            assert!(events
+                .windows(2)
+                .all(|pair| pair[0].sequence < pair[1].sequence));
+            assert_eq!(session.snapshot().connections, 48);
+            max_round = max_round.max(round_started.elapsed());
+            if round + 1 < rounds {
+                thread::sleep(interval.saturating_sub(round_started.elapsed()));
+            }
+        }
+        assert_eq!(totals.iter().sum::<usize>(), 48 * 6 * rounds);
+        println!("Local load: clients=48 rounds={rounds} requests={} accepted={} rate_limited={} busy={} elapsed_ms={} max_round_ms={}",
+            48 * 6 * rounds, totals[0], totals[1], totals[2], started.elapsed().as_millis(), max_round.as_millis());
+        let authority = url
+            .strip_prefix("http://")
+            .unwrap()
+            .split('/')
+            .next()
+            .unwrap();
+        session.shutdown();
+        assert_eq!(session.snapshot().connections, 0);
+        assert_eq!(session.snapshot().status, SessionStatus::Stopped);
+        assert!(session.drain_events().is_empty());
+        for ws in &mut clients {
+            assert!(ws.read().is_err());
+        }
+        let _rebound = std::net::TcpListener::bind(authority).unwrap();
+    }
+
+    #[test]
+    fn shutdown_closes_clients_waiting_for_authentication() {
+        let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+        let (url, _) = ready(&session);
+        let mut clients: Vec<_> = (0..8).map(|_| connect(&url)).collect();
+        assert_eq!(session.snapshot().connections, 0);
+        session.shutdown();
+        assert!(session.is_finished());
+        for ws in &mut clients {
+            assert!(ws.read().is_err());
+        }
+    }
+
+    #[test]
     fn handshake_budget_bounds_churn_and_recovers() {
         let now = Instant::now();
         let mut budget = HandshakeBudget::new(now);

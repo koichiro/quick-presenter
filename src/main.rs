@@ -11,6 +11,7 @@ pub mod audience_events;
 pub mod audience_overlay;
 mod audience_ui;
 pub mod black_screen;
+mod browser;
 pub mod cli;
 pub mod clock;
 mod control_app;

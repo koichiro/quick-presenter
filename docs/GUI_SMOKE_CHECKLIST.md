@@ -359,3 +359,11 @@ On the exact final package, with development PDFium overrides unset:
 - Rerun notes/context/export/watch and renderer isolation via the certified
   Store installation and registered `qp.exe` alias. Extracted executable results
   remain separate evidence.
+
+## Audience Live (v3.0.0)
+
+When qualifying a build with Audience Live, also complete
+[A6 release validation](AUDIENCE_RELEASE_CHECKLIST.md) for the final installed
+package. Its LAN, mobile, and physical-display gates are separate from loopback
+GUI smoke. Multi-connection load testing uses local loopback; real-LAN
+multi-participant load is outside A6 scope. Record pending checks explicitly.
