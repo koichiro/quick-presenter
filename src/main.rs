@@ -7,6 +7,7 @@ pub mod app_metadata;
 pub mod app_state;
 pub mod aspect;
 pub mod audience;
+pub mod audience_events;
 mod audience_ui;
 pub mod black_screen;
 pub mod cli;
@@ -966,6 +967,23 @@ fn handle_presentation_command(
     state: &Rc<RefCell<AppState>>,
     command: PresentationCommand,
 ) {
+    if command == PresentationCommand::PreviousPage {
+        let app = state.borrow();
+        if app.audience_join_visible {
+            return;
+        }
+        let return_to_join = app.audience_join_available
+            && app
+                .presentation
+                .snapshot()
+                .is_some_and(|snapshot| snapshot.current_index == 0);
+        drop(app);
+        if return_to_join {
+            audience_ui::set_join_visible(windows, state, true);
+            show_slide_window_from_menu(windows, state);
+            return;
+        }
+    }
     if state.borrow().audience_join_visible
         && matches!(
             command,
