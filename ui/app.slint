@@ -1,3 +1,5 @@
+export struct ReactionOverlayItem { kind: int, x: float, y: float, opacity: float }
+
 import { Button, VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
 
 export struct ThumbnailItem {
@@ -1388,7 +1390,7 @@ export component PresenterWindow inherits Window {
                     padding: 0px;
                     spacing: 8px;
                     audience-live-toggle := Button {
-                        text: root.audience-active ? "Audience Live OFF" : "Audience Live ON";
+                        text: root.audience-active ? "Audience Live OFF" : "Audience live ON 👍";
                         enabled: !root.audience-busy && (root.audience-active || root.audience-can-start);
                         clicked => { root.audience-toggle-session(); }
                     }
@@ -1712,6 +1714,8 @@ export component SlideWindow inherits Window {
     icon: @image-url("../assets/icons/png/quick-presenter-icon-256.png");
     in property <bool> audience-guide-visible: false;
     in property <bool> black-screen-active: false;
+    in property <[ReactionOverlayItem]> audience-overlay;
+    callback audience-clear-overlay();
     in property <image> audience-qr;
     in property <string> audience-url;
     in property <string> audience-code;
@@ -1904,6 +1908,23 @@ export component SlideWindow inherits Window {
                 Image { source: root.audience-qr; image-fit: contain; image-rendering: pixelated; min-height: 100px; vertical-stretch: 1; }
                 Text { text: root.audience-url == "" ? root.audience-status : root.audience-url; color: white; font-size: 18px; wrap: word-wrap; horizontal-alignment: center; }
                 Text { text: "Scan the QR code on the same Wi-Fi or LAN."; color: #d9dce0; font-size: 20px; horizontal-alignment: center; }
+            }
+        }
+        if !root.black-screen-active: Rectangle {
+            width: parent.width;
+            height: parent.height;
+            clip: true;
+            for reaction in root.audience-overlay: Image {
+                width: min(64px, max(24px, parent.height / 14));
+                height: self.width;
+                x: reaction.x * max(0px, parent.width - self.width);
+                y: reaction.y * max(0px, parent.height - self.height);
+                opacity: reaction.opacity;
+                source: reaction.kind == 0 ? @image-url("../assets/audience/reactions/thumbs-up.svg") :
+                    reaction.kind == 1 ? @image-url("../assets/audience/reactions/heart.svg") :
+                    reaction.kind == 2 ? @image-url("../assets/audience/reactions/applause.svg") :
+                    reaction.kind == 3 ? @image-url("../assets/audience/reactions/laugh.svg") :
+                    @image-url("../assets/audience/reactions/question.svg");
             }
         }
         if root.black-screen-active: Rectangle { width: parent.width; height: parent.height; background: black; }

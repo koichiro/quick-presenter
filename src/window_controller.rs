@@ -837,6 +837,7 @@ pub fn show_slide_window(windows: &AppWindowRefs) {
         // Restore Slint's rendering lifecycle before raising the native window.
         // A close request hides through Slint, so native ordering alone leaves
         // the adapter hidden and exposes the previous backing image.
+        slide.invoke_audience_clear_overlay();
         if let Err(err) = slide.show() {
             warn!(error = ?err, "failed to show slide window");
             return;
@@ -862,6 +863,7 @@ pub fn hide_slide_window(windows: &AppWindowRefs) {
     capture_slide_placement(windows);
     windows.placement.cancel();
     if let Some(slide) = windows.slide.upgrade() {
+        slide.invoke_audience_clear_overlay();
         if let Err(err) = slide.hide() {
             warn!(error = ?err, "failed to hide slide window");
         } else {

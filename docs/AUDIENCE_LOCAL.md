@@ -5,8 +5,8 @@ Audience Live targets v3.0.0 and is developed on the `v3.0.0` branch.
 The initial Audience Live implementation lets audience browsers join a local
 session hosted by Quick Presenter. It supports session start/stop, a join QR
 code and URL, and an authenticated live connection count. Five reactions can be sent from the
-mobile page and appear in Presenter View. Comments and presentation overlays
-remain outside the A4 scope.
+mobile page, appear in Presenter View (A4), and animate over the presentation
+window (A5). Comments remain outside this scope.
 
 ## Use
 
@@ -131,6 +131,46 @@ restarting with rotated credentials, and immediate reception without a reaction
 switch. One run failed the existing fullscreen-on check; the same GUI suite
 passed on retry with unchanged assertions.
 
+## Reaction overlay (A5)
+
+The presentation window draws reactions in a Slint layer above the PDF image
+or the page 0 join information.
+Original, bundled SVG icons keep the display independent of emoji font support;
+the mobile page and presenter feed still use native emoji. Overlay updates do
+not submit PDF render requests or modify pages, notes, or the timer.
+
+At most 24 reactions are visible for 1.8 seconds from their server receive time.
+Positions are normalized to the current slide window and recomputed by Slint on
+resize, fullscreen, or display changes. Excess events are omitted, never queued
+for later overlay replay. A 16 ms animation timer runs only while items remain;
+the existing session poll remains 100 ms. Audience Live OFF, blackout, and
+hide/close discard the display model immediately. Switching between page 0
+and the PDF clears existing animations; new reactions appear on either screen. Restoring visibility also
+establishes a receive-time cutoff so late delivery cannot replay suppressed
+inputs. Presenter reception continues during blackout or slide hiding.
+
+`audience_overlay` manages lifetime and density without Slint or PDF state.
+`audience_ui` owns the Slint model and stops the animation timer when empty or
+suppressed. Start/stop and application shutdown clear both timers and models.
+The overlay takes no mouse or keyboard input. Physical multi-monitor changes,
+platform packaging, and mobile/venue load remain A6 release validation.
+
+A5 validation on macOS: `cargo fmt --check`, `cargo check --locked --offline`,
+`cargo test --locked --offline` (492 tests), and the binaries build passed.
+GUI smoke passed 118 checks, including actual SVG pixels, motion on resize,
+immediate session-stop clearing with live overlays, blackout during incoming events,
+hidden-window suppression, resumed input, expiry, page 0 before/after PDF open,
+and the updated layout/session toggle checks.
+The CLI contract check passed all 10 checks for application 3.0.0 / protocol 1.
+These checks do not qualify physical display swapping or signed packages.
+
+Presenter action/URL follow-up validation: A4 passed 489 Rust tests, 98 GUI
+checks, and 10 CLI contract checks. A5 passed 492 Rust tests, 118 GUI checks,
+and 10 CLI contract checks. GUI checks verify inactive/active action labels,
+URL publication as a browser link, placement below the panel, aligned thumbnail
+viewport bottoms, automatic
+page 0 on session start, and PDF navigation without a join-screen toggle.
+
 Address selection and refresh use compact buttons beside the IPv4 address.
 The URL strip is 36 logical pixels high. Stopping disables page 0 navigation
 immediately, even while the asynchronous server shutdown is pending.
@@ -139,3 +179,14 @@ Page 0 return navigation and compact controls validation: 489 Rust tests,
 101 GUI checks, and 10 CLI contract checks passed on macOS. The GUI covers
 returning from PDF page 1, the lower page 0 boundary, and forward navigation
 without skipping, as well as compact inline address controls at three sizes.
+
+A5 integration of page 0 return navigation passed 492 Rust tests, 121 GUI
+checks, and 10 CLI contract checks on macOS, including reaction overlay
+the original suppression on page 0 and resumption on PDF navigation.
+Page 0 now accepts new overlays, verified by a live WebSocket reaction and
+rendered SVG pixels in GUI smoke before and after PDF loading.
+
+Page 0 overlay validation on macOS: GUI smoke passed 123 checks, including
+live WebSocket reception and visible reaction pixels above the join screen
+both before and after PDF loading. Blackout and hidden-window suppression
+continue to pass.
