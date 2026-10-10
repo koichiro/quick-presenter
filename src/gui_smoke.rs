@@ -420,14 +420,14 @@ fn check_audience_join_screen(
     let now = Instant::now();
     let elapsed = state.borrow().timer.elapsed_at(now);
     let presenter = &windows.presenter;
-    presenter.invoke_audience_toggle_guide();
+    presenter.invoke_audience_toggle_session();
     let deadline = Instant::now() + Duration::from_secs(5);
     while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter)?;
     }
     let url = presenter.get_audience_url();
     report.check(
-        "Audience automatically starts a local session with a QR code",
+        "Audience Live ON starts a local session with a QR code",
         presenter.get_audience_active()
             && url.starts_with("http://127.0.0.1:")
             && presenter.get_audience_qr().size().width > 0,
@@ -435,7 +435,7 @@ fn check_audience_join_screen(
         "session or QR not ready",
     );
     report.check(
-        "Audience button shows page 0 on the slide window",
+        "Audience Live ON shows page 0 on the slide window",
         windows.slide.get_audience_guide_visible()
             && windows.slide.get_audience_url() == url
             && windows.slide.get_audience_code() == presenter.get_audience_code()
@@ -496,19 +496,10 @@ fn check_audience_join_screen(
         "authenticated reaction displayed",
         "reaction did not reach the presenter",
     );
-    presenter.invoke_audience_toggle_reactions();
-    report.check(
-        "Reactions OFF immediately clears the presenter feed",
-        !presenter.get_audience_reactions_enabled()
-            && presenter.get_audience_recent_reactions().is_empty(),
-        "feed cleared",
-        "disabled reactions remained visible",
-    );
-    presenter.invoke_audience_toggle_reactions();
     presenter.invoke_audience_toggle_guide();
     presenter.invoke_audience_toggle_guide();
     report.check(
-        "Audience button toggles back to PDF",
+        "Join-screen control returns to PDF without stopping Audience Live",
         !state.borrow().audience_join_visible && !windows.slide.get_audience_guide_visible(),
         "both windows returned to PDF",
         "join screen remained active",
@@ -524,10 +515,76 @@ fn check_audience_join_screen(
             && presenter.get_audience_url().is_empty()
             && windows.slide.get_audience_url().is_empty()
             && windows.slide.get_audience_qr().size().width == 0
-            && !windows.slide.get_audience_guide_visible(),
+            && !windows.slide.get_audience_guide_visible()
+            && presenter.get_audience_recent_reactions().is_empty(),
         "stale join credentials cleared",
         "stale join information remained",
     );
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    let new_url = presenter.get_audience_url();
+    submit_audience_smoke_reaction(&new_url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while presenter.get_audience_reaction_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    report.check(
+        "Audience Live can restart with a new URL and automatically receives reactions",
+        new_url != url
+            && presenter.get_audience_reaction_count() == 1
+            && !presenter.get_audience_recent_reactions().is_empty(),
+        "new session received a reaction",
+        "restart reused credentials or failed to receive",
+    );
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_active() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    check_audience_panel_layout(windows, report)?;
+    Ok(())
+}
+
+fn check_audience_panel_layout(windows: &AppWindows, report: &mut GuiSmokeReport) -> Result<()> {
+    let presenter = &windows.presenter;
+    let size = presenter.window().size();
+    for (width, height) in [(800.0, 800.0), (1020.0, 960.0), (1200.0, 1240.0)] {
+        presenter
+            .window()
+            .dispatch_event(slint::platform::WindowEvent::Resized {
+                size: slint::LogicalSize::new(width, height),
+            });
+        settle_presenter_notes_layout(presenter)?;
+        report.check(
+            format!("Audience panel leaves thumbnails unobstructed ({width}x{height})"),
+            presenter.get_audience_panel_right() + 8.0 <= presenter.get_thumbnails_left()
+                && presenter.get_thumbnails_bottom() > presenter.get_notes_area_bottom(),
+            "thumbnail column stays beside the footer",
+            "audience footer overlaps the thumbnail column",
+        );
+        report.check(
+            format!(
+                "Audience toggle follows notes and reactions have more space ({width}x{height})"
+            ),
+            presenter.get_audience_toggle_y() >= presenter.get_notes_area_bottom()
+                && presenter.get_audience_panel_top()
+                    >= presenter.get_audience_toggle_bottom() + 4.0
+                && presenter.get_audience_reactions_width()
+                    > presenter.get_audience_controls_width(),
+            "toggle and expanded feed fit",
+            "toggle placement or feed width failed",
+        );
+    }
+    presenter.window().set_size(size);
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::Resized {
+            size: size.to_logical(presenter.window().scale_factor()),
+        });
+    settle_presenter_notes_layout(presenter)?;
     Ok(())
 }
 

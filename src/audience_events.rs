@@ -62,7 +62,7 @@ pub fn parse_reaction(text: &str) -> Option<(String, ReactionKind)> {
 #[serde(rename_all = "snake_case")]
 pub enum Admission {
     Accepted,
-    Disabled,
+    Stopped,
     RateLimited,
     Busy,
 }
@@ -97,7 +97,7 @@ impl RateBudget {
 }
 /// Owned by one session handle. Dropping that handle also drops all old events.
 pub struct AudienceEngine {
-    enabled: bool,
+    stopped: bool,
     sequence: u64,
     queue: VecDeque<AcceptedAudienceEvent>,
     budget: RateBudget,
@@ -105,22 +105,19 @@ pub struct AudienceEngine {
 impl AudienceEngine {
     pub fn new(now: Instant) -> Self {
         Self {
-            enabled: true,
+            stopped: false,
             sequence: 0,
             queue: VecDeque::new(),
             budget: RateBudget::new(120, 120, now),
         }
     }
-    pub fn set_enabled(&mut self, enabled: bool) {
-        self.enabled = enabled;
+    pub fn stop(&mut self) {
+        self.stopped = true;
         self.queue.clear();
     }
-    pub fn enabled(&self) -> bool {
-        self.enabled
-    }
     pub fn accept(&mut self, kind: ReactionKind, participant_id: u64, now: Instant) -> Admission {
-        if !self.enabled {
-            return Admission::Disabled;
+        if self.stopped {
+            return Admission::Stopped;
         }
         if !self.budget.allow(now) {
             return Admission::RateLimited;
@@ -186,7 +183,7 @@ mod tests {
         assert!(!b.allow(now + Duration::from_millis(500)));
     }
     #[test]
-    fn delivery_is_bounded_expires_and_never_replays_after_disable() {
+    fn delivery_is_bounded_expires_and_stops_permanently() {
         let now = Instant::now();
         let mut e = AudienceEngine::new(now);
         for n in 0..EVENT_CAPACITY {
@@ -207,11 +204,10 @@ mod tests {
         assert_eq!(batch.len(), UI_BATCH);
         assert_eq!(batch[0].sequence, 1);
         assert_eq!(batch[0].participant_id, 9);
-        e.set_enabled(false);
-        assert_eq!(e.accept(ReactionKind::Heart, 9, now), Admission::Disabled);
+        e.stop();
+        assert_eq!(e.accept(ReactionKind::Heart, 9, now), Admission::Stopped);
         assert!(e.drain(now).is_empty());
-        e.set_enabled(true);
-        assert!(e.drain(now).is_empty());
+        let mut e = AudienceEngine::new(now);
         assert_eq!(
             e.accept(ReactionKind::Heart, 1, now + Duration::from_secs(5)),
             Admission::Accepted

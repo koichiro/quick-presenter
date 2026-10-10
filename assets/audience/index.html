@@ -17,12 +17,12 @@ const status=document.getElementById('status'), retry=document.getElementById('r
 const buttons=[...document.querySelectorAll('[data-kind]')];
 const token=new URLSearchParams(location.hash.slice(1)).get('k');
 history.replaceState(null,'',location.pathname);
-let socket, enabled=false, nextId=0, pending=null, timeout;
-function updateButtons(){buttons.forEach(b=>b.disabled=!enabled || pending!==null);}
+let socket, connected=false, nextId=0, pending=null, timeout;
+function updateButtons(){buttons.forEach(b=>b.disabled=!connected || pending!==null);}
 function finish(){clearTimeout(timeout);pending=null;updateButtons();}
 function connect(){
   if(!token){status.textContent='Open the complete join link or scan the QR code.';return;}
-  retry.hidden=true;enabled=false;finish();status.textContent='Connecting…';
+  retry.hidden=true;connected=false;finish();status.textContent='Connecting…';
   const current=new WebSocket(`ws://${location.host}/ws`);socket=current;
   current.onopen=()=>current.send(JSON.stringify({v:1,token}));
   current.onmessage=event=>{
@@ -30,21 +30,21 @@ function connect(){
     try{
       const message=JSON.parse(event.data);
       if(message.v!==1){current.close();return;}
-      if(message.type==='welcome' || message.type==='settings'){
-        enabled=message.reactions_enabled===true;
-        status.textContent=enabled?'Connected to the presentation.':'Connected. Reactions are paused by the presenter.';
+      if(message.type==='welcome'){
+        connected=Array.isArray(message.capabilities) && message.capabilities.includes('reactions');
+        status.textContent='Connected to the presentation.';
         updateButtons();
       }else if(message.type==='result' && message.request_id===pending){
-        feedback.textContent=({accepted:'Reaction received.',disabled:'Reactions are paused.',rate_limited:'Please slow down.',busy:'The presentation is busy. Try again shortly.'})[message.status] || 'Unable to send reaction.';
+        feedback.textContent=({accepted:'Reaction received.',stopped:'This session has ended.',rate_limited:'Please slow down.',busy:'The presentation is busy. Try again shortly.'})[message.status] || 'Unable to send reaction.';
         finish();
       }
     }catch{current.close();}
   };
-  current.onclose=()=>{if(socket!==current)return;enabled=false;finish();status.textContent='Disconnected. Reconnect while the session is active, or scan the new QR code.';retry.hidden=false;};
+  current.onclose=()=>{if(socket!==current)return;connected=false;finish();status.textContent='Disconnected. Reconnect while the session is active, or scan the new QR code.';retry.hidden=false;};
   current.onerror=()=>{if(socket===current)status.textContent='Unable to connect. Check that you are on the same network.';};
 }
 buttons.forEach(button=>button.onclick=()=>{
-  if(!enabled || pending!==null || socket.readyState!==WebSocket.OPEN)return;
+  if(!connected || pending!==null || socket.readyState!==WebSocket.OPEN)return;
   pending=String(++nextId);updateButtons();feedback.textContent='Sending…';
   socket.send(JSON.stringify({v:1,type:'reaction',request_id:pending,kind:button.dataset.kind}));
   timeout=setTimeout(()=>{feedback.textContent='No response. Reconnect to try again.';socket.close();},4000);

@@ -12,7 +12,7 @@ validation, heartbeat, and 4 KiB frame/message bounds apply.
 After authentication the server sends:
 
 ```json
-{"v":1,"type":"welcome","capabilities":["reactions"],"reactions_enabled":true}
+{"v":1,"type":"welcome","capabilities":["reactions"]}
 ```
 
 The browser enables only implemented capabilities. Current reaction kinds are
@@ -34,14 +34,15 @@ The server responds with the same request ID:
 {"v":1,"type":"result","request_id":"42","status":"accepted"}
 ```
 
-Other statuses are `disabled`, `rate_limited`, and `busy`. Acceptance means
+Other statuses are `rate_limited`, `busy`, and `stopped` (a stop racing with input). Acceptance means
 admission into the bounded session queue, not guaranteed screen display. Events
 are transient and are never replayed or retried automatically. The browser allows
 one outstanding request and disconnects after four seconds without a response.
 
-Presenter changes are broadcast as
-`{"v":1,"type":"settings","reactions_enabled":false}`. Reactions OFF clears
-queued events immediately. Stop invalidates the session and all pending events.
+Reactions are always accepted while Audience Live is running, subject to the
+resource budgets below. There is no reaction-specific presenter setting or
+settings broadcast. Audience Live OFF stops the listener, invalidates the
+session, and clears all pending events and presenter display state.
 Each handle owns its queue, participant IDs, and sequence; a restarted session
 cannot consume events from the previous handle. Participant IDs and timestamps
 are assigned by the server and do not identify people across sessions.

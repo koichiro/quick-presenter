@@ -51,28 +51,15 @@ impl AudienceUi {
         let weak = Rc::downgrade(&ui);
         presenter.on_audience_toggle_guide(move || {
             let visible = !guide_state.borrow().audience_join_visible;
-            if visible {
-                if let (Some(ui), Some(presenter)) = (weak.upgrade(), refs.presenter.upgrade()) {
-                    if ui.session.borrow().is_none() {
-                        presenter.invoke_audience_toggle_session();
-                    }
-                }
+            if !weak
+                .upgrade()
+                .is_some_and(|ui| ui.session.borrow().is_some() && !*ui.stopping.borrow())
+            {
+                return;
             }
             set_join_visible(&refs, &guide_state, visible);
             if visible {
                 crate::show_slide_window_from_menu(&refs, &guide_state);
-            }
-        });
-        let weak = Rc::downgrade(&ui);
-        let window = presenter.as_weak();
-        presenter.on_audience_toggle_reactions(move || {
-            if let (Some(ui), Some(window)) = (weak.upgrade(), window.upgrade()) {
-                let enabled = !window.get_audience_reactions_enabled();
-                window.set_audience_reactions_enabled(enabled);
-                if let Some(session) = ui.session.borrow().as_ref() {
-                    session.set_reactions_enabled(enabled);
-                }
-                ui.clear_reactions(&window);
             }
         });
         presenter.set_audience_address(ui.address_label().into());
@@ -125,6 +112,9 @@ impl AudienceUi {
             let Some(ui) = weak.upgrade() else {
                 return;
             };
+            if *ui.stopping.borrow() {
+                return;
+            }
             if let Some(session) = ui.session.borrow().as_ref() {
                 *ui.stopping.borrow_mut() = true;
                 session.request_stop();
@@ -134,6 +124,7 @@ impl AudienceUi {
                     ui.clear_reactions(&window);
                 }
                 if let Some(window) = window.upgrade() {
+                    window.set_audience_busy(true);
                     window.set_audience_status("Stopping…".into());
                     window.set_audience_url("".into());
                     window.set_audience_code("".into());
@@ -153,7 +144,6 @@ impl AudienceUi {
             match LocalAudienceSession::start(address) {
                 Ok(session) => {
                     if let Some(window) = window.upgrade() {
-                        session.set_reactions_enabled(window.get_audience_reactions_enabled());
                         ui.clear_reactions(&window);
                         window.set_audience_reaction_count(0);
                     }
@@ -161,22 +151,25 @@ impl AudienceUi {
                     *ui.session.borrow_mut() = Some(session);
                     if let Some(window) = window.upgrade() {
                         window.set_audience_active(true);
+                        window.set_audience_busy(true);
                         window.set_audience_status("Starting…".into());
                     }
                     let weak = Rc::downgrade(&ui);
                     let window = window.clone();
-                    let refs = refs.clone();
-                    let state = state.clone();
+                    let timer_refs = refs.clone();
+                    let timer_state = state.clone();
                     ui.timer
                         .start(TimerMode::Repeated, Duration::from_millis(100), move || {
                             if let Some(ui) = weak.upgrade() {
                                 ui.refresh(&window);
-                                sync_join_metadata(&refs);
+                                sync_join_metadata(&timer_refs);
                                 if !window.upgrade().is_some_and(|w| w.get_audience_active()) {
-                                    set_join_visible(&refs, &state, false);
+                                    set_join_visible(&timer_refs, &timer_state, false);
                                 }
                             }
                         });
+                    set_join_visible(&refs, &state, true);
+                    crate::show_slide_window_from_menu(&refs, &state);
                 }
                 Err(error) => {
                     if let Some(window) = window.upgrade() {
@@ -252,13 +245,14 @@ impl AudienceUi {
                 if *self.stopping.borrow() {
                     return;
                 }
+                window.set_audience_busy(false);
                 let events = self
                     .session
                     .borrow()
                     .as_ref()
                     .map(LocalAudienceSession::drain_events)
                     .unwrap_or_default();
-                if window.get_audience_reactions_enabled() && !events.is_empty() {
+                if !events.is_empty() {
                     window.set_audience_reaction_count(
                         window
                             .get_audience_reaction_count()
@@ -268,7 +262,7 @@ impl AudienceUi {
                     for accepted in events {
                         let AudienceEvent::Reaction { kind } = accepted.event;
                         recent.push_back(kind.emoji().to_owned());
-                        if recent.len() > 12 {
+                        if recent.len() > 36 {
                             recent.pop_front();
                         }
                     }
@@ -312,9 +306,11 @@ impl AudienceUi {
                 };
                 self.clear_reactions(&window);
                 self.session.borrow_mut().take();
+                *self.stopping.borrow_mut() = false;
                 self.timer.stop();
                 self.last_url.borrow_mut().clear();
                 window.set_audience_active(false);
+                window.set_audience_busy(false);
                 window.set_audience_status(message.into());
                 window.set_audience_url("".into());
                 window.set_audience_code("".into());

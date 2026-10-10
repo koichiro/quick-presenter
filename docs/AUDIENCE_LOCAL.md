@@ -11,29 +11,30 @@ remain outside the A4 scope.
 ## Use
 
 1. Connect the presenter computer and audience devices to the same LAN.
-2. Use the **Audience Live** controls permanently below the notes area. Select
-   an IPv4 address with **Next address** or rediscover interfaces with
-   **Refresh addresses**, then select **Start Session**.
-3. Press **Audience** to start a session if needed and show the page 0 join screen in the presentation window.
-   It contains the audience QR code, session code, and join URL, without host
-   controls or connection diagnostics.
-4. Scan the QR code with a phone. Keep the browser page open to stay connected.
-5. Press **Return to PDF**, or advance once, to restore the current PDF page.
-   The join screen is separate from PDF pagination; it does not modify the PDF,
-   render generation, or timer. Blackout covers the join screen as well.
-6. Select **Stop Session** to invalidate the link, clear the join screen, and
-   close all connections.
+2. Select an IPv4 address with **Next address**, or rediscover interfaces with
+   **Refresh** in the compact connection area below the notes.
+3. Toggle **Audience Live OFF** to **Audience Live ON** using the button between
+   the notes and Audience Live area. This starts the server and shows the page 0
+   QR code, session code, and join URL in the presentation window.
+4. Scan the QR code with a phone. All five reactions are available as soon as
+   the browser joins; no separate presenter reaction switch exists.
+5. Select **Return to PDF**, or advance once, to restore the current PDF page.
+   Reception continues. **Show join screen** displays the QR again without
+   stopping or restarting the session. Page 0 does not modify PDF pagination,
+   rendering state, or the timer. Blackout covers the join screen as well.
+6. Toggle **Audience Live ON** to **Audience Live OFF** to invalidate the URL,
+   clear the feed/join screen, and close all connections.
 
-The presenter window reserves 200 logical pixels below the notes and grows its
-preferred/minimum height by the same amount, preserving the notes area. Start,
-stop, address selection, session status, and connection count stay in this area.
-Audience starts a session when none is running; dismissing page 0 keeps it active.
-Click the presenter join URL to open the same audience page in your browser.
-The reactions area shows a bounded recent feed and the number of reactions
-delivered to Presenter View. Reactions ON/OFF controls admission and immediately
-clears queued events and the feed. This delivery count can be lower than the
-number of accepted inputs when events expire. A restarted
-session uses a new random secret and may use a different OS-assigned port.
+The thumbnail column extends to the bottom of the main content, alongside the
+Audience area, and is clipped within its own viewport. The Audience area spans
+only the notes/keys columns. Its compact connection controls take at most 280
+logical pixels (35% at narrower sizes); the reactions feed receives the remaining
+width and displays up to 36 recent reactions. The total reserved footer height
+is 240 logical pixels, including the toggle row; preferred/minimum window height
+increases by that amount to preserve the notes area. The full join URL remains
+clickable in Presenter View. Starting/stopping temporarily disables the toggle
+until the asynchronous operation finishes. A new session resets the delivery
+count, uses a new random secret, and may have a different OS-assigned port.
 Sessions do not start automatically.
 
 The connection count represents authenticated WebSocket connections, not unique
@@ -119,3 +120,10 @@ blackout before and after opening a PDF. The GUI smoke layout
 synchronization fix from #430 resolves the five notes-sizing failures observed
 in the earlier validation. This does not qualify signed-package GUI behavior
 or mobile/Windows/Linux interoperability.
+
+A4 presenter-layout follow-up validation: 489 Rust tests, 96 GUI smoke checks,
+and 10 CLI contract checks passed. GUI checks cover footer/thumbnail separation,
+toggle placement and expanded reaction width at three sizes, as well as stopping,
+restarting with rotated credentials, and immediate reception without a reaction
+switch. One run failed the existing fullscreen-on check; the same GUI suite
+passed on retry with unchanged assertions.

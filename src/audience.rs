@@ -65,7 +65,6 @@ pub struct LocalAudienceSession {
     stop: watch::Sender<bool>,
     worker: Option<JoinHandle<()>>,
     engine: Arc<Mutex<AudienceEngine>>,
-    settings: watch::Sender<bool>,
 }
 
 impl LocalAudienceSession {
@@ -75,7 +74,6 @@ impl LocalAudienceSession {
         let (stop, receiver) = watch::channel(false);
         let engine = Arc::new(Mutex::new(AudienceEngine::new(Instant::now())));
         let worker_engine = engine.clone();
-        let (settings, settings_rx) = watch::channel(true);
         let worker_status = status.clone();
         let worker_connections = connections.clone();
         let worker = thread::Builder::new()
@@ -91,7 +89,6 @@ impl LocalAudienceSession {
                         worker_connections,
                         receiver,
                         worker_engine,
-                        settings_rx,
                     ))
                 });
                 *worker_status.lock().unwrap_or_else(|e| e.into_inner()) = match result {
@@ -106,7 +103,6 @@ impl LocalAudienceSession {
             stop,
             worker: Some(worker),
             engine,
-            settings,
         })
     }
 
@@ -121,14 +117,6 @@ impl LocalAudienceSession {
         }
     }
 
-    pub fn set_reactions_enabled(&self, enabled: bool) {
-        self.engine
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .set_enabled(enabled);
-        self.settings.send_replace(enabled);
-    }
-
     pub fn drain_events(&self) -> Vec<AcceptedAudienceEvent> {
         self.engine
             .lock()
@@ -137,7 +125,7 @@ impl LocalAudienceSession {
     }
 
     pub fn request_stop(&self) {
-        self.set_reactions_enabled(false);
+        self.engine.lock().unwrap_or_else(|e| e.into_inner()).stop();
         self.stop.send_replace(true);
     }
 
@@ -175,7 +163,6 @@ struct ServerState {
     attempts: Arc<Mutex<HandshakeBudget>>,
     stop: watch::Receiver<bool>,
     engine: Arc<Mutex<AudienceEngine>>,
-    settings: watch::Receiver<bool>,
     next_participant: Arc<AtomicU64>,
 }
 
@@ -192,7 +179,6 @@ async fn run(
     connections: Arc<AtomicUsize>,
     mut stop: watch::Receiver<bool>,
     engine: Arc<Mutex<AudienceEngine>>,
-    settings: watch::Receiver<bool>,
 ) -> std::io::Result<()> {
     let (code, secret) = credentials()?;
     let listener = tokio::net::TcpListener::bind(SocketAddr::new(address.into(), 0)).await?;
@@ -207,7 +193,6 @@ async fn run(
         attempts: Arc::new(Mutex::new(HandshakeBudget::new(Instant::now()))),
         stop: stop.clone(),
         engine,
-        settings,
         next_participant: Arc::new(AtomicU64::new(1)),
     };
     let app = Router::new()
@@ -331,9 +316,14 @@ async fn connection(
     state.connections.fetch_add(1, Ordering::Relaxed);
     let _count = CountGuard(state.connections.clone());
     let participant_id = state.next_participant.fetch_add(1, Ordering::Relaxed);
-    let mut settings = state.settings.clone();
-    let enabled = *settings.borrow_and_update();
-    if !send_json(&mut socket, serde_json::json!({"v":1,"type":"welcome","capabilities":["reactions"],"reactions_enabled":enabled})).await { return; }
+    if !send_json(
+        &mut socket,
+        serde_json::json!({"v":1,"type":"welcome","capabilities":["reactions"]}),
+    )
+    .await
+    {
+        return;
+    }
     let mut budget = RateBudget::new(5, 2, Instant::now());
     let mut heartbeat = tokio::time::interval(HEARTBEAT);
     heartbeat.tick().await;
@@ -341,11 +331,6 @@ async fn connection(
     loop {
         tokio::select! {
             _ = stop.changed() => break,
-            result = settings.changed() => {
-                if result.is_err() { break; }
-                let enabled = *settings.borrow_and_update();
-                if !send_json(&mut socket, serde_json::json!({"v":1,"type":"settings","reactions_enabled":enabled})).await { break; }
-            },
             _ = heartbeat.tick() => {
                 if waiting_for_pong { break; }
                 waiting_for_pong = true;
@@ -484,7 +469,7 @@ mod tests {
     }
 
     #[test]
-    fn authenticated_reactions_are_delivered_bounded_and_disable_clears_pending() {
+    fn authenticated_reactions_are_always_accepted_while_session_runs() {
         let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
         let (url, token) = ready(&session);
         let mut ws = connect(&url);
@@ -510,11 +495,6 @@ mod tests {
             == crate::audience_events::AudienceEvent::Reaction {
                 kind: crate::audience_events::ReactionKind::Applause
             }));
-        session.set_reactions_enabled(false);
-        let reply: serde_json::Value =
-            serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
-        assert_eq!(reply["reactions_enabled"], false);
-        assert!(session.drain_events().is_empty());
         let mut second = connect(&url);
         second
             .send(tungstenite::Message::Text(
@@ -524,20 +504,7 @@ mod tests {
         second.read().unwrap();
         second
             .send(tungstenite::Message::Text(
-                r#"{"v":1,"type":"reaction","request_id":"disabled","kind":"heart"}"#.into(),
-            ))
-            .unwrap();
-        assert!(second
-            .read()
-            .unwrap()
-            .into_text()
-            .unwrap()
-            .contains("disabled"));
-        session.set_reactions_enabled(true);
-        second.read().unwrap();
-        second
-            .send(tungstenite::Message::Text(
-                r#"{"v":1,"type":"reaction","request_id":"enabled","kind":"heart"}"#.into(),
+                r#"{"v":1,"type":"reaction","request_id":"second","kind":"heart"}"#.into(),
             ))
             .unwrap();
         assert!(second
