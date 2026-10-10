@@ -13,6 +13,10 @@ path = "src/main.rs"
 name = "qp"
 path = "src/bin/qp.rs"
 
+[[example]]
+name = "store_ipc_probe"
+test = true
+
 [dependencies]
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
