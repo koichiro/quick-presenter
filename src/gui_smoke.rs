@@ -445,7 +445,8 @@ fn check_audience_join_screen(
         windows.slide.get_audience_guide_visible()
             && windows.slide.get_audience_url() == url
             && windows.slide.get_audience_code() == presenter.get_audience_code()
-            && windows.slide.get_audience_qr().size().width > 0,
+            && windows.slide.get_audience_qr().size().width > 0
+            && windows.slide.get_audience_overlay().row_count() == 0,
         "join metadata reached the audience window",
         "join screen or metadata missing",
     );
@@ -546,6 +547,7 @@ fn check_audience_join_screen(
         "authenticated reaction displayed",
         "reaction did not reach the presenter",
     );
+    check_audience_overlay(windows, state, &url, report)?;
     report.check(
         "PDF navigation keeps Audience Live running",
         !state.borrow().audience_join_visible
@@ -556,7 +558,24 @@ fn check_audience_join_screen(
         "both windows returned to PDF",
         "join screen remained active",
     );
+    submit_audience_smoke_reaction(&url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while windows.slide.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    report.check(
+        "Reaction is visible before session stop",
+        windows.slide.get_audience_overlay().row_count() > 0,
+        "overlay active",
+        "overlay missing before stop",
+    );
     presenter.invoke_audience_toggle_session();
+    report.check(
+        "Stop immediately clears live reaction overlays",
+        windows.slide.get_audience_overlay().row_count() == 0,
+        "overlay cleared",
+        "overlay survived stop",
+    );
     let deadline = Instant::now() + Duration::from_secs(5);
     while presenter.get_audience_active() && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter)?;
@@ -642,6 +661,113 @@ fn check_audience_panel_layout(windows: &AppWindows, report: &mut GuiSmokeReport
             size: size.to_logical(presenter.window().scale_factor()),
         });
     settle_presenter_notes_layout(presenter)?;
+    Ok(())
+}
+
+fn check_audience_overlay(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    url: &str,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let slide = &windows.slide;
+    let presenter = &windows.presenter;
+    let generation = state.borrow().render_generation;
+    let first = slide.get_audience_overlay().row_data(0);
+    let snapshot = slide.window().take_snapshot()?;
+    let colored = snapshot
+        .as_bytes()
+        .chunks_exact(4)
+        .filter(|p| p[0] > 220 && p[1] > 160 && p[1] < 230 && p[2] < 120)
+        .count();
+    report.check(
+        "Reaction renders an independent SVG overlay",
+        first.is_some() && colored > 5,
+        "overlay model and colored pixels present",
+        "reaction overlay was not rendered",
+    );
+    let size = slide.window().size();
+    slide
+        .window()
+        .set_size(slint::LogicalSize::new(800.0, 600.0));
+    settle_presenter_notes_layout(presenter)?;
+    let moving = slide.get_audience_overlay().row_data(0);
+    report.check(
+        "Overlay animates within resized bounds and preserves the presentation session",
+        first.zip(moving).is_some_and(|(a, b)| {
+            b.y < a.y && (0.0..=1.0).contains(&b.x) && (0.0..=1.0).contains(&b.y)
+        }) && state.borrow().render_generation == generation,
+        "motion stays normalized and render generation unchanged",
+        "motion or rendering boundary failed",
+    );
+    slide.window().set_size(size);
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(true),
+    );
+    report.check(
+        "Blackout immediately discards reaction overlays",
+        slide.get_audience_overlay().row_count() == 0,
+        "model cleared",
+        "overlay remained queued",
+    );
+    submit_audience_smoke_reaction(url)?;
+    settle_presenter_notes_layout(presenter)?;
+    let blank = slide.window().take_snapshot()?;
+    report.check(
+        "Blackout remains black while audience reactions arrive",
+        blank
+            .as_bytes()
+            .chunks_exact(4)
+            .all(|p| p[0..3] == [0, 0, 0]),
+        "all pixels black",
+        "reaction bypassed blackout",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(false),
+    );
+    settle_presenter_notes_layout(presenter)?;
+    report.check(
+        "Restoring blackout never replays suppressed reactions",
+        slide.get_audience_overlay().row_count() == 0,
+        "no stale reactions",
+        "old reaction replayed",
+    );
+    crate::window_controller::hide_slide_window(&windows.refs());
+    submit_audience_smoke_reaction(url)?;
+    settle_presenter_notes_layout(presenter)?;
+    crate::window_controller::show_slide_window(&windows.refs());
+    settle_presenter_notes_layout(presenter)?;
+    report.check(
+        "Showing the slide never replays hidden-window reactions",
+        slide.get_audience_overlay().row_count() == 0,
+        "hidden reactions discarded",
+        "hidden reaction replayed",
+    );
+    submit_audience_smoke_reaction(url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while slide.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    report.check(
+        "New reactions resume after showing the slide",
+        slide.get_audience_overlay().row_count() > 0,
+        "new input displayed",
+        "new input missing",
+    );
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while slide.get_audience_overlay().row_count() > 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    report.check(
+        "Reaction overlay expires without further inputs",
+        slide.get_audience_overlay().row_count() == 0,
+        "animation expired",
+        "animation retained an old reaction",
+    );
     Ok(())
 }
 

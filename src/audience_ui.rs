@@ -2,12 +2,21 @@
 use crate::{
     app_state::AppState,
     audience::{self, LocalAudienceSession, SessionStatus},
-    audience_events::AudienceEvent,
+    audience_events::{AudienceEvent, ReactionKind},
+    audience_overlay::OverlayEngine,
     window_controller::{AppWindowRefs, AppWindows},
-    PresenterWindow,
+    PresenterWindow, ReactionOverlayItem,
 };
-use slint::{ComponentHandle, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, Weak};
-use std::{cell::RefCell, collections::VecDeque, net::Ipv4Addr, rc::Rc, time::Duration};
+use slint::{
+    ComponentHandle, Model, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel, Weak,
+};
+use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    net::Ipv4Addr,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
 pub struct AudienceUi {
     session: RefCell<Option<LocalAudienceSession>>,
@@ -17,6 +26,11 @@ pub struct AudienceUi {
     address_index: RefCell<usize>,
     last_url: RefCell<String>,
     recent: RefCell<VecDeque<String>>,
+    windows: AppWindowRefs,
+    overlay: RefCell<OverlayEngine>,
+    overlay_timer: Timer,
+    overlay_model: Rc<VecModel<ReactionOverlayItem>>,
+    weak_self: RefCell<std::rc::Weak<Self>>,
 }
 
 impl AudienceUi {
@@ -45,6 +59,21 @@ impl AudienceUi {
             address_index: RefCell::new(0),
             last_url: RefCell::new(String::new()),
             recent: RefCell::new(VecDeque::new()),
+            windows: windows.refs(),
+            overlay: RefCell::new(OverlayEngine::default()),
+            overlay_timer: Timer::default(),
+            overlay_model: Rc::new(VecModel::default()),
+            weak_self: RefCell::new(std::rc::Weak::new()),
+        });
+        *ui.weak_self.borrow_mut() = Rc::downgrade(&ui);
+        windows
+            .slide
+            .set_audience_overlay(ui.overlay_model.clone().into());
+        let weak = Rc::downgrade(&ui);
+        windows.slide.on_audience_clear_overlay(move || {
+            if let Some(ui) = weak.upgrade() {
+                ui.clear_overlay();
+            }
         });
         presenter.set_audience_address(ui.address_label().into());
         let weak = Rc::downgrade(&ui);
@@ -208,7 +237,65 @@ impl AudienceUi {
             .unwrap_or_else(|| "No IPv4 LAN address. Connect to Wi-Fi or Ethernet.".into())
     }
 
+    fn overlay_visible(&self) -> bool {
+        self.windows.slide.upgrade().is_some_and(|slide| {
+            slide.window().is_visible()
+                && !slide.get_black_screen_active()
+                && !slide.get_audience_guide_visible()
+        })
+    }
+    fn clear_overlay(&self) {
+        self.overlay.borrow_mut().clear(Instant::now());
+        self.overlay_model.set_vec(Vec::new());
+        self.overlay_timer.stop();
+    }
+    fn update_overlay(&self) {
+        if !self.overlay_visible() {
+            self.clear_overlay();
+            return;
+        }
+        let frames = self.overlay.borrow_mut().frames(Instant::now());
+        if frames.is_empty() {
+            self.overlay_timer.stop();
+        }
+        let rows = frames
+            .into_iter()
+            .map(|f| ReactionOverlayItem {
+                kind: match f.kind {
+                    ReactionKind::ThumbsUp => 0,
+                    ReactionKind::Heart => 1,
+                    ReactionKind::Applause => 2,
+                    ReactionKind::Laugh => 3,
+                    ReactionKind::Question => 4,
+                },
+                x: f.x,
+                y: f.y,
+                opacity: f.opacity,
+            })
+            .collect::<Vec<_>>();
+        if rows.len() != self.overlay_model.row_count() {
+            self.overlay_model.set_vec(rows);
+        } else {
+            for (index, row) in rows.into_iter().enumerate() {
+                self.overlay_model.set_row_data(index, row);
+            }
+        }
+    }
+    fn start_overlay_animation(&self) {
+        self.update_overlay();
+        if self.overlay_model.row_count() == 0 || self.overlay_timer.running() {
+            return;
+        }
+        let weak = self.weak_self.borrow().clone();
+        self.overlay_timer
+            .start(TimerMode::Repeated, Duration::from_millis(16), move || {
+                if let Some(ui) = weak.upgrade() {
+                    ui.update_overlay();
+                }
+            });
+    }
     fn clear_reactions(&self, window: &PresenterWindow) {
+        self.clear_overlay();
         self.recent.borrow_mut().clear();
         window.set_audience_recent_reactions("".into());
     }
@@ -245,8 +332,15 @@ impl AudienceUi {
                             .get_audience_reaction_count()
                             .saturating_add(events.len() as i32),
                     );
+                    let visible = self.overlay_visible();
+                    if !visible {
+                        self.clear_overlay();
+                    }
                     let mut recent = self.recent.borrow_mut();
                     for accepted in events {
+                        if visible {
+                            self.overlay.borrow_mut().push(&accepted, Instant::now());
+                        }
                         let AudienceEvent::Reaction { kind } = accepted.event;
                         recent.push_back(kind.emoji().to_owned());
                         if recent.len() > 36 {
@@ -257,6 +351,7 @@ impl AudienceUi {
                         recent.iter().cloned().collect::<Vec<_>>().join(" ").into(),
                     );
                 }
+                self.start_overlay_animation();
                 window.set_audience_code(code.clone().into());
                 window.set_audience_status(
                     format!("Connected: {} · Session {code}", snapshot.connections).into(),
@@ -308,6 +403,7 @@ impl AudienceUi {
     }
 
     pub fn shutdown(&self) {
+        self.clear_overlay();
         self.timer.stop();
         if let Some(mut session) = self.session.borrow_mut().take() {
             session.shutdown();
@@ -321,6 +417,7 @@ pub fn set_join_visible(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, 
         presenter.set_audience_guide_visible(visible);
     }
     if let Some(slide) = windows.slide.upgrade() {
+        slide.invoke_audience_clear_overlay();
         slide.set_audience_guide_visible(visible);
         slide.set_black_screen_active(state.borrow().black_screen.is_active());
     }
