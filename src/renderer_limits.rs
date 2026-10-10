@@ -21,6 +21,7 @@ pub enum Operation {
     VisibleRender,
     AuxiliaryRender,
     Notes,
+    Text,
     Shutdown,
 }
 impl Operation {
@@ -38,7 +39,7 @@ impl Operation {
             Self::Open => 30,
             Self::VisibleRender => 5,
             Self::AuxiliaryRender => 10,
-            Self::Notes => 5,
+            Self::Notes | Self::Text => 5,
             Self::Shutdown => 1,
         })
     }

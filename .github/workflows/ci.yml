@@ -53,6 +53,9 @@ jobs:
       - name: Test release SBOM policy
         run: python -m unittest tests/test_release_sbom.py
 
+      - name: Test CLI packaging
+        run: python -m unittest tests/test_cli_packaging.py
+
       - name: Fetch PDFium
         run: python scripts/fetch_pdfium.py --clean
 
@@ -60,7 +63,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Check
-        run: cargo check --bin quick-presenter
+        run: cargo check --all-targets
 
       - name: Test
         run: cargo test

@@ -9,6 +9,10 @@ pub mod aspect;
 pub mod black_screen;
 pub mod cli;
 pub mod clock;
+mod control_app;
+#[cfg(unix)]
+mod control_smoke;
+mod control_state;
 pub mod diagnostics;
 pub mod errors;
 pub mod fullscreen;
@@ -215,6 +219,14 @@ fn main() -> Result<()> {
         ..AppState::default()
     }));
 
+    let _control_runtime = match control_app::ControlRuntime::install(windows.refs(), state.clone())
+    {
+        Ok(runtime) => Some(runtime),
+        Err(error) => {
+            warn!(error = %error, "Local presentation control is unavailable");
+            None
+        }
+    };
     wire_callbacks(&windows, windows.refs(), state.clone());
     let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
     let _render_event_timer = start_render_event_updates(windows.refs(), state.clone());
@@ -950,6 +962,11 @@ fn handle_presentation_command(
     state: &Rc<RefCell<AppState>>,
     command: PresentationCommand,
 ) {
+    if command == PresentationCommand::Close {
+        apply_session_command(&mut state.borrow_mut(), command, Instant::now());
+        view_sync::apply_closed_state_to_windows(windows);
+        return;
+    }
     let preload_snapshot = {
         let mut state = state.borrow_mut();
         let outcome = apply_session_command(&mut state, command, Instant::now());
@@ -2032,7 +2049,8 @@ pub(crate) fn drain_render_events(
             RenderEvent::OpenFailed { .. } => drain.open_failed = true,
             RenderEvent::PageFailed { .. } => drain.page_failed = true,
             RenderEvent::WorkerFailed { .. } => drain.worker_failed = true,
-            RenderEvent::Opened { .. }
+            RenderEvent::SlideTextLoaded { .. }
+            | RenderEvent::Opened { .. }
             | RenderEvent::PageRendered { .. }
             | RenderEvent::ReloadPrepared { .. }
             | RenderEvent::ReloadPrepareFailed { .. } => {}
@@ -2044,6 +2062,20 @@ pub(crate) fn drain_render_events(
 
 fn handle_render_event(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, event: RenderEvent) {
     match event {
+        RenderEvent::SlideTextLoaded {
+            session_id,
+            page_index,
+            full,
+            result,
+        } => {
+            control_state::commit_slide_text_mode(
+                &mut state.borrow_mut(),
+                session_id,
+                page_index,
+                full,
+                result,
+            );
+        }
         RenderEvent::Opened {
             session_id,
             title,
@@ -2277,6 +2309,7 @@ fn handle_speaker_notes_loaded(
     notes: SpeakerNotes,
     status_text: String,
 ) {
+    let notes_ready = status_text == "Ready";
     let mut state = state.borrow_mut();
     let status_text =
         if status_text == "Ready" && state.hot_reload.success_notice_active(Instant::now()) {
@@ -2291,6 +2324,11 @@ fn handle_speaker_notes_loaded(
         return;
     }
 
+    state.control.notes_state = if notes_ready {
+        quick_presenter::control::protocol::NotesState::Ready
+    } else {
+        quick_presenter::control::protocol::NotesState::Failed
+    };
     if let Some(snapshot) = state.presentation.snapshot() {
         apply_snapshot_to_windows(windows, &state, &snapshot);
     }

@@ -5,6 +5,27 @@ pub const MIN_NOTES_FONT_SIZE: u16 = 12;
 pub const MAX_NOTES_FONT_SIZE: u16 = 24;
 pub const NOTES_BOTTOM_PADDING: f32 = 10.0;
 
+/// Split display paragraphs without altering source notes or single line breaks.
+/// Empty entries preserve additional blank lines as compact paragraph gaps.
+pub fn display_paragraphs(text: &str) -> Vec<String> {
+    if text.is_empty() {
+        return vec![String::new()];
+    }
+    let mut paragraphs = Vec::new();
+    let mut lines = Vec::new();
+    for line in text.split('\n') {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+        if line.trim().is_empty() {
+            paragraphs.push(lines.join("\n"));
+            lines.clear();
+        } else {
+            lines.push(line);
+        }
+    }
+    paragraphs.push(lines.join("\n"));
+    paragraphs
+}
+
 /// Select the largest measured size that fits, falling back to scrolling at 12px.
 /// Heights must cover every whole-pixel size from 12px through 24px in order.
 pub fn fit_notes_font_size(
@@ -112,6 +133,22 @@ pub fn is_pdf_speaker_note_annotation(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_paragraphs_preserve_wrapping_indentation_and_unicode() {
+        assert_eq!(
+            display_paragraphs("First line\n  indented line\n\n日本語\n次の行"),
+            ["First line\n  indented line", "日本語\n次の行"]
+        );
+    }
+
+    #[test]
+    fn display_paragraphs_handle_crlf_whitespace_and_repeated_blank_lines() {
+        assert_eq!(display_paragraphs("A\r\n \t\r\n\r\nB"), ["A", "", "B"]);
+        assert_eq!(display_paragraphs("\nA\n\n"), ["", "A", "", ""]);
+        assert_eq!(display_paragraphs(""), [""]);
+        assert_eq!(display_paragraphs("A\nB"), ["A\nB"]);
+    }
 
     #[test]
     fn notes_font_size_uses_largest_fitting_measurement_including_padding() {

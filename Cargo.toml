@@ -1,12 +1,17 @@
 [package]
 name = "quick-presenter"
-version = "1.4.0"
+version = "2.0.0"
 edition = "2021"
 license = "GPL-3.0-only"
+default-run = "quick-presenter"
 
 [[bin]]
 name = "quick-presenter"
 path = "src/main.rs"
+
+[[bin]]
+name = "qp"
+path = "src/bin/qp.rs"
 
 [dependencies]
 anyhow = "1.0"
@@ -31,6 +36,14 @@ winresource = { version = "0.1.31", default-features = false }
 [patch.crates-io]
 i-slint-backend-winit = { path = "vendor/i-slint-backend-winit" }
 winit = { path = "vendor/winit" }
+
+# The Windows renderer tests copy the complete test binary into a fresh
+# AppContainer for every helper launch. Full debug information makes that
+# executable hundreds of megabytes and lets copying/antivirus scanning consume
+# the test harness deadlines. Line-table debug information keeps useful test
+# backtraces while making those launches representative of release packaging.
+[profile.test]
+debug = 1
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.4"
@@ -59,5 +72,6 @@ windows-sys = { version = "0.61", features = [
     "Win32_Security_Authorization",
     "Win32_System_Pipes",
     "Win32_System_JobObjects",
+    "Win32_System_IO",
     "Win32_System_Threading",
 ] }

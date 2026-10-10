@@ -10,7 +10,7 @@ use tracing::{info, warn};
 use crate::window_placement::{
     plan_restore, DisplayRect, PlacementRecord, RestorePlan, SlidePlacementController,
 };
-use crate::{PresenterWindow, SlideWindow};
+use crate::{NotesTypography, PresenterWindow, SlideWindow};
 
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
 
@@ -649,8 +649,30 @@ fn restore_window_focus(windows: &AppWindowRefs, role: WindowRole) {
 
 impl AppWindows {
     pub fn new() -> Result<Self> {
+        let presenter = PresenterWindow::new()?;
+        // Linux fallback fonts already have generous natural line metrics.
+        presenter
+            .global::<NotesTypography>()
+            .set_line_height_factor(if cfg!(target_os = "linux") { 1.0 } else { 1.25 });
+        presenter
+            .global::<NotesTypography>()
+            .set_compact_paragraphs(cfg!(target_os = "linux"));
+        presenter.global::<NotesTypography>().on_paragraphs(|text| {
+            let paragraphs = if cfg!(target_os = "linux") {
+                crate::notes::display_paragraphs(&text)
+            } else {
+                vec![text.to_string()]
+            };
+            std::rc::Rc::new(slint::VecModel::from(
+                paragraphs
+                    .into_iter()
+                    .map(slint::SharedString::from)
+                    .collect::<Vec<_>>(),
+            ))
+            .into()
+        });
         Ok(Self {
-            presenter: PresenterWindow::new()?,
+            presenter,
             slide: SlideWindow::new()?,
             placement: Rc::new(SlidePlacementController::default()),
         })

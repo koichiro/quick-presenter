@@ -176,14 +176,43 @@ The active PDF is watched automatically. Saving it in place or replacing it
 atomically refreshes the deck while preserving the current page when possible.
 No hot reload setting is required.
 
-The Cargo package and GUI executable are both named `quick-presenter`. The short
-`qp` command name is reserved for a future automation-oriented CLI entrypoint.
+The Cargo package and GUI executable are both named `quick-presenter`. The separate
+`qp` executable provides the local automation interface described below.
 
 Keyboard controls are documented in [docs/KEYBOARD.md](docs/KEYBOARD.md).
 Recent-file privacy behavior is documented in
 [docs/PRIVACY.md](docs/PRIVACY.md).
 Packaged app diagnostic logs are documented in
 [docs/PACKAGING.md](docs/PACKAGING.md#diagnostic-logs).
+
+## Local Automation
+
+Supported Windows and Linux packages and macOS Developer ID / DMG builds include
+`qp`, a CLI for AI agents and other automation tools to query and control
+Quick Presenter. Control Protocol v1 and the documented JSON/NDJSON output and
+exit codes are stable public automation interfaces for v2.0.0:
+
+```sh
+# With qp on PATH:
+qp open slides.pdf --json
+qp status --json
+qp timer elapsed --json
+qp next
+qp notes --json
+qp slide --json
+qp context --json
+qp context --full --json
+qp watch --json
+```
+
+`qp open` starts the GUI if needed. The CLI uses local IPC and the same
+presentation operations as the GUI. **Mac App Store CLI/control support is out of
+scope for v2.0.0.** For packaged macOS automation, use the Developer ID / DMG
+distribution. Nonsandboxed development builds also support CLI control.
+Future Store support is tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422).
+See [CLI usage](docs/CLI.md) and the
+[Presentation Control Protocol](docs/CONTROL_PROTOCOL.md) for the command set,
+JSON output, errors, operating limits, and compatibility policy.
 
 ## Build and Development
 
@@ -244,6 +273,13 @@ GitHub Releases. Download and launch steps are documented in
 
 Packaging and signing details for maintainers are documented in
 [docs/PACKAGING.md](docs/PACKAGING.md).
+
+The current CLI and AI-assisted presentation work targets the
+[`v2.0.0` development branch](https://github.com/koichiro/quick-presenter/tree/v2.0.0)
+and [v2.0.0 milestone](https://github.com/koichiro/quick-presenter/milestone/2).
+This replaces the provisional `v1.9.0` development name; release publication
+and package validation remain separate gates. Mac App Store CLI support targets
+v2.5.0, and Audience Live targets v3.0.0.
 
 ## Roadmap
 
