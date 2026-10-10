@@ -289,6 +289,9 @@ delivery and AI-assisted presentation workflows.
 - **v2.0.0: AI-centric presentation operations.** Quick Presenter should grow a
   CLI interface and AI-friendly workflows while continuing to treat PDF as the
   presentation source of truth.
+- **v3.0.0: Audience Live.** Optional local audience sessions and audience
+  interaction should complement presentation playback. Development uses the
+  `v3.0.0` branch; see [Local Audience Sessions](docs/AUDIENCE_LOCAL.md).
 
 ## Related Projects
 
