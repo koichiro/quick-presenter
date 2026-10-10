@@ -192,3 +192,7 @@ Page 0 overlay validation on macOS: GUI smoke passed 123 checks, including
 live WebSocket reception and visible reaction pixels above the join screen
 both before and after PDF loading. Blackout and hidden-window suppression
 continue to pass.
+
+The Audience Live toggle includes a thumbs-up icon for both actions. The adjacent
+status lamp is green while the session is active and gray while stopped. The
+button text names the action; the lamp indicates the current session state.

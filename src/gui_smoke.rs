@@ -422,7 +422,7 @@ fn check_audience_join_screen(
     let presenter = &windows.presenter;
     report.check(
         "Inactive Audience Live offers the ON action",
-        presenter.get_audience_toggle_label() == "Audience live ON 👍",
+        presenter.get_audience_toggle_label() == "Audience Live ON 👍️",
         "start action displayed",
         "incorrect start label",
     );
@@ -574,7 +574,7 @@ fn check_audience_join_screen(
         !state.borrow().audience_join_visible
             && !windows.slide.get_audience_guide_visible()
             && presenter.get_audience_active()
-            && presenter.get_audience_toggle_label() == "Audience Live OFF"
+            && presenter.get_audience_toggle_label() == "Audience Live OFF 👍️"
             && presenter.get_audience_url_text() == presenter.get_audience_url(),
         "both windows returned to PDF",
         "join screen remained active",
