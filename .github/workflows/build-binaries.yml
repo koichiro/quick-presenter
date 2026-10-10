@@ -48,6 +48,10 @@ on:
       - 'scripts/check_qp.py'
       - 'tests/test_cli_packaging.py'
       - 'docs/CLI.md'
+      - 'src/audience*.rs'
+      - 'ui/app.slint'
+      - 'assets/audience/**'
+      - 'docs/AUDIENCE*.md'
       - 'docs/CONTROL_PROTOCOL.md'
   push:
     tags:
@@ -151,6 +155,9 @@ jobs:
 
       - name: Test control protocol and CLI on each platform
         run: cargo test --lib --test control_contract --test control_events --test control_ipc --test control_ipc_windows --test control_lock --test control_launch
+
+      - name: Test Audience Live transport, admission, and overlay on each platform
+        run: cargo test --bin quick-presenter audience
 
       - name: Build release binaries
         run: cargo build --release --bins

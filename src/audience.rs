@@ -542,6 +542,86 @@ mod tests {
     }
 
     #[test]
+    fn many_authenticated_clients_deliver_bounded_events_and_shutdown_cleanly() {
+        let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+        let (url, token) = ready(&session);
+        let mut clients = Vec::new();
+        // Pace joins to respect the anti-churn handshake budget, not an audience cap.
+        for batch in 0..3 {
+            if batch > 0 {
+                thread::sleep(Duration::from_millis(1100));
+            }
+            for _ in 0..16 {
+                let mut ws = connect(&url);
+                ws.send(tungstenite::Message::Text(
+                    serde_json::json!({"v":1,"token":token}).to_string().into(),
+                ))
+                .unwrap();
+                let welcome: serde_json::Value =
+                    serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
+                assert_eq!(welcome["type"], "welcome");
+                clients.push(ws);
+            }
+        }
+        assert_eq!(session.snapshot().connections, 48);
+        let workers: Vec<_> = clients
+            .into_iter()
+            .enumerate()
+            .map(|(index, mut ws)| {
+                thread::spawn(move || {
+                    for request in 0..6 {
+                        let id = format!("{index}-{request}");
+                        ws.send(tungstenite::Message::Text(
+                            serde_json::json!({"v":1,"type":"reaction","request_id":id,"kind":"heart"})
+                                .to_string().into(),
+                        )).unwrap();
+                        let reply: serde_json::Value =
+                            serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
+                        assert_eq!(reply["request_id"], id);
+                        assert!(matches!(reply["status"].as_str(), Some("accepted" | "rate_limited" | "busy")));
+                    }
+                    ws
+                })
+            })
+            .collect();
+        let mut clients: Vec<_> = workers.into_iter().map(|w| w.join().unwrap()).collect();
+        let events = session.drain_events();
+        assert!(!events.is_empty());
+        assert!(events.len() <= 16);
+        assert!(events
+            .windows(2)
+            .all(|pair| pair[0].sequence < pair[1].sequence));
+        assert_eq!(session.snapshot().connections, 48);
+        let authority = url
+            .strip_prefix("http://")
+            .unwrap()
+            .split('/')
+            .next()
+            .unwrap();
+        session.shutdown();
+        assert_eq!(session.snapshot().connections, 0);
+        assert_eq!(session.snapshot().status, SessionStatus::Stopped);
+        assert!(session.drain_events().is_empty());
+        for ws in &mut clients {
+            assert!(ws.read().is_err());
+        }
+        let _rebound = std::net::TcpListener::bind(authority).unwrap();
+    }
+
+    #[test]
+    fn shutdown_closes_clients_waiting_for_authentication() {
+        let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+        let (url, _) = ready(&session);
+        let mut clients: Vec<_> = (0..8).map(|_| connect(&url)).collect();
+        assert_eq!(session.snapshot().connections, 0);
+        session.shutdown();
+        assert!(session.is_finished());
+        for ws in &mut clients {
+            assert!(ws.read().is_err());
+        }
+    }
+
+    #[test]
     fn handshake_budget_bounds_churn_and_recovers() {
         let now = Instant::now();
         let mut budget = HandshakeBudget::new(now);
