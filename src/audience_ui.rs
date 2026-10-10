@@ -35,20 +35,31 @@ pub struct AudienceUi {
 
 impl AudienceUi {
     pub fn install(windows: &AppWindows, state: Rc<RefCell<AppState>>) -> Rc<Self> {
-        Self::install_with_address_source(windows, state, audience::local_addresses)
+        Self::install_with_address_source(
+            windows,
+            state,
+            audience::local_addresses,
+            OverlayEngine::default(),
+        )
     }
 
     pub(crate) fn install_for_smoke(
         windows: &AppWindows,
         state: Rc<RefCell<AppState>>,
     ) -> Rc<Self> {
-        Self::install_with_address_source(windows, state, || Ok(vec![Ipv4Addr::LOCALHOST]))
+        Self::install_with_address_source(
+            windows,
+            state,
+            || Ok(vec![Ipv4Addr::LOCALHOST]),
+            OverlayEngine::for_gui_smoke(),
+        )
     }
 
     fn install_with_address_source(
         windows: &AppWindows,
         state: Rc<RefCell<AppState>>,
         addresses: fn() -> std::io::Result<Vec<Ipv4Addr>>,
+        overlay: OverlayEngine,
     ) -> Rc<Self> {
         let presenter = &windows.presenter;
         let ui = Rc::new(Self {
@@ -60,7 +71,7 @@ impl AudienceUi {
             last_url: RefCell::new(String::new()),
             recent: RefCell::new(VecDeque::new()),
             windows: windows.refs(),
-            overlay: RefCell::new(OverlayEngine::default()),
+            overlay: RefCell::new(overlay),
             overlay_timer: Timer::default(),
             overlay_model: Rc::new(VecModel::default()),
             weak_self: RefCell::new(std::rc::Weak::new()),
@@ -216,8 +227,12 @@ impl AudienceUi {
             let window = window.clone();
             // Browser launching may invoke OS IPC; keep it off the UI thread.
             std::thread::spawn(move || {
-                if webbrowser::open(&url).is_err() {
+                if let Err(error) = crate::browser::open_join_url(&url) {
+                    tracing::warn!(error = %error, "Join URL browser activation failed");
                     let _ = window.upgrade_in_event_loop(|window| {
+                        window.set_status_text(
+                            "Cannot open your browser. Copy the join URL instead.".into(),
+                        );
                         window.set_audience_status(
                             "Cannot open your browser. Copy the join URL instead.".into(),
                         );

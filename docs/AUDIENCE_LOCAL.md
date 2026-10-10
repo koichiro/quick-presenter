@@ -71,7 +71,8 @@ session remains active, or scan the new QR after a restart.
 
 These bounds cover the WebSocket/session layer. This initial implementation
 does not claim protection against hostile network floods or unlimited slow HTTP
-connections. Validate venue-scale load before relying on it in production.
+connections. Real-LAN multi-participant load testing is outside A6 scope;
+repeatable load validation uses local loopback connections.
 
 ## Runtime boundary
 
@@ -153,7 +154,8 @@ inputs. Presenter reception continues during blackout or slide hiding.
 `audience_ui` owns the Slint model and stops the animation timer when empty or
 suppressed. Start/stop and application shutdown clear both timers and models.
 The overlay takes no mouse or keyboard input. Physical multi-monitor changes,
-platform packaging, and mobile/venue load remain A6 release validation.
+platform packaging and mobile checks are tracked in
+[A6 release validation](AUDIENCE_RELEASE_CHECKLIST.md).
 
 A5 validation on macOS: `cargo fmt --check`, `cargo check --locked --offline`,
 `cargo test --locked --offline` (492 tests), and the binaries build passed.
@@ -181,8 +183,8 @@ returning from PDF page 1, the lower page 0 boundary, and forward navigation
 without skipping, as well as compact inline address controls at three sizes.
 
 A5 integration of page 0 return navigation passed 492 Rust tests, 121 GUI
-checks, and 10 CLI contract checks on macOS, including reaction overlay
-the original suppression on page 0 and resumption on PDF navigation.
+checks, and 10 CLI contract checks on macOS, including
+the original reaction overlay suppression on page 0 and resumption on PDF navigation.
 Page 0 now accepts new overlays, verified by a live WebSocket reaction and
 rendered SVG pixels in GUI smoke before and after PDF loading.
 
@@ -190,3 +192,7 @@ Page 0 overlay validation on macOS: GUI smoke passed 123 checks, including
 live WebSocket reception and visible reaction pixels above the join screen
 both before and after PDF loading. Blackout and hidden-window suppression
 continue to pass.
+
+The Audience Live toggle includes a thumbs-up icon for both actions. The adjacent
+status lamp is green while the session is active and gray while stopped. The
+button text names the action; the lamp indicates the current session state.

@@ -422,7 +422,7 @@ fn check_audience_join_screen(
     let presenter = &windows.presenter;
     report.check(
         "Inactive Audience Live offers the ON action",
-        presenter.get_audience_toggle_label() == "Audience live ON 👍",
+        presenter.get_audience_toggle_label() == "Audience Live ON 👍️",
         "start action displayed",
         "incorrect start label",
     );
@@ -574,7 +574,7 @@ fn check_audience_join_screen(
         !state.borrow().audience_join_visible
             && !windows.slide.get_audience_guide_visible()
             && presenter.get_audience_active()
-            && presenter.get_audience_toggle_label() == "Audience Live OFF"
+            && presenter.get_audience_toggle_label() == "Audience Live OFF 👍️"
             && presenter.get_audience_url_text() == presenter.get_audience_url(),
         "both windows returned to PDF",
         "join screen remained active",
@@ -695,6 +695,7 @@ fn check_audience_overlay(
     let presenter = &windows.presenter;
     let generation = state.borrow().render_generation;
     let first = slide.get_audience_overlay().row_data(0);
+    let observed_at = Instant::now();
     let snapshot = slide.window().take_snapshot()?;
     let colored = snapshot
         .as_bytes()
@@ -715,11 +716,11 @@ fn check_audience_overlay(
     let moving = slide.get_audience_overlay().row_data(0);
     report.check(
         "Overlay animates within resized bounds and preserves the presentation session",
-        first.zip(moving).is_some_and(|(a, b)| {
+        first.as_ref().zip(moving.as_ref()).is_some_and(|(a, b)| {
             b.y < a.y && (0.0..=1.0).contains(&b.x) && (0.0..=1.0).contains(&b.y)
         }) && state.borrow().render_generation == generation,
         "motion stays normalized and render generation unchanged",
-        "motion or rendering boundary failed",
+        format!("first={first:?}, after={moving:?}, elapsed={:?}, generation={generation}->{}, window={:?}", observed_at.elapsed(), state.borrow().render_generation, slide.window().size()),
     );
     slide.window().set_size(size);
     crate::handle_presentation_command(
@@ -779,7 +780,8 @@ fn check_audience_overlay(
         "new input displayed",
         "new input missing",
     );
-    let deadline = Instant::now() + Duration::from_secs(3);
+    let deadline =
+        Instant::now() + crate::audience_overlay::GUI_SMOKE_LIFETIME + Duration::from_secs(2);
     while slide.get_audience_overlay().row_count() > 0 && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter)?;
     }
@@ -1026,23 +1028,56 @@ fn check_notes_font_size(
             presenter.get_notes_visible_height()
         ),
     );
-    // Exercise layout resize events independently of WindowServer size restrictions.
+    // Native configure events can constrain this request. Check the settled
+    // viewport rather than assuming that a larger root window enlarges notes.
     presenter
         .window()
         .dispatch_event(slint::platform::WindowEvent::Resized {
             size: slint::LogicalSize::new(1200.0, 1000.0 + presenter.get_audience_panel_height()),
         });
     settle_presenter_notes_layout(presenter)?;
+    let resized_size = presenter.get_notes_font_size();
+    let resized_height = presenter.get_notes_visible_height();
+    let resized_measurements: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();
+    let resized_selected = (resized_size as usize).saturating_sub(12);
     report.check(
-        format!("logical resize events automatically enlarge notes ({context})"),
-        presenter.get_notes_font_size() > small_size,
-        "larger viewport enlarged the text",
+        format!("resize events select the largest size fitting the settled notes viewport ({context})"),
+        (12.0..=24.0).contains(&resized_size)
+            && resized_size.fract() == 0.0
+            && resized_measurements.len() == 13
+            && resized_measurements.iter().all(|height| height.is_finite() && *height > 0.0)
+            && resized_measurements.get(resized_selected).is_some_and(|height| {
+                *height + crate::notes::NOTES_BOTTOM_PADDING <= resized_height
+            })
+            && resized_measurements.iter().skip(resized_selected + 1).all(|height| {
+                *height + crate::notes::NOTES_BOTTOM_PADDING > resized_height
+            })
+            && presenter.get_notes_content_height() <= resized_height,
+        format!("font={resized_size}px fits the settled {resized_height}px viewport"),
         format!(
-            "before={small_size}, after={}, viewport={}, window={:?}",
-            presenter.get_notes_font_size(),
-            presenter.get_notes_visible_height(),
+            "before={small_size}, after={resized_size}, viewport={resized_height}, measurements={resized_measurements:?}, window={:?}",
             presenter.window().size()
         ),
+    );
+
+    // Change only the preview's aspect ratio to release notes space without
+    // requesting an oversized native window. Preserve strict growth coverage.
+    presenter.set_current_page_aspect_ratio(0.6);
+    settle_presenter_notes_layout(presenter)?;
+    let constrained_height = presenter.get_notes_visible_height();
+    let constrained_size = presenter.get_notes_font_size();
+    let controlled_window = presenter.window().size();
+    presenter.set_current_page_aspect_ratio(4.0);
+    settle_presenter_notes_layout(presenter)?;
+    report.check(
+        format!("increasing available notes space automatically enlarges text ({context})"),
+        presenter.window().size() == controlled_window
+            && presenter.get_notes_visible_height() > constrained_height
+            && presenter.get_notes_font_size() > constrained_size
+            && presenter.get_notes_font_size() == 24.0
+            && presenter.get_notes_content_height() <= presenter.get_notes_visible_height(),
+        format!("viewport {constrained_height} -> {}px, font {constrained_size} -> 24px", presenter.get_notes_visible_height()),
+        format!("viewport {constrained_height} -> {}px, font {constrained_size} -> {}px, window {controlled_window:?} -> {:?}", presenter.get_notes_visible_height(), presenter.get_notes_font_size(), presenter.window().size()),
     );
     presenter
         .window()
