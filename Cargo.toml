@@ -23,6 +23,7 @@ getrandom = "0.3"
 if-addrs = "0.15"
 qrcode = { version = "0.14", default-features = false }
 webbrowser = "1.2"
+tempfile = "3.27"
 chrono = "0.4"
 notify = "8.2"
 tracing = "0.1"
