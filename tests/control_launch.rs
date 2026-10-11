@@ -6,14 +6,24 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::PathBuf,
     process::{Command, Output},
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex, MutexGuard,
+    },
 };
 static NEXT: AtomicUsize = AtomicUsize::new(0);
+// On Linux a fork may briefly retain another thread's writable executable descriptor.
+// Keep fixture creation separate from other tests' process spawning.
+static INSTALLATION_LOCK: Mutex<()> = Mutex::new(());
 struct Installation {
     root: PathBuf,
+    _guard: MutexGuard<'static, ()>,
 }
 impl Installation {
     fn new() -> Self {
+        let guard = INSTALLATION_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let root = PathBuf::from(format!(
             "/tmp/qp-launch-{}-{}",
             std::process::id(),
@@ -34,7 +44,10 @@ impl Installation {
             fs::Permissions::from_mode(0o755),
         )
         .unwrap();
-        Self { root }
+        Self {
+            root,
+            _guard: guard,
+        }
     }
     fn command(&self, args: &[&str]) -> Command {
         let mut command = Command::new(self.root.join("bin/qp"));
