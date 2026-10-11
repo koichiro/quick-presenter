@@ -159,6 +159,7 @@ application version. Compatible additions follow the
 | `presentation.blackout` | `{"value":true}` | Mutation with resulting state |
 | `presentation.notes` | `{}` | `kind: notes`, session ID, revision, page, notes |
 | `presentation.slide` | `{}` or `{"full":true}` | `kind: slide`, session ID, revision, pages, page text |
+| `presentation.export.page` | `{"page":1,"session_id":"…","document_revision":1}` | Full `kind: context` for one indexed page, `next: null`; read only |
 | `presentation.context` | `{}` or `{"full":true}` | `kind: context`, presentation state, current and next page text/notes |
 
 Pages are one-based. `goto` outside `1..=pages` fails without changing state.
@@ -266,6 +267,50 @@ Successful context fields are assembled together from the owner state, so they
 never mix documents or current/next page numbers. As with status, this describes
 the logical presentation, not a compositor-frame acknowledgement.
 
+### Export all pages without navigation
+
+`qp export --JSON` (also `--json`, or simply `qp export`) writes one JSON array
+containing a full context object for every page, in ascending page order. Each
+object uses exactly the `qp context --full --json` schema, including
+`protocol_version: 1`, `kind: "context"`, `presentation`, `current`, and `next`.
+`current` contains the exported page's full PDF text and speaker notes; `next`
+contains the following page's same content, or `null` on the final page.
+Image-only pages and pages without notes remain present with `text: []` and
+`notes: ""`. "Full" refers to the text and notes supported by context, not PDF
+images, geometry, arbitrary annotations, or OCR.
+
+Every object's `presentation` is the initial live status snapshot. In particular,
+`presentation.page` remains the displayed page at the start of export, while
+`current.page` is the indexed exported page. Export never navigates, changes
+blackout/fullscreen, resets or starts the timer, opens a PDF, or starts the GUI.
+The timer and other GUI operations can continue while extraction runs.
+
+The CLI first queries status, then calls the additive read-only method
+`presentation.export.page` once per page, and finally checks status again.
+Required parameters are the one-based `page`, initial `session_id`, and
+`document_revision`. This method returns a full `kind: context` response with
+`current` for the requested page and `next: null`; the CLI connects adjacent
+results to build the exported contexts. The live `presentation` field in an IPC
+page response observes the state at reply time. The method uses the existing
+isolated PDFium extraction scheduler, full-text cache, notes model, and chunked
+response transport. Extracting just one page per request keeps the two-entry
+full-text cache sufficient even when exporting far from the displayed page.
+
+A committed open/reload, close, or application restart invalidates the pinned
+identity and returns `CANCELLED`. User navigation does not cancel export.
+Invalid page numbers return `INVALID_PAGE`; no open presentation returns
+`NO_PRESENTATION`. Notes and extraction errors follow the full-context contract
+above, including `NOTES_LOADING`, `NOTES_FAILED`, `TEXT_FAILED`, and each request's
+30-second timeout. The whole export can take longer than one request. Older
+applications that do not implement the method return `UNKNOWN_METHOD`.
+
+The CLI retains only adjacent page contexts in memory and stages output in a
+private automatically removed temporary file. It writes stdout only after all
+pages and the final identity check succeed, so extraction failure produces no
+partial JSON. Disk and stdout IO failures are reported; a stdout failure can
+interrupt delivery after it starts. No document-wide truncation is applied, and
+existing per-page text limits still apply.
+
 ### Full-text response transfers
 
 The `full` parameter defaults to false, so existing `{}` requests keep the
@@ -288,8 +333,10 @@ The aggregate response is bounded to 32 MiB. Clients must reject invalid totals,
 empty/oversized chunks, wrong IDs/versions, duplicate or missing sequences, and
 incomplete transfers. After collecting exactly `total_bytes`, decode and validate
 the original typed response. Transfer frames are accepted only for requests
-with `full: true`. `qp` implements reassembly in its protocol client and prints
-only the final single JSON object; no fragments or partial output reach stdout.
+with `full: true` or `presentation.export.page`, which always requests full text.
+`qp` implements reassembly in its protocol client; no transport fragments reach
+stdout. Ordinary full queries print one JSON object and export prints its
+completed JSON array.
 
 The existing 30-second server response deadline also bounds the whole transfer.
 Private renderer IPC v4 uses corresponding typed, correlated transfer envelopes

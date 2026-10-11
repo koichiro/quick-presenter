@@ -5,7 +5,7 @@ use quick_presenter::control::{
 use std::io::{self, Write};
 fn main() {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let json = args.iter().any(|arg| arg == "--json");
+    let json = args.iter().any(|arg| arg == "--json" || arg == "--JSON");
     let result = run(args);
     if let Err(error) = result {
         if json {
@@ -23,6 +23,12 @@ fn main() {
 fn run(args: Vec<std::ffi::OsString>) -> Result<(), ControlError> {
     let output = match client::parse_args(args)? {
         CliRequest::Help => client::HELP.into(),
+        CliRequest::Export => {
+            let mut file = client::export(client::send)?;
+            return io::copy(&mut file, &mut io::stdout().lock())
+                .map(|_| ())
+                .map_err(|e| ControlError::new(ErrorCode::IpcFailure, e.to_string()));
+        }
         CliRequest::Version { json } => client::format_version(json)
             .map_err(|e| ControlError::new(ErrorCode::IpcFailure, e.to_string()))?,
         CliRequest::Run(options) => {
