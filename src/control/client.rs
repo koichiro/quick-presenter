@@ -11,10 +11,11 @@ pub struct CliOptions {
 }
 pub enum CliRequest {
     Help,
+    Export,
     Version { json: bool },
     Run(CliOptions),
 }
-pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n       qp --version [--json]\n\nCommands:\n  status             Query presentation state\n  timer elapsed      Read elapsed seconds (no timer mutation)\n  watch              Stream presentation events (NDJSON with --json)\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (starts the GUI if needed; paths relative to CLI)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n\nControl Protocol v1 is a stable public automation API.\nSupported: Windows, Linux, macOS Developer ID/DMG and development builds.\nMac App Store presentation control is not supported in v2.0.0.\n";
+pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n       qp --version [--json]\n\nCommands:\n  status             Query presentation state\n  timer elapsed      Read elapsed seconds (no timer mutation)\n  watch              Stream presentation events (NDJSON with --json)\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (starts the GUI if needed; paths relative to CLI)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n  export             Export every page as full context JSON (--json)\n\nControl Protocol v1 is a stable public automation API.\nSupported: Windows, Linux, macOS Developer ID/DMG and development builds.\nMac App Store presentation control is not supported in v2.0.0.\n";
 
 pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest, ControlError> {
     let mut args: Vec<_> = args.into_iter().collect();
@@ -41,6 +42,9 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest
     }
     if full && !matches!(first, "slide" | "context") {
         return Err(invalid());
+    }
+    if first == "export" && args.len() == 1 {
+        return Ok(CliRequest::Export);
     }
     let command = match (first, args.len()) {
         ("status", 1) => Command::Status(Empty {}),
@@ -95,6 +99,102 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest
     };
     Ok(CliRequest::Run(CliOptions { command, json }))
 }
+/// Stage the complete JSON array on disk, keeping only adjacent page contexts in memory.
+/// No stdout is emitted until every page and the final identity check succeed.
+pub fn export(
+    mut send_request: impl FnMut(&Request) -> Result<Response, ControlError>,
+) -> Result<std::fs::File, ControlError> {
+    use std::io::{Seek, SeekFrom, Write};
+    let mut id = 0;
+    let mut call = |command| {
+        id += 1;
+        let request = Request::new(id, command);
+        let response = send_request(&request)?;
+        match validate_typed_response(&request, response)?.outcome {
+            Outcome::Result(reply) => Ok(reply),
+            Outcome::Error(error) => Err(error),
+        }
+    };
+    let Reply::Status(presentation) = call(Command::Status(Empty {}))? else {
+        unreachable!("validated status reply")
+    };
+    if presentation.page.is_none() || presentation.pages == 0 {
+        return Err(ControlError::new(
+            ErrorCode::NoPresentation,
+            "No presentation is currently open.",
+        ));
+    }
+    let cancelled =
+        || ControlError::new(ErrorCode::Cancelled, "Presentation changed during export.");
+    let same_document = |state: &Status| {
+        state.session_id == presentation.session_id
+            && state.document_revision == presentation.document_revision
+            && state.document == presentation.document
+            && state.pages == presentation.pages
+            && state.page.is_some()
+    };
+    let mut file = tempfile::tempfile().map_err(ipc_error)?;
+    file.write_all(b"[\n").map_err(ipc_error)?;
+    let mut previous: Option<SlideContext> = None;
+    for page in 1..=presentation.pages {
+        let Reply::Context {
+            presentation: observed,
+            current,
+            next,
+        } = call(Command::ExportPage(ExportPageParams {
+            page,
+            session_id: presentation.session_id.clone(),
+            document_revision: presentation.document_revision,
+        }))?
+        else {
+            unreachable!("validated export reply")
+        };
+        if !same_document(&observed) {
+            return Err(cancelled());
+        }
+        if current.slide.page != page || next.is_some() {
+            return Err(ControlError::new(
+                ErrorCode::IpcFailure,
+                "Invalid export page response.",
+            ));
+        }
+        if let Some(previous) = previous.take() {
+            let output = format_reply(
+                &Reply::Context {
+                    presentation: presentation.clone(),
+                    current: previous,
+                    next: Some(current.clone()),
+                },
+                true,
+            )
+            .map_err(|e| ControlError::new(ErrorCode::IpcFailure, e.to_string()))?;
+            file.write_all(output.trim_end().as_bytes())
+                .map_err(ipc_error)?;
+            file.write_all(b",\n").map_err(ipc_error)?;
+        }
+        previous = Some(current);
+    }
+    let Reply::Status(final_state) = call(Command::Status(Empty {}))? else {
+        unreachable!("validated status reply")
+    };
+    if !same_document(&final_state) {
+        return Err(cancelled());
+    }
+    let output = format_reply(
+        &Reply::Context {
+            presentation,
+            current: previous.expect("nonempty presentation"),
+            next: None,
+        },
+        true,
+    )
+    .map_err(|e| ControlError::new(ErrorCode::IpcFailure, e.to_string()))?;
+    file.write_all(output.as_bytes()).map_err(ipc_error)?;
+    file.write_all(b"]\n").map_err(ipc_error)?;
+    file.seek(SeekFrom::Start(0)).map_err(ipc_error)?;
+    Ok(file)
+}
+
 fn invalid() -> ControlError {
     ControlError::new(
         ErrorCode::InvalidRequest,
@@ -191,6 +291,13 @@ fn receive_response(
 fn validate_response(request: &Request, bytes: &[u8]) -> Result<Response, ControlError> {
     let response: Response = serde_json::from_slice(bytes)
         .map_err(|_| ControlError::new(ErrorCode::IpcFailure, "Malformed control response."))?;
+    validate_typed_response(request, response)
+}
+
+fn validate_typed_response(
+    request: &Request,
+    response: Response,
+) -> Result<Response, ControlError> {
     if response.protocol_version != PROTOCOL_VERSION {
         return Err(ControlError::new(
             ErrorCode::ProtocolMismatch,
@@ -210,7 +317,9 @@ fn validate_response(request: &Request, bytes: &[u8]) -> Result<Response, Contro
         (Command::Watch(_), Outcome::Result(Reply::Watching { .. })) => true,
         (Command::Notes(_), Outcome::Result(Reply::Notes { .. })) => true,
         (Command::Slide(_), Outcome::Result(Reply::Slide { .. })) => true,
-        (Command::Context(_), Outcome::Result(Reply::Context { .. })) => true,
+        (Command::Context(_) | Command::ExportPage(_), Outcome::Result(Reply::Context { .. })) => {
+            true
+        }
         (
             Command::Next(_)
             | Command::Previous(_)
@@ -504,6 +613,153 @@ mod tests {
             _ => panic!("expected command"),
         }
     }
+    #[test]
+    fn export_cli_accepts_json_and_rejects_invalid_options() {
+        for args in [
+            &["export"][..],
+            &["export", "--json"],
+            &["--json", "export"],
+        ] {
+            assert!(matches!(
+                parse_args(args.iter().map(OsString::from)).unwrap(),
+                CliRequest::Export
+            ));
+        }
+        for args in [
+            &["export", "--json", "--json"][..],
+            &["export", "--JSON"],
+            &["--JSON", "export"],
+            &["export", "--json", "--JSON"],
+            &["export", "--full"],
+            &["export", "file.pdf"],
+            &["status", "--JSON"],
+        ] {
+            assert!(parse_args(args.iter().map(OsString::from)).is_err());
+        }
+    }
+
+    fn export_status() -> Status {
+        serde_json::from_str(r#"{"session_id":"test","document_revision":1,"document":"/deck.pdf","page":2,"pages":3,"fullscreen":true,"blackout":true,"timer":{"running":true,"elapsed_seconds":42},"opening":false,"render_state":"ready","notes_state":"ready"}"#).unwrap()
+    }
+    fn export_response(request: &Request) -> Response {
+        let reply = match &request.command {
+            Command::Status(_) => Reply::Status(export_status()),
+            Command::ExportPage(params) => {
+                assert_eq!(params.session_id, "test");
+                assert_eq!(params.document_revision, 1);
+                assert!(request.command.full_text());
+                Reply::Context {
+                    presentation: export_status(),
+                    current: SlideContext {
+                        slide: SlideText {
+                            page: params.page,
+                            text: vec![format!("Source {} 日本語\n", params.page)],
+                            truncated: false,
+                        },
+                        notes: if params.page == 2 {
+                            "Note 日本語\n".into()
+                        } else {
+                            String::new()
+                        },
+                    },
+                    next: None,
+                }
+            }
+            _ => panic!("export must only use read commands"),
+        };
+        Response::success(request.id, reply)
+    }
+    #[test]
+    fn export_array_reuses_exact_context_schema_and_links_adjacent_pages() {
+        let mut requests = Vec::new();
+        let mut file = export(|request| {
+            requests.push(request.clone());
+            Ok(export_response(request))
+        })
+        .unwrap();
+        let array: Vec<serde_json::Value> = serde_json::from_reader(&mut file).unwrap();
+        assert_eq!(array.len(), 3);
+        assert_eq!(requests.len(), 5);
+        for (index, item) in array.iter().enumerate() {
+            assert_eq!(item["protocol_version"], 1);
+            assert_eq!(item["kind"], "context");
+            assert_eq!(
+                item["presentation"],
+                serde_json::to_value(export_status()).unwrap()
+            );
+            assert_eq!(item["current"]["page"], index + 1);
+            assert_eq!(item["current"]["truncated"], false);
+            if index < 2 {
+                assert_eq!(item["next"], array[index + 1]["current"]);
+            } else {
+                assert!(item["next"].is_null());
+            }
+        }
+        assert_eq!(array[1]["current"]["notes"], "Note 日本語\n");
+        assert_eq!(array[0]["current"]["text"][0], "Source 1 日本語\n");
+    }
+    #[test]
+    fn export_discards_staged_output_on_failure_or_document_change() {
+        for failure_id in [2, 3, 5] {
+            let error = export(|request| {
+                if request.id == failure_id {
+                    return Ok(Response::error(
+                        Some(request.id),
+                        ErrorCode::Cancelled,
+                        "Changed",
+                    ));
+                }
+                Ok(export_response(request))
+            })
+            .unwrap_err();
+            assert_eq!(error.code, ErrorCode::Cancelled);
+        }
+        for failure_id in [2, 5] {
+            assert_eq!(
+                export(|request| {
+                    let mut response = export_response(request);
+                    if request.id == failure_id {
+                        match &mut response.outcome {
+                            Outcome::Result(Reply::Status(status))
+                            | Outcome::Result(Reply::Context {
+                                presentation: status,
+                                ..
+                            }) => status.session_id = "replacement".into(),
+                            _ => unreachable!(),
+                        }
+                    }
+                    Ok(response)
+                })
+                .unwrap_err()
+                .code,
+                ErrorCode::Cancelled
+            );
+        }
+        assert_eq!(
+            export(|request| {
+                let mut status = export_status();
+                status.page = None;
+                status.pages = 0;
+                Ok(Response::success(request.id, Reply::Status(status)))
+            })
+            .unwrap_err()
+            .code,
+            ErrorCode::NoPresentation
+        );
+        assert_eq!(
+            export(|request| {
+                let mut response = export_response(request);
+                if let Outcome::Result(Reply::Context { current, .. }) = &mut response.outcome {
+                    current.slide.truncated = true;
+                }
+                Ok(response)
+            })
+            .unwrap_err()
+            .code,
+            ErrorCode::IpcFailure
+        );
+    }
+
     #[test]
     fn version_is_local_metadata_and_rejects_extra_arguments() {
         for name in ["--version", "-V"] {

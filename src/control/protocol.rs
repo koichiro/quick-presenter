@@ -50,6 +50,8 @@ pub enum Command {
     Slide(ContentParams),
     #[serde(rename = "presentation.context")]
     Context(ContentParams),
+    #[serde(rename = "presentation.export.page")]
+    ExportPage(ExportPageParams),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -61,11 +63,22 @@ pub struct ContentParams {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub full: bool,
 }
+/// Read one full page without navigating; identity pins a multi-request export.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExportPageParams {
+    pub page: u32,
+    pub session_id: String,
+    pub document_revision: u64,
+}
+
 impl Command {
     pub fn full_text(&self) -> bool {
         matches!(
             self,
-            Self::Slide(ContentParams { full: true }) | Self::Context(ContentParams { full: true })
+            Self::Slide(ContentParams { full: true })
+                | Self::Context(ContentParams { full: true })
+                | Self::ExportPage(_)
         )
     }
 }
@@ -394,6 +407,7 @@ pub fn decode_request(bytes: &[u8]) -> Result<Request, Response> {
             | "presentation.notes"
             | "presentation.slide"
             | "presentation.context"
+            | "presentation.export.page"
     ) {
         return Err(Response::error(
             Some(header.id),
