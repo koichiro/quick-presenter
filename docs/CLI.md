@@ -16,8 +16,9 @@ for compatible additions and breaking-change policy.
 Parse JSON fields and error codes rather than matching human output. JSON key
 order/whitespace and human-readable output, help, and diagnostic messages may
 change. Accept additional JSON object fields. Successful one-shot commands
-write one JSON object and a newline to stdout; errors remain on stderr and
-watch events remain independently valid JSON lines. Existing loading states,
+write one JSON object and a newline to stdout, except `export`, which writes
+a JSON array of full context objects. Errors remain on stderr and watch events
+remain independently valid JSON lines. Existing loading states,
 limits, and distribution exclusions still apply.
 
 ## Installation
@@ -77,6 +78,7 @@ In another terminal:
 ./target/debug/qp context --json
 ./target/debug/qp slide --full --json
 ./target/debug/qp context --full --json
+./target/debug/qp export --json > deck-context.json
 ./target/debug/qp open "slides with spaces.pdf" --json
 ./target/debug/qp close
 ./target/debug/qp watch --json
@@ -133,7 +135,8 @@ alias for `--version`. Use CLI and GUI binaries from the same package.
 ## Machine-readable output
 
 `--json` is available for every implemented command. Successful stdout contains
-one JSON object and a newline, with no logs or human decoration.
+one JSON object and a newline, with no logs or human decoration, except
+`export`, which outputs one JSON array.
 `watch --json` streams one event per line (NDJSON) until interrupted. Unlike the IPC
 response, CLI output omits the request envelope and exposes the result fields
 alongside `protocol_version`:
@@ -148,11 +151,13 @@ qp notes --json | jq -r '.notes'
 qp slide --json | jq -r '.text[]'
 qp context --json | jq -r '.current.notes'
 qp context --json | jq '.next'
+qp export --json | jq '.[].current.page'
 qp next --json | jq '.state.page'
 ```
 
 Single-response failures leave stdout empty. A failing watch retains already
-printed complete events and reports its terminal error only on stderr. With `--json`, stderr contains one JSON error object
+printed complete events and reports its terminal error only on stderr. With
+`--json`, stderr contains one JSON error object
 such as `{"code":"NO_PRESENTATION","message":"No presentation is currently open."}`.
 Without `--json`, stderr contains a diagnostic. Scripts should check the exit
 code or JSON error code instead of matching English messages.
@@ -213,14 +218,58 @@ qp context --full --json | jq -r '.current.text[]'
 qp context --full --json | jq -r '.next.text[]?'
 ```
 
-Full source results use the same output schema as compact results. Large IPC
-responses are reassembled internally; stdout still contains exactly one JSON
-object and a newline. Full pages retain a 4 MiB safety limit and the existing
+Full `slide` and `context` results use the same output schema as compact
+results. Large IPC responses are reassembled internally; these commands still
+write exactly one JSON object and a newline to stdout. Full pages retain a
+4 MiB safety limit and the existing
 one-million-PDFium-character guard. These limits yield `TEXT_FAILED` rather than
 successful shortened text. The server bounds assembled responses to 32 MiB
 and preserves its 30-second response deadline. Failed or incomplete transfers
 leave stdout empty and report a typed error on stderr.
 
+
+## Export all page contexts
+
+```sh
+qp export --json > deck-context.json
+qp export --json | jq -r '.[].current.text[]'
+qp export --json | jq '.[] | {page: .current.page, notes: .current.notes}'
+```
+
+`export` reads every page of the open PDF without navigating or changing the
+presentation timer, blackout, or fullscreen state. It requires a running GUI
+with an open PDF. Output is always JSON, including when invoked as `qp export`
+without a flag. The JSON option is `--json`, as with other commands. Export
+always requests full text, so `--full` is unnecessary and rejected.
+
+Stdout contains one JSON array in ascending page order. Every entry uses the
+same schema as `qp context --full --json`: `protocol_version`, `kind: "context"`,
+`presentation`, `current`, and `next`. `current` contains the indexed page's full
+PDF text and speaker notes. `next` contains the following page's same content,
+or `null` on the final page. Image-only pages remain in the array with `text: []`;
+pages without notes have `notes: ""`. Export includes the source text and notes
+supported by context, not images, geometry, arbitrary annotations, or OCR.
+
+All entries share the initial live `presentation` snapshot. Its `page` is the
+slide displayed when export started; `current.page` is the exported page number.
+User navigation and the running timer can continue independently during export.
+A committed open/reload, close, or application restart cancels export with
+`CANCELLED` (exit 10), preventing mixed-document output.
+
+Results are staged in a private temporary file and written to stdout only after
+all pages and the final document identity check succeed. Extraction failure
+therefore leaves stdout empty; a stdout IO failure can interrupt delivery after
+it starts. Only adjacent page contexts are retained in memory. Existing full-text
+safety limits apply per page, with no document-wide truncation. Each IPC request
+has a 30-second deadline; exporting an entire deck can take longer.
+
+`NOTES_LOADING` (exit 8) means notes are not ready; retry after
+`qp status --json` reports `notes_state: "ready"`. `NOTES_FAILED`, `TEXT_FAILED`,
+and `TIMEOUT` follow the full-context error contract. With `--json`, errors are
+JSON objects on stderr. Older GUIs without export support return
+`UNKNOWN_METHOD` (exit 2); use CLI and GUI binaries from the same package.
+See the [export protocol contract](CONTROL_PROTOCOL.md#export-all-pages-without-navigation)
+for the read-only IPC method and identity checks.
 
 ## Read elapsed time
 

@@ -160,14 +160,17 @@ impl Dispatcher {
                     Ok(result) => reply(&pending, result),
                     Err(error) => reply_error(&pending, error.code, &error.message),
                 },
-                Command::Slide(_) | Command::Context(_) => {
+                Command::Slide(_) | Command::Context(_) | Command::ExportPage(_) => {
                     let state = state.borrow();
                     let revision = state.control.document_revision;
-                    let page = state
-                        .presentation
-                        .snapshot()
-                        .map(|p| p.current_number)
-                        .unwrap_or(0);
+                    let page = match &command {
+                        Command::ExportPage(params) => params.page,
+                        _ => state
+                            .presentation
+                            .snapshot()
+                            .map(|p| p.current_number)
+                            .unwrap_or(0),
+                    };
                     match content_reply(&state, &command, revision, page) {
                         Ok(Some(result)) => reply(&pending, result),
                         Err(error) => reply_error(&pending, error.code, &error.message),
@@ -288,11 +291,23 @@ fn content_reply(
     revision: u64,
     page: u32,
 ) -> Result<Option<Reply>, ControlError> {
+    let export = matches!(command, Command::ExportPage(_));
+    if let Command::ExportPage(params) = command {
+        if params.session_id != state.control.session_id
+            || params.document_revision != state.control.document_revision
+        {
+            return Err(ControlError::new(
+                ErrorCode::Cancelled,
+                "Presentation changed during export.",
+            ));
+        }
+    }
     if state.control.document_revision != revision
-        || state
-            .presentation
-            .snapshot()
-            .is_some_and(|p| p.current_number != page)
+        || (!export
+            && state
+                .presentation
+                .snapshot()
+                .is_some_and(|p| p.current_number != page))
     {
         return Err(ControlError::new(
             ErrorCode::Cancelled,
@@ -305,7 +320,13 @@ fn content_reply(
             "No presentation is currently open.",
         )
     })?;
-    if matches!(command, Command::Context(_)) {
+    if page == 0 || page > snapshot.total_pages {
+        return Err(ControlError::new(
+            ErrorCode::InvalidPage,
+            "Page is outside the presentation.",
+        ));
+    }
+    if matches!(command, Command::Context(_) | Command::ExportPage(_)) {
         notes_reply(state)?;
     }
     let mut text = Vec::new();
@@ -515,6 +536,106 @@ mod tests {
             ErrorCode::NoPresentation
         );
     }
+    #[test]
+    fn export_reads_unshown_pages_without_changing_presentation_state() {
+        let mut state = AppState {
+            presentation: PresentationState::open_document("Deck", 4),
+            ..AppState::default()
+        };
+        state.control.notes_state = NotesState::Ready;
+        let now = Instant::now();
+        apply_session_command(&mut state, PresentationCommand::NextPage, now);
+        state.timer.start(now);
+        state.notes = crate::notes::SpeakerNotes::from_page_notes([(4, "Last note 日本語".into())]);
+        for page in 1..=4 {
+            state.control.full_slide_text.insert(
+                page - 1,
+                Ok(SlideText {
+                    page,
+                    text: vec![format!("Page {page}")],
+                    truncated: false,
+                }),
+            );
+        }
+        let before = control_state::snapshot(&state, now);
+        let sequence = state.control.events.sequence();
+        let command = |page| {
+            Command::ExportPage(ExportPageParams {
+                page,
+                session_id: state.control.session_id.clone(),
+                document_revision: state.control.document_revision,
+            })
+        };
+        for page in 1..=4 {
+            let result = content_reply(&state, &command(page), 0, page)
+                .unwrap()
+                .unwrap();
+            assert!(
+                matches!(result, Reply::Context { presentation, current, next: None }
+                if presentation.page == Some(2) && current.slide.page == page
+                && current.notes == if page == 4 { "Last note 日本語" } else { "" })
+            );
+        }
+        for page in [0, 5, u32::MAX] {
+            assert_eq!(
+                content_reply(&state, &command(page), 0, page)
+                    .unwrap_err()
+                    .code,
+                ErrorCode::InvalidPage
+            );
+        }
+        let original_command = command(4);
+        assert_eq!(control_state::snapshot(&state, now), before);
+        assert_eq!(state.control.events.sequence(), sequence);
+        apply_session_command(&mut state, PresentationCommand::NextPage, now);
+        assert!(content_reply(&state, &original_command, 0, 4)
+            .unwrap()
+            .is_some());
+        state.control.full_slide_text.remove(&3);
+        assert!(content_reply(&state, &original_command, 0, 4)
+            .unwrap()
+            .is_none());
+        state
+            .control
+            .full_slide_text
+            .insert(3, Err("extraction failed".into()));
+        assert_eq!(
+            content_reply(&state, &original_command, 0, 4)
+                .unwrap_err()
+                .code,
+            ErrorCode::TextFailed
+        );
+        state.control.notes_state = NotesState::Loading;
+        assert_eq!(
+            content_reply(&state, &original_command, 0, 4)
+                .unwrap_err()
+                .code,
+            ErrorCode::NotesLoading
+        );
+        state.control.notes_state = NotesState::Failed;
+        assert_eq!(
+            content_reply(&state, &original_command, 0, 4)
+                .unwrap_err()
+                .code,
+            ErrorCode::NotesFailed
+        );
+        state.control.document_revision += 1;
+        assert_eq!(
+            content_reply(&state, &original_command, 1, 4)
+                .unwrap_err()
+                .code,
+            ErrorCode::Cancelled
+        );
+        state.control.document_revision = 0;
+        state.control.session_id.push_str("-new");
+        assert_eq!(
+            content_reply(&state, &original_command, 0, 4)
+                .unwrap_err()
+                .code,
+            ErrorCode::Cancelled
+        );
+    }
+
     #[test]
     fn full_queries_never_reuse_truncated_compact_cache_entries() {
         let mut state = AppState {

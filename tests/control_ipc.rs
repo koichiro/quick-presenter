@@ -246,6 +246,127 @@ fn qp_context_and_slide_run_through_ipc_with_clean_json() {
 }
 
 #[test]
+fn qp_export_outputs_all_full_contexts_and_leaves_stdout_empty_on_failure() {
+    let root = Directory::new();
+    let directory = root.0.join("quick-presenter");
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&directory)
+        .unwrap();
+    let (_server, receiver) = ControlServer::bind(&directory.join("control.sock")).unwrap();
+    for (flag, fail_page) in [("--json", None), ("--json", Some(2))] {
+        let runtime = root.0.clone();
+        let child = thread::spawn(move || {
+            ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+                .env("XDG_RUNTIME_DIR", runtime)
+                .args(["export", flag])
+                .output()
+                .unwrap()
+        });
+        let mut requests = 0;
+        loop {
+            let pending = receiver.recv_timeout(Duration::from_secs(3)).unwrap();
+            requests += 1;
+            let result = match &pending.request.command {
+                Command::Status(_) => Reply::Status(status()),
+                Command::ExportPage(params) => {
+                    assert_eq!(params.session_id, "test-session");
+                    assert_eq!(params.document_revision, 1);
+                    assert!(pending.request.command.full_text());
+                    if Some(params.page) == fail_page {
+                        pending
+                            .response
+                            .send(Response::error(
+                                Some(pending.request.id),
+                                ErrorCode::Cancelled,
+                                "PDF changed",
+                            ))
+                            .unwrap();
+                        break;
+                    }
+                    Reply::Context {
+                        presentation: status(),
+                        current: SlideContext {
+                            slide: SlideText {
+                                page: params.page,
+                                // Exercise full response transfers as well as clean JSON output.
+                                text: if params.page == 3 {
+                                    vec!["日本語".repeat(150_000)]
+                                } else {
+                                    vec![]
+                                },
+                                truncated: false,
+                            },
+                            notes: format!("Note {}\n日本語", params.page),
+                        },
+                        next: None,
+                    }
+                }
+                _ => panic!("export must never navigate"),
+            };
+            pending
+                .response
+                .send(Response::success(pending.request.id, result))
+                .unwrap();
+            if requests == 7 {
+                break;
+            }
+        }
+        let output = child.join().unwrap();
+        if fail_page.is_some() {
+            assert_eq!(output.status.code(), Some(ErrorCode::Cancelled.exit_code()));
+            assert!(output.stdout.is_empty());
+            let error: serde_json::Value = serde_json::from_slice(&output.stderr).unwrap();
+            assert_eq!(error["code"], "CANCELLED");
+        } else {
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(output.stderr.is_empty());
+            let array: Vec<serde_json::Value> = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(array.len(), 5);
+            for (index, item) in array.iter().enumerate() {
+                assert_eq!(item["protocol_version"], 1);
+                assert_eq!(item["kind"], "context");
+                assert_eq!(item["current"]["page"], index + 1);
+                assert_eq!(item["presentation"]["page"], 1);
+                if index < 4 {
+                    assert_eq!(item["next"], array[index + 1]["current"]);
+                } else {
+                    assert!(item["next"].is_null());
+                }
+            }
+            assert_eq!(array[2]["current"]["text"][0], "日本語".repeat(150_000));
+            assert!(array[0]["current"]["text"].as_array().unwrap().is_empty());
+        }
+    }
+    for args in [&["export", "--JSON"][..], &["export", "--JSON", "--json"]] {
+        let output = ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+            .env("XDG_RUNTIME_DIR", &root.0)
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(ErrorCode::InvalidRequest.exit_code())
+        );
+        assert!(output.stdout.is_empty());
+        if args.contains(&"--json") {
+            let error: serde_json::Value = serde_json::from_slice(&output.stderr).unwrap();
+            assert_eq!(error["code"], "INVALID_REQUEST");
+        } else {
+            assert!(String::from_utf8_lossy(&output.stderr).starts_with("qp: InvalidRequest:"));
+        }
+        assert!(
+            receiver.try_recv().is_err(),
+            "Invalid flags must not reach IPC"
+        );
+    }
+}
+
+#[test]
 fn qp_full_queries_reassemble_large_unicode_responses_before_json_output() {
     let root = Directory::new();
     let directory = root.0.join("quick-presenter");
