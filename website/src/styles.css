@@ -1056,3 +1056,82 @@ code {
     transform: none;
   }
 }
+
+.language-switch {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: .8rem;
+  white-space: nowrap;
+}
+
+.language-switch a {
+  padding: 4px 8px;
+  border-radius: 5px;
+}
+
+.language-switch a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 750;
+}
+
+html:lang(ja) {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", Meiryo, sans-serif;
+  line-height: 1.85;
+}
+
+:lang(ja) h1, :lang(ja) h2, :lang(ja) h3 {
+  line-height: 1.4;
+  letter-spacing: 0;
+  word-break: normal;
+}
+
+:lang(ja) .hero h1 {
+  font-size: clamp(2.6rem, 4.4vw, 3.7rem);
+}
+
+:lang(ja) h2 {
+  font-size: clamp(1.8rem, 3.5vw, 3rem);
+}
+
+:lang(ja) .nav-links {
+  gap: 16px;
+  font-size: .85rem;
+}
+
+:lang(ja) .hero-facts dd {
+  font-size: .85rem;
+}
+
+:lang(ja) .command-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.translated-note {
+  padding-left: 16px;
+  border-left: 3px solid var(--accent-soft);
+}
+
+:lang(ja) .policy-hero h1 {
+  max-width: none;
+  font-size: clamp(2.2rem, 5vw, 3.6rem);
+}
+
+@media (max-width: 1080px) {
+  .nav-links { gap: 12px; font-size: .8rem; }
+}
+
+@media (max-width: 920px) {
+  .nav-links { gap: 12px 20px; }
+}
+
+@media (max-width: 720px) {
+  :lang(ja) .hero h1 { font-size: clamp(2.1rem, 8.8vw, 3rem); }
+  :lang(ja) .hero-facts dd { font-size: .74rem; }
+  :lang(ja) .hero-subtitle { font-size: 1.06rem; }
+}

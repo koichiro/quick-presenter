@@ -130,3 +130,16 @@ video range requests. Run `npm run preview` for a local browser preview.
 The preview server serves MP4/JPEG content types and byte ranges so video
 seeking works locally. A local preview does not publish a release or deploy
 GitHub Pages; confirm package availability and release copy before publishing.
+
+## English and Japanese pages
+
+The English homepage stays at `/`, with Japanese at `/ja/`. Privacy pages are
+`/privacy/` and `/ja/privacy/`. Each page provides explicit language navigation,
+a self-referencing canonical URL, and reciprocal `hreflang` alternatives.
+There is no browser-language redirect and no JavaScript dependency for switching.
+Both languages share the same media files; the English narration has an original
+transcript and Japanese translation on the Japanese homepage.
+
+Edit the static pages under `src/` and `src/ja/` together when changing product
+copy. Keep command names and API options unchanged in translated examples.
+The output tests cover both locales and language navigation.

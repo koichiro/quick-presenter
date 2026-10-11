@@ -10,6 +10,8 @@ const files = [
   ["src/assets/kokoro-demo.mp4", "assets/kokoro-demo.mp4"],
   ["src/assets/kokoro-demo-poster.jpg", "assets/kokoro-demo-poster.jpg"],
   ["src/index.html", "index.html"],
+  ["src/ja/index.html", "ja/index.html"],
+  ["src/ja/privacy/index.html", "ja/privacy/index.html"],
   ["src/privacy/index.html", "privacy/index.html"],
   ["src/styles.css", "styles.css"],
   ["../docs/assets/presenter-window-en-macos.png", "assets/presenter-window-en.png"],

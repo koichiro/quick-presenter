@@ -14,6 +14,8 @@ const oldOrigin = "https://koichiro.github.io/quick-presenter/";
 const pages = [
   ["index.html", "/"],
   ["privacy/index.html", "/privacy/"],
+  ["ja/index.html", "/ja/"],
+  ["ja/privacy/index.html", "/ja/privacy/"],
 ];
 
 function attributes(tag) {
@@ -39,8 +41,8 @@ test("generated pages have canonical and Open Graph URLs on the new domain", asy
       tags.filter((tag) => tag.rel === "canonical").map((tag) => tag.href),
       [`${origin}${pathname}`],
     );
-    if (pathname === "/") {
-      assert.equal(tags.find((tag) => tag.property === "og:url")?.content, `${origin}/`);
+    if (pathname === "/" || pathname === "/ja/") {
+      assert.equal(tags.find((tag) => tag.property === "og:url")?.content, `${origin}${pathname}`);
       assert.equal(
         tags.find((tag) => tag.property === "og:image")?.content,
         `${origin}/assets/presenter-window-en.png`,
@@ -93,7 +95,8 @@ test("internal navigation, fragments, and assets resolve at the domain root", as
         }
       }
     }
-    assert.ok(resolved.includes(pathname === "/" ? "/privacy/" : "/"));
+    const localeRoot = pathname.startsWith("/ja/") ? "/ja/" : "/";
+    assert.ok(resolved.includes(pathname.endsWith("privacy/") ? localeRoot : `${localeRoot}privacy/`));
     assert.ok(resolved.includes("/styles.css"));
   }
   const css = await readFile(join(dist, "styles.css"), "utf8");
@@ -154,5 +157,28 @@ test("preview serves video metadata and seek ranges", { timeout: 10000 }, async 
     const exited = once(child, "exit");
     child.kill();
     await exited;
+  }
+});
+
+
+test("localized pages declare their language and offer reciprocal language navigation", async () => {
+  for (const [file, pathname] of pages) {
+    const html = await readFile(join(dist, file), "utf8");
+    const japanese = pathname.startsWith("/ja/");
+    assert.match(html, new RegExp(`<html lang="${japanese ? "ja" : "en"}">`));
+    const englishPath = japanese ? pathname.slice(3) : pathname;
+    const japanesePath = `/ja${englishPath}`;
+    const alternateTags = [...html.matchAll(/<link\b[^>]*>/g)]
+      .map(([tag]) => attributes(tag)).filter((tag) => tag.rel === "alternate");
+    assert.deepEqual(Object.fromEntries(alternateTags.map((tag) => [tag.hreflang, tag.href])), {
+      en: `${origin}${englishPath}`,
+      ja: `${origin}${japanesePath}`,
+      "x-default": `${origin}${englishPath}`,
+    });
+    const switchHtml = html.match(/<span class="language-switch"[^>]*>([\s\S]*?)<\/span>/)?.[1];
+    assert.ok(switchHtml, file);
+    const links = [...switchHtml.matchAll(/<a\b[^>]*>/g)].map(([tag]) => attributes(tag));
+    assert.deepEqual(links.map((link) => link.href), [englishPath, japanesePath]);
+    assert.deepEqual(links.filter((link) => link["aria-current"] === "page").map((link) => link.href), [pathname]);
   }
 });

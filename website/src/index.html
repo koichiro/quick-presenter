@@ -22,6 +22,9 @@
     <meta property="og:url" content="https://quickpresenter.com/" />
     <link rel="icon" href="./assets/quick-presenter-icon-256.png" />
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="alternate" hreflang="en" href="https://quickpresenter.com/" />
+    <link rel="alternate" hreflang="ja" href="https://quickpresenter.com/ja/" />
+    <link rel="alternate" hreflang="x-default" href="https://quickpresenter.com/" />
   </head>
   <body>
     <header class="site-header">
@@ -36,13 +39,17 @@
         <a href="#download">Download</a>
         <a href="./privacy/">Privacy</a>
         <a href="https://github.com/koichiro/quick-presenter">GitHub</a>
+        <span class="language-switch" role="group" aria-label="Language">
+          <a href="/" lang="en" hreflang="en" aria-current="page">EN</a>
+          <a href="/ja/" lang="ja" hreflang="ja">日本語</a>
+        </span>
       </nav>
     </header>
 
     <main id="top">
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Quick Presenter 2.0 · Open source</p>
+          <p class="eyebrow">Quick Presenter · OPEN SOURCE</p>
           <h1>Your slides.<br />Your workflow.</h1>
           <p class="hero-subtitle">
             Present your PDF with a focused presenter view. Connect scripts and AI
@@ -50,8 +57,8 @@
             controls within reach.
           </p>
           <div class="hero-actions" aria-label="Primary actions">
-            <a class="button primary" href="#demo">Watch the narrated demo <span aria-hidden="true">↗</span></a>
-            <a class="button secondary" href="#download">Get Quick Presenter</a>
+            <a class="button primary" href="#demo">Watch the demo <span aria-hidden="true">↗</span></a>
+            <a class="button secondary" href="#download">Get Quick Presenter 2.0</a>
           </div>
           <dl class="hero-facts" aria-label="Project facts">
             <div>
@@ -100,10 +107,10 @@
           <div class="demo-story">
             <ol class="workflow-steps">
               <li><span>01</span><div><h3>Read the notes</h3><p>The external runner reads speaker notes embedded in a Marp PDF through <code>qp</code>.</p></div></li>
-              <li><span>02</span><div><h3>Speak with Kokoro</h3><p>Local speech synthesis turns each note into audio. The runner waits for playback to finish.</p></div></li>
+              <li><span>02</span><div><h3>Speak with TTS</h3><p>Local speech synthesis (Kokoro) turns each note into audio. The runner waits for playback to finish.</p></div></li>
               <li><span>03</span><div><h3>Move forward</h3><p>The CLI advances the slide. The current view, notes, and next-page preview follow along.</p></div></li>
             </ol>
-            <p class="demo-note">This demo reads your words verbatim. Kokoro is an optional external engine;
+            <p class="demo-note">This demo reads your words verbatim. <a class="text-link" href="https://github.com/hexgrad/kokoro">Kokoro</a> is an optional external engine;
               Quick Presenter provides the PDF context and playback controls.</p>
             <a class="text-link" href="https://github.com/koichiro/quick-presenter/tree/v2.0.0/examples/autopresent">Try the demo yourself <span aria-hidden="true">↗</span></a>
           </div>
