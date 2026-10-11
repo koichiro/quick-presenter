@@ -3,6 +3,9 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { createInterface } from "node:readline";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dist = join(root, "dist");
@@ -52,6 +55,8 @@ test("generated pages have canonical and Open Graph URLs on the new domain", asy
 
 test("required stylesheet and image assets are generated and nonempty", async () => {
   for (const file of [
+    "assets/kokoro-demo.mp4",
+    "assets/kokoro-demo-poster.jpg",
     "styles.css",
     "assets/presenter-window-en.png",
     "assets/slide-window-title-en.png",
@@ -73,7 +78,7 @@ test("internal navigation, fragments, and assets resolve at the domain root", as
     const resolved = [];
     for (const [tag] of html.matchAll(/<[a-z][^>]*>/gi)) {
       const attrs = attributes(tag);
-      for (const ref of [attrs.href, attrs.src].filter(Boolean)) {
+      for (const ref of [attrs.href, attrs.src, attrs.poster].filter(Boolean)) {
         const url = new URL(ref, `${origin}${pathname}`);
         if (url.origin !== origin) continue;
         resolved.push(url.pathname);
@@ -112,5 +117,42 @@ test("published output and current public documentation do not use the old URL",
   await checkDirectory(join(root, "src"));
   for (const file of ["README.md", "docs/PACKAGING.md"]) {
     assert.ok(!(await readFile(join(root, "..", file), "utf8")).includes(oldOrigin), file);
+  }
+});
+
+
+test("preview serves video metadata and seek ranges", { timeout: 10000 }, async () => {
+  const child = spawn(process.execPath, [join(root, "scripts/preview.mjs")], {
+    env: { ...process.env, HOST: "127.0.0.1", PORT: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const lines = createInterface({ input: child.stdout });
+  try {
+    const [line] = await once(lines, "line");
+    const base = line.match(/http:\/\/127\.0\.0\.1:\d+\//)?.[0];
+    assert.ok(base, line);
+    const url = `${base}assets/kokoro-demo.mp4`;
+    const info = await stat(join(dist, "assets/kokoro-demo.mp4"));
+    const head = await fetch(url, { method: "HEAD" });
+    assert.equal(head.status, 200);
+    assert.equal(head.headers.get("content-type"), "video/mp4");
+    assert.equal(Number(head.headers.get("content-length")), info.size);
+    const first = await fetch(url, { headers: { Range: "bytes=0-31" } });
+    assert.equal(first.status, 206);
+    assert.equal(first.headers.get("content-range"), `bytes 0-31/${info.size}`);
+    assert.equal((await first.arrayBuffer()).byteLength, 32);
+    const suffix = await fetch(url, { headers: { Range: "bytes=-16" } });
+    assert.equal(suffix.status, 206);
+    assert.equal(suffix.headers.get("content-range"), `bytes ${info.size - 16}-${info.size - 1}/${info.size}`);
+    assert.equal((await suffix.arrayBuffer()).byteLength, 16);
+    const invalid = await fetch(url, { headers: { Range: `bytes=${info.size}-` } });
+    assert.equal(invalid.status, 416);
+    assert.equal(invalid.headers.get("content-range"), `bytes */${info.size}`);
+    await invalid.arrayBuffer();
+  } finally {
+    lines.close();
+    const exited = once(child, "exit");
+    child.kill();
+    await exited;
   }
 });

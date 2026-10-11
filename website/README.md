@@ -108,3 +108,25 @@ These live checks remain pending until the manual migration is performed.
    the old project URL serves the site without a stale custom-domain redirect.
 
 Do not execute rollback automatically.
+
+## Version 2.0 local release preview
+
+The homepage introduces the stable `qp` interface alongside PDF playback:
+source context, explicit presentation control, and NDJSON change observation.
+The optional external narration runner is linked from the `v2.0.0` examples.
+It is separate from the player; Quick Presenter does not bundle an AI model or
+Kokoro. macOS automation requires the Developer ID / DMG distribution in v2.0.0.
+
+The checked-in `src/assets/kokoro-demo.mp4` is an actual macOS presenter-window
+recording of the four-slide Marp notes demo from #445, with the cursor hidden.
+Its audio uses the exact cached Kokoro WAV files used in that run, synchronized
+with recorded playback launch times because system-audio capture was silent.
+The 1024×720 H.264/AAC MP4 has faststart metadata and is approximately 1.8 MB.
+The homepage provides native playback controls, a poster, and the full text
+transcript; it does not autoplay or download the video before playback.
+
+Run `npm test` to rebuild and validate the output, links, assets, and local
+video range requests. Run `npm run preview` for a local browser preview.
+The preview server serves MP4/JPEG content types and byte ranges so video
+seeking works locally. A local preview does not publish a release or deploy
+GitHub Pages; confirm package availability and release copy before publishing.

@@ -3,17 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quick Presenter - PDF presentation playback for live talks</title>
+    <title>Quick Presenter 2.0 — PDF presentations, ready for automation</title>
     <meta
       name="description"
-      content="Quick Presenter is an open source desktop app for presenting prepared PDF slide decks reliably."
+      content="Present PDF slides with confidence. Quick Presenter 2.0 adds a stable CLI for scripts and AI agents, with slide text, speaker notes, and presentation control."
     />
     <link rel="canonical" href="https://quickpresenter.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Quick Presenter" />
     <meta
       property="og:description"
-      content="Reliable PDF presentation playback for macOS, Windows, and Linux."
+      content="Your PDF. Your workflow. Reliable presentation playback with a stable CLI for scripts and AI agents."
     />
     <meta
       property="og:image"
@@ -30,10 +30,9 @@
         <span>Quick Presenter</span>
       </a>
       <nav class="nav-links" aria-label="Primary navigation">
-        <a href="#audience">Who it helps</a>
-        <a href="#features">Features</a>
-        <a href="#authoring">PDF workflow</a>
-        <a href="#scope">Scope</a>
+        <a href="#demo">Watch the demo</a>
+        <a href="#automation">CLI &amp; agents</a>
+        <a href="#features">Presenter view</a>
         <a href="#download">Download</a>
         <a href="./privacy/">Privacy</a>
         <a href="https://github.com/koichiro/quick-presenter">GitHub</a>
@@ -43,19 +42,16 @@
     <main id="top">
       <section class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Open source PDF presentation player</p>
-          <h1>Quick Presenter</h1>
+          <p class="eyebrow">Quick Presenter 2.0 · Open source</p>
+          <h1>Your slides.<br />Your workflow.</h1>
           <p class="hero-subtitle">
-            A lightweight desktop app for presenting prepared PDF slide decks with
-            predictable controls, presenter context, and reliable live playback.
+            Present your PDF with a focused presenter view. Connect scripts and AI
+            agents through a stable CLI that puts your slides, notes, and playback
+            controls within reach.
           </p>
           <div class="hero-actions" aria-label="Primary actions">
-            <a class="button primary" href="#support">
-              Download App
-            </a>
-            <a class="button secondary" href="https://github.com/koichiro/quick-presenter">
-              View on GitHub
-            </a>
+            <a class="button primary" href="#demo">Watch the narrated demo <span aria-hidden="true">↗</span></a>
+            <a class="button secondary" href="#download">Get Quick Presenter</a>
           </div>
           <dl class="hero-facts" aria-label="Project facts">
             <div>
@@ -63,8 +59,8 @@
               <dd>PDF only</dd>
             </div>
             <div>
-              <dt>License</dt>
-              <dd>GPL-3.0-only</dd>
+              <dt>Automation</dt>
+              <dd>Stable CLI · JSON</dd>
             </div>
             <div>
               <dt>Platforms</dt>
@@ -74,92 +70,117 @@
         </div>
         <figure class="hero-shot">
           <img
-            src="./assets/presenter-window-en.png"
+            src="./assets/kokoro-demo-poster.jpg"
             width="1024"
-            height="695"
+            height="720"
             alt="Quick Presenter presenter window showing the current slide, next slide preview, speaker notes, timer, and page status."
           />
+          <figcaption class="hero-terminal"><span aria-hidden="true">$</span> qp context --full --json</figcaption>
         </figure>
       </section>
 
-      <section id="audience" class="audience" aria-labelledby="audience-title">
+      <section id="demo" class="demo-section" aria-labelledby="demo-title">
         <div class="section-heading">
-          <p class="eyebrow">Who it helps</p>
-          <h2 id="audience-title">For speakers who already have the deck.</h2>
-          <p>
-            Quick Presenter is built for academic talks, research presentations,
-            technical conferences, and online sessions where the final slides are
-            exported to PDF before the talk.
-          </p>
+          <p class="eyebrow">See the workflow</p>
+          <h2 id="demo-title">Let the notes do the talking.</h2>
+          <p>A real PDF. Its original speaker notes. A local voice. Watch the
+            presenter view follow the narration, one slide at a time.</p>
         </div>
-        <div class="audience-grid">
-          <article>
-            <span>Problem</span>
-            <h3>PDF viewers are general-purpose.</h3>
-            <p>
-              They open files well, but live talks need presenter context,
-              predictable navigation, and a clean audience output.
-            </p>
-          </article>
-          <article>
-            <span>Need</span>
-            <h3>The speaker must stay oriented.</h3>
-            <p>
-              Current slide, next slide, speaker notes, elapsed time, clock, and
-              page status should be visible without adding editing complexity.
-            </p>
-          </article>
-          <article>
-            <span>Value</span>
-            <h3>Prepared PDFs become presentation-ready.</h3>
-            <p>
-              Quick Presenter keeps the playback path compact so switching between
-              conference rooms, classrooms, and online meetings feels predictable.
-            </p>
-          </article>
+        <div class="demo-layout">
+          <figure class="demo-player">
+            <video controls playsinline preload="none" width="1024" height="720"
+              poster="./assets/kokoro-demo-poster.jpg" aria-label="Kokoro narration demo in the Quick Presenter window"
+              aria-describedby="demo-description">
+              <source src="./assets/kokoro-demo.mp4" type="video/mp4" />
+              <p><a href="./assets/kokoro-demo.mp4">Download the narrated demo.</a></p>
+            </video>
+            <figcaption id="demo-description">72 seconds · English narration · Recorded on macOS.
+              Press play to hear the demo.</figcaption>
+          </figure>
+          <div class="demo-story">
+            <ol class="workflow-steps">
+              <li><span>01</span><div><h3>Read the notes</h3><p>The external runner reads speaker notes embedded in a Marp PDF through <code>qp</code>.</p></div></li>
+              <li><span>02</span><div><h3>Speak with Kokoro</h3><p>Local speech synthesis turns each note into audio. The runner waits for playback to finish.</p></div></li>
+              <li><span>03</span><div><h3>Move forward</h3><p>The CLI advances the slide. The current view, notes, and next-page preview follow along.</p></div></li>
+            </ol>
+            <p class="demo-note">This demo reads your words verbatim. Kokoro is an optional external engine;
+              Quick Presenter provides the PDF context and playback controls.</p>
+            <a class="text-link" href="https://github.com/koichiro/quick-presenter/tree/v2.0.0/examples/autopresent">Try the demo yourself <span aria-hidden="true">↗</span></a>
+          </div>
         </div>
+        <details class="demo-transcript">
+          <summary>Read the demo transcript</summary>
+                    <p><strong>Slide 1.</strong> Welcome to this short Quick Presenter demo. Each slide has a speaker note containing the words you are hearing. The demo reads those notes aloud, waits for the speech to finish, and then moves to the next slide.</p>
+          <p><strong>Slide 2.</strong> The audience sees only the key ideas on this slide. The full explanation lives in the speaker notes embedded in the PDF. This demo reads that explanation word for word. It does not invent an explanation or read the bullet points instead.</p>
+          <p><strong>Slide 3.</strong> Notice that this slide stays on screen while the narration is playing. Only after the speech finishes does the demo ask Quick Presenter to move forward. If speech playback fails, the demo stops without sending a page change. Keep presentation control exclusive while the demo runs.</p>
+          <p><strong>Slide 4.</strong> That is the end of the demo. The presentation will stay on this final slide. To make your own version, edit the slide text and the speaker notes in the Markdown source, then export a new PDF with Marp&#x27;s PDF notes option enabled. Thank you for listening.</p>
+        </details>
       </section>
 
-      <section class="positioning" aria-labelledby="positioning-title">
+      <section id="automation" class="automation-section" aria-labelledby="automation-title">
         <div class="section-heading">
-          <p class="eyebrow">Built for presenting</p>
-          <h2 id="positioning-title">Not another slide editor.</h2>
+          <p class="eyebrow">New in 2.0 · A stable automation interface</p>
+          <h2 id="automation-title">A presentation your tools can understand.</h2>
+          <p>The <code>qp</code> CLI gives scripts and AI agents structured access
+            to the same PDF you are presenting. Build your own workflow around
+            clear source context and explicit playback controls.</p>
         </div>
-        <div class="positioning-grid">
-          <article>
-            <h3>Open a finished PDF</h3>
-            <p>
-              Keep authoring in Keynote, PowerPoint, Google Slides, Marp, Beamer,
-              or any tool that exports a stable PDF deck.
-            </p>
-          </article>
-          <article>
-            <h3>Stay oriented on stage</h3>
-            <p>
-              See the current page, next slide, notes, elapsed time, and clock
-              without turning the presentation surface into a document manager.
-            </p>
-          </article>
-          <article>
-            <h3>Move with confidence</h3>
-            <p>
-              Use keyboard-first navigation and presenter remote friendly controls
-              that keep page transitions simple during a live talk.
-            </p>
-          </article>
+        <div class="capability-grid">
+          <article><span class="capability-label">Read</span><h3>Give agents the context.</h3>
+            <p>Get current and next slide text, speaker notes, and presentation state as JSON. Use the PDF as the source for your agent’s explanation.</p>
+            <code>qp context --full --json</code></article>
+          <article><span class="capability-label">Control</span><h3>Act on the presentation.</h3>
+            <p>Open a deck, move to a page, or set the audience blackout state. Keep generation and speech in the tools you choose.</p>
+            <code>qp next --json</code></article>
+          <article><span class="capability-label">Observe</span><h3>Follow what changes.</h3>
+            <p>Stream presentation changes as newline-delimited JSON. Query status when you need rendering and note readiness.</p>
+            <code>qp watch --json</code></article>
+        </div>
+        <div class="agent-workflow">
+          <div>
+            <p class="eyebrow">Bring your own agent</p>
+            <h3>Choose the intelligence.<br />Keep the playback predictable.</h3>
+            <p>Use a local model, a hosted service, or a deterministic script.
+              Your agent owns narration and audio; Quick Presenter owns the PDF
+              and presentation state.</p>
+            <p>The included Python reference checks readiness, waits for audio
+              completion, and stops on failure before advancing.</p>
+            <a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md">Explore the CLI reference <span aria-hidden="true">↗</span></a>
+          </div>
+          <figure class="command-panel">
+            <figcaption><span class="terminal-dots" aria-hidden="true">● ● ●</span> A workflow through qp</figcaption>
+            <pre><code><span class="code-comment"># Open your prepared PDF</span>
+qp open talk.pdf --json
+
+<span class="code-comment"># Read slide text, notes, and state</span>
+qp context --full --json
+
+<span class="code-comment"># Your agent generates and plays narration.
+# Advance only after the audio finishes.</span>
+qp next --json
+
+<span class="code-comment"># Or observe presentation changes</span>
+qp watch --json</code></pre>
+          </figure>
+        </div>
+        <div class="interface-facts">
+          <p><strong>Stable contract.</strong> Control Protocol v1, JSON results, typed errors,
+            and documented exit codes give automation a supported interface.</p>
+          <p><strong>Choose the right package.</strong> CLI control supports macOS Developer ID / DMG,
+            Windows Store, and Linux. Mac App Store control is outside v2.0.0.</p>
         </div>
       </section>
 
       <section id="features" class="feature-stack" aria-labelledby="features-title">
         <div class="section-heading">
           <p class="eyebrow">Essential workflow</p>
-          <h2 id="features-title">Everything visible when it matters.</h2>
+          <h2 id="features-title">Stay oriented while your workflow runs.</h2>
         </div>
 
         <article class="feature feature-large">
           <div class="feature-copy">
             <p class="eyebrow">Presenter window</p>
-            <h3>Run the talk from one focused control surface.</h3>
+            <h3>Your presenter view, always in context.</h3>
             <p>
               The speaker-facing window keeps the active slide, next slide preview,
               speaker notes, timer, clock, and page position in one place.
@@ -298,9 +319,8 @@
           <h2 id="support-title">Help fund the next stage of presentation tools.</h2>
           <p>
             Quick Presenter will remain focused on reliable PDF playback, while
-            development continues toward AI-centric presentation operations: faster
-            preparation, speaker-aware workflows, and automation that still treats
-            the exported PDF as the source of truth.
+            the stable CLI opens presentation operations to your scripts and agents.
+            Supporting development helps keep playback reliable across platforms.
           </p>
           <p>
             Buying through desktop app stores is the planned donation-friendly way
@@ -333,12 +353,12 @@
       </section>
 
       <section id="download" class="download" aria-labelledby="download-title">
-        <p class="eyebrow">Release</p>
-        <h2 id="download-title">Download Quick Presenter v1.0.0</h2>
+        <p class="eyebrow">Get started with 2.0</p>
+        <h2 id="download-title">Find your Quick Presenter release</h2>
         <p>
-          Windows will be available exclusively from Microsoft Store. The signed
-          and notarized macOS package and the Linux package will be published
-          from GitHub Releases when v1.0.0 is ready.
+          Get Windows from Microsoft Store. For CLI automation on macOS, choose
+          the Developer ID / DMG package; Linux packages are also available through
+          GitHub Releases. Check the release version and notes before installing.
         </p>
         <a class="button primary" href="https://github.com/koichiro/quick-presenter/releases">
           Open macOS and Linux releases
