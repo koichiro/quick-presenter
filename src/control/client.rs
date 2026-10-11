@@ -11,11 +11,11 @@ pub struct CliOptions {
 }
 pub enum CliRequest {
     Help,
-    Export,
+    Export { include_next: bool },
     Version { json: bool },
     Run(CliOptions),
 }
-pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n       qp --version [--json]\n\nCommands:\n  status             Query presentation state\n  timer elapsed      Read elapsed seconds (no timer mutation)\n  watch              Stream presentation events (NDJSON with --json)\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (starts the GUI if needed; paths relative to CLI)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n  export             Export every page as full context JSON (--json)\n\nControl Protocol v1 is a stable public automation API.\nSupported: Windows, Linux, macOS Developer ID/DMG and development builds.\nMac App Store presentation control is not supported in v2.0.0.\n";
+pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n       qp export [--json] [--include-next]\n       qp --version [--json]\n\nCommands:\n  status             Query presentation state\n  timer elapsed      Read elapsed seconds (no timer mutation)\n  watch              Stream presentation events (NDJSON with --json)\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (starts the GUI if needed; paths relative to CLI)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n  export             Export full page JSON (--include-next for legacy context)\n\nControl Protocol v1 is a stable public automation API.\nSupported: Windows, Linux, macOS Developer ID/DMG and development builds.\nMac App Store presentation control is not supported in v2.0.0.\n";
 
 pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest, ControlError> {
     let mut args: Vec<_> = args.into_iter().collect();
@@ -32,11 +32,19 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest
         return Err(invalid());
     }
     let full = full_count == 1;
-    args.retain(|arg| arg != "--json" && arg != "--full");
+    let include_next_count = args.iter().filter(|arg| *arg == "--include-next").count();
+    if include_next_count > 1 {
+        return Err(invalid());
+    }
+    let include_next = include_next_count == 1;
+    args.retain(|arg| arg != "--json" && arg != "--full" && arg != "--include-next");
     let first = args
         .first()
         .and_then(|arg| arg.to_str())
         .ok_or_else(invalid)?;
+    if include_next && first != "export" {
+        return Err(invalid());
+    }
     if !full && args.len() == 1 && matches!(first, "--version" | "-V") {
         return Ok(CliRequest::Version { json });
     }
@@ -44,7 +52,7 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest
         return Err(invalid());
     }
     if first == "export" && args.len() == 1 {
-        return Ok(CliRequest::Export);
+        return Ok(CliRequest::Export { include_next });
     }
     let command = match (first, args.len()) {
         ("status", 1) => Command::Status(Empty {}),
@@ -102,6 +110,7 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest
 /// Stage the complete JSON array on disk, keeping only adjacent page contexts in memory.
 /// No stdout is emitted until every page and the final identity check succeed.
 pub fn export(
+    include_next: bool,
     mut send_request: impl FnMut(&Request) -> Result<Response, ControlError>,
 ) -> Result<std::fs::File, ControlError> {
     use std::io::{Seek, SeekFrom, Write};
@@ -159,17 +168,13 @@ pub fn export(
             ));
         }
         if let Some(previous) = previous.take() {
-            let output = format_reply(
-                &Reply::Context {
-                    presentation: presentation.clone(),
-                    current: previous,
-                    next: Some(current.clone()),
-                },
-                true,
-            )
-            .map_err(|e| ControlError::new(ErrorCode::IpcFailure, e.to_string()))?;
-            file.write_all(output.trim_end().as_bytes())
-                .map_err(ipc_error)?;
+            write_export_entry(
+                &mut file,
+                &presentation,
+                &previous,
+                include_next,
+                Some(&current),
+            )?;
             file.write_all(b",\n").map_err(ipc_error)?;
         }
         previous = Some(current);
@@ -180,19 +185,48 @@ pub fn export(
     if !same_document(&final_state) {
         return Err(cancelled());
     }
-    let output = format_reply(
-        &Reply::Context {
-            presentation,
-            current: previous.expect("nonempty presentation"),
-            next: None,
-        },
-        true,
-    )
-    .map_err(|e| ControlError::new(ErrorCode::IpcFailure, e.to_string()))?;
-    file.write_all(output.as_bytes()).map_err(ipc_error)?;
+    write_export_entry(
+        &mut file,
+        &presentation,
+        &previous.expect("nonempty presentation"),
+        include_next,
+        None,
+    )?;
+    file.write_all(b"\n").map_err(ipc_error)?;
     file.write_all(b"]\n").map_err(ipc_error)?;
     file.seek(SeekFrom::Start(0)).map_err(ipc_error)?;
     Ok(file)
+}
+
+/// CLI-only projection: wire context replies always retain their nullable next field.
+#[derive(serde::Serialize)]
+struct ExportEntry<'a> {
+    protocol_version: u32,
+    kind: &'static str,
+    presentation: &'a Status,
+    current: &'a SlideContext,
+    // Outer None omits the field; Some(None) preserves the legacy final-page null.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next: Option<Option<&'a SlideContext>>,
+}
+fn write_export_entry(
+    writer: &mut impl io::Write,
+    presentation: &Status,
+    current: &SlideContext,
+    include_next: bool,
+    next: Option<&SlideContext>,
+) -> Result<(), ControlError> {
+    serde_json::to_writer(
+        writer,
+        &ExportEntry {
+            protocol_version: PROTOCOL_VERSION,
+            kind: "context",
+            presentation,
+            current,
+            next: include_next.then_some(next),
+        },
+    )
+    .map_err(|error| ControlError::new(ErrorCode::IpcFailure, error.to_string()))
 }
 
 fn invalid() -> ControlError {
@@ -622,11 +656,30 @@ mod tests {
         ] {
             assert!(matches!(
                 parse_args(args.iter().map(OsString::from)).unwrap(),
-                CliRequest::Export
+                CliRequest::Export {
+                    include_next: false
+                }
             ));
         }
         for args in [
-            &["export", "--json", "--json"][..],
+            &["export", "--json", "--include-next"][..],
+            &["--include-next", "export"],
+            &["--json", "--include-next", "export"],
+        ] {
+            assert!(matches!(
+                parse_args(args.iter().map(OsString::from)).unwrap(),
+                CliRequest::Export { include_next: true }
+            ));
+        }
+        assert!(HELP.contains("qp export [--json] [--include-next]"));
+        for args in [
+            &["export", "--include-next", "--include-next"][..],
+            &["context", "--include-next"],
+            &["slide", "--include-next"],
+            &["status", "--include-next"],
+            &["open", "file.pdf", "--include-next"],
+            &["--version", "--include-next"],
+            &["export", "--json", "--json"],
             &["export", "--JSON"],
             &["--JSON", "export"],
             &["export", "--json", "--JSON"],
@@ -670,38 +723,128 @@ mod tests {
         Response::success(request.id, reply)
     }
     #[test]
-    fn export_array_reuses_exact_context_schema_and_links_adjacent_pages() {
-        let mut requests = Vec::new();
-        let mut file = export(|request| {
-            requests.push(request.clone());
-            Ok(export_response(request))
-        })
-        .unwrap();
-        let array: Vec<serde_json::Value> = serde_json::from_reader(&mut file).unwrap();
-        assert_eq!(array.len(), 3);
-        assert_eq!(requests.len(), 5);
-        for (index, item) in array.iter().enumerate() {
-            assert_eq!(item["protocol_version"], 1);
-            assert_eq!(item["kind"], "context");
-            assert_eq!(
-                item["presentation"],
-                serde_json::to_value(export_status()).unwrap()
-            );
-            assert_eq!(item["current"]["page"], index + 1);
-            assert_eq!(item["current"]["truncated"], false);
-            if index < 2 {
-                assert_eq!(item["next"], array[index + 1]["current"]);
-            } else {
-                assert!(item["next"].is_null());
+    fn export_omits_next_by_default_and_include_next_preserves_legacy_output() {
+        for pages in [1, 3] {
+            let mut outputs = Vec::new();
+            for include_next in [false, true] {
+                let mut requests = Vec::new();
+                let mut file = export(include_next, |request| {
+                    requests.push(request.clone());
+                    let mut response = export_response(request);
+                    let status = match &mut response.outcome {
+                        Outcome::Result(Reply::Status(status))
+                        | Outcome::Result(Reply::Context {
+                            presentation: status,
+                            ..
+                        }) => status,
+                        _ => unreachable!(),
+                    };
+                    status.pages = pages;
+                    status.page = Some(1);
+                    // Initial readiness and timer state must survive the CLI projection.
+                    status.notes_state = NotesState::Loading;
+                    status.render_state = RenderState::Failed;
+                    status.opening = true;
+                    Ok(response)
+                })
+                .unwrap();
+                let mut output = String::new();
+                io::Read::read_to_string(&mut file, &mut output).unwrap();
+                let array: Vec<serde_json::Value> = serde_json::from_str(&output).unwrap();
+                assert_eq!(array.len(), pages as usize);
+                assert_eq!(requests.len(), pages as usize + 2);
+                let mut legacy_entries = Vec::new();
+                for (index, item) in array.iter().enumerate() {
+                    assert_eq!(item["protocol_version"], 1);
+                    assert_eq!(item["kind"], "context");
+                    let mut expected_status = export_status();
+                    expected_status.pages = pages;
+                    expected_status.page = Some(1);
+                    expected_status.notes_state = NotesState::Loading;
+                    expected_status.render_state = RenderState::Failed;
+                    expected_status.opening = true;
+                    assert_eq!(
+                        item["presentation"],
+                        serde_json::to_value(&expected_status).unwrap()
+                    );
+                    assert_eq!(item["current"]["page"], index + 1);
+                    assert_eq!(item["current"]["truncated"], false);
+                    assert_eq!(
+                        item["current"]["text"][0],
+                        format!("Source {} 日本語\n", index + 1)
+                    );
+                    assert_eq!(
+                        item["current"]["notes"],
+                        if index == 1 { "Note 日本語\n" } else { "" }
+                    );
+                    if include_next {
+                        assert!(item.get("next").is_some());
+                        if index + 1 < array.len() {
+                            assert_eq!(item["next"], array[index + 1]["current"]);
+                        } else {
+                            assert!(item["next"].is_null());
+                        }
+                    } else {
+                        assert!(item.get("next").is_none());
+                    }
+                    legacy_entries.push(
+                        format_reply(
+                            &Reply::Context {
+                                presentation: expected_status,
+                                current: serde_json::from_value(item["current"].clone()).unwrap(),
+                                next: array.get(index + 1).map(|next| {
+                                    serde_json::from_value(next["current"].clone()).unwrap()
+                                }),
+                            },
+                            true,
+                        )
+                        .unwrap()
+                        .trim_end()
+                        .to_owned(),
+                    );
+                }
+                if include_next {
+                    // Match PR #449's array serialization, including final next: null.
+                    assert_eq!(output, format!("[\n{}\n]\n", legacy_entries.join(",\n")));
+                }
+                outputs.push(array);
+            }
+            for (default, legacy) in outputs[0].iter().zip(&outputs[1]) {
+                let mut legacy = legacy.clone();
+                legacy.as_object_mut().unwrap().remove("next");
+                assert_eq!(*default, legacy);
             }
         }
-        assert_eq!(array[1]["current"]["notes"], "Note 日本語\n");
-        assert_eq!(array[0]["current"]["text"][0], "Source 1 日本語\n");
+    }
+    #[test]
+    fn export_preserves_existing_errors_in_both_output_modes() {
+        for include_next in [false, true] {
+            for code in [
+                ErrorCode::NotesLoading,
+                ErrorCode::NotesFailed,
+                ErrorCode::TextFailed,
+                ErrorCode::Timeout,
+                ErrorCode::Cancelled,
+            ] {
+                assert_eq!(
+                    export(include_next, |request| {
+                        if request.id == 2 {
+                            Ok(Response::error(Some(request.id), code, "Unavailable"))
+                        } else {
+                            Ok(export_response(request))
+                        }
+                    })
+                    .unwrap_err()
+                    .code,
+                    code
+                );
+            }
+        }
     }
     #[test]
     fn export_discards_staged_output_on_failure_or_document_change() {
         for failure_id in [2, 3, 5] {
-            let error = export(|request| {
+            let error = export(false, |request| {
                 if request.id == failure_id {
                     return Ok(Response::error(
                         Some(request.id),
@@ -716,7 +859,7 @@ mod tests {
         }
         for failure_id in [2, 5] {
             assert_eq!(
-                export(|request| {
+                export(false, |request| {
                     let mut response = export_response(request);
                     if request.id == failure_id {
                         match &mut response.outcome {
@@ -736,7 +879,7 @@ mod tests {
             );
         }
         assert_eq!(
-            export(|request| {
+            export(false, |request| {
                 let mut status = export_status();
                 status.page = None;
                 status.pages = 0;
@@ -747,7 +890,7 @@ mod tests {
             ErrorCode::NoPresentation
         );
         assert_eq!(
-            export(|request| {
+            export(false, |request| {
                 let mut response = export_response(request);
                 if let Outcome::Result(Reply::Context { current, .. }) = &mut response.outcome {
                     current.slide.truncated = true;

@@ -203,6 +203,7 @@ qp slide --json
 qp context --json
 qp context --full --json
 qp export --json > deck-context.json
+qp export --json --include-next > deck-context-with-next.json
 qp watch --json
 ```
 

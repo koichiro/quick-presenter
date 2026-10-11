@@ -23,8 +23,8 @@ fn main() {
 fn run(args: Vec<std::ffi::OsString>) -> Result<(), ControlError> {
     let output = match client::parse_args(args)? {
         CliRequest::Help => client::HELP.into(),
-        CliRequest::Export => {
-            let mut file = client::export(client::send)?;
+        CliRequest::Export { include_next } => {
+            let mut file = client::export(include_next, client::send)?;
             return io::copy(&mut file, &mut io::stdout().lock())
                 .map(|_| ())
                 .map_err(|e| ControlError::new(ErrorCode::IpcFailure, e.to_string()));

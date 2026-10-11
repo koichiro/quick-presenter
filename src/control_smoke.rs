@@ -137,40 +137,57 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
         matches!(call(path, Command::Context(ContentParams::default()))?, Reply::Context { current, next: None, .. } if current.slide.page == total),
         "end-of-deck context mismatch"
     );
-    let before_export = call(path, Command::Status(Empty {}))?;
-    let mut export_file = client::export(|request| client::send_to(path, request))
-        .map_err(|error| anyhow::anyhow!(error.message))?;
-    let exported: Vec<serde_json::Value> = serde_json::from_reader(&mut export_file)?;
-    anyhow::ensure!(
-        exported.len() == total as usize,
-        "export page count mismatch"
-    );
-    for (index, item) in exported.iter().enumerate() {
+    ready(path)?;
+    let Reply::Status(before_export) = call(path, Command::Status(Empty {}))? else {
+        anyhow::bail!("missing export status");
+    };
+    for include_next in [false, true] {
+        let mut export_file =
+            client::export(include_next, |request| client::send_to(path, request))
+                .map_err(|error| anyhow::anyhow!(error.message))?;
+        let exported: Vec<serde_json::Value> = serde_json::from_reader(&mut export_file)?;
         anyhow::ensure!(
-            item["current"]["page"] == index + 1,
-            "export page order mismatch"
+            exported.len() == total as usize,
+            "export page count mismatch"
         );
-        anyhow::ensure!(
-            item["current"]["truncated"] == false,
-            "export truncated source"
-        );
-        anyhow::ensure!(
-            item["presentation"]["page"] == total,
-            "export moved the displayed page"
-        );
-        if let Some(next) = exported.get(index + 1) {
+        for (index, item) in exported.iter().enumerate() {
             anyhow::ensure!(
-                item["next"] == next["current"],
-                "export adjacent context mismatch"
+                item["current"]["page"] == index + 1,
+                "export page order mismatch"
             );
-        } else {
-            anyhow::ensure!(item["next"].is_null(), "export last page has next context");
+            anyhow::ensure!(
+                item["current"]["truncated"] == false,
+                "export truncated source"
+            );
+            anyhow::ensure!(
+                item["presentation"]["page"] == total,
+                "export moved the displayed page"
+            );
+            if !include_next {
+                anyhow::ensure!(item.get("next").is_none(), "default export contains next");
+            } else if let Some(next) = exported.get(index + 1) {
+                anyhow::ensure!(
+                    item["next"] == next["current"],
+                    "export adjacent context mismatch"
+                );
+            } else {
+                anyhow::ensure!(item["next"].is_null(), "export last page has next context");
+            }
         }
+        let Reply::Status(mut after_export) = call(path, Command::Status(Empty {}))? else {
+            anyhow::bail!("missing post-export status");
+        };
+        anyhow::ensure!(
+            after_export.timer.elapsed_seconds >= before_export.timer.elapsed_seconds,
+            "export reset the timer"
+        );
+        // A running timer may naturally advance while both export modes are read.
+        after_export.timer.elapsed_seconds = before_export.timer.elapsed_seconds;
+        anyhow::ensure!(
+            after_export == before_export,
+            "export changed presentation state"
+        );
     }
-    anyhow::ensure!(
-        call(path, Command::Status(Empty {}))? == before_export,
-        "export changed presentation state"
-    );
     call(path, Command::GoTo(PageParams { page: 1 }))?;
     anyhow::ensure!(
         matches!(
