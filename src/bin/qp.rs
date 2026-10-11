@@ -5,7 +5,7 @@ use quick_presenter::control::{
 use std::io::{self, Write};
 fn main() {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let json = args.iter().any(|arg| arg == "--json" || arg == "--JSON");
+    let json = args.iter().any(|arg| arg == "--json");
     let result = run(args);
     if let Err(error) = result {
         if json {

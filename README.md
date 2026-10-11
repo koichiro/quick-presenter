@@ -202,7 +202,7 @@ qp notes --json
 qp slide --json
 qp context --json
 qp context --full --json
-qp export --JSON > deck-context.json
+qp export --json > deck-context.json
 qp watch --json
 ```
 

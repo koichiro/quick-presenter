@@ -78,7 +78,7 @@ In another terminal:
 ./target/debug/qp context --json
 ./target/debug/qp slide --full --json
 ./target/debug/qp context --full --json
-./target/debug/qp export --JSON > deck-context.json
+./target/debug/qp export --json > deck-context.json
 ./target/debug/qp open "slides with spaces.pdf" --json
 ./target/debug/qp close
 ./target/debug/qp watch --json
@@ -136,8 +136,7 @@ alias for `--version`. Use CLI and GUI binaries from the same package.
 
 `--json` is available for every implemented command. Successful stdout contains
 one JSON object and a newline, with no logs or human decoration, except
-`export`, which outputs one JSON array. `export` also accepts `--JSON`; the
-uppercase spelling is not supported by other commands.
+`export`, which outputs one JSON array.
 `watch --json` streams one event per line (NDJSON) until interrupted. Unlike the IPC
 response, CLI output omits the request envelope and exposes the result fields
 alongside `protocol_version`:
@@ -152,15 +151,15 @@ qp notes --json | jq -r '.notes'
 qp slide --json | jq -r '.text[]'
 qp context --json | jq -r '.current.notes'
 qp context --json | jq '.next'
-qp export --JSON | jq '.[].current.page'
+qp export --json | jq '.[].current.page'
 qp next --json | jq '.state.page'
 ```
 
 Single-response failures leave stdout empty. A failing watch retains already
 printed complete events and reports its terminal error only on stderr. With
-`--json` (or `--JSON` for export), stderr contains one JSON error object
+`--json`, stderr contains one JSON error object
 such as `{"code":"NO_PRESENTATION","message":"No presentation is currently open."}`.
-Without either JSON flag, stderr contains a diagnostic. Scripts should check the exit
+Without `--json`, stderr contains a diagnostic. Scripts should check the exit
 code or JSON error code instead of matching English messages.
 
 ## Exit codes
@@ -232,15 +231,15 @@ leave stdout empty and report a typed error on stderr.
 ## Export all page contexts
 
 ```sh
-qp export --JSON > deck-context.json
+qp export --json > deck-context.json
 qp export --json | jq -r '.[].current.text[]'
-qp export --JSON | jq '.[] | {page: .current.page, notes: .current.notes}'
+qp export --json | jq '.[] | {page: .current.page, notes: .current.notes}'
 ```
 
 `export` reads every page of the open PDF without navigating or changing the
 presentation timer, blackout, or fullscreen state. It requires a running GUI
 with an open PDF. Output is always JSON, including when invoked as `qp export`
-without a flag; `--json` and `--JSON` are equivalent export options. Export
+without a flag. The JSON option is `--json`, as with other commands. Export
 always requests full text, so `--full` is unnecessary and rejected.
 
 Stdout contains one JSON array in ascending page order. Every entry uses the
@@ -266,8 +265,8 @@ has a 30-second deadline; exporting an entire deck can take longer.
 
 `NOTES_LOADING` (exit 8) means notes are not ready; retry after
 `qp status --json` reports `notes_state: "ready"`. `NOTES_FAILED`, `TEXT_FAILED`,
-and `TIMEOUT` follow the full-context error contract. With either JSON flag,
-errors are JSON objects on stderr. Older GUIs without export support return
+and `TIMEOUT` follow the full-context error contract. With `--json`, errors are
+JSON objects on stderr. Older GUIs without export support return
 `UNKNOWN_METHOD` (exit 2); use CLI and GUI binaries from the same package.
 See the [export protocol contract](CONTROL_PROTOCOL.md#export-all-pages-without-navigation)
 for the read-only IPC method and identity checks.

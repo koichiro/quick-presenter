@@ -15,20 +15,12 @@ pub enum CliRequest {
     Version { json: bool },
     Run(CliOptions),
 }
-pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n       qp --version [--json]\n\nCommands:\n  status             Query presentation state\n  timer elapsed      Read elapsed seconds (no timer mutation)\n  watch              Stream presentation events (NDJSON with --json)\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (starts the GUI if needed; paths relative to CLI)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n  export             Export every page as full context JSON (--json or --JSON)\n\nControl Protocol v1 is a stable public automation API.\nSupported: Windows, Linux, macOS Developer ID/DMG and development builds.\nMac App Store presentation control is not supported in v2.0.0.\n";
+pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n       qp --version [--json]\n\nCommands:\n  status             Query presentation state\n  timer elapsed      Read elapsed seconds (no timer mutation)\n  watch              Stream presentation events (NDJSON with --json)\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (starts the GUI if needed; paths relative to CLI)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n  export             Export every page as full context JSON (--json)\n\nControl Protocol v1 is a stable public automation API.\nSupported: Windows, Linux, macOS Developer ID/DMG and development builds.\nMac App Store presentation control is not supported in v2.0.0.\n";
 
 pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest, ControlError> {
     let mut args: Vec<_> = args.into_iter().collect();
     if args == [OsString::from("--help")] || args == [OsString::from("-h")] {
         return Ok(CliRequest::Help);
-    }
-    let export = args.iter().any(|arg| arg == "export");
-    if export {
-        for arg in &mut args {
-            if arg == "--JSON" {
-                *arg = "--json".into();
-            }
-        }
     }
     let json_count = args.iter().filter(|arg| *arg == "--json").count();
     let json = json_count == 1;
@@ -622,12 +614,11 @@ mod tests {
         }
     }
     #[test]
-    fn export_cli_accepts_both_json_spellings_and_rejects_invalid_options() {
+    fn export_cli_accepts_json_and_rejects_invalid_options() {
         for args in [
             &["export"][..],
             &["export", "--json"],
-            &["export", "--JSON"],
-            &["--JSON", "export"],
+            &["--json", "export"],
         ] {
             assert!(matches!(
                 parse_args(args.iter().map(OsString::from)).unwrap(),
@@ -635,7 +626,10 @@ mod tests {
             ));
         }
         for args in [
-            &["export", "--json", "--JSON"][..],
+            &["export", "--json", "--json"][..],
+            &["export", "--JSON"],
+            &["--JSON", "export"],
+            &["export", "--json", "--JSON"],
             &["export", "--full"],
             &["export", "file.pdf"],
             &["status", "--JSON"],

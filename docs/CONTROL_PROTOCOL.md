@@ -269,7 +269,7 @@ the logical presentation, not a compositor-frame acknowledgement.
 
 ### Export all pages without navigation
 
-`qp export --JSON` (also `--json`, or simply `qp export`) writes one JSON array
+`qp export --json` (or simply `qp export`) writes one JSON array
 containing a full context object for every page, in ascending page order. Each
 object uses exactly the `qp context --full --json` schema, including
 `protocol_version: 1`, `kind: "context"`, `presentation`, `current`, and `next`.

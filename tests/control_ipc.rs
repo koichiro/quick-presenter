@@ -254,7 +254,7 @@ fn qp_export_outputs_all_full_contexts_and_leaves_stdout_empty_on_failure() {
         .create(&directory)
         .unwrap();
     let (_server, receiver) = ControlServer::bind(&directory.join("control.sock")).unwrap();
-    for (flag, fail_page) in [("--JSON", None), ("--json", None), ("--JSON", Some(2))] {
+    for (flag, fail_page) in [("--json", None), ("--json", Some(2))] {
         let runtime = root.0.clone();
         let child = thread::spawn(move || {
             ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
@@ -341,6 +341,28 @@ fn qp_export_outputs_all_full_contexts_and_leaves_stdout_empty_on_failure() {
             assert_eq!(array[2]["current"]["text"][0], "日本語".repeat(150_000));
             assert!(array[0]["current"]["text"].as_array().unwrap().is_empty());
         }
+    }
+    for args in [&["export", "--JSON"][..], &["export", "--JSON", "--json"]] {
+        let output = ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+            .env("XDG_RUNTIME_DIR", &root.0)
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(ErrorCode::InvalidRequest.exit_code())
+        );
+        assert!(output.stdout.is_empty());
+        if args.contains(&"--json") {
+            let error: serde_json::Value = serde_json::from_slice(&output.stderr).unwrap();
+            assert_eq!(error["code"], "INVALID_REQUEST");
+        } else {
+            assert!(String::from_utf8_lossy(&output.stderr).starts_with("qp: InvalidRequest:"));
+        }
+        assert!(
+            receiver.try_recv().is_err(),
+            "Invalid flags must not reach IPC"
+        );
     }
 }
 
