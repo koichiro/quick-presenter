@@ -19,6 +19,57 @@ supported Store OS, stop this approach and evaluate the XPC broker alternative.
 Do not ship a weaker same-user socket as a fallback. This is a design proposal;
 the signed and Apple-re-signed runtime gates remain open.
 
+## Probe feedback and pending status
+
+[PR #440](https://github.com/koichiro/quick-presenter/pull/440) provides an
+independent diagnostic probe, not production Store control. Its recorded
+Developer ID-signed sandbox run on macOS 27.0.1 / Apple Silicon passed eleven
+cases in a dedicated `/Applications` layout with nested helper apps. This
+demonstrates container/socket access and the selected mutual signature checks
+in that configuration. It does not pass the socket adoption gates or establish
+that this design is safe to ship. See #440's
+[`docs/validation/ISSUE431_STORE_IPC_PROBE.md`](https://github.com/koichiro/quick-presenter/blob/codex/431-store-cli-ipc-probe/docs/validation/ISSUE431_STORE_IPC_PROBE.md)
+for the tested revision, binary identity, failures, and limitations.
+
+The findings impose these requirements on any resumed implementation:
+
+- **Peer lifetime and replies:** once the server exited, post-read peer-token
+  lookup failed. The probe uses a private reply ACK to keep the peer alive
+  through revalidation. Protocol v1 has no such ACK; do not copy the diagnostic
+  exchange into it implicitly. Specify a defensible response/watch identity
+  and lifetime contract before integration, or select the XPC alternative.
+  Positive ACK-based exchanges do not resolve PID reuse, exec, descriptor
+  transfer, or check/use races.
+- **Installed layout:** peer code lookup failed with sandbox-denied executable
+  reads under `/private/tmp`, while the nested `/Applications` package passed.
+  A separately sandboxed loose client also failed during `libsecinit`
+  initialization on the tested OS. These observations do not prove all loose
+  CLI layouts unsupported. #433 must qualify the exact product bundle,
+  installation location, provisioning, and terminal/symlink invocation rather
+  than assuming the diagnostic layout establishes production authority.
+- **Deadlines and shutdown:** subsecond socket receive-timeout setup returned
+  `EINVAL`; the probe instead passed using nonblocking IO and `poll` with a
+  total frame deadline. Qualify the chosen IO strategy in the signed product.
+  Native Security calls remain synchronous; worker limits do not establish
+  bounded verification latency or shutdown.
+
+Outstanding gates include macOS 14.4 and Intel, foreign-team peers, adversarial
+PID/exec/FD cases, long container paths, worker/watcher saturation, slow readers,
+resource growth, native-check latency/shutdown, actual GUI/Protocol v1 behavior,
+and Apple-re-signed TestFlight/Store identity and container access. The probe
+does not exercise GUI operations, production watch/response assembly, startup,
+or PDF file-authority handoff. #432 and #433 retain those responsibilities.
+
+As of 2026-10-11 JST, further validation and implementation are **pending at the
+maintainer's request until the current Apple review completes**. Reflecting
+this feedback is documentation work only; it does not resume development or
+select either transport. Local checks above remain useful evidence, but they
+cannot substitute for Apple-re-signed installed-runtime qualification. After
+the review completes and the maintainer resumes this work, establish which
+distribution artifacts are available, run the remaining gates, and update the
+socket-versus-XPC decision. Review completion alone does not pass those gates.
+Keep #431/#422 open and do not advance #432/#433 implementation during this hold.
+
 ## Scope and ownership
 
 The first usable increment controls a running Store GUI with a PDF selected
@@ -152,6 +203,9 @@ a UID-only or PID-only fallback when `LOCAL_PEERTOKEN` is unavailable.
 The server authenticates before reading application payloads or allocating a
 watch subscription, and verifies the accepted identity again before dispatch.
 The CLI authenticates the server before sending any path, command, or query.
+The response/watch identity contract must also cover the peer-lifetime failure
+observed in #440; an exited peer cannot be assumed revalidatable. Protocol v1
+reply handling remains unqualified until that contract is established.
 Untrusted connections close without a protocol response or state disclosure.
 Authentication failures map locally to `IPC_FAILURE` / exit 7 and never trigger
 GUI launch or command replay. Store authentication is isolated from the renderer
@@ -305,7 +359,8 @@ Every runtime record identifies source commit, OS/architecture, SDK, GUI/CLI
 signing identifiers and team/group configuration, package identity, test cases,
 and results. Keep certificate material, profiles, raw tokens, private logs, and
 personal paths outside Git. Store development evidence under `docs/validation/`
-with a redacted summary. No signed runtime result is asserted by this proposal.
+with a redacted summary. Only the limited #440 diagnostic results summarized above are asserted;
+production and Apple-re-signed runtime qualification remain open.
 
 ## Adoption gates and handoff
 
