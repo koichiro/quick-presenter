@@ -46,6 +46,69 @@ for example:
 Voice availability varies by Mac; the default uses the system voice. Other
 platforms can use `notes_narration.py` with their own speech player.
 
+### Use local Kokoro speech instead of say
+
+The optional `speak_kokoro.py` player uses the open-source
+[Kokoro library](https://github.com/hexgrad/kokoro) and the Apache-2.0 licensed
+[Kokoro-82M model](https://huggingface.co/hexgrad/Kokoro-82M). It supports American
+and British English voices for this demo and requires no API key or speech
+service. The original `say` command above remains available.
+
+Use Python 3.12 (tested on Apple Silicon macOS). From the repository root:
+
+```sh
+# Install python@3.12 as well if python3.12 is not already available.
+brew install espeak-ng
+python3.12 -m venv examples/autopresent/.venv-kokoro
+examples/autopresent/.venv-kokoro/bin/python -m pip install \
+  -r examples/autopresent/requirements-kokoro.txt
+examples/autopresent/.venv-kokoro/bin/python \
+  examples/autopresent/speak_kokoro.py --prepare
+```
+
+`--prepare` downloads the model configuration, weights and default `af_heart`
+voice from a fixed revision of the official Hugging Face repository, installs
+the English language data if needed, and checks that they load. Model files and
+rendered audio live in `examples/autopresent/.kokoro/`; that directory and the
+virtual environment are ignored by Git. Use `--cache-dir` to choose another
+model/audio location. eSpeak NG supplies fallback pronunciations; the macOS
+player uses its Homebrew library and data together.
+
+Then use Kokoro as the playback adapter:
+
+```sh
+python3 examples/autopresent/autopresent.py examples/autopresent/demo.pdf \
+  --qp ./target/debug/qp \
+  --generate-command '["python3", "examples/autopresent/notes_narration.py"]' \
+  --play-command '["examples/autopresent/.venv-kokoro/bin/python", "examples/autopresent/speak_kokoro.py"]'
+```
+
+As with `say`, replace `--qp` with the bundled CLI path for a Developer ID/DMG
+installation. The engine renders **all chunks of a slide's narration into one
+complete WAV before starting playback**. It saves that file for reuse, then
+replaces its process with macOS `afplay`, which returns after the entire file
+finishes. A generation or playback failure stops before navigation. Adapter
+timeouts terminate the active synthesis/playback process directly.
+
+The first run pauses on each slide while its narration is synthesized on the
+CPU. Subsequent runs reuse the completed WAVs and start playback promptly.
+
+Normal playback uses only cached model files and installed English data; it
+does not download missing models during a presentation. Run `--prepare` again
+after choosing another voice, for example `--voice bf_emma`. Include the same
+`--voice` in the player argv. `--speed 0.9` slows speech down, and `--speed 1.1`
+speeds it up. Audio is cached by the exact narration, voice, speed and model
+revision; a failed synthesis never publishes a partial WAV. If a cached WAV is
+damaged, the player stops; remove that file before trying again.
+
+Python dependencies are only needed for Kokoro. The ordinary orchestration tests
+remain runnable without them; run the suite with the virtual environment's
+Python as well to exercise WAV generation tests:
+
+```sh
+examples/autopresent/.venv-kokoro/bin/python -m unittest discover -s examples/autopresent -v
+```
+
 To inspect the notes without playing audio (this still advances the real GUI):
 
 ```sh
