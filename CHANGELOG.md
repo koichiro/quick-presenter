@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v1.5.0) — Unreleased
+
+This section records changes since v1.4.0. The release date will be set when
+v1.5.0 is published.
+
+### Distribution
+
+- Add Mac App Store packaging with App Sandbox, security-scoped PDF bookmarks,
+  provisioning and signing validation, and reusable submission and
+  Store-installed validation checklists
+  ([#415](https://github.com/koichiro/quick-presenter/pull/415)).
+- Require macOS 14.4 or later for the Mac App Store channel and authenticate
+  Apple-resigned renderer processes with the native same-team XPC identity API
+  ([#417](https://github.com/koichiro/quick-presenter/pull/417)).
+- Remove unused private CoreGraphics blur imports from Mac App Store binaries by
+  patching the pinned `winit` dependency, and reject private API imports during
+  Store package validation
+  ([#421](https://github.com/koichiro/quick-presenter/pull/421)).
+
+### Fixed
+
+- Describe the **X** shortcut as swapping presenter and audience displays,
+  matching its actual behavior
+  ([#441](https://github.com/koichiro/quick-presenter/pull/441)).
+
+### Development
+
+- Add a Rails-style source statistics tool with implementation and test
+  breakdowns, including support for measuring another Git revision
+  ([#419](https://github.com/koichiro/quick-presenter/pull/419)).
+
 ## [1.4.0](https://github.com/koichiro/quick-presenter/releases/tag/v1.4.0) — 2026-10-08
 
 Release ahead of v1.5.0 to validate signed packages and the next Microsoft Store
