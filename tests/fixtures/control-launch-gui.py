@@ -18,8 +18,13 @@ if mode == "timeout":
 time.sleep(0.3)
 endpoint = root / "quick-presenter/control.sock"
 server = socket.socket(socket.AF_UNIX)
-server.bind(str(endpoint))
-endpoint.chmod(0o600)
+# Startup polling can observe the socket immediately after bind returns.
+# Publish it with private permissions instead of tightening them afterward.
+previous_umask = os.umask(0o177)
+try:
+    server.bind(str(endpoint))
+finally:
+    os.umask(previous_umask)
 server.listen(8)
 state = json.loads(Path(os.environ["QP_CONTRACT_FIXTURE"]).read_text())["responses"][0]["result"]
 
