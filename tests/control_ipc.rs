@@ -254,14 +254,22 @@ fn qp_export_outputs_all_full_contexts_and_leaves_stdout_empty_on_failure() {
         .create(&directory)
         .unwrap();
     let (_server, receiver) = ControlServer::bind(&directory.join("control.sock")).unwrap();
-    for (flag, fail_page) in [("--json", None), ("--json", Some(2))] {
+    for (include_next, fail_page) in [
+        (false, None),
+        (true, None),
+        (false, Some(2)),
+        (true, Some(2)),
+    ] {
         let runtime = root.0.clone();
         let child = thread::spawn(move || {
-            ProcessCommand::new(env!("CARGO_BIN_EXE_qp"))
+            let mut command = ProcessCommand::new(env!("CARGO_BIN_EXE_qp"));
+            command
                 .env("XDG_RUNTIME_DIR", runtime)
-                .args(["export", flag])
-                .output()
-                .unwrap()
+                .args(["export", "--json"]);
+            if include_next {
+                command.arg("--include-next");
+            }
+            command.output().unwrap()
         });
         let mut requests = 0;
         loop {
@@ -332,10 +340,23 @@ fn qp_export_outputs_all_full_contexts_and_leaves_stdout_empty_on_failure() {
                 assert_eq!(item["kind"], "context");
                 assert_eq!(item["current"]["page"], index + 1);
                 assert_eq!(item["presentation"]["page"], 1);
-                if index < 4 {
-                    assert_eq!(item["next"], array[index + 1]["current"]);
+                assert_eq!(
+                    item["current"]["notes"],
+                    format!("Note {}\n日本語", index + 1)
+                );
+                assert_eq!(
+                    item["presentation"],
+                    serde_json::to_value(status()).unwrap()
+                );
+                if include_next {
+                    assert!(item.get("next").is_some());
+                    if index < 4 {
+                        assert_eq!(item["next"], array[index + 1]["current"]);
+                    } else {
+                        assert!(item["next"].is_null());
+                    }
                 } else {
-                    assert!(item["next"].is_null());
+                    assert!(item.get("next").is_none());
                 }
             }
             assert_eq!(array[2]["current"]["text"][0], "日本語".repeat(150_000));

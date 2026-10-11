@@ -269,15 +269,27 @@ the logical presentation, not a compositor-frame acknowledgement.
 
 ### Export all pages without navigation
 
-`qp export --json` (or simply `qp export`) writes one JSON array
-containing a full context object for every page, in ascending page order. Each
-object uses exactly the `qp context --full --json` schema, including
-`protocol_version: 1`, `kind: "context"`, `presentation`, `current`, and `next`.
-`current` contains the exported page's full PDF text and speaker notes; `next`
-contains the following page's same content, or `null` on the final page.
-Image-only pages and pages without notes remain present with `text: []` and
-`notes: ""`. "Full" refers to the text and notes supported by context, not PDF
-images, geometry, arbitrary annotations, or OCR.
+`qp export --json` (or simply `qp export`) writes one JSON array containing
+an entry for every page, in ascending page order. By default, each entry has
+`protocol_version: 1`, `kind: "context"`, `presentation`, and `current`. These
+reuse the existing full-context page and presentation structures, but the CLI
+omits `next` entirely rather than emitting `null`. This avoids duplicating page
+text and speaker notes for consumers that read the whole deck.
+
+`qp export --json --include-next` preserves PR #449's previous export format:
+each entry uses exactly the `qp context --full --json` schema, with `next`
+containing the following page's content, or `null` on the final page. Image-only
+pages and pages without notes remain present with `text: []` and `notes: ""`.
+"Full" refers to the text and notes supported by context, not PDF images,
+geometry, arbitrary annotations, or OCR. The two CLI formats share the
+[export JSON Schema](schemas/qp-export.schema.json).
+
+This is an intentional change to the CLI export default; existing export
+consumers that require `next` must add `--include-next`. Control Protocol v1
+wire requests, responses, required fields, and version remain unchanged.
+`presentation.context` and `qp context --full --json` still always include
+nullable `next`. The new option is handled only by the CLI and is never sent
+as an IPC parameter.
 
 Every object's `presentation` is the initial live status snapshot. In particular,
 `presentation.page` remains the displayed page at the start of export, while
@@ -289,9 +301,9 @@ The CLI first queries status, then calls the additive read-only method
 `presentation.export.page` once per page, and finally checks status again.
 Required parameters are the one-based `page`, initial `session_id`, and
 `document_revision`. This method returns a full `kind: context` response with
-`current` for the requested page and `next: null`; the CLI connects adjacent
-results to build the exported contexts. The live `presentation` field in an IPC
-page response observes the state at reply time. The method uses the existing
+`current` for the requested page and `next: null`; the CLI omits that wire
+field by default and connects adjacent results only with `--include-next`.
+The live `presentation` field in an IPC page response observes the state at reply time. The method uses the existing
 isolated PDFium extraction scheduler, full-text cache, notes model, and chunked
 response transport. Extracting just one page per request keeps the two-entry
 full-text cache sufficient even when exporting far from the displayed page.

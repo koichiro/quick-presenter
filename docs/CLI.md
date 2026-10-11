@@ -17,7 +17,7 @@ Parse JSON fields and error codes rather than matching human output. JSON key
 order/whitespace and human-readable output, help, and diagnostic messages may
 change. Accept additional JSON object fields. Successful one-shot commands
 write one JSON object and a newline to stdout, except `export`, which writes
-a JSON array of full context objects. Errors remain on stderr and watch events
+a JSON array of full page entries. Errors remain on stderr and watch events
 remain independently valid JSON lines. Existing loading states,
 limits, and distribution exclusions still apply.
 
@@ -79,6 +79,7 @@ In another terminal:
 ./target/debug/qp slide --full --json
 ./target/debug/qp context --full --json
 ./target/debug/qp export --json > deck-context.json
+./target/debug/qp export --json --include-next > deck-context-with-next.json
 ./target/debug/qp open "slides with spaces.pdf" --json
 ./target/debug/qp close
 ./target/debug/qp watch --json
@@ -232,6 +233,7 @@ leave stdout empty and report a typed error on stderr.
 
 ```sh
 qp export --json > deck-context.json
+qp export --json --include-next > deck-context-with-next.json
 qp export --json | jq -r '.[].current.text[]'
 qp export --json | jq '.[] | {page: .current.page, notes: .current.notes}'
 ```
@@ -242,13 +244,26 @@ with an open PDF. Output is always JSON, including when invoked as `qp export`
 without a flag. The JSON option is `--json`, as with other commands. Export
 always requests full text, so `--full` is unnecessary and rejected.
 
-Stdout contains one JSON array in ascending page order. Every entry uses the
-same schema as `qp context --full --json`: `protocol_version`, `kind: "context"`,
-`presentation`, `current`, and `next`. `current` contains the indexed page's full
-PDF text and speaker notes. `next` contains the following page's same content,
-or `null` on the final page. Image-only pages remain in the array with `text: []`;
-pages without notes have `notes: ""`. Export includes the source text and notes
-supported by context, not images, geometry, arbitrary annotations, or OCR.
+Stdout contains one JSON array in ascending page order. By default, each entry
+contains `protocol_version`, `kind: "context"`, `presentation`, and `current`.
+`current` uses the existing page structure (`page`, `text`, `truncated`, `notes`)
+and includes the indexed page's full PDF text and speaker notes. The `next`
+field is absent, including on the final page, so an AI agent reads each page's
+content once. Image-only pages have `text: []`; pages without notes have
+`notes: ""`. Export includes the source text and notes supported by context,
+not images, geometry, arbitrary annotations, or OCR.
+
+Add `--include-next` to preserve PR #449's output exactly: each entry also has
+`next` containing the following page's same content, or `null` on the final
+page. The flag is exclusive to `export` and may be used with or without
+`--json`; duplicate flags are rejected. Consumers of the previous export format
+should add this flag. `qp context --full --json` keeps its existing nullable
+`next` field and does not accept `--include-next`.
+
+Both export formats are described by the
+[JSON Schema](schemas/qp-export.schema.json). Its `defaultExport` definition
+requires the absence of `next`; `includeNextExport` requires the legacy field.
+The shared page and presentation definitions retain all source and state fields.
 
 All entries share the initial live `presentation` snapshot. Its `page` is the
 slide displayed when export started; `current.page` is the exported page number.
