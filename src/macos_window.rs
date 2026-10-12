@@ -2,6 +2,37 @@ use objc2_app_kit::{NSApplication, NSView, NSWindow, NSWindowStyleMask, NSWindow
 use objc2_foundation::MainThreadMarker;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use slint::Window;
+use std::{cell::Cell, rc::Rc};
+
+pub fn create_app_windows() -> anyhow::Result<(crate::PresenterWindow, crate::SlideWindow)> {
+    use slint::winit_030::winit::platform::macos::WindowAttributesExtMacOS;
+    use slint::ComponentHandle;
+
+    // Set full-size content before AppKit and the renderer create their views.
+    // Changing the style afterwards can leave their initial viewport sizes out of sync.
+    let creating_slide = Rc::new(Cell::new(false));
+    let role = creating_slide.clone();
+    slint::BackendSelector::new()
+        .with_winit_window_attributes_hook(move |attributes| {
+            if role.get() {
+                attributes
+                    .with_fullsize_content_view(true)
+                    .with_titlebar_transparent(true)
+                    .with_title_hidden(true)
+            } else {
+                attributes
+            }
+        })
+        .select()?;
+    let presenter = crate::PresenterWindow::new()?;
+    // Materialize the lazy adapters while the matching window role is selected.
+    let _ = presenter.window().window_handle();
+    creating_slide.set(true);
+    let slide = crate::SlideWindow::new()?;
+    let _ = slide.window().window_handle();
+    creating_slide.set(false);
+    Ok((presenter, slide))
+}
 
 pub fn apply_slide_chrome(window: &Window, fallback_title: &str) {
     with_window(window, fallback_title, |_, window| {
