@@ -281,8 +281,122 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
     );
 
     check_hidden_slide_recovery(&windows, &state, report)?;
+    #[cfg(target_os = "macos")]
+    check_macos_slide_edges(&windows, report)?;
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) -> Result<()> {
+    use slint::winit_030::WinitWindowAccessor;
+
+    let slide = &windows.slide;
+    let original_image = slide.get_page_image();
+    let original_aspect = slide.get_page_aspect_ratio();
+    let original_size = slide
+        .window()
+        .size()
+        .to_logical(slide.window().scale_factor());
+    // Narrow edge bands disappear if the old 28-point offset crops the slide.
+    let mut buffer = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(160, 90);
+    for (row, pixels) in buffer
+        .make_mut_bytes()
+        .chunks_exact_mut(160 * 4)
+        .enumerate()
+    {
+        let color = if row < 3 {
+            [220, 30, 40, 255]
+        } else if row >= 87 {
+            [20, 210, 60, 255]
+        } else {
+            [30, 80, 220, 255]
+        };
+        for pixel in pixels.chunks_exact_mut(4) {
+            pixel.copy_from_slice(&color);
+        }
+    }
+    slide.set_page_image(slint::Image::from_rgba8(buffer));
+    slide.set_page_aspect_ratio(16.0 / 9.0);
+    let refs = windows.refs();
+    for (name, width, height) in [
+        ("windowed", 960.0, 540.0),
+        ("resized", 1280.0, 720.0),
+        ("after fullscreen", 960.0, 540.0),
+    ] {
+        if name == "after fullscreen" {
+            let action_refs = refs.clone();
+            run_macos_window_action(move || set_slide_fullscreen(&action_refs, true))?;
+            let action_refs = refs.clone();
+            run_macos_window_action(move || set_slide_fullscreen(&action_refs, false))?;
+        }
+        let action_refs = refs.clone();
+        run_macos_window_action(move || {
+            crate::window_controller::set_slide_logical_size(&action_refs, [width, height]);
+            crate::sync_slide_chrome(&action_refs);
+        })?;
+        let snapshot = slide.window().take_snapshot()?;
+        let native_size = slide.window().with_winit_window(|native| {
+            (
+                native.inner_size(),
+                native.outer_size(),
+                native.fullscreen(),
+            )
+        });
+        report.check(
+            format!("macOS {name} renderer covers the native window including the titlebar"),
+            slide.window().with_winit_window(|native| {
+                let size = native.outer_size();
+                size.width == snapshot.width() && size.height == snapshot.height()
+            }) == Some(true),
+            "renderer and complete native window dimensions match",
+            format!(
+                "renderer {}x{}, Slint {:?}, native {native_size:?}",
+                snapshot.width(),
+                snapshot.height(),
+                slide.window().size()
+            ),
+        );
+        for (edge, row, color) in [
+            ("top", 2, [220_u8, 30, 40]),
+            ("bottom", snapshot.height() - 3, [20_u8, 210, 60]),
+        ] {
+            let index = ((row * snapshot.width() + snapshot.width() / 2) * 4) as usize;
+            let pixel = &snapshot.as_bytes()[index..index + 3];
+            report.check(
+                format!("macOS {name} slide {edge} edge is visible without cropping"),
+                pixel
+                    .iter()
+                    .zip(color)
+                    .all(|(actual, expected)| actual.abs_diff(expected) <= 2),
+                "the original slide edge reaches the window edge",
+                format!("unexpected edge pixel {pixel:?}, expected {color:?}"),
+            );
+        }
+    }
+    slide.set_page_image(original_image);
+    slide.set_page_aspect_ratio(original_aspect);
+    run_macos_window_action(move || {
+        crate::window_controller::set_slide_logical_size(
+            &refs,
+            [
+                f64::from(original_size.width),
+                f64::from(original_size.height),
+            ],
+        );
+    })?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn run_macos_window_action(action: impl FnOnce() + 'static) -> Result<()> {
+    // AppKit can emit resize notifications synchronously. Winit drops them if
+    // no event handler is installed, so perform actions in the active loop.
+    slint::Timer::single_shot(Duration::ZERO, action);
+    slint::Timer::single_shot(Duration::from_millis(1000), || {
+        slint::quit_event_loop().expect("macOS window action should accept quit");
+    });
+    slint::run_event_loop_until_quit().context("failed to settle the macOS window action")
 }
 
 fn check_hidden_slide_recovery(

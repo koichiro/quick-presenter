@@ -42,6 +42,10 @@ viewport already includes the title bar; an additional offset clips the slide.
 PDF aspect fitting still letterboxes windows whose dimensions differ from the
 deck's aspect ratio. The macOS GUI smoke check verifies that the slide's initial
 native inner and outer dimensions match before runtime chrome synchronization.
+It also checks rendered top and bottom edge markers against the complete native
+window dimensions in windowed playback, after resizing, and after fullscreen.
+macOS resize actions run inside the active event loop so synchronous AppKit
+notifications reach Winit, and fullscreen animations settle before inspection.
 
 ## Windows Slide Chrome
 
