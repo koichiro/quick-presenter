@@ -243,6 +243,22 @@ Open with the product promise: Quick Presenter does one thing well by playing pr
 
 ---
 
+<!-- _class: japanese lead -->
+
+<div class="eyebrow">研究発表と技術発表のための再生ツール</div>
+
+# PDF スライドを安心して発表する
+
+<div class="subtitle">発表者ビュー、次スライド、ノート、タイマーを確認しながら、聴衆にはきれいなスライドだけを表示します。</div>
+
+<div class="screen"><div class="play"></div><div class="note"></div></div>
+
+<!--
+日本語スライドでも本文とノートが問題なく扱えることを確認するためのページです。
+-->
+
+---
+
 <div class="kicker">The problem</div>
 
 ## PDF decks are stable. PDF viewers are not presenter tools.
@@ -289,22 +305,6 @@ This is a good slide for README presenter screenshots because it has enough stru
 <!--
 This page is the English counterpart to the Japanese README screenshot page.
 It shows the same audience-facing workflow without exposing presenter-only UI.
--->
-
----
-
-<!-- _class: japanese lead -->
-
-<div class="eyebrow">研究発表と技術発表のための再生ツール</div>
-
-# PDF スライドを安心して発表する
-
-<div class="subtitle">発表者ビュー、次スライド、ノート、タイマーを確認しながら、聴衆にはきれいなスライドだけを表示します。</div>
-
-<div class="screen"><div class="play"></div><div class="note"></div></div>
-
-<!--
-日本語スライドでも本文とノートが問題なく扱えることを確認するためのページです。
 -->
 
 ---
