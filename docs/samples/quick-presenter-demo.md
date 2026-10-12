@@ -365,13 +365,13 @@ Quick Presenter v2.0.0 exposes a local CLI for external AI agents. The app does 
 
 <div class="grid two">
   <div class="panel"><strong>qp export --json</strong><p>Read every slide and its speaker notes in one request.</p></div>
-  <div class="panel"><strong>qp goto N --json</strong><p>Navigate directly to a selected slide.</p></div>
+  <div class="panel"><strong>qp next --json</strong><p>Advance to the next slide.</p></div>
   <div class="panel"><strong>qp context --full --json</strong><p>Inspect the current and next slides in detail.</p></div>
   <div class="panel"><strong>qp status --json</strong><p>Check the current page before and after navigation.</p></div>
 </div>
 
 <!--
-The Presentation Control Protocol is a local interface intended for automation. qp export --json returns all pages with the default next-page duplication omitted. qp goto uses one-based page numbers; qp status provides the current page so the agent can remember where to return. qp context --full --json retrieves the current and next slide context. qp next, qp prev, and qp watch are also available. These commands do not implement speech synthesis, AI reasoning, or autonomous presentation logic; those belong to the external agent.
+The Presentation Control Protocol is a local interface intended for automation. qp export --json returns all pages with the default next-page duplication omitted. qp next --json advances to the next slide and returns a structured result; qp status provides the current page so the agent can remember where to return. qp context --full --json retrieves the current and next slide context. qp goto, qp prev, and qp watch are also available. These commands do not implement speech synthesis, AI reasoning, or autonomous presentation logic; those belong to the external agent.
 -->
 
 ---
