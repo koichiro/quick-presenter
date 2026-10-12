@@ -322,6 +322,7 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
     for (name, width, height) in [
         ("windowed", 960.0, 540.0),
         ("resized", 1280.0, 720.0),
+        ("restored tall window", 1704.0, 1063.0),
         ("after fullscreen", 960.0, 540.0),
     ] {
         if name == "after fullscreen" {
@@ -333,6 +334,11 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
         let action_refs = refs.clone();
         run_macos_window_action(move || {
             crate::window_controller::set_slide_logical_size(&action_refs, [width, height]);
+            if name == "restored tall window" {
+                let preserve = action_refs.placement.preserve_size.replace(true);
+                crate::fit_slide_window_to_aspect_ratio(&action_refs, 16.0 / 9.0);
+                action_refs.placement.preserve_size.set(preserve);
+            }
             crate::sync_slide_chrome(&action_refs);
         })?;
         let snapshot = slide.window().take_snapshot()?;

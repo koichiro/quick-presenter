@@ -39,11 +39,16 @@ style after fullscreen transitions.
 Do not restore the old negative 28-point Slint offset or subtract that height
 from the fitted window size. With full-size content enabled at creation, the
 viewport already includes the title bar; an additional offset clips the slide.
-PDF aspect fitting still letterboxes windows whose dimensions differ from the
-deck's aspect ratio. The macOS GUI smoke check verifies that the slide's initial
+On macOS, startup restoration fits the saved window within its previous bounds
+to the deck's aspect ratio, and opening a PDF also refits a preserved window.
+This removes unused bands from older saved sizes while retaining display
+placement and avoiding slide cropping. Manually resizing to another aspect
+ratio or using a differently shaped fullscreen display still letterboxes.
+The macOS GUI smoke check verifies that the slide's initial
 native inner and outer dimensions match before runtime chrome synchronization.
 It also checks rendered top and bottom edge markers against the complete native
-window dimensions in windowed playback, after resizing, and after fullscreen.
+window dimensions in windowed playback, after resizing, after refitting a
+1704-by-1063 restored window, and after fullscreen.
 macOS resize actions run inside the active event loop so synchronous AppKit
 notifications reach Winit, and fullscreen animations settle before inspection.
 
