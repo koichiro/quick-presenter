@@ -94,6 +94,58 @@ then waits for local control before sending the open request. Other commands
 require a running GUI. It has its own `--help`;
 it does not replace the GUI's existing startup arguments.
 
+## Command reference
+
+```sh
+qp <command> [--json]
+qp slide [--full] [--json]
+qp context [--full] [--json]
+qp export [--json] [--include-next]
+qp --version [--json]
+qp --help
+```
+
+| Command | Positional arguments | Behavior |
+| --- | --- | --- |
+| `status` | None | Query presentation state, including loading/error states |
+| `timer elapsed` | Required subcommand `elapsed` | Read whole elapsed seconds without changing the timer |
+| `watch` | None | Stream presentation events until interrupted; NDJSON with `--json` |
+| `next` | None | Advance exactly one page |
+| `prev` | None | Go back exactly one page |
+| `goto <page>` | Required positive integer | Navigate to a one-based page number |
+| `open <file>` | Required PDF path | Open a PDF; start the companion GUI if needed |
+| `close` | None | Close the PDF and leave the GUI running |
+| `blackout on\|off` | Required `on` or `off` | Set an explicit audience black-screen state |
+| `notes` | None | Read current-page speaker notes |
+| `slide` | None | Read current-page text; accepts `--full` |
+| `context` | None | Read current and next page text/notes with state; accepts `--full` |
+| `export` | None | Read all pages' full text/notes without navigation; always JSON; accepts `--include-next` |
+
+`qp next` advances one page without an argument. `qp prev` goes back one page
+without an argument. Neither command accepts a page count or destination;
+use `qp goto 5` to select a destination.
+At the last page, `next` succeeds with `changed: false`; `prev` does the same
+at the first page. Navigation acknowledges the logical page, not completion
+of rendering; query `status` for `render_state`.
+
+```sh
+qp next
+qp next --json
+qp prev
+qp goto 5 --json
+```
+
+`--json` is accepted by every command in the table and by `--version`.
+`--full` is accepted only by `slide` and `context`; `--include-next` only by
+`export`. These options may appear before or after the command and its arguments
+(for example, `qp --json next`). Duplicate options and extra positional
+arguments are rejected. Help must be invoked alone as `qp --help` or `qp -h`;
+command-specific forms such as `qp next --help` are not supported. Version
+queries accept `--version` or `-V`, optionally with `--json`.
+
+Help and version queries need no running GUI. `open` can launch the GUI;
+all other commands require it. `status` and `watch` also work with no open PDF.
+
 ## Starting a presentation from the CLI
 
 ```sh
