@@ -1163,7 +1163,7 @@ mod tests {
             )
         );
         let english_note = notes
-            .note_for_page_number(4)
+            .note_for_page_number(5)
             .expect("English sample flow slide should have speaker notes");
         assert!(english_note.contains("English counterpart"));
         let japanese_note = notes
