@@ -67,6 +67,21 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         .slide
         .show()
         .context("failed to show slide window")?;
+    #[cfg(target_os = "macos")]
+    {
+        use slint::winit_030::WinitWindowAccessor;
+        settle_notes_layout()?;
+        report.check(
+            "macOS slide content includes the titlebar from creation",
+            windows
+                .slide
+                .window()
+                .with_winit_window(|native| native.inner_size() == native.outer_size())
+                == Some(true),
+            "native slide viewport covers the entire window before chrome synchronization",
+            "native slide viewport excludes the titlebar",
+        );
+    }
     let window_refs = windows.refs();
     crate::apply_macos_slide_window_chrome(&window_refs);
     crate::sync_slide_chrome(&window_refs);

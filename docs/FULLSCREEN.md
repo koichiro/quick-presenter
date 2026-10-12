@@ -27,6 +27,22 @@ Platform notes:
   management boundary instead of embedding platform-specific logic in Slint UI
   code.
 
+## macOS Slide Chrome
+
+The slide window keeps native window buttons but hides its title and draws its
+content behind a transparent title bar. The macOS window factory configures
+Winit's full-size content view, transparent title bar, and hidden title before
+the native window and renderer surface are created. The presenter retains its
+standard title bar. Runtime chrome synchronization still restores the slide
+style after fullscreen transitions.
+
+Do not restore the old negative 28-point Slint offset or subtract that height
+from the fitted window size. With full-size content enabled at creation, the
+viewport already includes the title bar; an additional offset clips the slide.
+PDF aspect fitting still letterboxes windows whose dimensions differ from the
+deck's aspect ratio. The macOS GUI smoke check verifies that the slide's initial
+native inner and outer dimensions match before runtime chrome synchronization.
+
 ## Windows Slide Chrome
 
 On Windows, Quick Presenter keeps the audience-facing slide window as a standard

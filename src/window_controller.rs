@@ -649,9 +649,13 @@ fn restore_window_focus(windows: &AppWindowRefs, role: WindowRole) {
 
 impl AppWindows {
     pub fn new() -> Result<Self> {
+        #[cfg(target_os = "macos")]
+        let (presenter, slide) = crate::macos_window::create_app_windows()?;
+        #[cfg(not(target_os = "macos"))]
+        let (presenter, slide) = (PresenterWindow::new()?, SlideWindow::new()?);
         Ok(Self {
-            presenter: PresenterWindow::new()?,
-            slide: SlideWindow::new()?,
+            presenter,
+            slide,
             placement: Rc::new(SlidePlacementController::default()),
         })
     }
