@@ -2,13 +2,30 @@
 
 use quick_presenter::control::{client, protocol::*, server::ControlServer, transport};
 use std::{
-    fs::OpenOptions,
+    fs::{File, OpenOptions},
     io::Write,
+    os::windows::{ffi::OsStrExt, io::FromRawHandle},
     path::PathBuf,
     process::Command as ProcessCommand,
+    ptr,
     sync::atomic::{AtomicU64, Ordering},
     thread,
     time::Duration,
+};
+use windows_sys::Win32::{
+    Foundation::{CloseHandle, GetLastError, ERROR_PIPE_CONNECTED, INVALID_HANDLE_VALUE},
+    Security::{
+        GetTokenInformation, RevertToSelf, SecurityIdentification, TokenImpersonationLevel,
+        TOKEN_QUERY,
+    },
+    Storage::FileSystem::{FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_DUPLEX},
+    System::{
+        Pipes::{
+            ConnectNamedPipe, CreateNamedPipeW, ImpersonateNamedPipeClient, PIPE_READMODE_BYTE,
+            PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
+        },
+        Threading::{GetCurrentThread, OpenThreadToken},
+    },
 };
 
 fn unique_pipe() -> PathBuf {
@@ -119,6 +136,70 @@ fn malformed_requests_do_not_enter_presentation_queue() {
         assert!(receiver.try_recv().is_err());
     }
     drop(server);
+}
+
+#[test]
+fn client_limits_pipe_server_to_identification_impersonation() {
+    let path = unique_pipe();
+    let name: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let handle = unsafe {
+        CreateNamedPipeW(
+            name.as_ptr(),
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+            1,
+            4096,
+            4096,
+            0,
+            ptr::null(),
+        )
+    };
+    assert_ne!(
+        handle,
+        INVALID_HANDLE_VALUE,
+        "{}",
+        std::io::Error::last_os_error()
+    );
+    let server = unsafe { File::from_raw_handle(handle) };
+    let client =
+        thread::spawn(move || client::send_to(&path, &Request::new(1, Command::Status(Empty {}))));
+    let connected = unsafe { ConnectNamedPipe(handle, ptr::null_mut()) };
+    assert!(
+        connected != 0 || unsafe { GetLastError() } == ERROR_PIPE_CONNECTED,
+        "{}",
+        std::io::Error::last_os_error()
+    );
+    assert_ne!(
+        unsafe { ImpersonateNamedPipeClient(handle) },
+        0,
+        "{}",
+        std::io::Error::last_os_error()
+    );
+    let mut token = ptr::null_mut();
+    let opened = unsafe { OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, 1, &mut token) };
+    let mut level = 0;
+    let mut returned = 0;
+    let queried = opened != 0
+        && unsafe {
+            GetTokenInformation(
+                token,
+                TokenImpersonationLevel,
+                (&mut level as *mut i32).cast(),
+                std::mem::size_of_val(&level) as u32,
+                &mut returned,
+            )
+        } != 0;
+    if !token.is_null() {
+        unsafe {
+            CloseHandle(token);
+        }
+    }
+    assert_ne!(unsafe { RevertToSelf() }, 0);
+    assert!(queried, "{}", std::io::Error::last_os_error());
+    assert_eq!(level, SecurityIdentification);
+
+    drop(server);
+    assert!(client.join().unwrap().is_err());
 }
 
 #[test]
