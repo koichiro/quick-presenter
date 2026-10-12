@@ -335,6 +335,71 @@ Mention that the target audience includes speakers who present over online meeti
 
 ---
 
+<div class="kicker">AI Agent Integration · v2.0.0</div>
+
+## Your PDF deck, accessible to AI agents.
+
+<div class="grid">
+  <div class="panel"><strong>Read the whole deck</strong><p>Export slide text and speaker notes as structured JSON, without changing the visible slide.</p></div>
+  <div class="panel"><strong>Understand the context</strong><p>Let an external agent find relevant topics across the presentation.</p></div>
+  <div class="panel"><strong>Control the show</strong><p>Jump to any page, answer questions, and return to the original flow.</p></div>
+</div>
+
+<!--
+Quick Presenter v2.0.0 exposes a local CLI for external AI agents. The app does not contain an AI model or send slides to a hosted model on its own. The external agent decides what to do with exported slide text and notes. The key distinction from scripted autoplay is that a human can ask an unexpected question and the agent can choose a relevant slide at runtime. Ask the audience: What happens if someone interrupts with a question about the architecture?
+-->
+
+---
+
+<div class="kicker">Presentation Control Protocol v1</div>
+
+## A small CLI with structured results.
+
+<div class="grid two">
+  <div class="panel"><strong>qp export --json</strong><p>Read every slide and its speaker notes in one request.</p></div>
+  <div class="panel"><strong>qp goto N --json</strong><p>Navigate directly to a selected slide.</p></div>
+  <div class="panel"><strong>qp context --full --json</strong><p>Inspect the current and next slides in detail.</p></div>
+  <div class="panel"><strong>qp status --json</strong><p>Check the current page before and after navigation.</p></div>
+</div>
+
+<!--
+The Presentation Control Protocol is a local interface intended for automation. qp export --json returns all pages with the default next-page duplication omitted. qp goto uses one-based page numbers; qp status provides the current page so the agent can remember where to return. qp context --full --json retrieves the current and next slide context. qp next, qp prev, and qp watch are also available. These commands do not implement speech synthesis, AI reasoning, or autonomous presentation logic; those belong to the external agent.
+-->
+
+---
+
+<div class="kicker">Interactive AI Presenter</div>
+
+## Ask a question. The presentation adapts.
+
+<div class="timeline">
+  <div class="step"><div class="number">1</div><div><strong>Ask naturally</strong><span>“Why did you choose Rust instead of Electron?”</span></div></div>
+  <div class="step"><div class="number">2</div><div><strong>Find and show context</strong><span>The agent selects a relevant slide and jumps there.</span></div></div>
+  <div class="step"><div class="number">3</div><div><strong>Explain and resume</strong><span>Answer using notes, then return when asked.</span></div></div>
+</div>
+
+<!--
+This slide describes a demo scenario, not an AI feature built into Quick Presenter. Pause here and invite an unscripted question. The external agent should use its preloaded export to identify the best slide, save the current page via qp status, jump with qp goto, and explain the answer using the slide text and speaker notes. Do not hard-code the target page. After answering, wait for the user to say 'continue' before returning to the saved page. Another useful question is: Can you explain the architecture in more detail?
+-->
+
+---
+
+<div class="kicker">Architecture & Design</div>
+
+## Native playback. External intelligence.
+
+<div class="grid">
+  <div class="panel"><strong>Rust</strong><p>Native application logic, responsiveness, and explicit state handling.</p></div>
+  <div class="panel"><strong>Slint + PDFium</strong><p>Native user interface and rendering of prepared PDF decks.</p></div>
+  <div class="panel"><strong>External AI agent</strong><p>Reads exported context, reasons about questions, and sends CLI commands.</p></div>
+</div>
+
+<!--
+Quick Presenter is implemented in Rust, uses Slint for its native UI, and PDFium for PDF rendering. It deliberately plays prepared PDF slide decks instead of embedding a slide editor. The local qp CLI and Presentation Control Protocol expose state and navigation to external automation. Why Rust rather than Electron? The project prioritizes a native, lightweight, cross-platform application and responsive presentation controls. Avoid unsupported quantitative claims about performance or memory use. The AI model is not embedded in the application; external agents may use the JSON export and command interface. This architecture keeps the presentation engine independent of any particular AI provider. If asked about AI privacy, distinguish Quick Presenter's local behavior from the data-handling policy of whichever external agent the user chooses.
+-->
+
+---
+
 <!-- _class: lead -->
 
 <div class="eyebrow">MVP scope</div>
