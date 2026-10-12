@@ -170,6 +170,55 @@ print(json.dumps(result))
             self.assertEqual(spoken, ['Note 1', 'Note 2'])
             self.assertEqual(json.loads(state.read_text())['page'], 2)
 
+    def test_non_json_or_malformed_qp_failure_preserves_stderr(self):
+        for stderr in ['fatal: lost connection', '{"message":"failed"}', '["failed"]',
+                       '{"code":null}', '{"code":[]}', '{"code":""}', '']:
+            with self.subTest(stderr=stderr):
+                result = subprocess.CompletedProcess(['qp'], 1, '', stderr)
+                with patch('autopresent.subprocess.run', return_value=result):
+                    with self.assertRaises(QpError) as caught:
+                        Qp().call('next')
+                self.assertEqual(caught.exception.code, 'IPC_FAILURE')
+                self.assertIn(stderr.strip() or 'qp failed', str(caught.exception))
+
+    def test_structured_qp_failure_keeps_original_code_and_message(self):
+        result = subprocess.CompletedProcess(['qp'], 1, '',
+                                             '{"code":"BUSY","message":"Rendering"}')
+        with patch('autopresent.subprocess.run', return_value=result):
+            with self.assertRaises(QpError) as caught:
+                Qp().call('status')
+        self.assertEqual(caught.exception.code, 'BUSY')
+        self.assertEqual(str(caught.exception), 'BUSY: Rendering')
+
+    def test_malformed_successful_qp_output_stops_without_reconnection(self):
+        for stdout in ['not JSON', '[]', 'null']:
+            with self.subTest(stdout=stdout):
+                result = subprocess.CompletedProcess(['qp'], 0, stdout, '')
+                with patch('autopresent.subprocess.run', return_value=result):
+                    with self.assertRaises(Stop) as caught:
+                        Qp().call('next')
+                self.assertIs(type(caught.exception), Stop)
+                self.assertIn('mutation outcome may be unknown', str(caught.exception))
+
+    def test_malformed_next_failure_is_diagnosed_without_replay(self):
+        deck = Deck()
+        original = deck.call
+        def call(*args):
+            value = original(*args)
+            if args[0] == 'next':
+                result = subprocess.CompletedProcess(['qp'], 1, '', 'connection lost after commit')
+                with patch('autopresent.subprocess.run', return_value=result):
+                    return Qp().call(*args)
+            return value
+        deck.call = call
+        with self.assertRaises(Stop) as caught:
+            self.run_deck(deck)
+        self.assertEqual(deck.state['page'], 2)
+        self.assertEqual(deck.log.count('next'), 1)
+        self.assertEqual(deck.log[-1], 'status')
+        self.assertIn('connection lost after commit', str(caught.exception))
+        self.assertIn('no replay', str(caught.exception))
+
     def test_qp_process_timeout_is_uncertain(self):
         with patch('autopresent.subprocess.run', side_effect=subprocess.TimeoutExpired('qp', 1)):
             with self.assertRaises(QpError) as caught:
