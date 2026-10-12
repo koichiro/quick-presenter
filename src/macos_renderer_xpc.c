@@ -160,7 +160,11 @@ void qp_xpc_service(void) {
 }
 
 int qp_xpc_proxy(void) {
-    if (!__builtin_available(macOS 12.0, *)) return 1;
+    if (__builtin_available(macOS 12.0, *)) {
+        // Continue with the supported XPC peer-identity API below.
+    } else {
+        return 1;
+    }
     if (!load_signing_team()) { fprintf(stderr, "XPC bootstrap failed: signed peer unavailable\n"); return 1; }
     xpc_connection_t connection = xpc_connection_create(service_name, NULL);
     if (!connection) return 1;

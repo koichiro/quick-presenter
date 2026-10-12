@@ -27,6 +27,50 @@ Platform notes:
   management boundary instead of embedding platform-specific logic in Slint UI
   code.
 
+## macOS Slide Chrome
+
+The slide window keeps native window buttons but hides its title and draws its
+content behind a transparent title bar. The macOS window factory configures
+Winit's full-size content view, transparent title bar, and hidden title before
+the native window and renderer surface are created. The presenter retains its
+standard title bar. Runtime chrome synchronization still restores the slide
+style after fullscreen transitions.
+
+Do not restore the old negative 28-point Slint offset or subtract that height
+from the fitted window size. With full-size content enabled at creation, the
+viewport already includes the title bar; an additional offset clips the slide.
+On macOS, startup restoration fits the saved window within its previous bounds
+to the deck's aspect ratio, and opening a PDF also refits a preserved window.
+This removes unused bands from older saved sizes while retaining display
+placement and avoiding slide cropping. Manually resizing to another aspect
+ratio or using a differently shaped fullscreen display still letterboxes.
+The macOS GUI smoke check verifies AppKit full-size content, titlebar
+transparency, hidden title, and matching native inner/outer dimensions before
+runtime chrome synchronization. Native chrome attributes are rechecked after
+each lifecycle operation. A synthetic image
+has distinct colored bands at all four edges; three samples per edge must reach
+the complete native window without cropping or black padding. The checks cover
+windowed playback, resizing, fullscreen return, and the production startup
+restoration planner with tall and short saved dimensions with widescreen and standard page ratios. A
+separate async PDF-open check verifies that a preserved tall window is refitted.
+Fixtures use in-memory placement records and do not modify user settings.
+
+The `macOS audience window regression` CI job runs these checks on every pull
+request and main push, and uploads the report even on failure. Run them locally
+with a working WindowServer session and development PDFium library:
+
+```sh
+cargo build --locked
+target/debug/quick-presenter \
+  --gui-smoke tests/fixtures/marp-speaker-notes.pdf \
+  --gui-smoke-report /tmp/macos-audience-regression.txt
+```
+
+macOS resize actions run inside the active event loop so synchronous AppKit
+notifications reach Winit, and fullscreen animations settle before inspection.
+The tests assert dimensions and pixels rather than platform-dependent screenshot
+baselines. A missing native display is an error, not a skipped success.
+
 ## Windows Slide Chrome
 
 On Windows, Quick Presenter keeps the audience-facing slide window as a standard
