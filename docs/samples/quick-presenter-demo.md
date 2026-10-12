@@ -247,7 +247,7 @@ Open with the product promise: Quick Presenter does one thing well by playing pr
 
 <div class="eyebrow">研究発表と技術発表のための再生ツール</div>
 
-# PDF スライドを安心して発表する
+# PDFで、安心して発表
 
 <div class="subtitle">発表者ビュー、次スライド、ノート、タイマーを確認しながら、聴衆にはきれいなスライドだけを表示します。</div>
 
