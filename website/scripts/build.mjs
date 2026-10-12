@@ -7,6 +7,12 @@ const repoRoot = dirname(root);
 const dist = join(root, "dist");
 
 const files = [
+  ["src/guides/interactive-ai/index.html", "guides/interactive-ai/index.html"],
+  ["src/ja/guides/interactive-ai/index.html", "ja/guides/interactive-ai/index.html"],
+  ["src/assets/interactive-ai-short.mp4", "assets/interactive-ai-short.mp4"],
+  ["src/assets/interactive-ai-poster.jpg", "assets/interactive-ai-poster.jpg"],
+  ["src/assets/interactive-ai-sample.pdf", "assets/interactive-ai-sample.pdf"],
+  ["src/assets/autopilot-sample.pdf", "assets/autopilot-sample.pdf"],
   ["src/assets/agentic-presentation-demo.mp4", "assets/agentic-presentation-demo.mp4"],
   ["src/assets/agentic-presentation-poster.jpg", "assets/agentic-presentation-poster.jpg"],
   ["src/assets/kokoro-demo.mp4", "assets/kokoro-demo.mp4"],

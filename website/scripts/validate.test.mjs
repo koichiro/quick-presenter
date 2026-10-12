@@ -17,6 +17,8 @@ const pages = [
   ["privacy/index.html", "/privacy/"],
   ["ja/index.html", "/ja/"],
   ["ja/privacy/index.html", "/ja/privacy/"],
+  ["guides/interactive-ai/index.html", "/guides/interactive-ai/"],
+  ["ja/guides/interactive-ai/index.html", "/ja/guides/interactive-ai/"],
 ];
 
 function attributes(tag) {
@@ -46,7 +48,7 @@ test("generated pages have canonical and Open Graph URLs on the new domain", asy
       assert.equal(tags.find((tag) => tag.property === "og:url")?.content, `${origin}${pathname}`);
       assert.equal(
         tags.find((tag) => tag.property === "og:image")?.content,
-        `${origin}/assets/presenter-window-en.png`,
+        `${origin}/assets/interactive-ai-poster.jpg`,
       );
     }
     for (const tag of tags.filter((tag) => ["og:url", "og:image"].includes(tag.property))) {
@@ -58,6 +60,10 @@ test("generated pages have canonical and Open Graph URLs on the new domain", asy
 
 test("required stylesheet and image assets are generated and nonempty", async () => {
   for (const file of [
+    "assets/interactive-ai-short.mp4",
+    "assets/interactive-ai-poster.jpg",
+    "assets/interactive-ai-sample.pdf",
+    "assets/autopilot-sample.pdf",
     "assets/agentic-presentation-demo.mp4",
     "assets/agentic-presentation-poster.jpg",
     "assets/kokoro-demo.mp4",
@@ -137,7 +143,7 @@ test("preview serves video metadata and seek ranges", { timeout: 10000 }, async 
     const [line] = await once(lines, "line");
     const base = line.match(/http:\/\/127\.0\.0\.1:\d+\//)?.[0];
     assert.ok(base, line);
-    for (const asset of ["assets/kokoro-demo.mp4", "assets/agentic-presentation-demo.mp4"]) {
+    for (const asset of ["assets/kokoro-demo.mp4", "assets/agentic-presentation-demo.mp4", "assets/interactive-ai-short.mp4"]) {
       const url = `${base}${asset}`;
       const info = await stat(join(dist, asset));
       const head = await fetch(url, { method: "HEAD" });

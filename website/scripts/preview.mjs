@@ -11,6 +11,7 @@ const port = Number(process.env.PORT ?? 4173);
 
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
+  ".pdf": "application/pdf",
   ".js": "text/javascript; charset=utf-8",
   ".mp4": "video/mp4",
   ".jpg": "image/jpeg",

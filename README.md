@@ -38,29 +38,38 @@ document management app.
 Quick Presenter lets AI agents read your slides and speaker notes, control your
 presentation, and build on those capabilities in their own way.
 
+### Interactive AI Presenter
+
+Codex reads text and speaker notes from the whole deck using `qp export --json`.
+Ask a question in natural language; the external agent uses the deck to answer
+and selects a related page when useful. It returns to the saved presentation
+position when you ask. Quick Presenter supplies PDF display, context, state,
+and controls; the external agent interprets the material and makes decisions.
+
+[![Watch Interactive AI Presenter with Codex](website/src/assets/interactive-ai-poster.jpg)](https://quickpresenter.com/#agentic-presentation)
+
+[Watch the short demo (29 seconds, no audio)](https://quickpresenter.com/#agentic-presentation)
+· [Full demo (76 seconds, no audio)](website/src/assets/agentic-presentation-demo.mp4)
+· [Try it yourself](docs/INTERACTIVE_AI_PRESENTER.md)
+
 ### Autopilot
 
-Read prepared speaker notes aloud with TTS and advance automatically after each
-note finishes. This demo uses the optional external [Kokoro](https://github.com/hexgrad/kokoro)
-engine; the external runner handles speech while Quick Presenter provides PDF
-context and presentation controls.
+An external Python runner reads prepared speaker notes aloud with optional
+[Kokoro](https://github.com/hexgrad/kokoro) TTS and advances after playback.
+It waits for rendering, note readiness, and audio completion, stopping on
+failure. Quick Presenter provides PDF context and presentation controls.
 
-[![Watch Autopilot: speaker-note narration and automatic slide advance](website/src/assets/kokoro-demo-poster.jpg)](https://quickpresenter.com/#autopilot)
+[![Watch Autopilot: notes and automatic page advance](website/src/assets/kokoro-demo-poster.jpg)](https://quickpresenter.com/#autopilot)
 
 [Watch Autopilot (72 seconds, English narration)](https://quickpresenter.com/#autopilot)
 · [MP4](website/src/assets/kokoro-demo.mp4)
+· [Runner and Kokoro setup](https://github.com/koichiro/quick-presenter/blob/v2.0.0/examples/autopresent/README.md)
 
-### Agentic Presentation
-
-Type questions to an external AI agent during a presentation. The agent refers
-to the current slide and speaker notes, generates an improvised answer, navigates
-to relevant slides, and interrupts or resumes the flow. The external agent owns
-answer generation and decisions; Quick Presenter exposes PDF context and controls.
-
-[![Watch Agentic Presentation: questions, contextual answers, and presentation control](website/src/assets/agentic-presentation-poster.jpg)](https://quickpresenter.com/#agentic-presentation)
-
-[Watch Agentic Presentation (76 seconds, English screen demo, no audio)](https://quickpresenter.com/#agentic-presentation)
-· [MP4](website/src/assets/agentic-presentation-demo.mp4)
+These are two examples of the interface, not a limit on possible workflows.
+The latest published release is currently v1.4.0; these examples require matching
+v2.0.0 GUI/CLI binaries. Until that release is available, follow the guide's
+v2.0.0 development setup. Store and package availability must be checked before
+installing.
 
 ### Presenter navigation
 
@@ -207,8 +216,9 @@ The active PDF is watched automatically. Saving it in place or replacing it
 atomically refreshes the deck while preserving the current page when possible.
 No hot reload setting is required.
 
-The Cargo package and GUI executable are both named `quick-presenter`. The short
-`qp` command name is reserved for a future automation-oriented CLI entrypoint.
+The Cargo package and GUI executable are both named `quick-presenter`.
+The v2.0.0 branch provides the `qp` automation CLI; see the
+[v2.0.0 CLI reference](https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md).
 
 Keyboard controls are documented in [docs/KEYBOARD.md](docs/KEYBOARD.md).
 Recent-file privacy behavior is documented in
