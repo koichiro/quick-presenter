@@ -15,7 +15,45 @@ pub enum CliRequest {
     Version { json: bool },
     Run(CliOptions),
 }
-pub const HELP: &str = "qp — control a running Quick Presenter\n\nUsage: qp <command> [--json] [--full]\n       qp export [--json] [--include-next]\n       qp --version [--json]\n\nCommands:\n  status             Query presentation state\n  timer elapsed      Read elapsed seconds (no timer mutation)\n  watch              Stream presentation events (NDJSON with --json)\n  next | prev        Move one page\n  goto <page>        Go to a one-based page number\n  open <file>        Open a PDF (starts the GUI if needed; paths relative to CLI)\n  close              Close the PDF, leaving the application running\n  blackout on|off    Set the audience black screen\n  notes              Read current-page speaker notes\n  slide              Read current-page PDF text (--full for unabridged text)\n  context            Read current and next page text and notes (--full supported)\n  export             Export full page JSON (--include-next for legacy context)\n\nControl Protocol v1 is a stable public automation API.\nSupported: Windows, Linux, macOS Developer ID/DMG and development builds.\nMac App Store presentation control is not supported in v2.0.0.\n";
+pub const HELP: &str = "\
+qp — open and control Quick Presenter
+
+Usage: qp <command> [--json]
+       qp slide [--full] [--json]
+       qp context [--full] [--json]
+       qp export [--json] [--include-next]
+       qp --version [--json]
+       qp --help
+
+Commands:
+  status             Query presentation state
+  timer elapsed      Read elapsed seconds (no timer mutation)
+  watch              Stream presentation events (NDJSON with --json)
+  next               Move forward one page (no positional arguments)
+  prev               Move back one page (no positional arguments)
+  goto <page>        Go to a positive, one-based page number
+  open <file>        Open a PDF (starts the GUI if needed; paths relative to CLI)
+  close              Close the PDF, leaving the application running
+  blackout on|off    Set the audience black screen
+  notes              Read current-page speaker notes
+  slide              Read current-page PDF text
+  context            Read current and next page text and notes
+  export             Export all pages' full text and notes (always JSON)
+
+Options:
+  --json             JSON output and errors; watch uses NDJSON
+  --full             Unabridged text; only slide and context accept this option
+  --include-next     Include legacy next-page content; only export accepts this option
+  -V, --version      Print CLI build and protocol versions without contacting the GUI
+  -h, --help         Print this help (use alone)
+
+Command options may appear before or after the command; duplicates are rejected.
+Navigation at either end of the deck succeeds with changed: false.
+Commands require a running GUI, except open, --version, and --help.
+Control Protocol v1 is a stable public automation API.
+Supported: Windows, Linux, macOS Developer ID/DMG and development builds.
+Mac App Store presentation control is not supported in v2.0.0.
+";
 
 pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest, ControlError> {
     let mut args: Vec<_> = args.into_iter().collect();
@@ -1185,6 +1223,9 @@ mod tests {
     #[test]
     fn parses_supported_commands() {
         assert_eq!(parse(&["status", "--json"]), Command::Status(Empty {}));
+        assert_eq!(parse(&["next"]), Command::Next(Empty {}));
+        assert_eq!(parse(&["prev"]), Command::Previous(Empty {}));
+        assert_eq!(parse(&["--json", "next"]), Command::Next(Empty {}));
         assert_eq!(parse(&["goto", "5"]), Command::GoTo(PageParams { page: 5 }));
         assert_eq!(
             parse(&["blackout", "on"]),
@@ -1206,6 +1247,9 @@ mod tests {
         for args in [
             &["goto", "0"][..],
             &["goto", "-1"],
+            &["next", "3"],
+            &["prev", "3"],
+            &["next", "--help"],
             &["blackout", "toggle"],
             &["status", "extra"],
             &["timer", "start"],
