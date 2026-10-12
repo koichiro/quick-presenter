@@ -2325,15 +2325,10 @@ fn handle_speaker_notes_loaded(
             }
             status_text
         };
-    if !commit_speaker_notes_loaded_state(&mut state, session_id, notes, status_text) {
+    if !commit_speaker_notes_loaded_state(&mut state, session_id, notes, status_text, notes_ready) {
         return;
     }
 
-    state.control.notes_state = if notes_ready {
-        quick_presenter::control::protocol::NotesState::Ready
-    } else {
-        quick_presenter::control::protocol::NotesState::Failed
-    };
     if let Some(snapshot) = state.presentation.snapshot() {
         apply_snapshot_to_windows(windows, &state, &snapshot);
     }

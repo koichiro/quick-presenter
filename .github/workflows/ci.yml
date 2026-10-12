@@ -56,6 +56,9 @@ jobs:
       - name: Test CLI packaging
         run: python -m unittest tests/test_cli_packaging.py
 
+      - name: Test external autopresentation error handling
+        run: python -m unittest discover -s examples/autopresent -p test_autopresent.py
+
       - name: Fetch PDFium
         run: python scripts/fetch_pdfium.py --clean
 
