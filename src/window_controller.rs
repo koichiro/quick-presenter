@@ -649,7 +649,10 @@ fn restore_window_focus(windows: &AppWindowRefs, role: WindowRole) {
 
 impl AppWindows {
     pub fn new() -> Result<Self> {
-        let presenter = PresenterWindow::new()?;
+        #[cfg(target_os = "macos")]
+        let (presenter, slide) = crate::macos_window::create_app_windows()?;
+        #[cfg(not(target_os = "macos"))]
+        let (presenter, slide) = (PresenterWindow::new()?, SlideWindow::new()?);
         // Linux fallback fonts already have generous natural line metrics.
         presenter
             .global::<NotesTypography>()
@@ -673,7 +676,7 @@ impl AppWindows {
         });
         Ok(Self {
             presenter,
-            slide: SlideWindow::new()?,
+            slide,
             placement: Rc::new(SlidePlacementController::default()),
         })
     }
@@ -1342,6 +1345,20 @@ fn build_restore_plan(
                 (outer.width - inner.width).max(0.0),
                 (outer.height - inner.height).max(0.0),
             ];
+            // Saved sizes from earlier versions can include unused titlebar space.
+            // Fit the complete macOS content area before planning display bounds.
+            #[cfg(target_os = "macos")]
+            let fitted_saved = saved.cloned().map(|mut record| {
+                let fitted = crate::aspect::fit_slide_surface(
+                    record.logical_inner_size[0] as f32,
+                    record.logical_inner_size[1] as f32,
+                    slide.get_page_aspect_ratio(),
+                );
+                record.logical_inner_size = [f64::from(fitted.width), f64::from(fitted.height)];
+                record
+            });
+            #[cfg(target_os = "macos")]
+            let saved = fitted_saved.as_ref();
             let planned = plan_restore(
                 saved,
                 &displays,

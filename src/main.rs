@@ -1453,7 +1453,7 @@ fn update_recent_file_menu_snapshot(
 }
 
 fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
-    if windows.placement.preserve_size.get() {
+    if windows.placement.preserve_size.get() && !cfg!(target_os = "macos") {
         return;
     }
     if let Some(slide) = windows.slide.upgrade() {
@@ -1463,12 +1463,17 @@ fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) 
 
         let compensation_height =
             slide_titlebar_compensation_height(slide.window().is_fullscreen());
-        let size = fitted_slide_window_size(
-            SLIDE_WINDOW_MAX_WIDTH,
-            SLIDE_WINDOW_MAX_HEIGHT,
-            aspect_ratio,
-            compensation_height,
-        );
+        let bounds = if windows.placement.preserve_size.get() {
+            let current = slide
+                .window()
+                .size()
+                .to_logical(slide.window().scale_factor());
+            [current.width, current.height]
+        } else {
+            [SLIDE_WINDOW_MAX_WIDTH, SLIDE_WINDOW_MAX_HEIGHT]
+        };
+        let size =
+            fitted_slide_window_size(bounds[0], bounds[1], aspect_ratio, compensation_height);
         window_controller::set_slide_logical_size(
             windows,
             [f64::from(size.width), f64::from(size.height)],
