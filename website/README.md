@@ -136,7 +136,15 @@ GitHub Pages; confirm package availability and release copy before publishing.
 The English homepage stays at `/`, with Japanese at `/ja/`. Privacy pages are
 `/privacy/` and `/ja/privacy/`. Each page provides explicit language navigation,
 a self-referencing canonical URL, and reciprocal `hreflang` alternatives.
-There is no browser-language redirect and no JavaScript dependency for switching.
+On the first visit to an English URL, `language.js` uses the browser's first
+preferred language (`navigator.languages`, with `navigator.language` as a
+fallback) to select Japanese or English. A direct Japanese URL is respected.
+The initial choice and subsequent manual language selections are saved in
+`localStorage` and take precedence on later visits. Redirects preserve the page,
+query string, and fragment. This is a browser-side redirect, not HTTP
+`Accept-Language` negotiation by GitHub Pages. Without JavaScript, both static
+pages and their language links remain usable; when storage is blocked, manual
+choices cannot persist across visits.
 Both languages share the same media files; the English narration has an original
 transcript and Japanese translation on the Japanese homepage.
 

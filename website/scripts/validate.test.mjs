@@ -3,6 +3,7 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
@@ -180,5 +181,52 @@ test("localized pages declare their language and offer reciprocal language navig
     const links = [...switchHtml.matchAll(/<a\b[^>]*>/g)].map(([tag]) => attributes(tag));
     assert.deepEqual(links.map((link) => link.href), [englishPath, japanesePath]);
     assert.deepEqual(links.filter((link) => link["aria-current"] === "page").map((link) => link.href), [pathname]);
+  }
+});
+
+
+test("language routing remembers choices and preserves destinations without redirect loops", async () => {
+  const script = await readFile(join(dist, "language.js"), "utf8");
+  function visit({ path = "/", languages = ["ja-JP", "en"], saved = null, blocked = false } = {}) {
+    let redirect;
+    let click;
+    let stored = saved;
+    runInNewContext(script, {
+      document: {
+        documentElement: { lang: path.startsWith("/ja/") ? "ja" : "en" },
+        addEventListener: (name, handler) => { if (name === "click") click = handler; },
+      },
+      navigator: { languages, language: "ja-JP" },
+      location: {
+        pathname: path, search: "?from=demo", hash: "#download",
+        replace: (url) => { redirect = url; },
+      },
+      localStorage: {
+        getItem: () => { if (blocked) throw Error("Blocked"); return stored; },
+        setItem: (key, value) => { if (blocked) throw Error("Blocked"); stored = value; },
+      },
+    });
+    return { redirect, stored: () => stored, click };
+  }
+  assert.equal(visit().redirect, "/ja/?from=demo#download");
+  assert.equal(visit({ path: "/privacy/" }).redirect, "/ja/privacy/?from=demo#download");
+  assert.equal(visit({ languages: ["en-US", "ja"] }).redirect, undefined);
+  assert.equal(visit({ languages: ["fr-FR"] }).stored(), "en");
+  assert.equal(visit({ languages: [] }).stored(), "ja");
+  assert.equal(visit({ path: "/ja/", languages: ["en-US"] }).redirect, undefined);
+  assert.equal(visit({ saved: "en" }).redirect, undefined);
+  assert.equal(visit({ saved: "ja", languages: ["en-US"] }).redirect, "/ja/?from=demo#download");
+  assert.equal(visit({ path: "/ja/privacy/", saved: "en" }).redirect, "/privacy/?from=demo#download");
+  assert.equal(visit({ saved: "invalid" }).stored(), "ja");
+  const manual = visit();
+  manual.click({ target: { closest: () => ({ hreflang: "en" }) } });
+  assert.equal(manual.stored(), "en");
+  assert.equal(visit({ saved: manual.stored() }).redirect, undefined);
+  const blocked = visit({ blocked: true });
+  assert.equal(blocked.redirect, "/ja/?from=demo#download");
+  blocked.click({ target: { closest: () => ({ hreflang: "en" }) } });
+  assert.equal(visit({ path: "/ja/", blocked: true }).redirect, undefined);
+  for (const [file] of pages) {
+    assert.match(await readFile(join(dist, file), "utf8"), /<script src="\/language\.js"><\/script>/);
   }
 });

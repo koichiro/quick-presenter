@@ -14,6 +14,7 @@ const files = [
   ["src/ja/privacy/index.html", "ja/privacy/index.html"],
   ["src/privacy/index.html", "privacy/index.html"],
   ["src/styles.css", "styles.css"],
+  ["src/language.js", "language.js"],
   ["../docs/assets/presenter-window-en-macos.png", "assets/presenter-window-en.png"],
   ["../docs/assets/slide-window-title-en-macos.png", "assets/slide-window-title-en.png"],
   ["../docs/assets/slide-window-en-macos.png", "assets/slide-window-en.png"],
