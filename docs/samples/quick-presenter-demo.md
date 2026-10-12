@@ -107,6 +107,14 @@ style: |
     line-height: 1.34;
   }
 
+  .two .panel {
+    min-height: 0;
+  }
+
+  .two .panel p {
+    margin: 0;
+  }
+
   ul {
     margin: 0;
     padding-left: 32px;
