@@ -83,14 +83,18 @@ pub(crate) mod windows {
             CloseHandle, GetLastError, ERROR_NO_DATA, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED,
             ERROR_PIPE_LISTENING, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
         },
+        Security::{EqualSid, GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER},
         Storage::FileSystem::{
             CreateFileW, ReadFile, WriteFile, FILE_FLAG_FIRST_PIPE_INSTANCE, OPEN_EXISTING,
-            PIPE_ACCESS_DUPLEX,
+            PIPE_ACCESS_DUPLEX, SECURITY_IDENTIFICATION, SECURITY_SQOS_PRESENT,
         },
         System::Pipes::{
-            ConnectNamedPipe, CreateNamedPipeW, PeekNamedPipe, WaitNamedPipeW, PIPE_NOWAIT,
-            PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE,
-            PIPE_UNLIMITED_INSTANCES,
+            ConnectNamedPipe, CreateNamedPipeW, GetNamedPipeServerProcessId, PeekNamedPipe,
+            WaitNamedPipeW, PIPE_NOWAIT, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS,
+            PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES,
+        },
+        System::Threading::{
+            GetCurrentProcess, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
         },
     };
 
@@ -99,6 +103,77 @@ pub(crate) mod windows {
 
     fn wide(path: &Path) -> Vec<u16> {
         path.as_os_str().encode_wide().chain(Some(0)).collect()
+    }
+
+    struct OwnedHandle(HANDLE);
+
+    impl Drop for OwnedHandle {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+
+    fn open_process_token(process: HANDLE) -> io::Result<OwnedHandle> {
+        let mut token = ptr::null_mut();
+        if unsafe { OpenProcessToken(process, TOKEN_QUERY, &mut token) } == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(OwnedHandle(token))
+        }
+    }
+
+    fn token_user(token: HANDLE) -> io::Result<Vec<usize>> {
+        let mut required = 0;
+        unsafe {
+            GetTokenInformation(token, TokenUser, ptr::null_mut(), 0, &mut required);
+        }
+        if required == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let words = (required as usize).div_ceil(std::mem::size_of::<usize>());
+        let mut buffer = vec![0usize; words];
+        if unsafe {
+            GetTokenInformation(
+                token,
+                TokenUser,
+                buffer.as_mut_ptr().cast(),
+                required,
+                &mut required,
+            )
+        } == 0
+        {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(buffer)
+        }
+    }
+
+    fn authenticate_server(pipe: HANDLE) -> io::Result<()> {
+        let mut server_pid = 0;
+        if unsafe { GetNamedPipeServerProcessId(pipe, &mut server_pid) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let server_process =
+            unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, server_pid) };
+        if server_process.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        let server_process = OwnedHandle(server_process);
+        let server_token = open_process_token(server_process.0)?;
+        let current_token = open_process_token(unsafe { GetCurrentProcess() })?;
+        let server_user = token_user(server_token.0)?;
+        let current_user = token_user(current_token.0)?;
+        let server_sid = unsafe { (*(server_user.as_ptr().cast::<TOKEN_USER>())).User.Sid };
+        let current_sid = unsafe { (*(current_user.as_ptr().cast::<TOKEN_USER>())).User.Sid };
+        if unsafe { EqualSid(server_sid, current_sid) } == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "Control pipe server belongs to another user",
+            ));
+        }
+        Ok(())
     }
 
     pub struct Pipe {
@@ -295,11 +370,20 @@ pub(crate) mod windows {
                     0,
                     ptr::null(),
                     OPEN_EXISTING,
-                    0,
+                    SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION,
                     ptr::null_mut(),
                 )
             };
             if handle != INVALID_HANDLE_VALUE {
+                if let Err(error) = authenticate_server(handle) {
+                    unsafe {
+                        CloseHandle(handle);
+                    }
+                    return Err(io::Error::new(
+                        error.kind(),
+                        format!("Failed to authenticate the control pipe server: {error}"),
+                    ));
+                }
                 return Ok(Pipe::new(handle, timeout, timeout));
             }
             let error = unsafe { GetLastError() };

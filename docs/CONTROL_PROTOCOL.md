@@ -90,7 +90,9 @@ On Windows, the endpoint is the byte-mode Named Pipe
 `\\.\pipe\quick-presenter`. The first pipe instance atomically owns the name,
 remote clients are rejected, and the Windows default pipe DACL limits write
 access to the creator account, administrators, and LocalSystem. Other local
-users cannot send control requests. No filesystem cleanup or stale-pipe recovery
+users cannot send control requests. Before sending a request, clients verify that
+the pipe server process belongs to the current user and limit the server to
+identification-level impersonation. No filesystem cleanup or stale-pipe recovery
 is needed because Windows removes an instance when its last handle is closed.
 
 On Unix, there is one controllable application instance per user/runtime
