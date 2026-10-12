@@ -8,19 +8,16 @@ The agent interprets the material, generates answers, and chooses operations.
 
 ## Prepare matching binaries
 
-The latest published release is currently v1.4.0. This workflow requires the
-v2.0.0 GUI and CLI with `export` support. Before a v2.0.0 release is available,
-check out the `v2.0.0` branch and follow its
-[development setup](https://github.com/koichiro/quick-presenter/blob/v2.0.0/README.md),
-including PDFium preparation, then use `cargo build --bins`.
+Install Quick Presenter v2.0.0 for your OS from the
+[download section](https://quickpresenter.com/#download). Use the GUI and CLI
+from the same package; this workflow uses the v2.0.0 `export` interface.
 
 For package paths and PATH setup, see the
 [v2.0.0 CLI installation guide](https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md#installation).
 macOS Developer ID / DMG and nonsandboxed development builds support control;
 Mac App Store does not in v2.0.0. Windows Store uses the `qp.exe` execution alias;
 Debian provides `/usr/bin/qp`. Use matching binaries and share XDG_RUNTIME_DIR
-when set. Commands below assume `qp` is on PATH; development builds can use
-`./target/debug/qp` instead.
+when set. Commands below assume `qp` is on PATH. Use its full package path if needed.
 
 ## Read the sample and check notes
 

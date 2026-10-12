@@ -191,9 +191,10 @@ restoring a saved page.
 
 ## Release and local verification checklist
 
-The latest published release was v1.4.0 when checked on 2026-10-12. The site
-explicitly marks the AI examples as requiring v2.0.0 and links development
-setup until release packages exist. Recheck this notice at publication time.
+This website is intended for publication after the v2.0.0 release. Public copy
+assumes v2.0.0 packages are available and guides users to matching GUI/CLI
+binaries. Confirm the download destinations and Store package version when
+publishing this prepared site.
 GitHub Releases lists macOS DMG and Linux Debian packages; the Windows link
 retains the existing Microsoft Store product ID. Store version availability
 has not been independently verified. No Mac App Store review status or planned

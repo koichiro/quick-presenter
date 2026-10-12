@@ -66,10 +66,8 @@ failure. Quick Presenter provides PDF context and presentation controls.
 · [Runner and Kokoro setup](https://github.com/koichiro/quick-presenter/blob/v2.0.0/examples/autopresent/README.md)
 
 These are two examples of the interface, not a limit on possible workflows.
-The latest published release is currently v1.4.0; these examples require matching
-v2.0.0 GUI/CLI binaries. Until that release is available, follow the guide's
-v2.0.0 development setup. Store and package availability must be checked before
-installing.
+Install Quick Presenter v2.0.0 for your OS and use the GUI and CLI from the same
+package. See the guide for CLI setup and distribution requirements.
 
 ### Presenter navigation
 
