@@ -152,7 +152,7 @@
         <div class="section-heading"><p class="eyebrow">The AI agent interface in 2.0</p><h2 id="automation-title">Read the deck. Control the flow. Observe changes.</h2><p>A stable CLI gives external tools access to deck information and presentation operations. Conversation and narration are two examples of what you can build.</p></div>
         <div class="capability-grid">
           <article><span class="capability-label">Read</span><h3>Give agents the whole deck.</h3><p>Export text and speaker notes from every page as JSON without changing the displayed slide. Use <code>qp context --full --json</code> for current and next page context. Images, diagrams, and OCR are not included.</p><code>qp export --json</code></article>
-          <article><span class="capability-label">Control</span><h3>Choose the next action.</h3><p>Open a PDF, select a page, or advance. Pages are one-based; 3 below is a syntax example, not a fixed destination for any question.</p><code>qp goto 3 --json</code></article>
+          <article><span class="capability-label">Control</span><h3>Choose the next action.</h3><p>Open a PDF, select a page, or advance. Pages are one-based; 3 below is a syntax example, not a fixed destination for any question.</p><code>qp goto 3 --json<br />qp next --json</code></article>
           <article><span class="capability-label">Observe</span><h3>Follow the presentation.</h3><p>Check the current page and rendering or note state. Observe changes as NDJSON; use status to check readiness.</p><code>qp status --json<br />qp watch --json</code></article>
         </div>
         <div class="agent-workflow">

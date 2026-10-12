@@ -154,7 +154,7 @@
         <div class="section-heading"><p class="eyebrow">2.0のAIエージェント向けインターフェース</p><h2 id="automation-title">資料を読み、操作し、変化を捉える。</h2><p>安定したCLIを通じて、外部ツールから資料の情報とプレゼンテーション操作にアクセスできます。対話や読み上げは、活用方法の一例です。</p></div>
         <div class="capability-grid">
           <article><span class="capability-label">Read</span><h3>資料全体を参照</h3><p>資料全体の本文とノートをJSONで取得。表示中のページを変えずに参照できます。現在・次のページは<code>qp context --full --json</code>で取得します。画像・図・OCRの結果は含まれません。</p><code>qp export --json</code></article>
-          <article><span class="capability-label">Control</span><h3>必要なページへ</h3><p>PDFを開く、ページを選ぶ、次へ進む。ページ番号は1から始まります。以下の3は構文例で、質問と移動先が固定されているわけではありません。</p><code>qp goto 3 --json</code></article>
+          <article><span class="capability-label">Control</span><h3>必要なページへ</h3><p>PDFを開く、ページを選ぶ、次へ進む。ページ番号は1から始まります。以下の3は構文例で、質問と移動先が固定されているわけではありません。</p><code>qp goto 3 --json<br />qp next --json</code></article>
           <article><span class="capability-label">Observe</span><h3>状態と変化を把握</h3><p>現在ページ、描画やノートの状態を確認し、変更をNDJSONで監視できます。準備完了の確認にはstatusを使います。</p><code>qp status --json<br />qp watch --json</code></article>
         </div>
         <div class="agent-workflow">
