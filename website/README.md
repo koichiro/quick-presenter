@@ -154,13 +154,60 @@ copy. Keep command names and API options unchanged in translated examples.
 The output tests cover both locales and language navigation.
 
 
-## Agentic Presentation recording
+## Interactive AI Presenter recording and guide
 
-`src/assets/agentic-presentation-demo.mp4` and its poster are supplied from
-`quick-presenter-v2-ai-demo-final.mp4` and the matching final preview. The
-1920×1080 H.264 recording is 75.5 seconds long, approximately 5.3 MB, and has no
-audio track. The `#agentic-presentation` player shows the slide output, presenter
-view, and external AI conversation together, with native controls and no
-preloading or autoplay. Keep this interaction demo separate from the scripted
-Autopilot narration. Both homepage locales and the repository README link to
-the two demos independently.
+The display name is **Interactive AI Presenter**. The legacy
+`#agentic-presentation` anchor and full-recording filenames remain valid.
+The homepage presents this example before Autopilot, and keeps both as examples
+of a broader interface rather than the only supported workflows.
+
+The main player uses `src/assets/interactive-ai-short.mp4` and the matching
+short preview supplied from the recording's `short/output/` folder. It is
+28.7 seconds, 1920×1080 H.264, 2,448,799 bytes, faststart, and has no audio.
+Processing waits were edited; it is not a latency benchmark. Codex is the
+recorded external agent. The question, related-slide selection, answer,
+return request, and restored page remain in their original order.
+
+`src/assets/agentic-presentation-demo.mp4` and its poster retain the supplied
+formal recording. It is 75.5 seconds, 1920×1080 H.264, approximately 5.3 MB,
+and has no audio. It appears in a collapsed full-demo player; neither player
+autoplays or preloads video data. The hero and Open Graph use the actual
+interactive demo preview instead of a generated UI.
+
+The localized guides are `/guides/interactive-ai/` and
+`/ja/guides/interactive-ai/`, with the repository guide at
+`docs/INTERACTIVE_AI_PRESENTER.md`. The copies of
+`docs/samples/quick-presenter-demo.pdf` (12 pages) and
+`examples/autopresent/demo.pdf` (4 pages) in `src/assets/` come from v2.0.0
+commit `926882b01befc0f9937ec93c7a182fc324975010`. Update their provenance when
+replacing the samples. Keep source notes in Marp comments and export with
+`--pdf-notes`; ordinary PDF export does not guarantee extractable notes.
+
+The site documents `qp export --json`, `goto`, `status`, and `watch` from the
+verified v2.0.0 CLI contract. Export provides text and notes, not images or OCR.
+The external agent interprets data and chooses actions; restoration requires
+a user request. The guide prompt checks document and session identity before
+restoring a saved page.
+
+## Release and local verification checklist
+
+The latest published release was v1.4.0 when checked on 2026-10-12. The site
+explicitly marks the AI examples as requiring v2.0.0 and links development
+setup until release packages exist. Recheck this notice at publication time.
+GitHub Releases lists macOS DMG and Linux Debian packages; the Windows link
+retains the existing Microsoft Store product ID. Store version availability
+has not been independently verified. No Mac App Store review status or planned
+price is asserted. Mac App Store CLI control is excluded in the v2.0.0 contract.
+
+The presenter feature uses a static screenshot rather than an unpausable GIF.
+All videos use native controls. Focus outlines, a native details-based compact
+navigation menu, and reduced-motion rules are supplied. The `#scope` alias is
+kept within PDF preparation; `#support` now includes open source and support.
+
+Before publishing, manually inspect English and Japanese at desktop, tablet,
+and phone widths, keyboard focus, menu behavior, media playback, and language
+switching. Automated tests cover six generated pages, reciprocal locale links,
+internal links/assets, and seeking for all three videos. Browser rendering,
+responsive geometry, playback interaction, and screenshots remain unverified
+in this session because the in-app browser's connection-error document is
+blocked by its URL policy. Do not treat source-level checks as visual QA.
