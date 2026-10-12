@@ -914,7 +914,8 @@ mod tests {
             &mut state,
             session,
             crate::notes::SpeakerNotes::empty(),
-            "Ready".into()
+            "Ready".into(),
+            true,
         ));
         apply_session_command(&mut state, PresentationCommand::Close, Instant::now());
         assert_eq!(state.control.document_revision, revision + 1);

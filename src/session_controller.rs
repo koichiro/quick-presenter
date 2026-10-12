@@ -268,12 +268,13 @@ pub fn commit_speaker_notes_loaded_state(
     session_id: RenderSessionId,
     notes: SpeakerNotes,
     status_text: String,
+    notes_ready: bool,
 ) -> bool {
     if !state.render_sessions.accepts(session_id) {
         return false;
     }
 
-    state.control.notes_state = if status_text == "Ready" {
+    state.control.notes_state = if notes_ready {
         quick_presenter::control::protocol::NotesState::Ready
     } else {
         quick_presenter::control::protocol::NotesState::Failed
@@ -853,10 +854,37 @@ mod tests {
             session_id,
             notes,
             "Ready".to_owned(),
+            true,
         ));
 
         assert_eq!(state.notes.note_for_page_number(2), Some("Presenter note"));
         assert_eq!(state.status_text, "Ready");
+    }
+
+    #[test]
+    fn notes_readiness_is_independent_of_display_status() {
+        use quick_presenter::control::protocol::NotesState;
+        for (notes_ready, status_text, expected) in [
+            (true, "Ready", NotesState::Ready),
+            (true, "PDF reloaded.", NotesState::Ready),
+            (false, "Could not read speaker notes", NotesState::Failed),
+            (false, "Ready", NotesState::Failed),
+        ] {
+            let mut state = AppState::default();
+            let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+            commit_render_opened_state(&mut state, session_id, "Deck".into(), 2, "Ready".into());
+            let notes = SpeakerNotes::from_page_notes([(1, "Speaker note".into())]);
+            assert!(commit_speaker_notes_loaded_state(
+                &mut state,
+                session_id,
+                notes,
+                status_text.into(),
+                notes_ready,
+            ));
+            assert_eq!(state.control.notes_state, expected, "status: {status_text}");
+            assert_eq!(state.status_text, status_text);
+            assert_eq!(state.notes.note_for_page_number(1), Some("Speaker note"));
+        }
     }
 
     #[test]
@@ -870,6 +898,7 @@ mod tests {
             stale_session,
             SpeakerNotes::from_page_notes([(1, "Old note".to_owned())]),
             "Ready".to_owned(),
+            true,
         ));
 
         assert!(state.notes.is_empty());

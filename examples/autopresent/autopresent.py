@@ -33,9 +33,15 @@ class Qp:
         try:
             value = json.loads(result.stderr if result.returncode else result.stdout)
         except ValueError as exc:
+            if result.returncode:
+                raise QpError('IPC_FAILURE', result.stderr.strip() or 'qp failed') from exc
             raise Stop('Invalid qp JSON; mutation outcome may be unknown') from exc
         if result.returncode:
+            if not isinstance(value, dict) or not isinstance(value.get('code'), str) or not value['code']:
+                raise QpError('IPC_FAILURE', result.stderr.strip() or 'qp failed')
             raise QpError(value['code'], value.get('message', 'qp failed'))
+        if not isinstance(value, dict):
+            raise Stop('Invalid qp JSON; mutation outcome may be unknown')
         if value.get('protocol_version') != 1:
             raise Stop('Control Protocol v1 is required')
         return value
@@ -105,7 +111,7 @@ class Presenter:
                             observed = self.qp.call('status')
                         except Stop:
                             pass
-                    raise Stop(f'Uncertain next outcome; no replay. Observed state: {observed}') from exc
+                    raise Stop(f'Uncertain next outcome; no replay. {exc}. Observed state: {observed}') from exc
                 raise
             new = moved['state']
             target = expected[:3] + (min(expected[3] + 1, expected[4]), expected[4])
