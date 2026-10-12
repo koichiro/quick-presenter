@@ -72,6 +72,12 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         use slint::winit_030::WinitWindowAccessor;
         settle_notes_layout()?;
         report.check(
+            "macOS native slide titlebar is transparent and hidden from creation",
+            macos_slide_chrome_is_correct(&windows.slide),
+            "AppKit full-size content, transparent titlebar, and hidden title are set",
+            "initial native titlebar attributes are incomplete",
+        );
+        report.check(
             "macOS slide content includes the titlebar from creation",
             windows
                 .slide
@@ -282,7 +288,10 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
 
     check_hidden_slide_recovery(&windows, &state, report)?;
     #[cfg(target_os = "macos")]
-    check_macos_slide_edges(&windows, report)?;
+    {
+        check_macos_slide_edges(&windows, report)?;
+        check_macos_preserved_pdf_open(&windows, &state, options, report)?;
+    }
 
     Ok(())
 }
@@ -290,7 +299,6 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
 #[cfg(target_os = "macos")]
 fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) -> Result<()> {
     use slint::winit_030::WinitWindowAccessor;
-
     let slide = &windows.slide;
     let original_image = slide.get_page_image();
     let original_aspect = slide.get_page_aspect_ratio();
@@ -312,7 +320,14 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
         } else {
             [30, 80, 220, 255]
         };
-        for pixel in pixels.chunks_exact_mut(4) {
+        for (column, pixel) in pixels.chunks_exact_mut(4).enumerate() {
+            let color = if column < 3 {
+                [240, 180, 20, 255]
+            } else if column >= 157 {
+                [180, 20, 210, 255]
+            } else {
+                color
+            };
             pixel.copy_from_slice(&color);
         }
     }
@@ -341,45 +356,77 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
             }
             crate::sync_slide_chrome(&action_refs);
         })?;
-        let snapshot = slide.window().take_snapshot()?;
-        let native_size = slide.window().with_winit_window(|native| {
-            (
-                native.inner_size(),
-                native.outer_size(),
-                native.fullscreen(),
-            )
-        });
-        report.check(
-            format!("macOS {name} renderer covers the native window including the titlebar"),
-            slide.window().with_winit_window(|native| {
-                let size = native.outer_size();
-                size.width == snapshot.width() && size.height == snapshot.height()
-            }) == Some(true),
-            "renderer and complete native window dimensions match",
-            format!(
-                "renderer {}x{}, Slint {:?}, native {native_size:?}",
-                snapshot.width(),
-                snapshot.height(),
-                slide.window().size()
-            ),
-        );
-        for (edge, row, color) in [
-            ("top", 2, [220_u8, 30, 40]),
-            ("bottom", snapshot.height() - 3, [20_u8, 210, 60]),
-        ] {
-            let index = ((row * snapshot.width() + snapshot.width() / 2) * 4) as usize;
-            let pixel = &snapshot.as_bytes()[index..index + 3];
-            report.check(
-                format!("macOS {name} slide {edge} edge is visible without cropping"),
-                pixel
-                    .iter()
-                    .zip(color)
-                    .all(|(actual, expected)| actual.abs_diff(expected) <= 2),
-                "the original slide edge reaches the window edge",
-                format!("unexpected edge pixel {pixel:?}, expected {color:?}"),
-            );
-        }
+        check_macos_native_slide_edges(slide, report, name)?;
     }
+
+    // Exercise the actual startup planner and its asynchronous verification,
+    // rather than directly invoking the PDF fitting helper.
+    let saved = slide
+        .window()
+        .with_winit_window(|native| {
+            let monitor = native
+                .primary_monitor()
+                .or_else(|| native.available_monitors().next())?;
+            let scale = monitor.scale_factor();
+            let origin = monitor.position().to_logical::<f64>(scale);
+            let extent = monitor.size().to_logical::<f64>(scale);
+            Some(crate::window_placement::PlacementRecord {
+                platform: "macos".into(),
+                source_display: crate::window_placement::DisplayRect {
+                    origin: [origin.x.round() as i32, origin.y.round() as i32],
+                    extent: [extent.width.round() as u32, extent.height.round() as u32],
+                    scale,
+                },
+                relative_center: [0.5, 0.5],
+                logical_inner_size: [960.0, 540.0],
+            })
+        })
+        .flatten()
+        .context("macOS regression requires an available display")?;
+    for (name, width, height, aspect) in [
+        ("startup tall widescreen", 1704.0, 1063.0, 16.0 / 9.0),
+        ("startup short widescreen", 1500.0, 700.0, 16.0 / 9.0),
+        ("startup standard", 1000.0, 700.0, 4.0 / 3.0),
+    ] {
+        // Keep fixtures inside the native display on smaller CI desktops, while
+        // preserving the mismatched saved/page ratios that caused the regression.
+        let scale = (f64::from(saved.source_display.extent[0]) * 0.9 / width)
+            .min(f64::from(saved.source_display.extent[1]) * 0.9 / height)
+            .min(1.0);
+        let width = width * scale;
+        let height = height * scale;
+        // Distort the image to the test page ratio; edge colors remain intact.
+        slide.set_page_aspect_ratio(aspect);
+        let mut record = saved.clone();
+        record.logical_inner_size = [width, height];
+        refs.placement.initialize(Some(record));
+        let action_refs = refs.clone();
+        run_macos_window_action(move || {
+            crate::window_controller::start_slide_placement(action_refs);
+        })?;
+        report.check(
+            format!("macOS {name} restoration completes"),
+            !refs.placement.busy.get() && !refs.placement.restoring.get(),
+            "startup restore settled through the production verification path",
+            "startup restore remained in flight",
+        );
+        let logical = slide
+            .window()
+            .size()
+            .to_logical(slide.window().scale_factor());
+        report.check(
+            format!("macOS {name} preserves scale within saved bounds"),
+            logical.width <= width as f32 + 2.0
+                && logical.height <= height as f32 + 2.0
+                && ((logical.width - width as f32).abs() < 2.0
+                    || (logical.height - height as f32).abs() < 2.0),
+            "one saved dimension is retained and the other fits the page",
+            format!("unexpected restored size {logical:?} for {width}x{height}"),
+        );
+        check_macos_native_slide_edges(slide, report, name)?;
+    }
+    refs.placement.cancel();
+    refs.placement.enabled.set(false);
     slide.set_page_image(original_image);
     slide.set_page_aspect_ratio(original_aspect);
     run_macos_window_action(move || {
@@ -391,6 +438,166 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
             ],
         );
     })?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_slide_chrome_is_correct(slide: &crate::SlideWindow) -> bool {
+    use objc2_app_kit::{NSView, NSWindowStyleMask, NSWindowTitleVisibility};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    let handle = slide.window().window_handle();
+    let Ok(handle) = handle.window_handle() else {
+        return false;
+    };
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return false;
+    };
+    // GUI smoke runs on the main thread; the Slint adapter owns this live view.
+    let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
+    view.window().is_some_and(|window| {
+        window
+            .styleMask()
+            .contains(NSWindowStyleMask::FullSizeContentView)
+            && window.titlebarAppearsTransparent()
+            && window.titleVisibility() == NSWindowTitleVisibility::Hidden
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn check_macos_native_slide_edges(
+    slide: &crate::SlideWindow,
+    report: &mut GuiSmokeReport,
+    name: &str,
+) -> Result<()> {
+    use slint::winit_030::WinitWindowAccessor;
+    report.check(
+        format!("macOS {name} native titlebar remains transparent"),
+        macos_slide_chrome_is_correct(slide),
+        "native titlebar allows the slide behind window buttons",
+        "native titlebar attributes were lost",
+    );
+    let snapshot = slide.window().take_snapshot()?;
+    let native_size = slide.window().with_winit_window(|native| {
+        (
+            native.inner_size(),
+            native.outer_size(),
+            native.fullscreen(),
+        )
+    });
+    report.check(
+        format!("macOS {name} renderer covers the native window including the titlebar"),
+        slide.window().with_winit_window(|native| {
+            let size = native.outer_size();
+            size.width == snapshot.width() && size.height == snapshot.height()
+        }) == Some(true),
+        "renderer and complete native window dimensions match",
+        format!(
+            "renderer {}x{}, Slint {:?}, native {native_size:?}",
+            snapshot.width(),
+            snapshot.height(),
+            slide.window().size()
+        ),
+    );
+    anyhow::ensure!(
+        snapshot.width() >= 8 && snapshot.height() >= 8,
+        "slide snapshot is too small"
+    );
+    for fraction in 1..=3 {
+        for (edge, x, y, color) in [
+            ("top", snapshot.width() * fraction / 4, 2, [220_u8, 30, 40]),
+            (
+                "bottom",
+                snapshot.width() * fraction / 4,
+                snapshot.height() - 3,
+                [20, 210, 60],
+            ),
+            ("left", 2, snapshot.height() * fraction / 4, [240, 180, 20]),
+            (
+                "right",
+                snapshot.width() - 3,
+                snapshot.height() * fraction / 4,
+                [180, 20, 210],
+            ),
+        ] {
+            let index = ((y * snapshot.width() + x) * 4) as usize;
+            let pixel = &snapshot.as_bytes()[index..index + 3];
+            report.check(
+                format!("macOS {name} slide {edge} edge at {fraction}/4 fills the window without cropping"),
+                pixel.iter().zip(color).all(|(actual, expected)| actual.abs_diff(expected) <= 2),
+                "the original slide edge reaches the window edge",
+                format!("pixel at ({x}, {y}) is {pixel:?}, expected {color:?}"),
+            );
+        }
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn check_macos_preserved_pdf_open(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    options: &GuiSmokeOptions,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let refs = windows.refs();
+    refs.placement.preserve_size.set(true);
+    let action_refs = refs.clone();
+    run_macos_window_action(move || {
+        crate::window_controller::set_slide_logical_size(&action_refs, [1704.0, 1063.0]);
+    })?;
+    crate::begin_open_pdf(&refs, state, options.pdf_path.clone());
+    // Production render events are drained with Winit's event handler active.
+    // Calling the blocking smoke helper here would drop synchronous resizes.
+    let completed = Rc::new(RefCell::new(None));
+    let outcome = completed.clone();
+    let poll_refs = refs.clone();
+    let poll_state = state.clone();
+    let started = Instant::now();
+    let mut notes_loaded = false;
+    let timer = slint::Timer::default();
+    timer.start(
+        slint::TimerMode::Repeated,
+        ASYNC_OPEN_POLL_INTERVAL,
+        move || {
+            let drain = crate::drain_render_events(&poll_refs, &poll_state);
+            notes_loaded |= drain.speaker_notes_loaded;
+            let result = if drain.open_failed || drain.page_failed || drain.worker_failed {
+                Some(Err(anyhow::anyhow!(
+                    "async PDF open failed during macOS regression"
+                )))
+            } else if async_open_is_ready(&poll_state.borrow(), notes_loaded) {
+                Some(Ok(()))
+            } else if started.elapsed() >= ASYNC_OPEN_TIMEOUT {
+                Some(Err(anyhow::anyhow!("macOS async PDF open timed out")))
+            } else {
+                None
+            };
+            if let Some(result) = result {
+                *outcome.borrow_mut() = Some(result);
+                slint::quit_event_loop().expect("async PDF open should accept quit");
+            }
+        },
+    );
+    slint::run_event_loop_until_quit()?;
+    timer.stop();
+    completed
+        .borrow_mut()
+        .take()
+        .context("async PDF open ended without a result")??;
+    run_macos_window_action(|| {})?;
+    let size = windows
+        .slide
+        .window()
+        .size()
+        .to_logical(windows.slide.window().scale_factor());
+    let aspect = windows.slide.get_page_aspect_ratio();
+    report.check(
+        "macOS opening a PDF refits a preserved window through the async open path",
+        (size.width - size.height * aspect).abs() < 2.0,
+        "preserved window dimensions match the rendered PDF aspect ratio",
+        format!("preserved window {size:?} does not match PDF aspect {aspect}"),
+    );
+    refs.placement.preserve_size.set(false);
     Ok(())
 }
 
