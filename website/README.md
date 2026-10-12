@@ -122,6 +122,7 @@ recording of the four-slide Marp notes demo from #445, with the cursor hidden.
 Its audio uses the exact cached Kokoro WAV files used in that run, synchronized
 with recorded playback launch times because system-audio capture was silent.
 The 1024×720 H.264/AAC MP4 has faststart metadata and is approximately 1.8 MB.
+This recording is presented as **Autopilot** at `#autopilot`.
 The homepage provides native playback controls, a poster, and the full text
 transcript; it does not autoplay or download the video before playback.
 
@@ -151,3 +152,15 @@ transcript and Japanese translation on the Japanese homepage.
 Edit the static pages under `src/` and `src/ja/` together when changing product
 copy. Keep command names and API options unchanged in translated examples.
 The output tests cover both locales and language navigation.
+
+
+## Agentic Presentation recording
+
+`src/assets/agentic-presentation-demo.mp4` and its poster are supplied from
+`quick-presenter-v2-ai-demo-final.mp4` and the matching final preview. The
+1920×1080 H.264 recording is 75.5 seconds long, approximately 5.3 MB, and has no
+audio track. The `#agentic-presentation` player shows the slide output, presenter
+view, and external AI conversation together, with native controls and no
+preloading or autoplay. Keep this interaction demo separate from the scripted
+Autopilot narration. Both homepage locales and the repository README link to
+the two demos independently.

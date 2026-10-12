@@ -7,14 +7,14 @@
     <title>Quick Presenter 2.0 — PDFプレゼンを、CLIとAIエージェントで自由に</title>
     <meta
       name="description"
-      content="PDFスライドを安心して発表。Quick Presenter 2.0は、スライド本文・発表者ノート・再生操作をスクリプトやAIエージェントから扱える、安定したCLIを提供します。"
+      content="Quick Presenterは、AIエージェントがスライドとスピーカーノートを読み、プレゼンテーションを操作し、その能力をさまざまな用途へ発展させるためのインターフェースを提供します。"
     />
     <link rel="canonical" href="https://quickpresenter.com/ja/" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Quick Presenter" />
     <meta
       property="og:description"
-      content="あなたのPDFを、あなたの方法で。安定したCLIでスクリプトやAIエージェントと連携できるPDFプレゼンテーションツール。"
+      content="PDFスライドに、AIエージェントで新しい可能性を。 Quick Presenterは、AIエージェントがスライドとスピーカーノートを読み、プレゼンテーションを操作し、その能力をさまざまな用途へ発展させるためのインターフェースを提供します。"
     />
     <meta
       property="og:image"
@@ -51,10 +51,10 @@
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Quick Presenter · OPEN SOURCE</p>
-          <h1>あなたの資料を。<br />あなたの方法で。</h1>
-          <p class="hero-subtitle">発表に必要な情報がひとつにまとまる、PDF専用のプレゼンター。安定したCLIを通じてスライド本文、ノート、再生操作をスクリプトやAIエージェントにつなげられます。</p>
+          <h1 class="ai-headline">PDFスライドに、AIエージェントで新しい可能性を。</h1>
+          <p class="hero-subtitle">Quick Presenterは、AIエージェントがスライドとスピーカーノートを読み、プレゼンテーションを操作し、その能力をさまざまな用途へ発展させるためのインターフェースを提供します。</p>
           <div class="hero-actions" aria-label="主な操作">
-            <a class="button primary" href="#demo">音声付きデモを見る<span aria-hidden="true">↗</span></a>
+            <a class="button primary" href="#demo">デモを見る<span aria-hidden="true">↗</span></a>
             <a class="button secondary" href="#download">Get Quick Presenter 2.0</a>
           </div>
           <dl class="hero-facts" aria-label="プロジェクト情報">
@@ -83,10 +83,22 @@
         </figure>
       </section>
 
-      <section id="demo" class="demo-section" aria-labelledby="demo-title">
+      <section id="demo" class="demo-section demo-overview" aria-labelledby="demo-title">
         <div class="section-heading">
-          <p class="eyebrow">実際の動作を見る</p>
-          <h2 id="demo-title">ノートが、そのままナレーションに。</h2>
+          <p class="eyebrow">同じPDFから、ふたつの体験へ</p>
+          <h2 id="demo-title">読み上げる。対話する。可能性が広がる。</h2>
+          <p>ノートに沿って進むAutopilotと、質問に応じて展開するAgentic Presentation。スライドとノート、プレゼンテーション操作へのアクセスを、あなたのツールで活用できます。</p>
+        </div>
+        <div class="demo-choices">
+          <a href="#autopilot"><strong>Autopilot</strong><span>ノートを読み上げ、音声が終わったら次のページへ。</span></a>
+          <a href="#agentic-presentation"><strong>Agentic Presentation</strong><span>外部AIエージェントに質問し、資料を参照した回答と中断・再開を体験。</span></a>
+        </div>
+      </section>
+
+      <section id="autopilot" class="demo-section" aria-labelledby="autopilot-title">
+        <div class="section-heading">
+          <p class="eyebrow">ノートの読み上げ・自動ページ送り</p>
+          <h2 id="autopilot-title">Autopilot</h2>
           <p>PDFに埋め込まれた発表者ノートを、ローカルの音声エンジンで読み上げます。音声が終わるたびにページが進む、発表者ビューの動きをご覧ください。</p>
         </div>
         <div class="demo-layout">
@@ -121,6 +133,30 @@
           <p lang="en"><strong lang="ja">スライド 4.</strong> That is the end of the demo. The presentation will stay on this final slide. To make your own version, edit the slide text and the speaker notes in the Markdown source, then export a new PDF with Marp&#x27;s PDF notes option enabled. Thank you for listening.</p>
           <p class="translated-note">デモはこれで終わりです。プレゼンは最後のスライドで止まります。ご自分の資料にするには、Markdownのスライド本文と発表者ノートを編集し、MarpのPDFノート出力オプションを有効にして新しいPDFを書き出してください。ご視聴ありがとうございました。</p>
         </details>
+      </section>
+
+      <section id="agentic-presentation" class="demo-section agentic-demo" aria-labelledby="agentic-title">
+        <div class="section-heading">
+          <p class="eyebrow">質問・即興回答・進行の中断と再開</p>
+          <h2 id="agentic-title">Agentic Presentation</h2>
+          <p>プレゼンテーションの途中で、外部AIエージェントに質問を入力。現在のスライドとスピーカーノートを参照して、その場で回答し、必要なスライドへ移動した後に進行を再開します。</p>
+        </div>
+        <figure class="demo-player">
+          <video controls playsinline preload="none" width="1920" height="1080"
+            poster="/assets/agentic-presentation-poster.jpg" aria-label="外部AIエージェントへの質問と、Quick Presenterのスライドを参照した回答・進行操作のデモ"
+            aria-describedby="agentic-description">
+            <source src="/assets/agentic-presentation-demo.mp4" type="video/mp4" />
+            <p><a href="/assets/agentic-presentation-demo.mp4">AI連携デモをダウンロード</a></p>
+          </video>
+          <figcaption id="agentic-description">約76秒・英語の画面デモ・音声なし。スライド、発表者ビュー、外部AIエージェントの対話を同時に表示します。</figcaption>
+        </figure>
+        <ol class="workflow-steps agentic-steps">
+          <li><span>01</span><div><h3>質問を入力</h3><p>プレゼンテーションの進行を中断し、外部AIエージェントに自由に質問します。</p></div></li>
+          <li><span>02</span><div><h3>資料を参照して回答</h3><p>エージェントがCLIを通じてスライドとスピーカーノートを読み、質問に応じた説明を生成します。</p></div></li>
+          <li><span>03</span><div><h3>進行を再開</h3><p>関連するスライドを示し、対話が終わったらプレゼンテーションの流れに戻ります。</p></div></li>
+        </ol>
+        <p class="demo-note">回答の生成と進行の判断を担うのは外部AIエージェントです。Quick Presenterは、PDFの情報とプレゼンテーション操作へのインターフェースを提供します。</p>
+        <a class="text-link" href="#automation">AIエージェントを支えるCLIを見る<span aria-hidden="true">↗</span></a>
       </section>
 
       <section id="automation" class="automation-section" aria-labelledby="automation-title">

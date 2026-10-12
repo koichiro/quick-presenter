@@ -7,6 +7,8 @@ const repoRoot = dirname(root);
 const dist = join(root, "dist");
 
 const files = [
+  ["src/assets/agentic-presentation-demo.mp4", "assets/agentic-presentation-demo.mp4"],
+  ["src/assets/agentic-presentation-poster.jpg", "assets/agentic-presentation-poster.jpg"],
   ["src/assets/kokoro-demo.mp4", "assets/kokoro-demo.mp4"],
   ["src/assets/kokoro-demo-poster.jpg", "assets/kokoro-demo-poster.jpg"],
   ["src/index.html", "index.html"],

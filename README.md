@@ -31,7 +31,38 @@ document management app.
 - [Slint](https://slint.dev/) provides the cross-platform user interface for
   presenter controls and slide output.
 
-## Demo
+## Demos
+
+**Your PDF slides. Your AI agent. New possibilities.**
+
+Quick Presenter lets AI agents read your slides and speaker notes, control your
+presentation, and build on those capabilities in their own way.
+
+### Autopilot
+
+Read prepared speaker notes aloud with TTS and advance automatically after each
+note finishes. This demo uses the optional external [Kokoro](https://github.com/hexgrad/kokoro)
+engine; the external runner handles speech while Quick Presenter provides PDF
+context and presentation controls.
+
+[![Watch Autopilot: speaker-note narration and automatic slide advance](website/src/assets/kokoro-demo-poster.jpg)](https://quickpresenter.com/#autopilot)
+
+[Watch Autopilot (72 seconds, English narration)](https://quickpresenter.com/#autopilot)
+· [MP4](website/src/assets/kokoro-demo.mp4)
+
+### Agentic Presentation
+
+Type questions to an external AI agent during a presentation. The agent refers
+to the current slide and speaker notes, generates an improvised answer, navigates
+to relevant slides, and interrupts or resumes the flow. The external agent owns
+answer generation and decisions; Quick Presenter exposes PDF context and controls.
+
+[![Watch Agentic Presentation: questions, contextual answers, and presentation control](website/src/assets/agentic-presentation-poster.jpg)](https://quickpresenter.com/#agentic-presentation)
+
+[Watch Agentic Presentation (76 seconds, English screen demo, no audio)](https://quickpresenter.com/#agentic-presentation)
+· [MP4](website/src/assets/agentic-presentation-demo.mp4)
+
+### Presenter navigation
 
 ![Quick Presenter demo showing PDF navigation in the presenter window](docs/assets/quick-presenter-demo.gif)
 

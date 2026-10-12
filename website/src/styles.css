@@ -1135,3 +1135,56 @@ html:lang(ja) {
   :lang(ja) .hero-facts dd { font-size: .74rem; }
   :lang(ja) .hero-subtitle { font-size: 1.06rem; }
 }
+
+/* Keep the longer AI message readable alongside the presenter screenshot. */
+.hero h1.ai-headline {
+  max-width: 18ch;
+  font-size: clamp(2.4rem, 4.2vw, 4.1rem);
+  line-height: 1.12;
+}
+
+.demo-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.demo-choices a {
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-strong);
+}
+
+.demo-choices a:hover {
+  border-color: var(--accent);
+}
+
+.demo-choices strong, .demo-choices span {
+  display: block;
+}
+
+.demo-choices strong {
+  color: var(--accent-strong);
+  font-size: 1.4rem;
+  margin-bottom: 12px;
+}
+
+.demo-choices span {
+  color: var(--muted);
+}
+
+.agentic-demo video {
+  aspect-ratio: 16 / 9;
+}
+
+.agentic-steps {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 32px;
+}
+
+@media (max-width: 760px) {
+  .demo-choices, .agentic-steps {
+    grid-template-columns: 1fr;
+  }
+}

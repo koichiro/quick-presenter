@@ -7,14 +7,14 @@
     <title>Quick Presenter 2.0 — PDF presentations, ready for automation</title>
     <meta
       name="description"
-      content="Present PDF slides with confidence. Quick Presenter 2.0 adds a stable CLI for scripts and AI agents, with slide text, speaker notes, and presentation control."
+      content="Quick Presenter lets AI agents read your slides and speaker notes, control your presentation, and build on those capabilities in their own way."
     />
     <link rel="canonical" href="https://quickpresenter.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Quick Presenter" />
     <meta
       property="og:description"
-      content="Your PDF. Your workflow. Reliable presentation playback with a stable CLI for scripts and AI agents."
+      content="Your PDF slides. Your AI agent. New possibilities. Quick Presenter lets AI agents read your slides and speaker notes, control your presentation, and build on those capabilities in their own way."
     />
     <meta
       property="og:image"
@@ -51,12 +51,8 @@
       <section class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Quick Presenter · OPEN SOURCE</p>
-          <h1>Your slides.<br />Your workflow.</h1>
-          <p class="hero-subtitle">
-            Present your PDF with a focused presenter view. Connect scripts and AI
-            agents through a stable CLI that puts your slides, notes, and playback
-            controls within reach.
-          </p>
+          <h1 class="ai-headline">Your PDF slides. Your AI agent. New possibilities.</h1>
+          <p class="hero-subtitle">Quick Presenter lets AI agents read your slides and speaker notes, control your presentation, and build on those capabilities in their own way.</p>
           <div class="hero-actions" aria-label="Primary actions">
             <a class="button primary" href="#demo">Watch the demo <span aria-hidden="true">↗</span></a>
             <a class="button secondary" href="#download">Get Quick Presenter 2.0</a>
@@ -87,10 +83,22 @@
         </figure>
       </section>
 
-      <section id="demo" class="demo-section" aria-labelledby="demo-title">
+      <section id="demo" class="demo-section demo-overview" aria-labelledby="demo-title">
         <div class="section-heading">
-          <p class="eyebrow">See the workflow</p>
-          <h2 id="demo-title">Let the notes do the talking.</h2>
+          <p class="eyebrow">One PDF. Two ways to present.</p>
+          <h2 id="demo-title">From narration to conversation.</h2>
+          <p>Autopilot follows your prepared notes. Agentic Presentation responds to questions as they come. Put slide context and presentation controls to work with your own tools.</p>
+        </div>
+        <div class="demo-choices">
+          <a href="#autopilot"><strong>Autopilot</strong><span>Read speaker notes aloud and advance after the audio finishes.</span></a>
+          <a href="#agentic-presentation"><strong>Agentic Presentation</strong><span>Ask your external AI agent, get answers grounded in the deck, and interrupt or resume the presentation.</span></a>
+        </div>
+      </section>
+
+      <section id="autopilot" class="demo-section" aria-labelledby="autopilot-title">
+        <div class="section-heading">
+          <p class="eyebrow">Speaker notes · Automatic slide advance</p>
+          <h2 id="autopilot-title">Autopilot</h2>
           <p>A real PDF. Its original speaker notes. A local voice. Watch the
             presenter view follow the narration, one slide at a time.</p>
         </div>
@@ -123,6 +131,30 @@
           <p><strong>Slide 3.</strong> Notice that this slide stays on screen while the narration is playing. Only after the speech finishes does the demo ask Quick Presenter to move forward. If speech playback fails, the demo stops without sending a page change. Keep presentation control exclusive while the demo runs.</p>
           <p><strong>Slide 4.</strong> That is the end of the demo. The presentation will stay on this final slide. To make your own version, edit the slide text and the speaker notes in the Markdown source, then export a new PDF with Marp&#x27;s PDF notes option enabled. Thank you for listening.</p>
         </details>
+      </section>
+
+      <section id="agentic-presentation" class="demo-section agentic-demo" aria-labelledby="agentic-title">
+        <div class="section-heading">
+          <p class="eyebrow">Questions · Improvised answers · Interrupt and resume</p>
+          <h2 id="agentic-title">Agentic Presentation</h2>
+          <p>Type a question to an external AI agent during the presentation. It refers to the current slide and speaker notes, answers on the spot, navigates to relevant slides, and resumes the flow.</p>
+        </div>
+        <figure class="demo-player">
+          <video controls playsinline preload="none" width="1920" height="1080"
+            poster="/assets/agentic-presentation-poster.jpg" aria-label="External AI agent answering questions with Quick Presenter slide context and controlling the presentation"
+            aria-describedby="agentic-description">
+            <source src="/assets/agentic-presentation-demo.mp4" type="video/mp4" />
+            <p><a href="/assets/agentic-presentation-demo.mp4">Download the AI integration demo.</a></p>
+          </video>
+          <figcaption id="agentic-description">76 seconds · English screen demo · No audio. Watch the slides, presenter view, and external AI conversation together.</figcaption>
+        </figure>
+        <ol class="workflow-steps agentic-steps">
+          <li><span>01</span><div><h3>Ask a question</h3><p>Interrupt the presentation and type an open-ended question to your external AI agent.</p></div></li>
+          <li><span>02</span><div><h3>Answer with context</h3><p>The agent reads slide text and speaker notes through the CLI and generates an explanation for your question.</p></div></li>
+          <li><span>03</span><div><h3>Resume the flow</h3><p>Show the relevant slide, then return to the presentation after the conversation.</p></div></li>
+        </ol>
+        <p class="demo-note">The external AI agent generates answers and decides how to proceed. Quick Presenter provides the interface to PDF context and presentation controls.</p>
+        <a class="text-link" href="#automation">Explore the CLI behind your agent <span aria-hidden="true">↗</span></a>
       </section>
 
       <section id="automation" class="automation-section" aria-labelledby="automation-title">
