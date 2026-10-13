@@ -18,7 +18,7 @@ Place `config.toml` in the standard qp configuration directory:
 ```toml
 [audience]
 transport = "remote"
-relay = "https://audience.example.com"
+relay = "https://relay.quickpresenter.com"
 create_token = "REPLACE_WITH_THE_RELAY_CREATION_TOKEN"
 ```
 

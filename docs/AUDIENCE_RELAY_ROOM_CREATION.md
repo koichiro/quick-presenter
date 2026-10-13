@@ -39,7 +39,7 @@ not generate credentials or rewrite this file. The normal user configuration is:
 ```toml
 [audience]
 transport = "remote"
-relay = "https://audience.example.com"
+relay = "https://relay.quickpresenter.com"
 create_token = "REPLACE_WITH_THE_RELAY_CREATION_TOKEN"
 ```
 
