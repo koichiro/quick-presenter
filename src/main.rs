@@ -3,6 +3,7 @@
     windows_subsystem = "windows"
 )]
 
+mod app_config;
 pub mod app_metadata;
 pub mod app_state;
 pub mod aspect;
@@ -12,6 +13,7 @@ pub mod audience_events;
 mod audience_log;
 pub mod audience_overlay;
 pub mod audience_relay;
+mod audience_relay_http;
 mod audience_session;
 mod audience_ui;
 pub mod black_screen;
@@ -237,7 +239,8 @@ fn main() -> Result<()> {
         }
     };
     wire_callbacks(&windows, windows.refs(), state.clone());
-    let audience_ui = audience_ui::AudienceUi::install(&windows, state.clone());
+    let audience_ui =
+        audience_ui::AudienceUi::install(&windows, state.clone(), startup_options.config_path);
     let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
     let _render_event_timer = start_render_event_updates(windows.refs(), state.clone());
     let _pending_open_status_timer =

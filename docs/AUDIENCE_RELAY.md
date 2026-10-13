@@ -1,109 +1,105 @@
-# Experimental Audience Live relay client
+# Audience Live relay client
 
-This v3.0.0 milestone adds only the qp client for Relay Protocol `1-draft.1`.
-qp remains GPL-3.0-only. Relay server code, browser assets, shared wire fixtures and
-their licensing belong to the separate `quick-presenter-relay` project.
+qp implements Relay Protocol `1-draft.1` with TOML relay configuration, HTTP room
+creation/termination and an outbound presenter WebSocket. qp remains GPL-3.0-only.
+Server code, browser assets and shared protocol fixtures belong to the separate
+`quick-presenter-relay` project. See the [configuration and lifecycle contract](AUDIENCE_RELAY_ROOM_CREATION.md).
 
-## Run a local interoperability test
+## Configure once
 
-In `quick-presenter-relay`, start its development fixture. The configuration path
-must be new; use an absolute path accessible to qp.
+Place `config.toml` in the standard qp configuration directory:
+
+| Platform | File |
+| --- | --- |
+| macOS | `~/Library/Application Support/Quick Presenter/config.toml` |
+| Windows | `%APPDATA%\Quick Presenter\config.toml` |
+| Linux | `$XDG_CONFIG_HOME/quick-presenter/config.toml`, otherwise `~/.config/quick-presenter/config.toml` |
+
+```toml
+[audience]
+transport = "remote"
+relay = "https://relay.quickpresenter.com"
+create_token = "REPLACE_WITH_THE_RELAY_CREATION_TOKEN"
+```
+
+The example credential is intentionally invalid. Use the relay operator's creation
+credential, not a per-room presenter token. On Unix, the file must be owned by the
+current user and have no group/world access (`chmod 600`). On Windows, put it in a
+user-private directory with restrictive ACLs. Never commit or log a real credential.
+
+No default file, no `[audience]` section, or `[audience]` with only
+`transport = "local"` selects local hosting. Invalid configurations report an
+Audience error without falling back to local hosting or interrupting PDF playback.
+Restart after configuration edits; no settings GUI or hot reload is provided.
+
+For debugging, replace the default configuration entirely:
+
+```sh
+quick-presenter --config /absolute/path/to/config.toml presentation.pdf
+```
+
+`--config` is a GUI executable option. The separate `qp` presentation-control CLI
+continues to control the running GUI; it does not change its configuration.
+The old `QUICK_PRESENTER_AUDIENCE_RELAY_CONFIG` variable no longer selects the
+GUI transport. GUI smoke tests always inject local settings.
+
+## Session operations
+
+ON creates a room, authenticates the presenter and synchronizes display state,
+then displays its join URL, code and QR. Reactions/comments use the existing
+Audience and overlay engines. Pause immediately clears comment overlays while
+reception/history continue; Resume never replays paused submissions.
+
+OFF clears join metadata/overlays and attempts to end the room with its presenter
+credential. The next ON creates a new room. An interrupted creation or failed
+connection keeps its idempotency key in memory; manual retry recovers/revalidates
+that room. Requests have bounded deadlines and retries. Failed termination can
+leave a room until relay expiration. Application restart does not restore a room.
+Networking runs on the existing dedicated worker and does not block live Slint/PDF
+processing; no network runtime starts while OFF. Exit performs bounded cleanup
+after the GUI event loop returns.
+
+HTTPS/WSS is required remotely. Literal loopback HTTP/WS is supported for tests.
+Configured and returned origins must match. HTTP redirects and environment proxies
+are disabled. HTTP and WebSocket TLS use WebPKI roots; custom trust roots, certificate
+bypasses, proxy settings and automatic infinite reconnect are not supported.
+
+Incoming JSON is limited to 4096 bytes, rejects duplicate/unknown keys and unsupported
+versions, and validates credentials, epochs, comment bounds and receiver-relative
+TTL. The event dedup cache holds up to 256 results for 30 seconds. Log participant
+IDs are local numeric hashes of opaque connection IDs. Neither HTTP management
+nor WebSocket messages contain PDF contents, paths, notes or presentation commands.
+
+## Interoperability test
+
+In the relay project, build and start the real loopback runtime with temporary storage:
 
 ```sh
 npm ci
-npm run fixture -- /absolute/path/to/relay-config.json
+npm run fixture -- --qp-config /absolute/path/to/new-config.toml
 ```
 
-Then, from the qp repository, launch the GUI:
+It writes an owner-only, non-overwriting TOML configuration; startup does not create
+rooms. Launch qp with `--config` and enable Audience Live. Loopback links work on
+the same machine only. Mobile access needs the relay's HTTPS reverse-proxy origin.
+
+For automated interoperability in the qp repository, keep the runtime running:
 
 ```sh
-QUICK_PRESENTER_AUDIENCE_RELAY_CONFIG="/absolute/path/to/relay-config.json" \
-  cargo run --bin quick-presenter -- examples/autopresent/demo.pdf
-```
-
-On PowerShell, set the variable before launching:
-
-```powershell
-$env:QUICK_PRESENTER_AUDIENCE_RELAY_CONFIG = "C:\path\to\relay-config.json"
-cargo run --bin quick-presenter -- path/to/presentation.pdf
-```
-
-1. Click Audience Live ON. The address label reads `Relay · draft protocol`.
-2. Open the join URL on the same computer. The fixture is loopback-only.
-3. Send reactions/comments and check animation, original handles, history and count.
-4. Pause removes current/pending comment overlay; reception/history/logging continue.
-   Resume must not display comments offered under an old epoch.
-5. OFF disconnects qp. ON resumes with the same credentials and a new presenter
-   epoch, without replay. Stopping the external fixture must leave PDF playback usable.
-
-Unset the environment variable and restart qp for Local Network. The GUI smoke
-harness always uses the local transport. For automated interoperability, use a
-fresh external fixture with no other presenter or audience connections:
-
-```sh
-QUICK_PRESENTER_AUDIENCE_RELAY_CONFIG="/absolute/path/to/relay-config.json" \
+QUICK_PRESENTER_TEST_CONFIG=/absolute/path/to/new-config.toml \
   cargo test --bin quick-presenter \
-  audience_relay::fixture_tests::external_relay_round_trip_and_presenter_resume -- --ignored
+  audience_relay::fixture_tests::external_relay_room_creation_round_trip_and_termination -- --ignored
 ```
 
-This opt-in test uses real audience and presenter sockets and checks native overlay
-engine input and presenter resume. It does not start or embed a relay in qp.
-
-## Credentials and transport
-
-The file is the draft create-response object with exactly `room_id`, `code`,
-`join_url`, `presenter_url` and `presenter_token`. It is read and validated on the
-network worker when a session starts. A missing/invalid file fails that session;
-there is no silent fallback to a local server. The GUI never displays the
-presenter token. The audience secret is carried by the join URL fragment.
-
-The external fixture supplies separate audience and presenter credentials. qp
-rejects group/world-readable files on Unix. On Windows place the file in a user-controlled directory with suitable ACLs.
-Keep credential files outside tracked source. Never paste real configuration
-files into PRs or logs. Error messages omit tokens and paths.
-
-HTTPS/WSS is required except for loopback HTTP/WS test endpoints. TLS uses WebPKI
-roots with normal certificate verification; no insecure certificate bypass is
-provided. Join and presenter URLs must share a host/port, with no userinfo or
-query tokens. Creation/end HTTP APIs, credential persistence, automatic reconnect
-and custom trust roots are outside this milestone. OFF disconnects qp; it does
-not permanently end a server-side room. Use ON to explicitly resume the existing
-room, or restart the fixture with fresh credentials for a new test room.
-
-## Integration and limits
-
-`AudienceSession` delegates the existing session handle operations to local or
-remote implementations. The remote worker owns its Tokio runtime and WebSocket;
-Slint/PDF state never enters it. Queue/log admission and overlay engines are shared.
-No network runtime starts until Audience Live ON.
-
-Incoming JSON is bounded to 4096 bytes, rejects duplicate keys at every depth,
-unknown fields and unsupported versions. Identifiers, canonical decimal epochs,
-comment scalar/UTF-8/control limits and receiver-relative offer TTL are checked.
-The dedup cache retains at most 256 event results for 30 seconds; saturation
-returns busy without evicting a live cache entry. Log participant IDs are local
-numeric hashes of opaque relay connection IDs, not persistent audience identities.
-
-qp seeds its display epoch from the presenter welcome, publishes a newer display
-snapshot, and suppresses comment overlay until the relay confirms it. State
-revisions never move backward. The local generation fences queued comments
-immediately on Pause/Resume. Receiver-relative expiry follows the original offer
-through UI and lane waiting; it is not renewed when the UI drains the queue.
-This is not a guarantee of browser-to-screen age under arbitrary network delay.
-
-The worker bounds connect/auth/send waits and heartbeat inactivity. Cancellation
-interrupts pending network work. Disconnect clears queued events and join metadata;
-manual restart authenticates again, without replaying failed submissions.
-
-## Automated validation
+The test creates rooms over HTTP, sends reactions/comments through real sockets,
+checks engine/overlay inputs, ends a room, and creates a different one. Synthetic
+unit peers cover malformed responses, authorization failures, same-key retries,
+response loss and cancellation. Shared schema conformance remains in the relay
+project. Rendered QR scanning and actual GUI animation still need manual validation.
 
 ```sh
 cargo fmt --check
 cargo check --all-targets
 cargo test
+scripts/coverage.sh
 ```
-
-The default qp tests use small synthetic presenter peers to check client parsing,
-admission, deduplication, expiry, display fencing and worker cancellation. Shared
-protocol/schema conformance stays in the relay project. The opt-in external relay
-test above checks actual interoperability; GUI animation still needs manual testing.

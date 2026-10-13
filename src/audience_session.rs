@@ -4,7 +4,7 @@ use crate::{
     audience_events::AcceptedAudienceEvent,
     audience_relay::RemoteAudienceSession,
 };
-use std::{net::Ipv4Addr, path::PathBuf};
+use std::net::Ipv4Addr;
 
 pub enum AudienceSession {
     Local(LocalAudienceSession),
@@ -13,10 +13,10 @@ pub enum AudienceSession {
 impl AudienceSession {
     pub fn start(
         address: Option<Ipv4Addr>,
-        relay_config: Option<PathBuf>,
+        relay_config: Option<crate::audience_relay_http::ManagedRelay>,
     ) -> std::io::Result<Self> {
         if let Some(path) = relay_config {
-            RemoteAudienceSession::start(path).map(Self::Remote)
+            RemoteAudienceSession::start_managed(path).map(Self::Remote)
         } else {
             LocalAudienceSession::start(
                 address.ok_or_else(|| std::io::Error::other("No LAN address available"))?,
