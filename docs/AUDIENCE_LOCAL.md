@@ -197,3 +197,10 @@ continue to pass.
 The Audience Live toggle includes a thumbs-up icon for both actions. The adjacent
 status lamp is green while the session is active and gray while stopped. The
 button text names the action; the lamp indicates the current session state.
+
+### GUI smoke observation budget
+
+GUI smoke instances use a six-second reaction lifetime on all desktop platforms,
+so slow native snapshots and resizes can still observe motion. Ordinary Audience
+Live instances retain the 1.8-second lifetime. Smoke checks still assert movement,
+normalized bounds, expiry, and rejection of stale inputs.
