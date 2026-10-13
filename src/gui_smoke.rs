@@ -359,6 +359,38 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
         check_macos_native_slide_edges(slide, report, name)?;
     }
 
+    let early_quit = slint::Timer::default();
+    early_quit.start(
+        slint::TimerMode::SingleShot,
+        Duration::from_millis(20),
+        || {
+            slint::quit_event_loop().expect("early-quit regression should accept quit");
+        },
+    );
+    let action_count = Rc::new(Cell::new(0));
+    let counted = action_count.clone();
+    let started = Instant::now();
+    run_macos_window_action(move || counted.set(counted.get() + 1))?;
+    early_quit.stop();
+    report.check(
+        "macOS window actions survive unrelated early event-loop exits",
+        action_count.get() == 1 && started.elapsed() >= Duration::from_secs(1),
+        "action ran once and its own settling condition completed",
+        "action was skipped, repeated, or ended before settling",
+    );
+
+    let timed_out =
+        run_macos_window_action_until(|| {}, || false, Duration::from_millis(30)).is_err();
+    let next_action_ran = Rc::new(Cell::new(false));
+    let ran = next_action_ran.clone();
+    run_macos_window_action_until(move || ran.set(true), || true, Duration::from_secs(5))?;
+    report.check(
+        "macOS window action timeout does not leak into the next check",
+        timed_out && next_action_ran.get(),
+        "deadline failed explicitly and the next action completed",
+        "timeout did not fail or a later action was interrupted",
+    );
+
     // Exercise the actual startup planner and its asynchronous verification,
     // rather than directly invoking the PDF fitting helper.
     let saved = slide
@@ -401,9 +433,15 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
         record.logical_inner_size = [width, height];
         refs.placement.initialize(Some(record));
         let action_refs = refs.clone();
-        run_macos_window_action(move || {
-            crate::window_controller::start_slide_placement(action_refs);
-        })?;
+        let verification_refs = refs.clone();
+        run_macos_window_action_until(
+            move || crate::window_controller::start_slide_placement(action_refs),
+            move || {
+                !verification_refs.placement.busy.get()
+                    && !verification_refs.placement.restoring.get()
+            },
+            Duration::from_secs(5),
+        )?;
         report.check(
             format!("macOS {name} restoration completes"),
             !refs.placement.busy.get() && !refs.placement.restoring.get(),
@@ -603,13 +641,77 @@ fn check_macos_preserved_pdf_open(
 
 #[cfg(target_os = "macos")]
 fn run_macos_window_action(action: impl FnOnce() + 'static) -> Result<()> {
-    // AppKit can emit resize notifications synchronously. Winit drops them if
-    // no event handler is installed, so perform actions in the active loop.
-    slint::Timer::single_shot(Duration::ZERO, action);
-    slint::Timer::single_shot(Duration::from_millis(1000), || {
-        slint::quit_event_loop().expect("macOS window action should accept quit");
+    let applied_at = Rc::new(Cell::new(None::<Instant>));
+    let observed = applied_at.clone();
+    run_macos_window_action_until(
+        move || {
+            action();
+            applied_at.set(Some(Instant::now()));
+        },
+        move || {
+            observed
+                .get()
+                .is_some_and(|started| started.elapsed() >= Duration::from_secs(1))
+        },
+        Duration::from_secs(5),
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn run_macos_window_action_until(
+    action: impl FnOnce() + 'static,
+    settled: impl Fn() -> bool + 'static,
+    timeout: Duration,
+) -> Result<()> {
+    // AppKit can emit resize notifications synchronously. Keep Winit's handler
+    // active until this action's own completion, even if another callback quits
+    // a loop turn. Owned timers cannot leak a delayed quit into later checks.
+    let action_ran = Rc::new(Cell::new(false));
+    let ran = action_ran.clone();
+    let action_timer = slint::Timer::default();
+    let mut action = Some(action);
+    action_timer.start(slint::TimerMode::SingleShot, Duration::ZERO, move || {
+        if let Some(action) = action.take() {
+            action();
+            ran.set(true);
+        }
     });
-    slint::run_event_loop_until_quit().context("failed to settle the macOS window action")
+    let completed = Rc::new(RefCell::new(None));
+    let outcome = completed.clone();
+    let started = Instant::now();
+    let poll = slint::Timer::default();
+    poll.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(10),
+        move || {
+            if outcome.borrow().is_some() {
+                return;
+            }
+            let result = if action_ran.get() && settled() {
+                Some(Ok(()))
+            } else if started.elapsed() >= timeout {
+                Some(Err(anyhow::anyhow!(
+                    "macOS window action did not settle before its deadline"
+                )))
+            } else {
+                None
+            };
+            if let Some(result) = result {
+                *outcome.borrow_mut() = Some(result);
+                slint::quit_event_loop().expect("macOS window action should accept quit");
+            }
+        },
+    );
+    while completed.borrow().is_none() {
+        slint::run_event_loop_until_quit().context("failed to settle the macOS window action")?;
+    }
+    action_timer.stop();
+    poll.stop();
+    let result = completed
+        .borrow_mut()
+        .take()
+        .context("macOS window action ended without a result")?;
+    result
 }
 
 fn check_hidden_slide_recovery(
