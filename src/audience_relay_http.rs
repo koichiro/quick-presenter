@@ -278,6 +278,73 @@ mod tests {
             .push_back((status, body));
     }
 
+    #[test]
+    fn cloned_settings_share_attempt_and_clear_cached_room_together() {
+        let settings = ManagedRelay::new(RelayEndpoint {
+            origin: url::Url::parse("http://127.0.0.1:1234").unwrap(),
+            create_token: "A".repeat(43),
+        });
+        let clone = settings.clone();
+        assert!(!settings.has_attempt());
+        let attempt = settings.attempt().unwrap();
+        assert_eq!(attempt.key.len(), 64);
+        assert!(attempt.key.bytes().all(|b| b.is_ascii_hexdigit()));
+        assert_eq!(clone.attempt().unwrap().key, attempt.key);
+        let room: RelayConfig = serde_json::from_value(room(&settings)).unwrap();
+        room.validate().unwrap();
+        settings.attempt.lock().unwrap().as_mut().unwrap().room = Some(room);
+        assert_eq!(clone.attempt().unwrap().room.unwrap().room_id, "test");
+        clone.clear();
+        assert!(!settings.has_attempt());
+        assert_ne!(settings.attempt().unwrap().key, attempt.key);
+        assert!(clone.attempt().unwrap().room.is_none());
+    }
+
+    #[tokio::test]
+    async fn exact_response_size_is_accepted_and_overflow_retains_retry_identity() {
+        let s = server().await;
+        let http = client().unwrap();
+        let body = room(&s.settings).to_string();
+        let exact = format!("{body}{}", " ".repeat(4096 - body.len()));
+        push(&s, 201, format!("{exact} "));
+        let key = s.settings.attempt().unwrap().key;
+        assert_eq!(
+            create(&http, &s.settings).await.err(),
+            Some("Relay creation response is too large.")
+        );
+        assert_eq!(s.settings.attempt().unwrap().key, key);
+        assert!(s.settings.attempt().unwrap().room.is_none());
+        push(&s, 201, exact);
+        assert_eq!(create(&http, &s.settings).await.unwrap().room_id, "test");
+        assert_eq!(s.peer.requests.lock().unwrap().len(), 2);
+        assert_eq!(s.settings.attempt().unwrap().key, key);
+    }
+
+    #[tokio::test]
+    async fn failed_cleanup_clears_cached_room_without_recreating_it() {
+        let s = server().await;
+        let http = client().unwrap();
+        push(&s, 201, room(&s.settings).to_string());
+        create(&http, &s.settings).await.unwrap();
+        s.settings
+            .attempt
+            .lock()
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .room
+            .as_mut()
+            .unwrap()
+            .presenter_token = "C".repeat(43);
+        assert_eq!(
+            cleanup(&http, &s.settings).await.err(),
+            Some("Cannot confirm relay room termination.")
+        );
+        assert!(!s.settings.has_attempt());
+        assert_eq!(s.peer.requests.lock().unwrap().len(), 1);
+        assert_eq!(s.peer.ends.load(Ordering::SeqCst), 0);
+    }
+
     #[tokio::test]
     async fn retries_share_identity_cache_credentials_and_end_with_presenter_token() {
         let s = server().await;
