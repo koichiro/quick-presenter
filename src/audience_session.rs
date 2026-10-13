@@ -10,6 +10,18 @@ pub enum AudienceSession {
     Local(LocalAudienceSession),
     Remote(RemoteAudienceSession),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_session_requires_a_lan_address_without_starting_network_worker() {
+        let error = AudienceSession::start(None, None).err().unwrap();
+        assert_eq!(error.kind(), std::io::ErrorKind::Other);
+        assert_eq!(error.to_string(), "No LAN address available");
+    }
+}
 impl AudienceSession {
     pub fn start(
         address: Option<Ipv4Addr>,

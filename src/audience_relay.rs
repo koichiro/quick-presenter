@@ -705,6 +705,233 @@ mod tests {
     fn config(port: u16) -> Value {
         json!({"room_id":"test","code":"TEST","join_url":format!("http://127.0.0.1:{port}/join/test#k={}", "A".repeat(43)),"presenter_url":format!("ws://127.0.0.1:{port}/presenter"),"presenter_token":"B".repeat(43)})
     }
+
+    #[test]
+    fn strict_json_accepts_exact_byte_limit_and_rejects_escaped_duplicate_keys() {
+        let exact = format!("\"{}\"", "x".repeat(MAX_BYTES - 2));
+        assert_eq!(
+            strict_json(exact.as_bytes()).unwrap(),
+            json!("x".repeat(MAX_BYTES - 2))
+        );
+        assert_eq!(
+            strict_json(format!("{exact} ").as_bytes()).err(),
+            Some("Relay message exceeds size limit.")
+        );
+        for text in [
+            r#"{"name":1,"\u006eame":2}"#,
+            r#"[{"nested":{"x":1,"\u0078":2}}]"#,
+            "{} {}",
+        ] {
+            assert_eq!(
+                strict_json(text.as_bytes()).err(),
+                Some("Malformed relay JSON.")
+            );
+        }
+        assert_eq!(
+            strict_json(br#"[null,true,false,1,-2,1.5,"text",{"x":1}]"#).unwrap(),
+            json!([null, true, false, 1, -2, 1.5, "text", {"x":1}])
+        );
+    }
+
+    #[test]
+    fn relay_snapshot_counters_are_canonical_and_connections_are_safe_integers() {
+        for kind in ["presenter_welcome", "state"] {
+            let counter_key = if kind == "state" {
+                "revision"
+            } else {
+                "presenter_epoch"
+            };
+            let mut base = json!({"protocol":"qp.presenter","version":VERSION,"type":kind,"display_epoch":"0","audience_connections":9_007_199_254_740_991u64});
+            base[counter_key] = json!("99999999999999999999");
+            if kind == "state" {
+                base["available"] = json!(true);
+            }
+            assert!(incoming(&base.to_string()).is_ok());
+            for value in [
+                json!(""),
+                json!("00"),
+                json!("01"),
+                json!("-1"),
+                json!("1.0"),
+                json!("100000000000000000000"),
+                json!(1),
+            ] {
+                for key in [counter_key, "display_epoch"] {
+                    let mut invalid = base.clone();
+                    invalid[key] = value.clone();
+                    assert!(
+                        incoming(&invalid.to_string()).is_err(),
+                        "{kind}: {key}={value}"
+                    );
+                }
+            }
+            base["audience_connections"] = json!(9_007_199_254_740_992u64);
+            assert!(incoming(&base.to_string()).is_err());
+        }
+    }
+
+    #[test]
+    fn relay_offer_identifiers_payloads_and_ttl_have_strict_boundaries() {
+        let base: Value = serde_json::from_str(&offer("e1", "7", "11", true)).unwrap();
+        for key in ["event_id", "connection_id", "request_id"] {
+            let mut valid = base.clone();
+            valid[key] = json!("x".repeat(64));
+            assert!(incoming(&valid.to_string()).is_ok());
+            for id in [String::new(), "x".repeat(65), "é".into(), "a/b".into()] {
+                let mut invalid = base.clone();
+                invalid[key] = json!(id);
+                assert!(incoming(&invalid.to_string()).is_err(), "{key}: {id:?}");
+            }
+        }
+        for ttl in [1, 2000] {
+            let mut valid = base.clone();
+            valid["offer_ttl_ms"] = json!(ttl);
+            assert!(incoming(&valid.to_string()).is_ok());
+        }
+        for payload in [
+            json!({"type":"comment","body":"Hello"}),
+            json!({"type":"comment","body":"Hello","handle":"","extra":true}),
+            json!({"type":"comment","body":"Hello","handle":"x".repeat(33)}),
+            json!({"type":"reaction","kind":"unknown"}),
+        ] {
+            let mut invalid = base.clone();
+            invalid["payload"] = payload;
+            assert!(incoming(&invalid.to_string()).is_err());
+        }
+    }
+
+    #[test]
+    fn busy_receipt_is_cached_after_budget_refills_without_enqueuing_again() {
+        let now = Instant::now();
+        let mut engine = AudienceEngine::new(now);
+        let mut wire = state();
+        let connections = AtomicUsize::new(0);
+        for id in 0..30 {
+            let receipt = wire
+                .process(
+                    &offer(&format!("e{id}"), "7", "11", true),
+                    &mut engine,
+                    &connections,
+                    now,
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(receipt["status"], "accepted");
+        }
+        let text = offer("limited", "7", "11", true);
+        let receipt = wire
+            .process(&text, &mut engine, &connections, now)
+            .unwrap()
+            .unwrap();
+        assert_eq!(receipt["status"], "busy");
+        assert_eq!(receipt["event_id"], "limited");
+        assert_eq!(receipt["presenter_epoch"], "7");
+        let later = now + Duration::from_secs(1);
+        let events: Vec<_> = engine
+            .drain(later)
+            .into_iter()
+            .chain(engine.drain(later))
+            .collect();
+        assert_eq!(events.len(), 30);
+        assert_eq!(
+            wire.process(&text, &mut engine, &connections, later)
+                .unwrap(),
+            Some(receipt)
+        );
+        assert!(engine.drain(later).is_empty());
+        assert_eq!(
+            wire.process(
+                &offer("fresh", "7", "11", true),
+                &mut engine,
+                &connections,
+                later
+            )
+            .unwrap()
+            .unwrap()["status"],
+            "accepted"
+        );
+        assert_eq!(engine.drain(later)[0].sequence, 31);
+    }
+
+    #[test]
+    fn duplicate_cache_expires_at_exact_ttl_and_allows_new_admission() {
+        let now = Instant::now();
+        let mut engine = AudienceEngine::new(now);
+        let mut wire = state();
+        let connections = AtomicUsize::new(0);
+        let text = offer("e1", "7", "11", true);
+        wire.process(&text, &mut engine, &connections, now).unwrap();
+        assert_eq!(engine.drain(now).len(), 1);
+        let before = now + DEDUP_TTL - Duration::from_nanos(1);
+        wire.process(&text, &mut engine, &connections, before)
+            .unwrap();
+        assert!(engine.drain(before).is_empty());
+        let boundary = now + DEDUP_TTL;
+        wire.process(&text, &mut engine, &connections, boundary)
+            .unwrap();
+        let events = engine.drain(boundary);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].sequence, 2);
+        assert_eq!(events[0].received_at, boundary);
+        assert_eq!(wire.cache.len(), 1);
+    }
+
+    #[test]
+    fn unavailable_state_revokes_display_confirmation_and_equal_revision_is_ignored() {
+        let now = Instant::now();
+        let mut engine = AudienceEngine::new(now);
+        let mut wire = state();
+        let connections = AtomicUsize::new(0);
+        wire.process(&snapshot("8", "11", 3), &mut engine, &connections, now)
+            .unwrap();
+        let mut unavailable: Value = serde_json::from_str(&snapshot("9", "11", 1)).unwrap();
+        unavailable["available"] = json!(false);
+        wire.process(&unavailable.to_string(), &mut engine, &connections, now)
+            .unwrap();
+        wire.process(&snapshot("9", "11", 99), &mut engine, &connections, now)
+            .unwrap();
+        assert_eq!(connections.load(Ordering::Relaxed), 1);
+        wire.process(
+            &offer("unavailable", "7", "11", true),
+            &mut engine,
+            &connections,
+            now,
+        )
+        .unwrap();
+        assert_eq!(engine.drain(now)[0].display_generation, u64::MAX);
+        wire.process(&snapshot("10", "11", 2), &mut engine, &connections, now)
+            .unwrap();
+        wire.process(
+            &offer("available", "7", "11", true),
+            &mut engine,
+            &connections,
+            now,
+        )
+        .unwrap();
+        assert_eq!(engine.drain(now)[0].display_generation, 0);
+        assert_eq!(connections.load(Ordering::Relaxed), 2);
+    }
+
+    #[test]
+    fn display_epoch_exhaustion_fails_before_emitting_invalid_wire_counter() {
+        let mut wire = state();
+        wire.epoch = 99_999_999_999_999_999_998;
+        let message = wire
+            .display(Display {
+                generation: 4,
+                paused: true,
+            })
+            .unwrap();
+        assert_eq!(message["display_epoch"], "99999999999999999999");
+        assert_eq!(message["paused"], true);
+        assert_eq!(wire.generation, 4);
+        assert!(!wire.confirmed);
+        assert_eq!(
+            wire.display(Display::default()).err(),
+            Some("Relay display epoch exhausted.")
+        );
+    }
+
     #[test]
     fn strict_wire_rejects_duplicates_invalid_bounds_and_versions() {
         for bad in [

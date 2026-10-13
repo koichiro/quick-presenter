@@ -184,6 +184,48 @@ mod tests {
     use super::*;
 
     #[test]
+    fn config_can_follow_pdf_and_coexist_with_each_smoke_mode() {
+        for mode in ["--pdf", "--smoke-open-pdf", "--gui-smoke"] {
+            for args in [
+                vec![mode, "deck.pdf", "--config", "settings with spaces.toml"],
+                vec!["--config", "settings with spaces.toml", mode, "deck.pdf"],
+            ] {
+                let StartupRequest::Run(options) = parse_startup_options(args).unwrap() else {
+                    panic!("expected startup options");
+                };
+                assert_eq!(
+                    options.config_path,
+                    Some(PathBuf::from("settings with spaces.toml"))
+                );
+                assert_eq!(options.is_smoke(), mode != "--pdf");
+                match mode {
+                    "--pdf" => assert_eq!(options.pdf_path, Some(PathBuf::from("deck.pdf"))),
+                    "--smoke-open-pdf" => {
+                        assert_eq!(options.smoke_open_pdf_path, Some(PathBuf::from("deck.pdf")))
+                    }
+                    _ => assert_eq!(
+                        options.gui_smoke.unwrap().pdf_path,
+                        PathBuf::from("deck.pdf")
+                    ),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn config_alone_does_not_select_a_pdf_or_smoke_mode() {
+        let StartupRequest::Run(options) =
+            parse_startup_options(["--config", "./-settings.toml"]).unwrap()
+        else {
+            panic!("expected startup options");
+        };
+        assert_eq!(options.config_path, Some(PathBuf::from("./-settings.toml")));
+        assert!(options.pdf_path.is_none());
+        assert!(!options.is_smoke());
+        assert!(help_text("quick-presenter").contains("--config <PATH>"));
+    }
+
+    #[test]
     fn config_option_is_explicit_and_independent_of_pdf() {
         let StartupRequest::Run(options) =
             parse_startup_options(["--config", "debug.toml", "deck.pdf"]).unwrap()
