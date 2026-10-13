@@ -137,6 +137,9 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
         matches!(call(path, Command::Context(ContentParams::default()))?, Reply::Context { current, next: None, .. } if current.slide.page == total),
         "end-of-deck context mismatch"
     );
+    // Navigation acknowledges before its render completes. Compare the full
+    // status only after that independent transition has finished.
+    ready(path)?;
     let before_export = call(path, Command::Status(Empty {}))?;
     let mut export_file = client::export(|request| client::send_to(path, request))
         .map_err(|error| anyhow::anyhow!(error.message))?;
@@ -167,9 +170,10 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
             anyhow::ensure!(item["next"].is_null(), "export last page has next context");
         }
     }
+    let after_export = call(path, Command::Status(Empty {}))?;
     anyhow::ensure!(
-        call(path, Command::Status(Empty {}))? == before_export,
-        "export changed presentation state"
+        after_export == before_export,
+        "export changed presentation state: before={before_export:?}, after={after_export:?}"
     );
     call(path, Command::GoTo(PageParams { page: 1 }))?;
     anyhow::ensure!(
