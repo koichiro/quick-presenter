@@ -1010,6 +1010,7 @@ fn check_audience_join_screen(
         "reaction did not reach the presenter",
     );
     check_audience_overlay(windows, state, &url, report)?;
+    check_live_comments(windows, state, &url, report)?;
     report.check(
         "PDF navigation keeps Audience Live running",
         !state.borrow().audience_join_visible
@@ -1235,8 +1236,135 @@ fn check_audience_overlay(
     Ok(())
 }
 
+fn check_live_comments(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    url: &str,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let slide = &windows.slide;
+    let submit = |body: &str| {
+        submit_audience_smoke_event(
+            url,
+            serde_json::json!({"v":1,"type":"comment","request_id":"c","body":body,"handle":"Anonymous"}),
+        )
+    };
+    submit("Hello 世界")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while slide.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    let first = slide.get_audience_comments().row_data(0);
+    report.check(
+        "Live comments measure the actual font and enter the logical canvas",
+        first.as_ref().is_some_and(|f| {
+            f.width > 100.0 && f.x <= 1280.0 && f.y == 48.0 && f.text == "Hello 世界"
+        }) && presenter
+            .get_audience_comment_history()
+            .contains("Hello 世界"),
+        "measured comment and independent history present",
+        format!("comment={first:?}"),
+    );
+    let original_size = slide.window().size();
+    slide
+        .window()
+        .set_size(slint::LogicalSize::new(800.0, 600.0));
+    crate::audience_ui::set_join_visible(&windows.refs(), state, true);
+    settle_presenter_notes_layout(presenter)?;
+    let next = slide.get_audience_comments().row_data(0);
+    report.check(
+        "Resize and page 0 preserve comment lane, width, and elapsed motion",
+        first
+            .as_ref()
+            .zip(next.as_ref())
+            .is_some_and(|(a, b)| b.x < a.x && a.y == b.y && a.width == b.width),
+        "logical comment state preserved",
+        format!("before={first:?}, after={next:?}"),
+    );
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    slide.window().set_size(original_size);
+    presenter.invoke_audience_toggle_comments();
+    report.check(
+        "Pause immediately clears comments",
+        presenter.get_audience_comments_paused() && slide.get_audience_comments().row_count() == 0,
+        "comments cleared",
+        "comments survived pause",
+    );
+    submit("Paused comment")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !presenter
+        .get_audience_comment_history()
+        .contains("Paused comment")
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    report.check(
+        "Paused comments reach history without overlay",
+        presenter
+            .get_audience_comment_history()
+            .contains("Paused comment")
+            && slide.get_audience_comments().row_count() == 0,
+        "history updated only",
+        "pause lost history or displayed comment",
+    );
+    // Resume before the UI poll: this queued event must retain its old generation.
+    submit("Old generation")?;
+    presenter.invoke_audience_toggle_comments();
+    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter)?;
+    report.check(
+        "Resume rejects old-generation UI deliveries",
+        !presenter.get_audience_comments_paused() && slide.get_audience_comments().row_count() == 0,
+        "no replay",
+        "old comment appeared after resume",
+    );
+    submit("After resume")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while slide.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter)?;
+    }
+    report.check(
+        "New comments display after Resume",
+        slide.get_audience_comments().row_count() == 1
+            && slide
+                .get_audience_comments()
+                .row_data(0)
+                .is_some_and(|f| f.text == "After resume"),
+        "new comment displayed",
+        "new comment missing or old comment replayed",
+    );
+    let history = presenter.get_audience_comment_history();
+    presenter.set_audience_comment_history(
+        (1..=20)
+            .map(|n| format!("{n}: A long comment that wraps 日本語のコメント").repeat(4))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .into(),
+    );
+    settle_presenter_notes_layout(presenter)?;
+    report.check(
+        "Twenty comment history entries remain scrollable below notes",
+        presenter.get_audience_history_height() > presenter.get_audience_history_visible_height()
+            && presenter.get_audience_history_visible_height() > 0.0,
+        "bounded history overflows a usable scroll viewport",
+        "history height or viewport missing",
+    );
+    presenter.set_audience_comment_history(history);
+    presenter.invoke_audience_toggle_comments();
+    presenter.invoke_audience_toggle_comments();
+    Ok(())
+}
+
 // A minimal loopback client keeps GUI smoke independent of a new runtime dependency.
 fn submit_audience_smoke_reaction(url: &str) -> Result<()> {
+    submit_audience_smoke_event(
+        url,
+        serde_json::json!({"v":1,"type":"reaction","request_id":"smoke","kind":"applause"}),
+    )
+}
+fn submit_audience_smoke_event(url: &str, event: serde_json::Value) -> Result<()> {
     use std::io::{Read, Write};
     let (url, token) = url.split_once("#k=").context("missing audience token")?;
     let authority = url
@@ -1290,10 +1418,7 @@ fn submit_audience_smoke_reaction(url: &str) -> Result<()> {
         read(&mut socket)?["type"] == "welcome",
         "audience authentication failed"
     );
-    send(
-        &mut socket,
-        serde_json::json!({"v":1,"type":"reaction","request_id":"smoke","kind":"applause"}),
-    )?;
+    send(&mut socket, event)?;
     anyhow::ensure!(
         read(&mut socket)?["status"] == "accepted",
         "smoke reaction rejected"

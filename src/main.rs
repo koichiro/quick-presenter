@@ -7,7 +7,9 @@ pub mod app_metadata;
 pub mod app_state;
 pub mod aspect;
 pub mod audience;
+pub mod audience_comments;
 pub mod audience_events;
+mod audience_log;
 pub mod audience_overlay;
 mod audience_ui;
 pub mod black_screen;
@@ -262,6 +264,7 @@ fn main() -> Result<()> {
 
     let event_loop_result = slint::run_event_loop();
     audience_ui.shutdown();
+    audience_log::shutdown();
     if event_loop_result.is_ok() {
         window_controller::capture_slide_placement(&windows.refs());
         let last_pdf = state
@@ -473,7 +476,9 @@ fn smoke_open_pdf(path: PathBuf) -> Result<()> {
 }
 
 fn run_gui_smoke(options: GuiSmokeOptions) -> Result<()> {
-    gui_smoke::run(options)
+    let result = gui_smoke::run(options);
+    audience_log::shutdown();
+    result
 }
 
 #[cfg(target_os = "macos")]

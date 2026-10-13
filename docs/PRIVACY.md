@@ -82,3 +82,23 @@ it is set, Quick Presenter reads and writes the recent-file list at that exact
 path. On Unix-like platforms, the same owner-only file permissions are applied
 when saving through this override, but parent directory permissions depend on the
 chosen path.
+
+## Audience Comment Logs (v3.0.0)
+
+While Audience Live is active, accepted comments are logged locally as JSON Lines
+in `audience-comments.jsonl`, alongside the default diagnostic log (independent
+of `--log-file`). Records contain a UTC receipt timestamp, session identifier,
+session-local sequence and participant ID, normalized body, and the original
+submitted handle, including anonymous or blank handles. Pause does not stop
+logging. Comments are not written into diagnostic logs or uploaded.
+
+The initial retention policy keeps the active file and `.1`, at most 10 MiB each.
+Files survive session stop and application restart; age-based expiration is not
+implemented. Unix files have owner-only `0600` permissions. Windows uses the
+current user's log directory and inherited access permissions. Stop receiving
+comments by turning Audience Live OFF. To remove retained comments, quit Quick
+Presenter and delete both files. No PDF, notes, page number, geometry, session
+join token, or browser IP address is included. Queue pressure can reject a post;
+disk failure produces a presenter warning and reception continues without a
+persistence guarantee. Orderly app exit drains the writer; abrupt termination
+can lose queued records.

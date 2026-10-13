@@ -6,7 +6,8 @@ The initial Audience Live implementation lets audience browsers join a local
 session hosted by Quick Presenter. It supports session start/stop, a join QR
 code and URL, and an authenticated live connection count. Five reactions can be sent from the
 mobile page, appear in Presenter View (A4), and animate over the presentation
-window (A5). Comments remain outside this scope.
+window (A5). Live comments (A7) provide a browser input, presenter history, and
+a moving overlay; see [Live Comments](AUDIENCE_COMMENTS.md).
 
 ## Use
 

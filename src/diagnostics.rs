@@ -155,7 +155,7 @@ fn file_logging_disabled_error() -> io::Error {
     io::Error::other("diagnostic file logging is disabled")
 }
 
-struct RotatingLogWriter {
+pub(crate) struct RotatingLogWriter {
     active_path: PathBuf,
     previous_path: PathBuf,
     file: Option<File>,
@@ -164,7 +164,7 @@ struct RotatingLogWriter {
 }
 
 impl RotatingLogWriter {
-    fn new(active_path: &Path, generation_limit: u64) -> Result<Self> {
+    pub(crate) fn new(active_path: &Path, generation_limit: u64) -> Result<Self> {
         ensure!(
             generation_limit > 0,
             "diagnostic log limit must be positive"
