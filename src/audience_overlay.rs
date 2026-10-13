@@ -4,12 +4,9 @@ use std::time::{Duration, Instant};
 
 pub const MAX_VISIBLE: usize = 24;
 pub const LIFETIME: Duration = Duration::from_millis(1800);
-// Real XWayland drawing can block for roughly one second per frame. Only the
+// Native CI snapshots/resizes can outlast the production animation. Only the
 // GUI smoke instance gets a wider observation budget; production stays at 1.8s.
-#[cfg(target_os = "linux")]
 pub const GUI_SMOKE_LIFETIME: Duration = Duration::from_secs(6);
-#[cfg(not(target_os = "linux"))]
-pub const GUI_SMOKE_LIFETIME: Duration = LIFETIME;
 #[derive(Clone, Copy, Debug)]
 pub struct OverlayFrame {
     pub kind: ReactionKind,
