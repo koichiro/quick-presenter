@@ -35,14 +35,14 @@ const SEND_TIMEOUT: Duration = Duration::from_secs(2);
 const DEDUP_TTL: Duration = Duration::from_secs(30);
 const DEDUP_CAPACITY: usize = 256;
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RelayConfig {
-    room_id: String,
+pub(crate) struct RelayConfig {
+    pub(crate) room_id: String,
     code: String,
-    join_url: String,
+    pub(crate) join_url: String,
     presenter_url: String,
-    presenter_token: String,
+    pub(crate) presenter_token: String,
 }
 fn identifier(s: &str, max: usize) -> bool {
     !s.is_empty()
@@ -87,7 +87,7 @@ impl RelayConfig {
         config.validate()?;
         Ok(config)
     }
-    fn validate(&self) -> Result<(), &'static str> {
+    pub(crate) fn validate(&self) -> Result<(), &'static str> {
         let bad = "Invalid relay configuration.";
         if !identifier(&self.room_id, 64)
             || !identifier(&self.code, 64)
@@ -184,7 +184,7 @@ impl<'de> Deserialize<'de> for Unique {
         d.deserialize_any(V)
     }
 }
-fn strict_json(bytes: &[u8]) -> Result<Value, &'static str> {
+pub(crate) fn strict_json(bytes: &[u8]) -> Result<Value, &'static str> {
     if bytes.len() > MAX_BYTES {
         return Err("Relay message exceeds size limit.");
     }
@@ -322,6 +322,17 @@ pub struct RemoteAudienceSession {
 }
 impl RemoteAudienceSession {
     pub fn start(path: PathBuf) -> std::io::Result<Self> {
+        Self::start_worker(Some(path), None)
+    }
+    pub(crate) fn start_managed(
+        settings: crate::audience_relay_http::ManagedRelay,
+    ) -> std::io::Result<Self> {
+        Self::start_worker(None, Some(settings))
+    }
+    fn start_worker(
+        path: Option<PathBuf>,
+        managed: Option<crate::audience_relay_http::ManagedRelay>,
+    ) -> std::io::Result<Self> {
         let status = Arc::new(Mutex::new(SessionStatus::Starting));
         let connections = Arc::new(AtomicUsize::new(0));
         let engine = Arc::new(Mutex::new(AudienceEngine::new(Instant::now())));
@@ -331,14 +342,39 @@ impl RemoteAudienceSession {
         let worker = thread::Builder::new().name("audience-relay".into()).spawn(move || {
             let (status, connections, engine) = shared;
             let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(), &'static str> {
-                let config = RelayConfig::load(&path)?;
+                let config = path.as_ref().map(RelayConfig::load).transpose()?;
                 let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|_| "Cannot start relay worker.")?;
                 #[cfg(not(test))] { engine.lock().unwrap_or_else(|e| e.into_inner()).logger = Some(crate::audience_log::logger()); }
                 runtime.block_on(async {
-                    if *stopped.borrow() { return Ok(()); }
-                    tokio::select! {
-                        _ = stopped.changed() => Ok(()),
-                        result = run(config, status.clone(), connections.clone(), engine.clone(), updates) => result,
+                    if *stopped.borrow() {
+                        if let Some(settings) = managed.as_ref() {
+                            if settings.has_attempt() {
+                                let client = crate::audience_relay_http::client()?;
+                                crate::audience_relay_http::cleanup(&client, settings).await?;
+                            }
+                        }
+                        return Ok(());
+                    }
+                    if let Some(settings) = managed {
+                        let client = crate::audience_relay_http::client()?;
+                        let room = tokio::select! {
+                            biased;
+                            _ = stopped.changed() => None,
+                            result = crate::audience_relay_http::create(&client, &settings) => Some(result?),
+                        };
+                        let outcome = if let Some(room) = room {
+                            tokio::select! {
+                                _ = stopped.changed() => Ok(()),
+                                result = run(room, status.clone(), connections.clone(), engine.clone(), updates) => result,
+                            }
+                        } else { Ok(()) };
+                        if *stopped.borrow() { crate::audience_relay_http::cleanup(&client, &settings).await?; }
+                        outcome
+                    } else {
+                        tokio::select! {
+                            _ = stopped.changed() => Ok(()),
+                            result = run(config.ok_or("Missing relay configuration.")?, status.clone(), connections.clone(), engine.clone(), updates) => result,
+                        }
                     }
                 })
             }));
@@ -1026,14 +1062,18 @@ mod tests {
 mod fixture_tests {
     use super::*;
     #[test]
-    #[ignore = "requires a running OSS relay fixture and QUICK_PRESENTER_AUDIENCE_RELAY_CONFIG"]
-    fn external_relay_round_trip_and_presenter_resume() {
+    #[ignore = "requires a running OSS relay runtime and QUICK_PRESENTER_TEST_CONFIG"]
+    fn external_relay_room_creation_round_trip_and_termination() {
         let path = PathBuf::from(
-            std::env::var_os("QUICK_PRESENTER_AUDIENCE_RELAY_CONFIG")
+            std::env::var_os("QUICK_PRESENTER_TEST_CONFIG")
                 .expect("Set the relay fixture configuration path"),
         );
-        let config = RelayConfig::load(&path).unwrap();
-        let mut session = RemoteAudienceSession::start(path.clone()).unwrap();
+        let settings = crate::audience_relay_http::ManagedRelay::new(
+            crate::app_config::load(Some(path))
+                .unwrap()
+                .expect("Remote TOML configuration required"),
+        );
+        let mut session = RemoteAudienceSession::start_managed(settings.clone()).unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
         while !matches!(session.snapshot().status, SessionStatus::Running { .. })
             && Instant::now() < deadline
@@ -1044,10 +1084,12 @@ mod fixture_tests {
             session.snapshot().status,
             SessionStatus::Running { .. }
         ));
+        let config = settings.attempt().unwrap().room.unwrap();
         let url = url::Url::parse(&config.join_url).unwrap();
         let endpoint = format!(
-            "ws://{}/ws/audience",
-            url[url::Position::BeforeHost..url::Position::AfterPort].to_owned()
+            "ws://{}/ws/audience/{}",
+            url[url::Position::BeforeHost..url::Position::AfterPort].to_owned(),
+            config.room_id
         );
         let (mut audience, _) = tungstenite::connect(endpoint).unwrap();
         if let tungstenite::stream::MaybeTlsStream::Plain(stream) = audience.get_mut() {
@@ -1107,7 +1149,8 @@ mod fixture_tests {
         );
         session.shutdown();
         assert!(session.is_finished());
-        let mut resumed = RemoteAudienceSession::start(path).unwrap();
+        assert!(settings.attempt.lock().unwrap().is_none());
+        let mut resumed = RemoteAudienceSession::start_managed(settings.clone()).unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
         while !matches!(resumed.snapshot().status, SessionStatus::Running { .. })
             && Instant::now() < deadline
@@ -1119,6 +1162,27 @@ mod fixture_tests {
             SessionStatus::Running { .. }
         ));
         assert!(resumed.drain_events().is_empty());
+        let next = settings.attempt().unwrap().room.unwrap();
+        assert_ne!(config.room_id, next.room_id);
+        assert_ne!(config.presenter_token, next.presenter_token);
+        let endpoint = format!(
+            "{}/ws/audience/{}",
+            settings
+                .endpoint
+                .origin
+                .as_str()
+                .trim_end_matches('/')
+                .replacen("http:", "ws:", 1),
+            next.room_id
+        );
+        let (mut audience, _) = tungstenite::connect(endpoint).unwrap();
+        if let tungstenite::stream::MaybeTlsStream::Plain(stream) = audience.get_mut() {
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+        }
+        let url = url::Url::parse(&next.join_url).unwrap();
+        audience.send(tungstenite::Message::Text(json!({"protocol":"qp.audience","version":VERSION,"type":"hello","token":url.fragment().unwrap().strip_prefix("k=").unwrap()}).to_string().into())).unwrap();
         audience.send(tungstenite::Message::Text(json!({"protocol":"qp.audience","version":VERSION,"type":"reaction","request_id":"r3","kind":"applause"}).to_string().into())).unwrap();
         assert_eq!(result(&mut audience)["status"], "accepted");
         assert_eq!(resumed.drain_events().len(), 1);

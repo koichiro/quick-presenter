@@ -1,7 +1,7 @@
 # Audience relay configuration and room creation proposal
 
-Status: proposed design for v3.0.0. This document does not implement the CLI,
-configuration loader, or room-management client described below.
+Status: implemented in the v3.0.0 follow-up to the experimental relay client.
+This document records the configuration and lifecycle contract.
 
 ## Goal and current implementation
 
@@ -10,8 +10,8 @@ Live ON/OFF control. qp creates a room, connects its presenter socket, and displ
 the returned join URL, session code, and QR code. No relay settings GUI is needed.
 PDF playback must remain usable through configuration and network failures.
 
-The existing client in `src/audience_relay.rs` consumes a pre-created room JSON
-file selected by `QUICK_PRESENTER_AUDIENCE_RELAY_CONFIG`. `AudienceSession` selects
+The earlier client consumed a pre-created room JSON file selected by an
+experimental environment variable. The normal GUI now uses TOML and HTTP creation. `AudienceSession` selects
 local or remote transport; `AudienceUi` owns the controls and overlay integration.
 The remote session already owns a dedicated thread and current-thread Tokio
 runtime. Reuse those boundaries and the existing event validation, queues, pause
@@ -76,14 +76,14 @@ Rules:
 `--config <PATH>` selects exactly one TOML file for debugging or alternate setups:
 
 ```sh
-qp --config /absolute/path/to/test-config.toml presentation.pdf
+quick-presenter --config /absolute/path/to/test-config.toml presentation.pdf
 ```
 
 The explicit file replaces the default file; there is no merging or fallback.
 Resolve relative paths against the launch working directory. Reject duplicate
 `--config`, missing/empty values, and another option used as its value. Support
-non-UTF-8 paths through the existing `OsString` CLI parser. Both executable entry
-points use the same parser. `--help` must not read configuration or start networking.
+non-UTF-8 paths through the existing `OsString` CLI parser. The GUI executable supports this option; the separate `qp` control CLI does not
+change the configuration of a running GUI. `--help` must not read configuration or start networking.
 
 An absent explicit file or malformed default file is an Audience configuration
 error, never an implicit switch to local hosting. Report a short, redacted error
@@ -92,11 +92,10 @@ Resolve configuration off the UI thread during initialization; disable only Audi
 start until resolution completes. GUI smoke tests inject local settings and remain
 independent of a developer's user configuration.
 
-Remove the experimental environment-variable selection from the normal GUI path
-when this flow lands. Keep pre-created JSON loading only as an explicit integration
-test helper, if still needed. Do not let environment variables silently override
-TOML or `--config`. Update `docs/AUDIENCE_RELAY.md` and interoperability instructions
-with the implementation.
+The experimental environment variable no longer selects the normal GUI transport.
+Pre-created JSON loading remains available to synthetic socket tests only.
+Environment variables do not override TOML or `--config`. The opt-in interoperability
+test uses `QUICK_PRESENTER_TEST_CONFIG` to select its TOML file.
 
 ## Boundaries and dependencies
 
@@ -115,17 +114,15 @@ Keep secrets in Rust-owned configuration/session state. Do not derive unrestrict
 credentials into diagnostics. Existing UI settings should not serialize them.
 Create requests and room credentials do not contain PDF paths, notes, or slides.
 
-Add a TOML parser and an async HTTP client with Rustls and JSON support, using
-minimal features. Evaluate `toml` and `reqwest` against the repository's Rust and
-platform requirements during implementation. Do not introduce another runtime,
-HTTP framework, hand-written HTTP parser, or synchronous client on the UI thread.
-The HTTP client and presenter socket must use compatible certificate trust
-behavior. Proxy behavior must be explicit and covered in documentation/tests;
-it must not leak bearer credentials through redirects or diagnostic logging.
+The implementation uses `toml` and `reqwest` with default features disabled for
+the HTTP client and Rustls/WebPKI roots. No additional runtime or synchronous
+HTTP client is introduced. Both HTTP and WebSocket paths verify certificates
+using WebPKI roots. HTTP redirects and environment proxy discovery are disabled;
+custom proxy and private-CA configuration are outside this milestone.
 
 ## Room creation and connection
 
-1. ON starts the remote worker and publishes `Creating room…`. There is no network
+1. ON starts the remote worker and publishes `Starting…`. There is no network
    runtime, HTTP request, or heartbeat while Audience Live is OFF.
 2. Generate a cryptographically random idempotency key for this start operation.
    Submit `POST /api/relay/draft-1/rooms` with `Authorization: Bearer <create_token>`,
@@ -151,7 +148,8 @@ unsupported protocol, room expiration, and cancellation with safe messages.
 A timeout does not prove that creation failed. Keep the operation key and any
 validated room credentials in application memory across manual retry of a failed
 start. Recover the same room instead of allocating a replacement. A terminal-room
-410 requires a fresh key on the next explicit ON. A create/connect failure must
+410 requires a fresh key on the next explicit ON. A manual retry revalidates cached room identity through the creation API before
+connecting, so a terminal room can yield 410. A create/connect failure must
 not silently fall back to the local server. No automatic infinite reconnect loop
 is included in this milestone.
 
@@ -176,14 +174,14 @@ change display policy only; it does not terminate a room.
 If OFF arrives during creation, cancel normal admission/connection. When a room
 response is already available, attempt termination. If creation may have committed
 but its response was lost, attempt bounded recovery with the same key and end the
-recovered room within the cleanup budget. Do not create a replacement room merely
-to finish cleanup. An unresolved cleanup can leave a server-side room until its
+recovered room within the cleanup budget. Never use a new key merely to finish cleanup. Recovery with the original key
+can create a room if the original request never committed; it is immediately ended. An unresolved cleanup can leave a server-side room until its
 existing disconnection grace/deadline expires; do not claim cancellation rolls back
 an HTTP request.
 
-Application exit uses the same best-effort, bounded cleanup without waiting on
-the UI thread for HTTP. Coordinate with the existing session shutdown path;
-do not join a worker that is waiting for a UI callback. Process crashes and hard
+Application exit uses the same best-effort, bounded cleanup after the GUI event
+loop returns. It may wait for the worker within that cleanup budget; no worker
+waits for a UI callback. Normal OFF is asynchronous and keeps the live UI responsive. Process crashes and hard
 kills rely on relay expiration. This milestone does not persist room credentials
 or idempotency keys, resume rooms after application restart, or guarantee remote
 termination during outages. An explicit stop invalidates its operation generation
@@ -201,10 +199,9 @@ so late replies cannot reactivate the UI or become a later session's room.
    GUI instructions with a TOML setup and run interoperability against the relay's
    real self-hosted runtime. Keep all examples synthetic.
 
-These are implementation tasks for the follow-up code PR, not GitHub issues.
-This design PR changes documentation only.
+These tasks are implemented in this PR; no GitHub issues are created.
 
-Required tests for that code PR:
+Validation requirements:
 
 - CLI priority, duplicates, missing values, platform path resolution, absent default
   vs absent explicit file, invalid TOML, size bounds, secret permissions, and no
