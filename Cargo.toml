@@ -19,6 +19,11 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros"] }
+tokio-tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots"] }
+futures-util = { version = "0.3", features = ["sink"] }
+url = "2"
+toml = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "json", "stream"] }
 getrandom = "0.3"
 if-addrs = "0.15"
 qrcode = { version = "0.14", default-features = false }

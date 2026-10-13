@@ -292,7 +292,8 @@ delivery and AI-assisted presentation workflows.
   presentation source of truth.
 - **v3.0.0: Audience Live.** Optional local audience sessions and audience
   interaction should complement presentation playback. Development uses the
-  `v3.0.0` branch; see [Local Audience Sessions](docs/AUDIENCE_LOCAL.md).
+  `v3.0.0` branch; see [Local Audience Sessions](docs/AUDIENCE_LOCAL.md)
+  and the [experimental relay client](docs/AUDIENCE_RELAY.md).
 
 ## Related Projects
 

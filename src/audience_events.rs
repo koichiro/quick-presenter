@@ -38,6 +38,7 @@ pub struct AcceptedAudienceEvent {
     pub sequence: u64,
     pub participant_id: u64,
     pub received_at: Instant,
+    pub overlay_deadline: Instant,
     pub display_generation: u64,
     pub event: AudienceEvent,
 }
@@ -197,6 +198,18 @@ impl AudienceEngine {
         participant_id: u64,
         now: Instant,
     ) -> Admission {
+        self.accept_relay(event, participant_id, now, now + EVENT_TTL, self.generation)
+    }
+    /// Relay admission shares queue/log limits, but keeps receiver-relative expiry
+    /// and display fencing separate from the local session generation.
+    pub fn accept_relay(
+        &mut self,
+        event: AudienceEvent,
+        participant_id: u64,
+        now: Instant,
+        overlay_deadline: Instant,
+        generation: u64,
+    ) -> Admission {
         if self.stopped {
             return Admission::Stopped;
         }
@@ -222,7 +235,8 @@ impl AudienceEngine {
             sequence: self.sequence,
             participant_id,
             received_at: now,
-            display_generation: self.generation,
+            overlay_deadline,
+            display_generation: generation,
             event,
         });
         Admission::Accepted

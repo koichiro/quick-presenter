@@ -194,6 +194,7 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
     // Navigation acknowledges before its render completes. Compare the full
     // status only after that independent transition has finished.
     ready(path)?;
+    let export_started = Instant::now();
     let before_export = call(path, Command::Status(Empty {}))?;
     let mut export_file = client::export(|request| client::send_to(path, request))
         .map_err(|error| anyhow::anyhow!(error.message))?;
@@ -224,7 +225,23 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
             anyhow::ensure!(item["next"].is_null(), "export last page has next context");
         }
     }
-    let after_export = call(path, Command::Status(Empty {}))?;
+    let mut after_export = call(path, Command::Status(Empty {}))?;
+    // A running timer may cross a second boundary while export is in flight.
+    // Allow only natural elapsed time; still compare every other status field.
+    if let (Reply::Status(before), Reply::Status(after)) = (&before_export, &mut after_export) {
+        if before.timer.running {
+            let elapsed = after
+                .timer
+                .elapsed_seconds
+                .checked_sub(before.timer.elapsed_seconds)
+                .context("export reset the running timer")?;
+            anyhow::ensure!(
+                elapsed <= export_started.elapsed().as_secs().saturating_add(1),
+                "export advanced the timer beyond elapsed wall time"
+            );
+            after.timer.elapsed_seconds = before.timer.elapsed_seconds;
+        }
+    }
     anyhow::ensure!(
         after_export == before_export,
         "export changed presentation state: before={before_export:?}, after={after_export:?}"
