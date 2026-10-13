@@ -24,7 +24,10 @@ pub struct AudienceUi {
     session: RefCell<Option<AudienceSession>>,
     timer: Timer,
     addresses: RefCell<Vec<Ipv4Addr>>,
-    relay_config: Option<std::path::PathBuf>,
+    relay_config: RefCell<Option<crate::audience_relay_http::ManagedRelay>>,
+    config_timer: Timer,
+    configuring: std::cell::Cell<bool>,
+    config_error: RefCell<Option<&'static str>>,
     stopping: RefCell<bool>,
     address_index: RefCell<usize>,
     last_url: RefCell<String>,
@@ -39,14 +42,71 @@ pub struct AudienceUi {
 }
 
 impl AudienceUi {
-    pub fn install(windows: &AppWindows, state: Rc<RefCell<AppState>>) -> Rc<Self> {
-        Self::install_with_address_source(
+    pub fn install(
+        windows: &AppWindows,
+        state: Rc<RefCell<AppState>>,
+        config_path: Option<std::path::PathBuf>,
+    ) -> Rc<Self> {
+        let ui = Self::install_with_address_source(
             windows,
             state,
             audience::local_addresses,
             OverlayEngine::default(),
-            std::env::var_os("QUICK_PRESENTER_AUDIENCE_RELAY_CONFIG").map(Into::into),
-        )
+            None,
+        );
+        ui.configuring.set(true);
+        windows.presenter.set_audience_can_start(false);
+        windows
+            .presenter
+            .set_audience_status("Loading Audience configuration…".into());
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let spawned = std::thread::Builder::new()
+            .name("audience-config".into())
+            .spawn(move || {
+                let _ = sender.send(crate::app_config::load(config_path));
+            });
+        if spawned.is_err() {
+            ui.configuring.set(false);
+            *ui.config_error.borrow_mut() = Some("Cannot load Audience configuration.");
+            windows
+                .presenter
+                .set_audience_status("Cannot load Audience configuration.".into());
+            return ui;
+        }
+        let weak = Rc::downgrade(&ui);
+        let window = windows.presenter.as_weak();
+        ui.config_timer
+            .start(TimerMode::Repeated, Duration::from_millis(20), move || {
+                let Some(ui) = weak.upgrade() else {
+                    return;
+                };
+                let result = match receiver.try_recv() {
+                    Ok(result) => result,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                    Err(_) => Err("Cannot load Audience configuration."),
+                };
+                ui.config_timer.stop();
+                ui.configuring.set(false);
+                match result {
+                    Ok(endpoint) => {
+                        *ui.relay_config.borrow_mut() =
+                            endpoint.map(crate::audience_relay_http::ManagedRelay::new);
+                        if let Some(window) = window.upgrade() {
+                            window.set_audience_status("".into());
+                            window.set_audience_address(ui.address_label().into());
+                            window.set_audience_can_start(ui.can_start());
+                        }
+                    }
+                    Err(error) => {
+                        *ui.config_error.borrow_mut() = Some(error);
+                        if let Some(window) = window.upgrade() {
+                            window.set_audience_can_start(false);
+                            window.set_audience_status(error.into());
+                        }
+                    }
+                }
+            });
+        ui
     }
 
     pub(crate) fn install_for_smoke(
@@ -67,14 +127,17 @@ impl AudienceUi {
         state: Rc<RefCell<AppState>>,
         addresses: fn() -> std::io::Result<Vec<Ipv4Addr>>,
         overlay: OverlayEngine,
-        relay_config: Option<std::path::PathBuf>,
+        relay_config: Option<crate::audience_relay_http::ManagedRelay>,
     ) -> Rc<Self> {
         let presenter = &windows.presenter;
         let ui = Rc::new(Self {
             session: RefCell::new(None),
             timer: Timer::default(),
             addresses: RefCell::new(Vec::new()),
-            relay_config,
+            relay_config: RefCell::new(relay_config),
+            config_timer: Timer::default(),
+            configuring: std::cell::Cell::new(false),
+            config_error: RefCell::new(None),
             stopping: RefCell::new(false),
             address_index: RefCell::new(0),
             last_url: RefCell::new(String::new()),
@@ -130,9 +193,7 @@ impl AudienceUi {
                     *ui.address_index.borrow_mut() = 0;
                     if let Some(window) = window.upgrade() {
                         window.set_audience_address(ui.address_label().into());
-                        window.set_audience_can_start(
-                            ui.relay_config.is_some() || !ui.addresses.borrow().is_empty(),
-                        );
+                        window.set_audience_can_start(ui.can_start());
                     }
                 }
                 Err(error) => {
@@ -140,7 +201,7 @@ impl AudienceUi {
                         window.set_audience_status(
                             format!("Cannot discover LAN addresses: {error}").into(),
                         );
-                        window.set_audience_can_start(ui.relay_config.is_some());
+                        window.set_audience_can_start(ui.can_start());
                     }
                 }
             }
@@ -166,7 +227,7 @@ impl AudienceUi {
             let Some(ui) = weak.upgrade() else {
                 return;
             };
-            if *ui.stopping.borrow() {
+            if *ui.stopping.borrow() || ui.configuring.get() || ui.config_error.borrow().is_some() {
                 return;
             }
             if let Some(session) = ui.session.borrow().as_ref() {
@@ -192,7 +253,8 @@ impl AudienceUi {
                 .borrow()
                 .get(*ui.address_index.borrow())
                 .copied();
-            match AudienceSession::start(address, ui.relay_config.clone()) {
+            let relay = ui.relay_config.borrow().clone();
+            match AudienceSession::start(address, relay) {
                 Ok(session) => {
                     if let Some(window) = window.upgrade() {
                         ui.clear_reactions(&window);
@@ -270,8 +332,14 @@ impl AudienceUi {
         ui
     }
 
+    fn can_start(&self) -> bool {
+        !self.configuring.get()
+            && self.config_error.borrow().is_none()
+            && (self.relay_config.borrow().is_some() || !self.addresses.borrow().is_empty())
+    }
+
     fn address_label(&self) -> String {
-        if self.relay_config.is_some() {
+        if self.relay_config.borrow().is_some() {
             return "Relay · draft protocol".into();
         }
         self.addresses
@@ -511,8 +579,20 @@ impl AudienceUi {
         self.comment_model.set_vec(Vec::new());
         self.overlay_timer.stop();
         self.timer.stop();
+        self.config_timer.stop();
         if let Some(mut session) = self.session.borrow_mut().take() {
             session.shutdown();
+        }
+        // A failed start may retain an ambiguous creation identity for manual retry.
+        // Application exit also attempts bounded cleanup of that identity.
+        if let Some(settings) = self.relay_config.borrow().clone() {
+            if settings.has_attempt() {
+                if let Ok(mut session) =
+                    crate::audience_relay::RemoteAudienceSession::start_managed(settings)
+                {
+                    session.shutdown();
+                }
+            }
         }
     }
 }
