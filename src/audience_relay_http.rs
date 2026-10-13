@@ -162,6 +162,10 @@ pub async fn cleanup(
     client: &reqwest::Client,
     settings: &ManagedRelay,
 ) -> Result<(), &'static str> {
+    // Cleanup may recover an existing attempt, but must never start a new one.
+    if !settings.has_attempt() {
+        return Ok(());
+    }
     let result = tokio::time::timeout(Duration::from_secs(2), async {
         let cached = settings
             .attempt
@@ -298,6 +302,28 @@ mod tests {
         assert!(!settings.has_attempt());
         assert_ne!(settings.attempt().unwrap().key, attempt.key);
         assert!(clone.attempt().unwrap().room.is_none());
+    }
+
+    #[tokio::test]
+    async fn stop_before_creation_is_polled_does_not_create_a_room_during_cleanup() {
+        let s = server().await;
+        let http = client().unwrap();
+        push(&s, 201, room(&s.settings).to_string());
+        let (stop, mut stopped) = tokio::sync::watch::channel(false);
+        assert!(!*stopped.borrow());
+        stop.send(true).unwrap();
+
+        let created = tokio::select! {
+            biased;
+            _ = stopped.changed() => None,
+            result = create(&http, &s.settings) => Some(result),
+        };
+        assert!(created.is_none());
+        assert!(!s.settings.has_attempt());
+        cleanup(&http, &s.settings).await.unwrap();
+        assert!(!s.settings.has_attempt());
+        assert!(s.peer.requests.lock().unwrap().is_empty());
+        assert_eq!(s.peer.ends.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

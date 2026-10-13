@@ -368,7 +368,7 @@ impl RemoteAudienceSession {
                                 result = run(room, status.clone(), connections.clone(), engine.clone(), updates) => result,
                             }
                         } else { Ok(()) };
-                        if *stopped.borrow() { crate::audience_relay_http::cleanup(&client, &settings).await?; }
+                        if *stopped.borrow() && settings.has_attempt() { crate::audience_relay_http::cleanup(&client, &settings).await?; }
                         outcome
                     } else {
                         tokio::select! {
