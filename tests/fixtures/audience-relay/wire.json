@@ -1,0 +1,352 @@
+[
+  {
+    "name": "audience hello dummy secret",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "hello",
+      "token": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    "valid": true
+  },
+  {
+    "name": "presenter hello separate role",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.presenter",
+      "version": "1-draft.1",
+      "type": "hello",
+      "token": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    },
+    "valid": true
+  },
+  {
+    "name": "reaction",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "reaction",
+      "request_id": "r1",
+      "kind": "applause"
+    },
+    "valid": true
+  },
+  {
+    "name": "comment with original handle",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "comment",
+      "request_id": "c1",
+      "body": "Hello\nworld",
+      "handle": " Anonymous "
+    },
+    "valid": true
+  },
+  {
+    "name": "accepted result",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "result",
+      "request_id": "c1",
+      "status": "accepted"
+    },
+    "valid": true
+  },
+  {
+    "name": "unknown is not rejection",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "result",
+      "request_id": "c1",
+      "status": "unknown"
+    },
+    "valid": true
+  },
+  {
+    "name": "extensible capability identifier",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "welcome",
+      "connection_id": "a1",
+      "capabilities": ["reactions", "comments", "future_feature"],
+      "available": true,
+      "limits": {
+        "max_message_bytes": 4096,
+        "request_cache_ms": 30000
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "large epoch remains string",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.presenter",
+      "version": "1-draft.1",
+      "type": "display",
+      "presenter_epoch": "9007199254740993",
+      "display_epoch": "2",
+      "paused": true
+    },
+    "valid": true
+  },
+  {
+    "name": "presenter state",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.presenter",
+      "version": "1-draft.1",
+      "type": "state",
+      "revision": "2",
+      "display_epoch": "2",
+      "available": true,
+      "audience_connections": 3
+    },
+    "valid": true
+  },
+  {
+    "name": "event",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.presenter",
+      "version": "1-draft.1",
+      "type": "event",
+      "event_id": "e1",
+      "connection_id": "a1",
+      "request_id": "c1",
+      "presenter_epoch": "1",
+      "display_epoch": "0",
+      "offer_ttl_ms": 2000,
+      "payload": {
+        "type": "comment",
+        "body": "Hello",
+        "handle": "Anonymous"
+      }
+    },
+    "valid": true
+  },
+  {
+    "name": "receipt",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.presenter",
+      "version": "1-draft.1",
+      "type": "receipt",
+      "event_id": "e1",
+      "presenter_epoch": "1",
+      "status": "accepted"
+    },
+    "valid": true
+  },
+  {
+    "name": "wrong draft",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1",
+      "type": "reaction",
+      "request_id": "r1",
+      "kind": "applause"
+    },
+    "valid": false
+  },
+  {
+    "name": "unknown kind",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "reaction",
+      "request_id": "r1",
+      "kind": "spam"
+    },
+    "valid": false
+  },
+  {
+    "name": "question is reaction not QA",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "question",
+      "request_id": "r1",
+      "body": "Why?"
+    },
+    "valid": false
+  },
+  {
+    "name": "empty id",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "reaction",
+      "request_id": "",
+      "kind": "heart"
+    },
+    "valid": false
+  },
+  {
+    "name": "extra privileged field",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "reaction",
+      "request_id": "r1",
+      "kind": "heart",
+      "presenter_epoch": "1"
+    },
+    "valid": false
+  },
+  {
+    "name": "numeric epoch forbidden",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.presenter",
+      "version": "1-draft.1",
+      "type": "display",
+      "presenter_epoch": 1,
+      "display_epoch": "1",
+      "paused": false
+    },
+    "valid": false
+  },
+  {
+    "name": "noncanonical epoch",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.presenter",
+      "version": "1-draft.1",
+      "type": "display",
+      "presenter_epoch": "01",
+      "display_epoch": "1",
+      "paused": false
+    },
+    "valid": false
+  },
+  {
+    "name": "UTF8 body over bound",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "comment",
+      "request_id": "c1",
+      "body": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "handle": "Anonymous"
+    },
+    "valid": false
+  },
+  {
+    "name": "whitespace only body",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "comment",
+      "request_id": "c1",
+      "body": " \n\t",
+      "handle": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "control body",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "comment",
+      "request_id": "c1",
+      "body": "hi\u0000",
+      "handle": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "lone surrogate",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "comment",
+      "request_id": "c1",
+      "body": "hi\ud800",
+      "handle": ""
+    },
+    "valid": false
+  },
+  {
+    "name": "max scalar astral body",
+    "schema": "messages",
+    "value": {
+      "protocol": "qp.audience",
+      "version": "1-draft.1",
+      "type": "comment",
+      "request_id": "c1",
+      "body": "\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d\ud83d\udc4d",
+      "handle": ""
+    },
+    "valid": true
+  },
+  {
+    "name": "create",
+    "schema": "create-request",
+    "value": {
+      "idempotency_key": "create_1"
+    },
+    "valid": true
+  },
+  {
+    "name": "create response",
+    "schema": "create-response",
+    "value": {
+      "room_id": "room1",
+      "code": "AB12CD",
+      "join_url": "https://relay.example.test/join/room1#k=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "presenter_url": "wss://relay.example.test/presenter/room1",
+      "presenter_token": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    },
+    "valid": true
+  },
+  {
+    "name": "allow stub",
+    "schema": "policy-decision",
+    "value": {
+      "api_version": "1-draft.1",
+      "outcome": "allow"
+    },
+    "valid": true
+  },
+  {
+    "name": "deny stub",
+    "schema": "policy-decision",
+    "value": {
+      "api_version": "1-draft.1",
+      "outcome": "deny",
+      "reason": "test_denied"
+    },
+    "valid": true
+  },
+  {
+    "name": "no content rewrite extension",
+    "schema": "policy-decision",
+    "value": {
+      "api_version": "1-draft.1",
+      "outcome": "allow",
+      "body": "rewritten"
+    },
+    "valid": false
+  }
+]
