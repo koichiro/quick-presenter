@@ -61,13 +61,17 @@ session remains active, or scan the new QR after a restart.
   WebSocket authentications. WebSocket frames/messages are limited to 4 KiB.
 - A session-wide handshake budget permits 20 attempts per second, including
   reconnects. This is a resource protection measure, not a participant limit.
-- After authentication, only version 1 reaction messages with five known kinds
+- After authentication, version 1 reactions with five known kinds and comments
   are accepted. Invalid application messages close the connection. Heartbeats
   detect stale connections.
-- Per connection: a burst of five reactions, refilling at two per second. Across
-  the session: a burst of 120, refilling at 120 per second. The event queue holds
-  at most 128 events, expires them after two seconds, and drains at most 16 per
-  UI poll. Resource limits do not impose a participant-count product limit.
+- Per connection: an all-event burst of five, refilling at two per second.
+  Comments additionally have a burst of two, refilling at one per second.
+  Across the session: an all-event burst of 120, refilling at 120 per second,
+  and a comment burst of 30, refilling at 30 per second. The delivery queue holds
+  at most 128 events and drains at most 16 per UI poll. Reactions expire after
+  two seconds; accepted comments remain until drained to preserve presenter
+  history independently of overlay expiry. Resource limits do not impose a
+  participant-count product limit.
 - See [Audience Protocol](AUDIENCE_PROTOCOL.md) for messages and response semantics.
 
 These bounds cover the WebSocket/session layer. This initial implementation
