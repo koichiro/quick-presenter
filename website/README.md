@@ -219,8 +219,9 @@ blocked by its URL policy. Do not treat source-level checks as visual QA.
 `src/assets/presenter-window-v2-macos.png` replaces the older presenter UI in
 both homepage locales and the README's macOS presenter example. It is an
 889×519 crop of the actual v2.0.0 presenter window at 1 second in the original
-2026-10-12 13-14-33 recording used for the interactive demo. It includes the
+2026-10-12 12-52-19 interactive demo recording, showing page 1 of the deck.
+It includes the
 first/previous/next/last icon controls and the 12-slide deck's speaker notes.
 The screenshot retains the source recording's visible window area and pixel
 geometry; no UI was recreated. The original recording's SHA-256 is
-`733440b1992776a770a7ac696da66c6d7c78f3df5c54f233037ae6948d02e30d`.
+`b6726cf89d255da4bcb07bff7491d2e3bc47d2030404902badbf286eaf474e4e`.
