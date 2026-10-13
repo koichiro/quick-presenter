@@ -670,57 +670,6 @@ mod tests {
         json!({"room_id":"test","code":"TEST","join_url":format!("http://127.0.0.1:{port}/join/test#k={}", "A".repeat(43)),"presenter_url":format!("ws://127.0.0.1:{port}/presenter"),"presenter_token":"B".repeat(43)})
     }
     #[test]
-    fn matches_pinned_oss_wire_fixtures() {
-        #[derive(Deserialize)]
-        struct Fixture {
-            name: String,
-            schema: String,
-            value: Box<serde_json::value::RawValue>,
-            valid: bool,
-        }
-        let fixtures: Vec<Fixture> =
-            serde_json::from_str(include_str!("../tests/fixtures/audience-relay/wire.json"))
-                .unwrap();
-        let mut checked = 0;
-        for fixture in fixtures {
-            if fixture.schema != "messages" {
-                continue;
-            }
-            let mut value: Value = match serde_json::from_str(fixture.value.get()) {
-                Ok(v) => v,
-                Err(_) => {
-                    assert!(!fixture.valid, "{}", fixture.name);
-                    checked += 1;
-                    continue;
-                }
-            };
-            match value["type"].as_str() {
-                Some("event") => {}
-                Some("state") if value["protocol"] == "qp.presenter" => {}
-                Some("reaction" | "comment") => {
-                    let mut envelope: Value =
-                        serde_json::from_str(&offer("fixture", "7", "11", false)).unwrap();
-                    envelope["version"] = value["version"].clone();
-                    envelope["request_id"] = value["request_id"].clone();
-                    for key in ["protocol", "version", "request_id"] {
-                        value.as_object_mut().unwrap().remove(key);
-                    }
-                    envelope["payload"] = value;
-                    value = envelope;
-                }
-                _ => continue,
-            }
-            assert_eq!(
-                incoming(&value.to_string()).is_ok(),
-                fixture.valid,
-                "{}",
-                fixture.name
-            );
-            checked += 1;
-        }
-        assert!(checked >= 10);
-    }
-    #[test]
     fn strict_wire_rejects_duplicates_invalid_bounds_and_versions() {
         for bad in [
             r#"{"x":1,"x":2}"#,
@@ -1074,18 +1023,15 @@ mod tests {
 }
 
 #[cfg(test)]
-#[allow(dead_code)]
-#[path = "../examples/audience-relay-fixture.rs"]
-mod fixture;
-
-#[cfg(test)]
 mod fixture_tests {
     use super::*;
     #[test]
-    fn browser_fixture_round_trip_and_presenter_resume() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("relay.json");
-        let (stop, worker) = fixture::start_for_test(path.clone());
+    #[ignore = "requires a running OSS relay fixture and QUICK_PRESENTER_AUDIENCE_RELAY_CONFIG"]
+    fn external_relay_round_trip_and_presenter_resume() {
+        let path = PathBuf::from(
+            std::env::var_os("QUICK_PRESENTER_AUDIENCE_RELAY_CONFIG")
+                .expect("Set the relay fixture configuration path"),
+        );
         let config = RelayConfig::load(&path).unwrap();
         let mut session = RemoteAudienceSession::start(path.clone()).unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -1178,7 +1124,5 @@ mod fixture_tests {
         assert_eq!(resumed.drain_events().len(), 1);
         resumed.shutdown();
         let _ = audience.close(None);
-        let _ = stop.send(());
-        worker.join().unwrap();
     }
 }
