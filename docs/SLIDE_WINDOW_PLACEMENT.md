@@ -407,8 +407,11 @@ platform release validation.
 
 The GUI smoke harness schedules native actions inside an active Winit loop so
 synchronous AppKit resize notifications are delivered. The startup checks await
-the placement controller's `busy` and `restoring` flags clearing, with a five-second
-deadline, before asserting saved bounds and edge pixels. The production bounded
+the placement controller's success-only `restore_verified` result, with a
+five-second deadline, before asserting saved bounds and edge pixels. Cancellation,
+fallback, and acceptance of an externally moved window do not set this result.
+New operations clear it, and stale callbacks cannot mark a later operation as
+verified. The production bounded
 retry schedule can exceed a fixed one-second wait; the harness deadline does not
 change that schedule or bypass geometry assertions.
 
