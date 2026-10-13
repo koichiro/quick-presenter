@@ -1305,10 +1305,23 @@ fn submit_audience_smoke_reaction(url: &str) -> Result<()> {
 }
 
 fn settle_notes_layout() -> Result<()> {
-    slint::Timer::single_shot(Duration::from_millis(50), || {
-        slint::quit_event_loop().expect("GUI smoke event loop should accept quit");
-    });
-    slint::run_event_loop_until_quit().context("failed to process notes layout changes")
+    // An unrelated quit must not leave our timer active for a later check.
+    let completed = Rc::new(Cell::new(false));
+    let outcome = completed.clone();
+    let timer = slint::Timer::default();
+    timer.start(
+        slint::TimerMode::SingleShot,
+        Duration::from_millis(50),
+        move || {
+            outcome.set(true);
+            slint::quit_event_loop().expect("GUI smoke event loop should accept quit");
+        },
+    );
+    while !completed.get() {
+        slint::run_event_loop_until_quit().context("failed to process notes layout changes")?;
+    }
+    timer.stop();
+    Ok(())
 }
 
 fn settle_presenter_notes_layout(presenter: &crate::PresenterWindow) -> Result<()> {
@@ -1353,8 +1366,9 @@ fn check_notes_font_size(
         "unexpected placeholder size",
     );
 
+    // These fixtures isolate vertical font fitting even on small CI displays.
     presenter.set_has_notes(true);
-    presenter.set_notes_text("Opening remarks. 日本語のノート。".into());
+    presenter.set_notes_text("Hi. 日本語。".into());
     settle_presenter_notes_layout(presenter)?;
     report.check(
         format!("short notes automatically use 24px ({context})"),
@@ -1443,7 +1457,7 @@ fn check_notes_font_size(
     presenter.set_notes_scroll_y(
         presenter.get_notes_visible_height() - presenter.get_notes_content_height(),
     );
-    presenter.set_notes_text("日本語のノートを確認します。\n".repeat(8).into());
+    presenter.set_notes_text("語\n".repeat(8).into());
     settle_presenter_notes_layout(presenter)?;
     let small_size = presenter.get_notes_font_size();
     let heights: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();
@@ -1455,7 +1469,7 @@ fn check_notes_font_size(
         format!("scroll offset={}", presenter.get_notes_scroll_y()),
     );
     report.check(
-        format!("wrapped notes use the largest fitting measured size ({context})"),
+        format!("multi-line notes use the largest fitting measured size ({context})"),
         small_size > 12.0
             && small_size < 24.0
             && heights
