@@ -69,7 +69,7 @@ test("required stylesheet and image assets are generated and nonempty", async ()
     "assets/kokoro-demo.mp4",
     "assets/kokoro-demo-poster.jpg",
     "styles.css",
-    "assets/presenter-window-en.png",
+    "assets/presenter-window-v2-macos.png",
     "assets/slide-window-title-en.png",
     "assets/slide-window-en.png",
     "assets/quick-presenter-demo.gif",

@@ -158,7 +158,7 @@ context and controls together; the audience window shows only the deck.
 
 ![Windows presenter window with an English sample slide and speaker notes](docs/assets/presenter-window-en-windows.png)
 
-![macOS presenter window with an English sample slide and speaker notes](docs/assets/presenter-window-en-macos.png)
+![Quick Presenter v2.0.0 macOS presenter window with slide text and speaker notes](website/src/assets/presenter-window-v2-macos.png)
 
 ### Slide Window
 

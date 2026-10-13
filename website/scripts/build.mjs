@@ -23,7 +23,7 @@ const files = [
   ["src/privacy/index.html", "privacy/index.html"],
   ["src/styles.css", "styles.css"],
   ["src/language.js", "language.js"],
-  ["../docs/assets/presenter-window-en-macos.png", "assets/presenter-window-en.png"],
+  ["src/assets/presenter-window-v2-macos.png", "assets/presenter-window-v2-macos.png"],
   ["../docs/assets/slide-window-title-en-macos.png", "assets/slide-window-title-en.png"],
   ["../docs/assets/slide-window-en-macos.png", "assets/slide-window-en.png"],
   ["../docs/assets/quick-presenter-demo.gif", "assets/quick-presenter-demo.gif"],
