@@ -1479,7 +1479,11 @@ fn verify_startup_placement(
                     && (outer[1] - plan.logical_outer_size[1]).abs() < 2.0;
                 if moved_elsewhere || (size_settled && frame_settled) {
                     // Prefer an externally moved usable window over delayed correction.
-                    windows.placement.cancel();
+                    if !moved_elsewhere && size_settled && frame_settled {
+                        windows.placement.complete_verified_restore(generation);
+                    } else {
+                        windows.placement.cancel();
+                    }
                     sync_slide_chrome(&windows);
                     capture_slide_placement(&windows);
                     return;
