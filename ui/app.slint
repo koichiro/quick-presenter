@@ -1,3 +1,4 @@
+export struct CommentOverlayItem { text: string, x: float, y: float, width: float }
 export struct ReactionOverlayItem { kind: int, x: float, y: float, opacity: float }
 
 import { Button, VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
@@ -703,6 +704,11 @@ export component PresenterWindow inherits Window {
     out property <length> audience-panel-height: 282px;
     in property <bool> audience-busy: false;
     in property <string> audience-recent-reactions;
+    in property <string> audience-comment-history;
+    out property <length> audience-history-height: comment-history.preferred-height;
+    out property <length> audience-history-visible-height: comment-history-scroll.visible-height;
+    in property <bool> audience-comments-paused;
+    callback audience-toggle-comments();
     in property <int> audience-reaction-count;
     callback audience-open-url();
     callback audience-toggle-session();
@@ -1406,6 +1412,11 @@ export component PresenterWindow inherits Window {
                         enabled: !root.audience-busy && (root.audience-active || root.audience-can-start);
                         clicked => { root.audience-toggle-session(); }
                     }
+                    Button {
+                        text: root.audience-comments-paused ? "Resume" : "Pause";
+                        enabled: root.audience-active && !root.audience-busy;
+                        clicked => { root.audience-toggle-comments(); }
+                    }
                     Rectangle { horizontal-stretch: 1; }
                 }
             }
@@ -1449,11 +1460,24 @@ export component PresenterWindow inherits Window {
                             padding: 10px;
                             Text { text: "Reactions: " + root.audience-reaction-count; color: white; font-weight: 700; }
                             Text {
-                                text: root.audience-recent-reactions == "" ? "Waiting for reactions…" : root.audience-recent-reactions;
+                                text: root.audience-recent-reactions;
                                 color: white;
-                                font-size: 28px;
-                                wrap: word-wrap;
+                                font-size: 22px;
+                                overflow: elide;
+                            }
+                            comment-history-scroll := ScrollView {
                                 vertical-stretch: 1;
+                                content-width: self.visible-width;
+                                content-height: comment-history.preferred-height;
+                                content-y: min(0px, self.visible-height - self.content-height);
+                                comment-history := Text {
+                                    width: parent.width;
+                                    height: self.preferred-height;
+                                    text: root.audience-comment-history == "" ? "Waiting for comments…" : root.audience-comment-history;
+                                    color: white;
+                                    font-size: 14px;
+                                    wrap: word-wrap;
+                                }
                             }
                         }
                     }
@@ -1727,6 +1751,9 @@ export component SlideWindow inherits Window {
     in property <bool> audience-guide-visible: false;
     in property <bool> black-screen-active: false;
     in property <[ReactionOverlayItem]> audience-overlay;
+    in property <[CommentOverlayItem]> audience-comments;
+    in property <string> comment-measure-text;
+    out property <float> comment-measure-width: comment-measure.preferred-width / 1px;
     callback audience-clear-overlay();
     in property <image> audience-qr;
     in property <string> audience-url;
@@ -1937,6 +1964,32 @@ export component SlideWindow inherits Window {
                     reaction.kind == 2 ? @image-url("../assets/audience/reactions/applause.svg") :
                     reaction.kind == 3 ? @image-url("../assets/audience/reactions/laugh.svg") :
                     @image-url("../assets/audience/reactions/question.svg");
+            }
+        }
+        comment-measure := Text {
+            visible: false;
+            text: root.comment-measure-text;
+            font-size: 32px;
+            font-weight: 700;
+            wrap: no-wrap;
+        }
+        if !root.black-screen-active: Rectangle {
+            property <float> canvas-scale: min(parent.width / 1280px, parent.height / 720px);
+            width: 1280px * self.canvas-scale;
+            height: 720px * self.canvas-scale;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            clip: true;
+            for comment in root.audience-comments: Text {
+                x: comment.x * parent.canvas-scale * 1px;
+                y: comment.y * parent.canvas-scale * 1px;
+                width: (comment.width + 1) * parent.canvas-scale * 1px;
+                height: 48px * parent.canvas-scale;
+                text: comment.text;
+                color: white;
+                font-size: 32px * parent.canvas-scale;
+                font-weight: 700;
+                wrap: no-wrap;
             }
         }
         if root.black-screen-active: Rectangle { width: parent.width; height: parent.height; background: black; }

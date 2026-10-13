@@ -54,7 +54,9 @@ impl OverlayEngine {
         {
             return;
         }
-        let AudienceEvent::Reaction { kind } = event.event;
+        let AudienceEvent::Reaction { kind } = event.event else {
+            return;
+        };
         let slot = (0..MAX_VISIBLE)
             .find(|slot| !self.active.iter().any(|a| a.slot == *slot))
             .unwrap();
@@ -108,6 +110,7 @@ mod tests {
             sequence: 1,
             participant_id: 1,
             received_at: at,
+            display_generation: 0,
             event: AudienceEvent::Reaction {
                 kind: ReactionKind::Heart,
             },
