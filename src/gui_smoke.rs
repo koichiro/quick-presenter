@@ -436,17 +436,14 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
         let verification_refs = refs.clone();
         run_macos_window_action_until(
             move || crate::window_controller::start_slide_placement(action_refs),
-            move || {
-                !verification_refs.placement.busy.get()
-                    && !verification_refs.placement.restoring.get()
-            },
+            move || verification_refs.placement.restore_verified.get(),
             Duration::from_secs(5),
         )?;
         report.check(
             format!("macOS {name} restoration completes"),
-            !refs.placement.busy.get() && !refs.placement.restoring.get(),
+            refs.placement.restore_verified.get(),
             "startup restore settled through the production verification path",
-            "startup restore remained in flight",
+            "startup restore did not verify the saved geometry",
         );
         let logical = slide
             .window()
