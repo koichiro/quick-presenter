@@ -138,6 +138,8 @@ pub struct SlidePlacementController {
     pub enabled: Cell<bool>,
     pub busy: Cell<bool>,
     pub restoring: Cell<bool>,
+    /// True only after startup restoration verifies the planned native geometry.
+    pub restore_verified: Cell<bool>,
     pub visible: Cell<bool>,
     pub preserve_size: Cell<bool>,
     pub generation: Cell<u64>,
@@ -146,6 +148,7 @@ pub struct SlidePlacementController {
 }
 impl SlidePlacementController {
     pub fn initialize(&self, record: Option<PlacementRecord>) {
+        self.restore_verified.set(false);
         self.enabled.set(true);
         self.visible.set(true);
         self.preserve_size
@@ -156,6 +159,14 @@ impl SlidePlacementController {
         self.generation.set(self.generation.get().wrapping_add(1));
         self.busy.set(false);
         self.restoring.set(false);
+        self.restore_verified.set(false);
+    }
+    /// Complete the current restore after native geometry verification succeeds.
+    pub fn complete_verified_restore(&self, generation: u64) {
+        if self.current(generation) && self.restoring.get() {
+            self.cancel();
+            self.restore_verified.set(true);
+        }
     }
     pub fn suspend(&self) -> u64 {
         self.cancel();
@@ -178,6 +189,28 @@ impl SlidePlacementController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn restore_verification_excludes_cancelled_and_stale_operations() {
+        let controller = SlidePlacementController::default();
+        controller.initialize(None);
+        let generation = controller.suspend();
+        controller.restoring.set(true);
+        controller.cancel();
+        controller.complete_verified_restore(generation);
+        assert!(!controller.restore_verified.get());
+
+        let current = controller.suspend();
+        controller.restoring.set(true);
+        controller.complete_verified_restore(generation);
+        assert!(!controller.restore_verified.get());
+        assert!(controller.current(current));
+        controller.complete_verified_restore(current);
+        assert!(controller.restore_verified.get());
+        assert!(!controller.busy.get());
+        assert!(!controller.restoring.get());
+        controller.suspend();
+        assert!(!controller.restore_verified.get());
+    }
     fn display(x: i32, scale: f64) -> DisplayRect {
         DisplayRect {
             origin: [x, 0],

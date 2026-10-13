@@ -140,6 +140,7 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
     // Navigation acknowledges before its render completes. Compare the full
     // status only after that independent transition has finished.
     ready(path)?;
+    let export_started = Instant::now();
     let before_export = call(path, Command::Status(Empty {}))?;
     let mut export_file = client::export(|request| client::send_to(path, request))
         .map_err(|error| anyhow::anyhow!(error.message))?;
@@ -172,7 +173,7 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
     }
     let after_export = call(path, Command::Status(Empty {}))?;
     anyhow::ensure!(
-        after_export == before_export,
+        export_preserves_status(&before_export, &after_export, export_started.elapsed()),
         "export changed presentation state: before={before_export:?}, after={after_export:?}"
     );
     call(path, Command::GoTo(PageParams { page: 1 }))?;
@@ -252,4 +253,89 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
         }
     }
     anyhow::bail!("renderer did not finish shutdown")
+}
+
+/// Compare every status field while allowing only bounded natural timer progress.
+fn export_preserves_status(before: &Reply, after: &Reply, elapsed: Duration) -> bool {
+    let (Reply::Status(before), Reply::Status(after)) = (before, after) else {
+        return false;
+    };
+    let mut expected = before.clone();
+    if before.timer.running {
+        let advance = after
+            .timer
+            .elapsed_seconds
+            .checked_sub(before.timer.elapsed_seconds);
+        if !advance.is_some_and(|seconds| seconds <= elapsed.as_secs().saturating_add(1)) {
+            return false;
+        }
+        expected.timer.elapsed_seconds = after.timer.elapsed_seconds;
+    }
+    expected == *after
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_status_allows_clock_progress_but_rejects_state_changes() {
+        let status = Status {
+            session_id: "smoke".into(),
+            document_revision: 1,
+            document: Some("slides.pdf".into()),
+            page: Some(3),
+            pages: 3,
+            fullscreen: false,
+            blackout: false,
+            timer: TimerStatus {
+                running: true,
+                elapsed_seconds: 4,
+            },
+            opening: false,
+            render_state: RenderState::Ready,
+            notes_state: NotesState::Ready,
+        };
+        let before = Reply::Status(status.clone());
+        let mut after = status.clone();
+        after.timer.elapsed_seconds = 5;
+        let duration = Duration::from_millis(200);
+        assert!(export_preserves_status(
+            &before,
+            &Reply::Status(after.clone()),
+            duration
+        ));
+        for seconds in [0, 3, 6] {
+            after.timer.elapsed_seconds = seconds;
+            assert!(!export_preserves_status(
+                &before,
+                &Reply::Status(after.clone()),
+                duration
+            ));
+        }
+        after = status.clone();
+        after.page = Some(2);
+        assert!(!export_preserves_status(
+            &before,
+            &Reply::Status(after),
+            duration
+        ));
+        after = status.clone();
+        after.timer.running = false;
+        assert!(!export_preserves_status(
+            &before,
+            &Reply::Status(after),
+            duration
+        ));
+        let mut paused = status;
+        paused.timer.running = false;
+        let before = Reply::Status(paused.clone());
+        assert!(export_preserves_status(&before, &before, duration));
+        paused.timer.elapsed_seconds += 1;
+        assert!(!export_preserves_status(
+            &before,
+            &Reply::Status(paused),
+            duration
+        ));
+    }
 }
