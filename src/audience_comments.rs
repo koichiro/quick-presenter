@@ -22,6 +22,7 @@ struct Pending {
     text: String,
     width: f32,
     received: Instant,
+    deadline: Instant,
 }
 struct Active {
     text: String,
@@ -72,6 +73,7 @@ impl CommentEngine {
         if self.paused
             || event.display_generation != self.generation
             || now.saturating_duration_since(event.received_at) > WAIT
+            || now >= event.overlay_deadline
             || !width.is_finite()
             || width < 0.0
             || self.active.len() >= MAX_ACTIVE
@@ -83,6 +85,7 @@ impl CommentEngine {
             text,
             width,
             received: event.received_at,
+            deadline: event.overlay_deadline,
         });
         self.advance(now);
     }
@@ -91,7 +94,7 @@ impl CommentEngine {
             WIDTH + a.width - SPEED * now.saturating_duration_since(a.started).as_secs_f32() > 0.0
         });
         self.pending
-            .retain(|p| now.saturating_duration_since(p.received) <= WAIT);
+            .retain(|p| now.saturating_duration_since(p.received) <= WAIT && now < p.deadline);
         while !self.pending.is_empty() && self.active.len() < MAX_ACTIVE {
             let start = self.last_lane.map_or(0, |lane| (lane + 1) % LANES);
             let lane = (0..LANES)
@@ -145,6 +148,7 @@ mod tests {
             sequence,
             participant_id: 1,
             received_at: now,
+            overlay_deadline: now + WAIT,
             display_generation: generation,
             event: AudienceEvent::Comment {
                 body: format!("Comment {sequence}"),

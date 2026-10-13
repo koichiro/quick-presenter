@@ -11,6 +11,8 @@ pub mod audience_comments;
 pub mod audience_events;
 mod audience_log;
 pub mod audience_overlay;
+pub mod audience_relay;
+mod audience_session;
 mod audience_ui;
 pub mod black_screen;
 mod browser;

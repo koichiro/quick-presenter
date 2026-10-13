@@ -408,7 +408,8 @@ speech orchestration outside the playback core.
 
 Audience Live development uses the `v3.0.0` branch. Optional local audience
 sessions and interaction complement presentation playback; see
-[Local Audience Sessions](docs/AUDIENCE_LOCAL.md).
+[Local Audience Sessions](docs/AUDIENCE_LOCAL.md) and the
+[experimental relay client](docs/AUDIENCE_RELAY.md).
 
 ## Related Projects
 
