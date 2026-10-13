@@ -2,10 +2,11 @@
 use crate::{
     app_state::AppState,
     audience::{self, LocalAudienceSession, SessionStatus},
+    audience_comments::CommentEngine,
     audience_events::{AudienceEvent, ReactionKind},
     audience_overlay::OverlayEngine,
     window_controller::{AppWindowRefs, AppWindows},
-    PresenterWindow, ReactionOverlayItem,
+    CommentOverlayItem, PresenterWindow, ReactionOverlayItem,
 };
 use slint::{
     ComponentHandle, Model, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel, Weak,
@@ -30,6 +31,8 @@ pub struct AudienceUi {
     overlay: RefCell<OverlayEngine>,
     overlay_timer: Timer,
     overlay_model: Rc<VecModel<ReactionOverlayItem>>,
+    comments: RefCell<CommentEngine>,
+    comment_model: Rc<VecModel<CommentOverlayItem>>,
     weak_self: RefCell<std::rc::Weak<Self>>,
 }
 
@@ -74,12 +77,31 @@ impl AudienceUi {
             overlay: RefCell::new(overlay),
             overlay_timer: Timer::default(),
             overlay_model: Rc::new(VecModel::default()),
+            comments: RefCell::new(CommentEngine::default()),
+            comment_model: Rc::new(VecModel::default()),
             weak_self: RefCell::new(std::rc::Weak::new()),
         });
         *ui.weak_self.borrow_mut() = Rc::downgrade(&ui);
         windows
             .slide
             .set_audience_overlay(ui.overlay_model.clone().into());
+        windows
+            .slide
+            .set_audience_comments(ui.comment_model.clone().into());
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_toggle_comments(move || {
+            if let Some(ui) = weak.upgrade() {
+                if let Some(session) = ui.session.borrow().as_ref() {
+                    let generation = session.advance_comment_generation();
+                    let paused = !ui.comments.borrow().paused();
+                    ui.comments.borrow_mut().set_paused(paused, generation);
+                    ui.comment_model.set_vec(Vec::new());
+                    if let Some(window) = ui.windows.presenter.upgrade() {
+                        window.set_audience_comments_paused(paused);
+                    }
+                }
+            }
+        });
         let weak = Rc::downgrade(&ui);
         windows.slide.on_audience_clear_overlay(move || {
             if let Some(ui) = weak.upgrade() {
@@ -261,15 +283,30 @@ impl AudienceUi {
     fn clear_overlay(&self) {
         self.overlay.borrow_mut().clear(Instant::now());
         self.overlay_model.set_vec(Vec::new());
-        self.overlay_timer.stop();
+        if !self.comments.borrow().has_work() {
+            self.overlay_timer.stop();
+        }
     }
     fn update_overlay(&self) {
         if !self.overlay_visible() {
-            self.clear_overlay();
-            return;
+            self.overlay.borrow_mut().clear(Instant::now());
+            self.overlay_model.set_vec(Vec::new());
         }
+        let now = Instant::now();
+        let comment_frames = self.comments.borrow_mut().frames(now);
+        self.comment_model.set_vec(
+            comment_frames
+                .into_iter()
+                .map(|f| CommentOverlayItem {
+                    text: f.text.into(),
+                    x: f.x,
+                    y: f.y,
+                    width: f.width,
+                })
+                .collect::<Vec<_>>(),
+        );
         let frames = self.overlay.borrow_mut().frames(Instant::now());
-        if frames.is_empty() {
+        if frames.is_empty() && !self.comments.borrow().has_work() {
             self.overlay_timer.stop();
         }
         let rows = frames
@@ -297,7 +334,9 @@ impl AudienceUi {
     }
     fn start_overlay_animation(&self) {
         self.update_overlay();
-        if self.overlay_model.row_count() == 0 || self.overlay_timer.running() {
+        if (self.overlay_model.row_count() == 0 && !self.comments.borrow().has_work())
+            || self.overlay_timer.running()
+        {
             return;
         }
         let weak = self.weak_self.borrow().clone();
@@ -310,6 +349,10 @@ impl AudienceUi {
     }
     fn clear_reactions(&self, window: &PresenterWindow) {
         self.clear_overlay();
+        self.comments.borrow_mut().reset();
+        self.comment_model.set_vec(Vec::new());
+        window.set_audience_comments_paused(false);
+        window.set_audience_comment_history("".into());
         self.recent.borrow_mut().clear();
         window.set_audience_recent_reactions("".into());
     }
@@ -341,26 +384,51 @@ impl AudienceUi {
                     .map(LocalAudienceSession::drain_events)
                     .unwrap_or_default();
                 if !events.is_empty() {
-                    window.set_audience_reaction_count(
-                        window
-                            .get_audience_reaction_count()
-                            .saturating_add(events.len() as i32),
-                    );
                     let visible = self.overlay_visible();
                     if !visible {
                         self.clear_overlay();
                     }
                     let mut recent = self.recent.borrow_mut();
                     for accepted in events {
-                        if visible {
-                            self.overlay.borrow_mut().push(&accepted, Instant::now());
-                        }
-                        let AudienceEvent::Reaction { kind } = accepted.event;
-                        recent.push_back(kind.emoji().to_owned());
-                        if recent.len() > 36 {
-                            recent.pop_front();
+                        match &accepted.event {
+                            AudienceEvent::Reaction { kind } => {
+                                window.set_audience_reaction_count(
+                                    window.get_audience_reaction_count().saturating_add(1),
+                                );
+                                if visible {
+                                    self.overlay.borrow_mut().push(&accepted, Instant::now());
+                                }
+                                recent.push_back(kind.emoji().to_owned());
+                                if recent.len() > 36 {
+                                    recent.pop_front();
+                                }
+                            }
+                            AudienceEvent::Comment { body, handle } => {
+                                let text = crate::audience_events::comment_display(body, handle);
+                                let width = if let Some(slide) = self.windows.slide.upgrade() {
+                                    slide.set_comment_measure_text(text.into());
+                                    slide.get_comment_measure_width()
+                                } else {
+                                    f32::NAN
+                                };
+                                self.comments.borrow_mut().receive(
+                                    &accepted,
+                                    width,
+                                    Instant::now(),
+                                );
+                            }
                         }
                     }
+                    window.set_audience_comment_history(
+                        self.comments
+                            .borrow()
+                            .history()
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                            .into(),
+                    );
                     window.set_audience_recent_reactions(
                         recent.iter().cloned().collect::<Vec<_>>().join(" ").into(),
                     );
@@ -368,7 +436,21 @@ impl AudienceUi {
                 self.start_overlay_animation();
                 window.set_audience_code(code.clone().into());
                 window.set_audience_status(
-                    format!("Connected: {} · Session {code}", snapshot.connections).into(),
+                    format!(
+                        "Connected: {} · Session {code}{}",
+                        snapshot.connections,
+                        if self
+                            .session
+                            .borrow()
+                            .as_ref()
+                            .is_some_and(LocalAudienceSession::comment_log_failed)
+                        {
+                            " · Comment log unavailable"
+                        } else {
+                            ""
+                        }
+                    )
+                    .into(),
                 );
                 if *self.last_url.borrow() != url {
                     match qr_image(&url) {
@@ -418,6 +500,9 @@ impl AudienceUi {
 
     pub fn shutdown(&self) {
         self.clear_overlay();
+        self.comments.borrow_mut().reset();
+        self.comment_model.set_vec(Vec::new());
+        self.overlay_timer.stop();
         self.timer.stop();
         if let Some(mut session) = self.session.borrow_mut().take() {
             session.shutdown();

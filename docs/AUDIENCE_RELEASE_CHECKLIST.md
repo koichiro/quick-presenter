@@ -133,3 +133,22 @@ only once per round. Resource shedding is expected; accepted events are not
 guaranteed displayed. Connected count stayed 48 and each drain remained at
 most 16 events. All sockets disconnected, pending events cleared, and the
 listener port rebound after shutdown.
+
+## A7 live comments
+
+- On PDF pages and page 0, send anonymous, named, Japanese, emoji, and HTML-looking
+  plain text. Verify only the moving overlay appears on the audience window and
+  the newest 20 comments appear oldest-first in the presenter history.
+- Navigate forward/backward and resize/fullscreen the audience window while a
+  comment moves. Verify no restart, lane change, or replay. Minimize long enough
+  for expiry and confirm old comments do not return.
+- Pause while comments are visible, submit more, then Resume. History and
+  reactions must continue; only new post-Resume comments may enter the overlay.
+- Submit oversized/blank/control-character input, bursts, and concurrent clients.
+  Confirm bounded state and continued PDF navigation.
+- Verify `audience-comments.jsonl` and `.1` contain the original submitted handle
+  and normalized body, including while paused. Exercise rotation and an
+  unwritable log directory; the presenter must report logging failure while PDF
+  playback and reception continue. Retained files survive session stop.
+- Repeat on signed macOS/Store, Windows, Linux, and real mobile browsers before
+  release. Local macOS GUI smoke does not replace those platform checks.
