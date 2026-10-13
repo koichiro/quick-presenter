@@ -4,6 +4,10 @@ This v3.0.0 milestone adds only the qp client for Relay Protocol `1-draft.1`.
 qp remains GPL-3.0-only. Relay server code, browser assets, shared wire fixtures and
 their licensing belong to the separate `quick-presenter-relay` project.
 
+The proposed replacement for the manual room-file setup is documented in
+[Audience relay configuration and room creation](AUDIENCE_RELAY_ROOM_CREATION.md).
+That proposal is not implemented by the current client.
+
 ## Run a local interoperability test
 
 In `quick-presenter-relay`, start its development fixture. The configuration path
