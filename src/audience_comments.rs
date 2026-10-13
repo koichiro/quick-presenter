@@ -156,6 +156,140 @@ mod tests {
             },
         }
     }
+
+    #[test]
+    fn invalid_widths_keep_history_without_starting_or_queueing_animation() {
+        let now = Instant::now();
+        for width in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -1.0] {
+            let mut engine = CommentEngine::default();
+            engine.receive(&event(1, now, 0), width, now);
+            assert_eq!(engine.history().back().unwrap(), "Comment 1");
+            assert!(engine.frames(now).is_empty());
+            assert!(!engine.has_work());
+            engine.receive(&event(2, now, 0), 0.0, now);
+            assert_eq!(engine.frames(now)[0].width, 0.0);
+        }
+    }
+
+    #[test]
+    fn wait_boundary_is_inclusive_but_overlay_deadline_is_exclusive() {
+        let now = Instant::now();
+        let mut message = event(1, now, 0);
+        message.overlay_deadline = now + WAIT + Duration::from_secs(1);
+        for (at, visible) in [
+            (now + WAIT, true),
+            (now + WAIT + Duration::from_nanos(1), false),
+        ] {
+            let mut engine = CommentEngine::default();
+            engine.receive(&message, 100.0, at);
+            assert_eq!(engine.frames(at).len(), usize::from(visible));
+            assert_eq!(engine.history().len(), 1);
+        }
+        message.overlay_deadline = now + Duration::from_millis(100);
+        let mut engine = CommentEngine::default();
+        engine.receive(&message, 100.0, message.overlay_deadline);
+        assert!(!engine.has_work());
+        assert_eq!(engine.history().len(), 1);
+    }
+
+    #[test]
+    fn expired_pending_head_does_not_delay_the_next_comment() {
+        let now = Instant::now();
+        let mut engine = CommentEngine::default();
+        for sequence in 1..=LANES as u64 {
+            engine.receive(&event(sequence, now, 0), 128.0, now);
+        }
+        let mut short = event(7, now, 0);
+        short.overlay_deadline = now + Duration::from_millis(500);
+        engine.receive(&short, 128.0, now);
+        engine.receive(&event(8, now, 0), 128.0, now);
+        let frames = engine.frames(now + Duration::from_secs(1));
+        assert_eq!(frames.len(), LANES + 1);
+        assert_eq!(frames.last().unwrap().text, "Comment 8");
+        assert_eq!(frames.last().unwrap().y, 48.0);
+        assert_eq!(engine.history().len(), 8);
+        assert!(engine.pending.is_empty());
+    }
+
+    #[test]
+    fn queued_comment_can_start_at_exact_wait_boundary() {
+        let now = Instant::now();
+        let mut engine = CommentEngine::default();
+        for sequence in 1..=7 {
+            let mut message = event(sequence, now, 0);
+            message.overlay_deadline = now + WAIT + Duration::from_secs(1);
+            engine.receive(&message, 288.0, now);
+        }
+        assert_eq!(
+            engine.frames(now + WAIT - Duration::from_millis(1)).len(),
+            LANES
+        );
+        let frames = engine.frames(now + WAIT);
+        assert_eq!(frames.len(), LANES + 1);
+        assert_eq!(frames[LANES].text, "Comment 7");
+        assert_eq!(frames[LANES].x - (frames[0].x + frames[0].width), 32.0);
+    }
+
+    #[test]
+    fn active_comment_lifetime_uses_width_and_outlasts_admission_deadline() {
+        let now = Instant::now();
+        let mut engine = CommentEngine::default();
+        engine.receive(&event(1, now, 0), 320.0, now);
+        let middle = engine.frames(now + Duration::from_secs(5));
+        assert_eq!(middle.len(), 1);
+        assert_eq!(middle[0].x, WIDTH - SPEED * 5.0);
+        assert_eq!(middle[0].width, 320.0);
+        let last = engine.frames(now + Duration::from_millis(9999));
+        assert!(last[0].x + last[0].width > 0.0);
+        assert!(engine.frames(now + Duration::from_secs(10)).is_empty());
+        assert!(!engine.has_work());
+    }
+
+    #[test]
+    fn reactions_and_out_of_order_comments_do_not_advance_comment_history() {
+        let now = Instant::now();
+        let mut engine = CommentEngine::default();
+        let mut reaction = event(100, now, 0);
+        reaction.event = AudienceEvent::Reaction {
+            kind: crate::audience_events::ReactionKind::Heart,
+        };
+        engine.receive(&reaction, 100.0, now);
+        engine.receive(&event(2, now, 0), 100.0, now);
+        engine.receive(&event(1, now, 0), 100.0, now);
+        engine.receive(&event(2, now, 0), 100.0, now);
+        assert_eq!(
+            engine.history().iter().cloned().collect::<Vec<_>>(),
+            vec!["Comment 2"]
+        );
+        assert_eq!(engine.frames(now).len(), 1);
+        engine.reset();
+        engine.receive(&event(1, now, 0), 100.0, now);
+        assert_eq!(engine.frames(now)[0].text, "Comment 1");
+    }
+
+    #[test]
+    fn active_capacity_rejects_overflow_but_keeps_recent_history_in_order() {
+        let now = Instant::now();
+        let mut engine = CommentEngine::default();
+        for wave in 0..4 {
+            let at = now + Duration::from_millis(wave * 200);
+            for lane in 0..LANES as u64 {
+                engine.receive(&event(wave * LANES as u64 + lane + 1, at, 0), 0.0, at);
+            }
+        }
+        let later = now + Duration::from_millis(800);
+        engine.receive(&event(25, later, 0), 0.0, later);
+        let frames = engine.frames(later);
+        assert_eq!(frames.len(), MAX_ACTIVE);
+        assert!(frames.iter().all(|frame| frame.text != "Comment 25"));
+        assert!(engine.pending.is_empty());
+        assert_eq!(engine.history().front().unwrap(), "Comment 6");
+        assert_eq!(engine.history().back().unwrap(), "Comment 25");
+        engine.set_paused(true, 1);
+        assert!(!engine.has_work());
+        assert_eq!(engine.history().len(), 20);
+    }
+
     #[test]
     fn round_robin_spacing_fifo_and_constant_lifetime() {
         let now = Instant::now();

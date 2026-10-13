@@ -110,6 +110,64 @@ mod tests {
             "A".repeat(43)
         )
     }
+
+    #[test]
+    fn configuration_size_limit_counts_utf8_bytes_and_accepts_exact_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        // A TOML comment supplies valid multibyte content without changing the mode.
+        let exact = format!("#{} ", "é".repeat(8191));
+        assert_eq!(exact.len(), 16384);
+        std::fs::write(&path, &exact).unwrap();
+        assert!(load_from(Some(path.clone()), None).unwrap().is_none());
+        std::fs::write(&path, format!("{exact} ")).unwrap();
+        assert_eq!(
+            load_from(Some(path), None).err(),
+            Some("Audience configuration is too large.")
+        );
+    }
+
+    #[test]
+    fn invalid_utf8_and_configuration_errors_do_not_expose_file_contents() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("private-config.toml");
+        std::fs::write(&path, [0xff, 0xfe]).unwrap();
+        assert_eq!(
+            load_from(Some(path.clone()), None).err(),
+            Some("Cannot read Audience configuration.")
+        );
+        std::fs::write(&path, "[audience]\ncreate_token='private-test-value'").unwrap();
+        assert_eq!(
+            load_from(Some(path), None).err(),
+            Some("Invalid Audience TOML configuration.")
+        );
+    }
+
+    #[test]
+    fn relay_creation_token_uses_exact_base64url_length_and_alphabet() {
+        let base = remote("https://relay.example");
+        let valid = format!("{}_-9", "a".repeat(40));
+        assert_eq!(valid.len(), 43);
+        let endpoint = parse(&base.replace(&"A".repeat(43), &valid))
+            .unwrap()
+            .unwrap();
+        assert_eq!(endpoint.create_token, valid);
+        assert_eq!(endpoint.origin.as_str(), "https://relay.example/");
+        for token in [
+            "a".repeat(42),
+            "a".repeat(44),
+            format!("{}+", "a".repeat(42)),
+            format!("{}/", "a".repeat(42)),
+            format!("{}=", "a".repeat(42)),
+            format!("{}é", "a".repeat(41)),
+        ] {
+            assert!(
+                parse(&base.replace(&"A".repeat(43), &token)).is_err(),
+                "{token}"
+            );
+        }
+    }
+
     #[test]
     fn strict_modes_origins_and_credentials() {
         assert!(parse("").unwrap().is_none());

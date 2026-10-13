@@ -117,6 +117,109 @@ impl CommentLogger {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn comment() -> AudienceEvent {
+        AudienceEvent::Comment {
+            body: "Hello\n世界".into(),
+            handle: " Original\tName ".into(),
+        }
+    }
+
+    #[test]
+    fn bounded_writer_backpressure_rejects_comment_without_consuming_sequence() {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let logger = Arc::new(CommentLogger {
+            sender: Mutex::new(Some(sender)),
+            worker: Mutex::new(None),
+            failed: Arc::new(AtomicBool::new(false)),
+        });
+        let now = std::time::Instant::now();
+        let mut engine = crate::audience_events::AudienceEngine::new(now);
+        engine.logger = Some(logger.clone());
+        use crate::audience_events::{Admission, ReactionKind};
+        assert_eq!(engine.accept_event(comment(), 1, now), Admission::Accepted);
+        assert_eq!(engine.accept_event(comment(), 2, now), Admission::Busy);
+        assert_eq!(
+            engine.accept(ReactionKind::Heart, 3, now),
+            Admission::Accepted
+        );
+        let first: serde_json::Value = serde_json::from_str(&receiver.try_recv().unwrap()).unwrap();
+        assert_eq!(first["sequence"], 1);
+        assert_eq!(first["participant_id"], 1);
+        assert_eq!(engine.accept_event(comment(), 4, now), Admission::Accepted);
+        let events = engine.drain(now);
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event.sequence)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event.participant_id)
+                .collect::<Vec<_>>(),
+            vec![1, 3, 4]
+        );
+        let last: serde_json::Value = serde_json::from_str(&receiver.try_recv().unwrap()).unwrap();
+        assert_eq!(last["sequence"], 3);
+        assert!(!logger.failed());
+        logger.shutdown();
+    }
+
+    #[test]
+    fn disconnected_writer_marks_failure_and_allows_later_comments() {
+        let (sender, receiver) = mpsc::sync_channel(1);
+        drop(receiver);
+        let logger = CommentLogger {
+            sender: Mutex::new(Some(sender)),
+            worker: Mutex::new(None),
+            failed: Arc::new(AtomicBool::new(false)),
+        };
+        assert!(logger.submit("session", 1, 1, &comment()));
+        assert!(logger.failed());
+        assert!(logger.submit("session", 2, 1, &comment()));
+        logger.shutdown();
+    }
+
+    #[test]
+    fn shutdown_drains_ordered_records_and_does_not_log_reactions() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested/comments.jsonl");
+        let logger = CommentLogger::start(Some(path.clone()), 100_000);
+        let reaction = AudienceEvent::Reaction {
+            kind: crate::audience_events::ReactionKind::Heart,
+        };
+        assert!(logger.submit("session", 0, 99, &reaction));
+        for sequence in 1..=3 {
+            assert!(logger.submit("session", sequence, 7, &comment()));
+        }
+        logger.shutdown();
+        logger.shutdown();
+        assert!(!logger.failed());
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.ends_with('\n'));
+        let records: Vec<serde_json::Value> = text
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(records.len(), 3);
+        for (index, record) in records.iter().enumerate() {
+            assert_eq!(record["sequence"], index as u64 + 1);
+            assert_eq!(record["participant_id"], 7);
+            assert_eq!(record["session_id"], "session");
+            assert_eq!(record["body"], "Hello\n世界");
+            assert_eq!(record["handle"], " Original\tName ");
+            assert!(
+                chrono::DateTime::parse_from_rfc3339(record["received_at"].as_str().unwrap())
+                    .is_ok()
+            );
+        }
+        assert!(logger.submit("session", 4, 7, &comment()));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    }
+
     #[test]
     fn json_lines_rotate_preserve_handles_and_flush_on_shutdown() {
         let dir = tempfile::tempdir().unwrap();
