@@ -402,3 +402,21 @@ Update `README.md`, `PRIVACY.md`, `FULLSCREEN.md`, and the GUI smoke checklist t
 describe the delivered behavior, storage/reset path, and platform limitations.
 The implementation keeps native multi-display smoke checks as part of the
 platform release validation.
+
+### macOS GUI restoration verification
+
+The GUI smoke harness schedules native actions inside an active Winit loop so
+synchronous AppKit resize notifications are delivered. The startup checks await
+the placement controller's `busy` and `restoring` flags clearing, with a five-second
+deadline, before asserting saved bounds and edge pixels. The production bounded
+retry schedule can exceed a fixed one-second wait; the harness deadline does not
+change that schedule or bypass geometry assertions.
+
+Each window action owns its action/poll timers and re-enters the loop after an
+unrelated early quit until its own result is ready. Timers are stopped on success,
+timeout, or error so delayed quit requests cannot interrupt later checks. Other
+native actions retain a full one-second settling interval after the action runs.
+Regression checks inject an early quit, require the action to run once and fully
+settle, and verify an explicit timeout does not interfere with the next action.
+This corrects validation sequencing; native placement planning and persistence
+remain unchanged.
