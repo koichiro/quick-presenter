@@ -53,6 +53,7 @@ impl OverlayEngine {
             .cleared_at
             .is_some_and(|cutoff| event.received_at <= cutoff)
             || now.saturating_duration_since(event.received_at) >= self.lifetime
+            || now >= event.overlay_deadline
             || self.active.len() >= MAX_VISIBLE
         {
             return;
@@ -113,6 +114,7 @@ mod tests {
             sequence: 1,
             participant_id: 1,
             received_at: at,
+            overlay_deadline: at + crate::audience_events::EVENT_TTL,
             display_generation: 0,
             event: AudienceEvent::Reaction {
                 kind: ReactionKind::Heart,

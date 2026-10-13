@@ -1,10 +1,11 @@
 //! UI-thread adapter for the optional audience subsystem.
 use crate::{
     app_state::AppState,
-    audience::{self, LocalAudienceSession, SessionStatus},
+    audience::{self, SessionStatus},
     audience_comments::CommentEngine,
     audience_events::{AudienceEvent, ReactionKind},
     audience_overlay::OverlayEngine,
+    audience_session::AudienceSession,
     window_controller::{AppWindowRefs, AppWindows},
     CommentOverlayItem, PresenterWindow, ReactionOverlayItem,
 };
@@ -20,9 +21,10 @@ use std::{
 };
 
 pub struct AudienceUi {
-    session: RefCell<Option<LocalAudienceSession>>,
+    session: RefCell<Option<AudienceSession>>,
     timer: Timer,
     addresses: RefCell<Vec<Ipv4Addr>>,
+    relay_config: Option<std::path::PathBuf>,
     stopping: RefCell<bool>,
     address_index: RefCell<usize>,
     last_url: RefCell<String>,
@@ -43,6 +45,7 @@ impl AudienceUi {
             state,
             audience::local_addresses,
             OverlayEngine::default(),
+            std::env::var_os("QUICK_PRESENTER_AUDIENCE_RELAY_CONFIG").map(Into::into),
         )
     }
 
@@ -55,6 +58,7 @@ impl AudienceUi {
             state,
             || Ok(vec![Ipv4Addr::LOCALHOST]),
             OverlayEngine::for_gui_smoke(),
+            None,
         )
     }
 
@@ -63,12 +67,14 @@ impl AudienceUi {
         state: Rc<RefCell<AppState>>,
         addresses: fn() -> std::io::Result<Vec<Ipv4Addr>>,
         overlay: OverlayEngine,
+        relay_config: Option<std::path::PathBuf>,
     ) -> Rc<Self> {
         let presenter = &windows.presenter;
         let ui = Rc::new(Self {
             session: RefCell::new(None),
             timer: Timer::default(),
             addresses: RefCell::new(Vec::new()),
+            relay_config,
             stopping: RefCell::new(false),
             address_index: RefCell::new(0),
             last_url: RefCell::new(String::new()),
@@ -92,8 +98,8 @@ impl AudienceUi {
         presenter.on_audience_toggle_comments(move || {
             if let Some(ui) = weak.upgrade() {
                 if let Some(session) = ui.session.borrow().as_ref() {
-                    let generation = session.advance_comment_generation();
                     let paused = !ui.comments.borrow().paused();
+                    let generation = session.advance_comment_generation(paused);
                     ui.comments.borrow_mut().set_paused(paused, generation);
                     ui.comment_model.set_vec(Vec::new());
                     if let Some(window) = ui.windows.presenter.upgrade() {
@@ -124,7 +130,9 @@ impl AudienceUi {
                     *ui.address_index.borrow_mut() = 0;
                     if let Some(window) = window.upgrade() {
                         window.set_audience_address(ui.address_label().into());
-                        window.set_audience_can_start(!ui.addresses.borrow().is_empty());
+                        window.set_audience_can_start(
+                            ui.relay_config.is_some() || !ui.addresses.borrow().is_empty(),
+                        );
                     }
                 }
                 Err(error) => {
@@ -132,7 +140,7 @@ impl AudienceUi {
                         window.set_audience_status(
                             format!("Cannot discover LAN addresses: {error}").into(),
                         );
-                        window.set_audience_can_start(false);
+                        window.set_audience_can_start(ui.relay_config.is_some());
                     }
                 }
             }
@@ -179,16 +187,12 @@ impl AudienceUi {
                 }
                 return;
             }
-            let Some(&address) = ui.addresses.borrow().get(*ui.address_index.borrow()) else {
-                if let Some(window) = window.upgrade() {
-                    window.set_audience_status(
-                        "No LAN address. Connect to Wi-Fi or Ethernet, then refresh addresses."
-                            .into(),
-                    );
-                }
-                return;
-            };
-            match LocalAudienceSession::start(address) {
+            let address = ui
+                .addresses
+                .borrow()
+                .get(*ui.address_index.borrow())
+                .copied();
+            match AudienceSession::start(address, ui.relay_config.clone()) {
                 Ok(session) => {
                     if let Some(window) = window.upgrade() {
                         ui.clear_reactions(&window);
@@ -223,7 +227,7 @@ impl AudienceUi {
                 Err(error) => {
                     if let Some(window) = window.upgrade() {
                         window.set_audience_status(
-                            format!("Cannot start audience server: {error}").into(),
+                            format!("Cannot start audience session: {error}").into(),
                         );
                     }
                 }
@@ -267,6 +271,9 @@ impl AudienceUi {
     }
 
     fn address_label(&self) -> String {
+        if self.relay_config.is_some() {
+            return "Relay · draft protocol".into();
+        }
         self.addresses
             .borrow()
             .get(*self.address_index.borrow())
@@ -365,7 +372,7 @@ impl AudienceUi {
             .session
             .borrow()
             .as_ref()
-            .map(LocalAudienceSession::snapshot);
+            .map(AudienceSession::snapshot);
         let Some(snapshot) = snapshot else {
             return;
         };
@@ -381,7 +388,7 @@ impl AudienceUi {
                     .session
                     .borrow()
                     .as_ref()
-                    .map(LocalAudienceSession::drain_events)
+                    .map(AudienceSession::drain_events)
                     .unwrap_or_default();
                 if !events.is_empty() {
                     let visible = self.overlay_visible();
@@ -443,7 +450,7 @@ impl AudienceUi {
                             .session
                             .borrow()
                             .as_ref()
-                            .is_some_and(LocalAudienceSession::comment_log_failed)
+                            .is_some_and(AudienceSession::comment_log_failed)
                         {
                             " · Comment log unavailable"
                         } else {
@@ -474,7 +481,7 @@ impl AudienceUi {
                     .session
                     .borrow()
                     .as_ref()
-                    .is_some_and(LocalAudienceSession::is_finished)
+                    .is_some_and(AudienceSession::is_finished)
                 {
                     return;
                 }
