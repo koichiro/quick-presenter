@@ -11,8 +11,8 @@
 <button disabled data-kind="question" aria-label="Question">❓</button>
 </div>
 <form id="comments">
-<label for="handle">Handle</label><input id="handle" value="Anonymous" maxlength="32" autocomplete="nickname">
-<label for="body">Comment (up to 200 characters)</label><textarea id="body" maxlength="200" required></textarea>
+<label for="handle">Handle</label><input id="handle" value="Anonymous" autocomplete="nickname">
+<label for="body">Comment (up to 200 characters)</label><textarea id="body" required></textarea>
 <button id="send-comment" disabled>Send comment</button>
 </form>
 <p id="feedback" role="status">Send a reaction to the presenter.</p>
@@ -58,14 +58,22 @@ function send(type,fields){
   timeout=setTimeout(()=>{feedback.textContent='No response. Reconnect to try again.';socket.close();},4000);
 }
 buttons.forEach(button=>button.onclick=()=>send('reaction',{kind:button.dataset.kind}));
+function validateComments(){
+  const bytes=new TextEncoder();
+  body.setCustomValidity(!body.value.trim()?'Enter a comment.':
+    [...body.value].length>200 || bytes.encode(body.value).length>800?'Use up to 200 characters and 800 UTF-8 bytes.':'');
+  handle.setCustomValidity([...handle.value].length>32 || bytes.encode(handle.value).length>128?
+    'Use up to 32 characters and 128 UTF-8 bytes.':'');
+  return body.validity.valid && handle.validity.valid;
+}
+body.oninput=handle.oninput=validateComments;
 form.onsubmit=event=>{
   event.preventDefault();
   if(!commentsEnabled)return;
-  const value=body.value, name=handle.value, bytes=new TextEncoder();
-  if(!value.trim() || [...value].length>200 || bytes.encode(value).length>800 || [...name].length>32 || bytes.encode(name).length>128){
-    feedback.textContent='Enter a comment up to 200 characters and a handle up to 32 characters.';return;
+  if(!validateComments()){
+    form.reportValidity();return;
   }
-  send('comment',{body:value,handle:name});
+  send('comment',{body:body.value,handle:handle.value});
 };
 retry.onclick=connect;
 connect();
