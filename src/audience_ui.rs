@@ -1,11 +1,13 @@
 //! UI-thread adapter for the optional audience subsystem.
 use crate::{
     app_state::AppState,
-    audience::{self, LocalAudienceSession, SessionStatus},
+    audience::{self, SessionStatus},
+    audience_comments::CommentEngine,
     audience_events::{AudienceEvent, ReactionKind},
     audience_overlay::OverlayEngine,
+    audience_session::AudienceSession,
     window_controller::{AppWindowRefs, AppWindows},
-    PresenterWindow, ReactionOverlayItem,
+    CommentOverlayItem, PresenterWindow, ReactionOverlayItem,
 };
 use slint::{
     ComponentHandle, Model, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel, Weak,
@@ -19,9 +21,13 @@ use std::{
 };
 
 pub struct AudienceUi {
-    session: RefCell<Option<LocalAudienceSession>>,
+    session: RefCell<Option<AudienceSession>>,
     timer: Timer,
     addresses: RefCell<Vec<Ipv4Addr>>,
+    relay_config: RefCell<Option<crate::audience_relay_http::ManagedRelay>>,
+    config_timer: Timer,
+    configuring: std::cell::Cell<bool>,
+    config_error: RefCell<Option<&'static str>>,
     stopping: RefCell<bool>,
     address_index: RefCell<usize>,
     last_url: RefCell<String>,
@@ -30,17 +36,77 @@ pub struct AudienceUi {
     overlay: RefCell<OverlayEngine>,
     overlay_timer: Timer,
     overlay_model: Rc<VecModel<ReactionOverlayItem>>,
+    comments: RefCell<CommentEngine>,
+    comment_model: Rc<VecModel<CommentOverlayItem>>,
     weak_self: RefCell<std::rc::Weak<Self>>,
 }
 
 impl AudienceUi {
-    pub fn install(windows: &AppWindows, state: Rc<RefCell<AppState>>) -> Rc<Self> {
-        Self::install_with_address_source(
+    pub fn install(
+        windows: &AppWindows,
+        state: Rc<RefCell<AppState>>,
+        config_path: Option<std::path::PathBuf>,
+    ) -> Rc<Self> {
+        let ui = Self::install_with_address_source(
             windows,
             state,
             audience::local_addresses,
             OverlayEngine::default(),
-        )
+            None,
+        );
+        ui.configuring.set(true);
+        windows.presenter.set_audience_can_start(false);
+        windows
+            .presenter
+            .set_audience_status("Loading Audience configuration…".into());
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        let spawned = std::thread::Builder::new()
+            .name("audience-config".into())
+            .spawn(move || {
+                let _ = sender.send(crate::app_config::load(config_path));
+            });
+        if spawned.is_err() {
+            ui.configuring.set(false);
+            *ui.config_error.borrow_mut() = Some("Cannot load Audience configuration.");
+            windows
+                .presenter
+                .set_audience_status("Cannot load Audience configuration.".into());
+            return ui;
+        }
+        let weak = Rc::downgrade(&ui);
+        let window = windows.presenter.as_weak();
+        ui.config_timer
+            .start(TimerMode::Repeated, Duration::from_millis(20), move || {
+                let Some(ui) = weak.upgrade() else {
+                    return;
+                };
+                let result = match receiver.try_recv() {
+                    Ok(result) => result,
+                    Err(std::sync::mpsc::TryRecvError::Empty) => return,
+                    Err(_) => Err("Cannot load Audience configuration."),
+                };
+                ui.config_timer.stop();
+                ui.configuring.set(false);
+                match result {
+                    Ok(endpoint) => {
+                        *ui.relay_config.borrow_mut() =
+                            endpoint.map(crate::audience_relay_http::ManagedRelay::new);
+                        if let Some(window) = window.upgrade() {
+                            window.set_audience_status("".into());
+                            window.set_audience_address(ui.address_label().into());
+                            window.set_audience_can_start(ui.can_start());
+                        }
+                    }
+                    Err(error) => {
+                        *ui.config_error.borrow_mut() = Some(error);
+                        if let Some(window) = window.upgrade() {
+                            window.set_audience_can_start(false);
+                            window.set_audience_status(error.into());
+                        }
+                    }
+                }
+            });
+        ui
     }
 
     pub(crate) fn install_for_smoke(
@@ -52,6 +118,7 @@ impl AudienceUi {
             state,
             || Ok(vec![Ipv4Addr::LOCALHOST]),
             OverlayEngine::for_gui_smoke(),
+            None,
         )
     }
 
@@ -60,12 +127,17 @@ impl AudienceUi {
         state: Rc<RefCell<AppState>>,
         addresses: fn() -> std::io::Result<Vec<Ipv4Addr>>,
         overlay: OverlayEngine,
+        relay_config: Option<crate::audience_relay_http::ManagedRelay>,
     ) -> Rc<Self> {
         let presenter = &windows.presenter;
         let ui = Rc::new(Self {
             session: RefCell::new(None),
             timer: Timer::default(),
             addresses: RefCell::new(Vec::new()),
+            relay_config: RefCell::new(relay_config),
+            config_timer: Timer::default(),
+            configuring: std::cell::Cell::new(false),
+            config_error: RefCell::new(None),
             stopping: RefCell::new(false),
             address_index: RefCell::new(0),
             last_url: RefCell::new(String::new()),
@@ -74,12 +146,31 @@ impl AudienceUi {
             overlay: RefCell::new(overlay),
             overlay_timer: Timer::default(),
             overlay_model: Rc::new(VecModel::default()),
+            comments: RefCell::new(CommentEngine::default()),
+            comment_model: Rc::new(VecModel::default()),
             weak_self: RefCell::new(std::rc::Weak::new()),
         });
         *ui.weak_self.borrow_mut() = Rc::downgrade(&ui);
         windows
             .slide
             .set_audience_overlay(ui.overlay_model.clone().into());
+        windows
+            .slide
+            .set_audience_comments(ui.comment_model.clone().into());
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_toggle_comments(move || {
+            if let Some(ui) = weak.upgrade() {
+                if let Some(session) = ui.session.borrow().as_ref() {
+                    let paused = !ui.comments.borrow().paused();
+                    let generation = session.advance_comment_generation(paused);
+                    ui.comments.borrow_mut().set_paused(paused, generation);
+                    ui.comment_model.set_vec(Vec::new());
+                    if let Some(window) = ui.windows.presenter.upgrade() {
+                        window.set_audience_comments_paused(paused);
+                    }
+                }
+            }
+        });
         let weak = Rc::downgrade(&ui);
         windows.slide.on_audience_clear_overlay(move || {
             if let Some(ui) = weak.upgrade() {
@@ -102,7 +193,7 @@ impl AudienceUi {
                     *ui.address_index.borrow_mut() = 0;
                     if let Some(window) = window.upgrade() {
                         window.set_audience_address(ui.address_label().into());
-                        window.set_audience_can_start(!ui.addresses.borrow().is_empty());
+                        window.set_audience_can_start(ui.can_start());
                     }
                 }
                 Err(error) => {
@@ -110,7 +201,7 @@ impl AudienceUi {
                         window.set_audience_status(
                             format!("Cannot discover LAN addresses: {error}").into(),
                         );
-                        window.set_audience_can_start(false);
+                        window.set_audience_can_start(ui.can_start());
                     }
                 }
             }
@@ -136,7 +227,7 @@ impl AudienceUi {
             let Some(ui) = weak.upgrade() else {
                 return;
             };
-            if *ui.stopping.borrow() {
+            if *ui.stopping.borrow() || ui.configuring.get() || ui.config_error.borrow().is_some() {
                 return;
             }
             if let Some(session) = ui.session.borrow().as_ref() {
@@ -157,16 +248,13 @@ impl AudienceUi {
                 }
                 return;
             }
-            let Some(&address) = ui.addresses.borrow().get(*ui.address_index.borrow()) else {
-                if let Some(window) = window.upgrade() {
-                    window.set_audience_status(
-                        "No LAN address. Connect to Wi-Fi or Ethernet, then refresh addresses."
-                            .into(),
-                    );
-                }
-                return;
-            };
-            match LocalAudienceSession::start(address) {
+            let address = ui
+                .addresses
+                .borrow()
+                .get(*ui.address_index.borrow())
+                .copied();
+            let relay = ui.relay_config.borrow().clone();
+            match AudienceSession::start(address, relay) {
                 Ok(session) => {
                     if let Some(window) = window.upgrade() {
                         ui.clear_reactions(&window);
@@ -201,7 +289,7 @@ impl AudienceUi {
                 Err(error) => {
                     if let Some(window) = window.upgrade() {
                         window.set_audience_status(
-                            format!("Cannot start audience server: {error}").into(),
+                            format!("Cannot start audience session: {error}").into(),
                         );
                     }
                 }
@@ -244,7 +332,16 @@ impl AudienceUi {
         ui
     }
 
+    fn can_start(&self) -> bool {
+        !self.configuring.get()
+            && self.config_error.borrow().is_none()
+            && (self.relay_config.borrow().is_some() || !self.addresses.borrow().is_empty())
+    }
+
     fn address_label(&self) -> String {
+        if self.relay_config.borrow().is_some() {
+            return "Relay · draft protocol".into();
+        }
         self.addresses
             .borrow()
             .get(*self.address_index.borrow())
@@ -261,15 +358,30 @@ impl AudienceUi {
     fn clear_overlay(&self) {
         self.overlay.borrow_mut().clear(Instant::now());
         self.overlay_model.set_vec(Vec::new());
-        self.overlay_timer.stop();
+        if !self.comments.borrow().has_work() {
+            self.overlay_timer.stop();
+        }
     }
     fn update_overlay(&self) {
         if !self.overlay_visible() {
-            self.clear_overlay();
-            return;
+            self.overlay.borrow_mut().clear(Instant::now());
+            self.overlay_model.set_vec(Vec::new());
         }
+        let now = Instant::now();
+        let comment_frames = self.comments.borrow_mut().frames(now);
+        self.comment_model.set_vec(
+            comment_frames
+                .into_iter()
+                .map(|f| CommentOverlayItem {
+                    text: f.text.into(),
+                    x: f.x,
+                    y: f.y,
+                    width: f.width,
+                })
+                .collect::<Vec<_>>(),
+        );
         let frames = self.overlay.borrow_mut().frames(Instant::now());
-        if frames.is_empty() {
+        if frames.is_empty() && !self.comments.borrow().has_work() {
             self.overlay_timer.stop();
         }
         let rows = frames
@@ -297,7 +409,9 @@ impl AudienceUi {
     }
     fn start_overlay_animation(&self) {
         self.update_overlay();
-        if self.overlay_model.row_count() == 0 || self.overlay_timer.running() {
+        if (self.overlay_model.row_count() == 0 && !self.comments.borrow().has_work())
+            || self.overlay_timer.running()
+        {
             return;
         }
         let weak = self.weak_self.borrow().clone();
@@ -310,6 +424,10 @@ impl AudienceUi {
     }
     fn clear_reactions(&self, window: &PresenterWindow) {
         self.clear_overlay();
+        self.comments.borrow_mut().reset();
+        self.comment_model.set_vec(Vec::new());
+        window.set_audience_comments_paused(false);
+        window.set_audience_comment_history("".into());
         self.recent.borrow_mut().clear();
         window.set_audience_recent_reactions("".into());
     }
@@ -322,7 +440,7 @@ impl AudienceUi {
             .session
             .borrow()
             .as_ref()
-            .map(LocalAudienceSession::snapshot);
+            .map(AudienceSession::snapshot);
         let Some(snapshot) = snapshot else {
             return;
         };
@@ -338,29 +456,54 @@ impl AudienceUi {
                     .session
                     .borrow()
                     .as_ref()
-                    .map(LocalAudienceSession::drain_events)
+                    .map(AudienceSession::drain_events)
                     .unwrap_or_default();
                 if !events.is_empty() {
-                    window.set_audience_reaction_count(
-                        window
-                            .get_audience_reaction_count()
-                            .saturating_add(events.len() as i32),
-                    );
                     let visible = self.overlay_visible();
                     if !visible {
                         self.clear_overlay();
                     }
                     let mut recent = self.recent.borrow_mut();
                     for accepted in events {
-                        if visible {
-                            self.overlay.borrow_mut().push(&accepted, Instant::now());
-                        }
-                        let AudienceEvent::Reaction { kind } = accepted.event;
-                        recent.push_back(kind.emoji().to_owned());
-                        if recent.len() > 36 {
-                            recent.pop_front();
+                        match &accepted.event {
+                            AudienceEvent::Reaction { kind } => {
+                                window.set_audience_reaction_count(
+                                    window.get_audience_reaction_count().saturating_add(1),
+                                );
+                                if visible {
+                                    self.overlay.borrow_mut().push(&accepted, Instant::now());
+                                }
+                                recent.push_back(kind.emoji().to_owned());
+                                if recent.len() > 36 {
+                                    recent.pop_front();
+                                }
+                            }
+                            AudienceEvent::Comment { body, handle } => {
+                                let text = crate::audience_events::comment_display(body, handle);
+                                let width = if let Some(slide) = self.windows.slide.upgrade() {
+                                    slide.set_comment_measure_text(text.into());
+                                    slide.get_comment_measure_width()
+                                } else {
+                                    f32::NAN
+                                };
+                                self.comments.borrow_mut().receive(
+                                    &accepted,
+                                    width,
+                                    Instant::now(),
+                                );
+                            }
                         }
                     }
+                    window.set_audience_comment_history(
+                        self.comments
+                            .borrow()
+                            .history()
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                            .into(),
+                    );
                     window.set_audience_recent_reactions(
                         recent.iter().cloned().collect::<Vec<_>>().join(" ").into(),
                     );
@@ -368,7 +511,21 @@ impl AudienceUi {
                 self.start_overlay_animation();
                 window.set_audience_code(code.clone().into());
                 window.set_audience_status(
-                    format!("Connected: {} · Session {code}", snapshot.connections).into(),
+                    format!(
+                        "Connected: {} · Session {code}{}",
+                        snapshot.connections,
+                        if self
+                            .session
+                            .borrow()
+                            .as_ref()
+                            .is_some_and(AudienceSession::comment_log_failed)
+                        {
+                            " · Comment log unavailable"
+                        } else {
+                            ""
+                        }
+                    )
+                    .into(),
                 );
                 if *self.last_url.borrow() != url {
                     match qr_image(&url) {
@@ -392,7 +549,7 @@ impl AudienceUi {
                     .session
                     .borrow()
                     .as_ref()
-                    .is_some_and(LocalAudienceSession::is_finished)
+                    .is_some_and(AudienceSession::is_finished)
                 {
                     return;
                 }
@@ -418,9 +575,24 @@ impl AudienceUi {
 
     pub fn shutdown(&self) {
         self.clear_overlay();
+        self.comments.borrow_mut().reset();
+        self.comment_model.set_vec(Vec::new());
+        self.overlay_timer.stop();
         self.timer.stop();
+        self.config_timer.stop();
         if let Some(mut session) = self.session.borrow_mut().take() {
             session.shutdown();
+        }
+        // A failed start may retain an ambiguous creation identity for manual retry.
+        // Application exit also attempts bounded cleanup of that identity.
+        if let Some(settings) = self.relay_config.borrow().clone() {
+            if settings.has_attempt() {
+                if let Ok(mut session) =
+                    crate::audience_relay::RemoteAudienceSession::start_managed(settings)
+                {
+                    session.shutdown();
+                }
+            }
         }
     }
 }

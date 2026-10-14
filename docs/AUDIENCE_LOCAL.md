@@ -6,7 +6,8 @@ The initial Audience Live implementation lets audience browsers join a local
 session hosted by Quick Presenter. It supports session start/stop, a join QR
 code and URL, and an authenticated live connection count. Five reactions can be sent from the
 mobile page, appear in Presenter View (A4), and animate over the presentation
-window (A5). Comments remain outside this scope.
+window (A5). Live comments (A7) provide a browser input, presenter history, and
+a moving overlay; see [Live Comments](AUDIENCE_COMMENTS.md).
 
 ## Use
 
@@ -26,6 +27,11 @@ window (A5). Comments remain outside this scope.
    rendering state, or the timer. Blackout covers the join screen as well.
 6. Click **Audience Live OFF** to invalidate the URL,
    clear the feed/join screen, and close all connections.
+
+The green indicator blinks while comments are paused and stays lit after
+**Resume**. In the audience browser, **Enter** sends a comment and
+**Shift+Enter** inserts a line break. Confirming an IME composition does not send.
+The **Send** button sits to the right of the comment field.
 
 The thumbnail column extends to the bottom of the main content, alongside the
 Audience area, and is clipped within its own viewport. The Audience area spans
@@ -55,18 +61,26 @@ session remains active, or scan the new QR after a restart.
 - The server serves only its embedded audience page, not PDFs, notes, or files.
 - The 256-bit secret travels in the URL fragment and then the first WebSocket
   message. It is not rendered into the HTTP page or written to settings/logs.
+  The browser retains it in tab-scoped session storage before clearing the
+  fragment, allowing reloads to rejoin the active session. A new join link
+  replaces that credential. If session storage is unavailable, the fragment
+  remains so reloading still works. No persistent local storage is used.
 - HTTP Host and WebSocket Origin must match the selected listener authority.
 - Authentication has a five-second deadline and at most 32 concurrent pending
   WebSocket authentications. WebSocket frames/messages are limited to 4 KiB.
 - A session-wide handshake budget permits 20 attempts per second, including
   reconnects. This is a resource protection measure, not a participant limit.
-- After authentication, only version 1 reaction messages with five known kinds
+- After authentication, version 1 reactions with five known kinds and comments
   are accepted. Invalid application messages close the connection. Heartbeats
   detect stale connections.
-- Per connection: a burst of five reactions, refilling at two per second. Across
-  the session: a burst of 120, refilling at 120 per second. The event queue holds
-  at most 128 events, expires them after two seconds, and drains at most 16 per
-  UI poll. Resource limits do not impose a participant-count product limit.
+- Per connection: an all-event burst of five, refilling at two per second.
+  Comments additionally have a burst of two, refilling at one per second.
+  Across the session: an all-event burst of 120, refilling at 120 per second,
+  and a comment burst of 30, refilling at 30 per second. The delivery queue holds
+  at most 128 events and drains at most 16 per UI poll. Reactions expire after
+  two seconds; accepted comments remain until drained to preserve presenter
+  history independently of overlay expiry. Resource limits do not impose a
+  participant-count product limit.
 - See [Audience Protocol](AUDIENCE_PROTOCOL.md) for messages and response semantics.
 
 These bounds cover the WebSocket/session layer. This initial implementation
@@ -196,3 +210,10 @@ continue to pass.
 The Audience Live toggle includes a thumbs-up icon for both actions. The adjacent
 status lamp is green while the session is active and gray while stopped. The
 button text names the action; the lamp indicates the current session state.
+
+### GUI smoke observation budget
+
+GUI smoke instances use a six-second reaction lifetime on all desktop platforms,
+so slow native snapshots and resizes can still observe motion. Ordinary Audience
+Live instances retain the 1.8-second lifetime. Smoke checks still assert movement,
+normalized bounds, expiry, and rejection of stale inputs.

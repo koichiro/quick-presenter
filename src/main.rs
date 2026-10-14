@@ -3,12 +3,18 @@
     windows_subsystem = "windows"
 )]
 
+mod app_config;
 pub mod app_metadata;
 pub mod app_state;
 pub mod aspect;
 pub mod audience;
+pub mod audience_comments;
 pub mod audience_events;
+mod audience_log;
 pub mod audience_overlay;
+pub mod audience_relay;
+mod audience_relay_http;
+mod audience_session;
 mod audience_ui;
 pub mod black_screen;
 mod browser;
@@ -233,7 +239,8 @@ fn main() -> Result<()> {
         }
     };
     wire_callbacks(&windows, windows.refs(), state.clone());
-    let audience_ui = audience_ui::AudienceUi::install(&windows, state.clone());
+    let audience_ui =
+        audience_ui::AudienceUi::install(&windows, state.clone(), startup_options.config_path);
     let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
     let _render_event_timer = start_render_event_updates(windows.refs(), state.clone());
     let _pending_open_status_timer =
@@ -262,6 +269,7 @@ fn main() -> Result<()> {
 
     let event_loop_result = slint::run_event_loop();
     audience_ui.shutdown();
+    audience_log::shutdown();
     if event_loop_result.is_ok() {
         window_controller::capture_slide_placement(&windows.refs());
         let last_pdf = state
@@ -473,7 +481,9 @@ fn smoke_open_pdf(path: PathBuf) -> Result<()> {
 }
 
 fn run_gui_smoke(options: GuiSmokeOptions) -> Result<()> {
-    gui_smoke::run(options)
+    let result = gui_smoke::run(options);
+    audience_log::shutdown();
+    result
 }
 
 #[cfg(target_os = "macos")]

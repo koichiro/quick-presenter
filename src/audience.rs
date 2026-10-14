@@ -1,6 +1,6 @@
 //! Optional local audience session. Network tasks never access Slint or PDF state.
 use crate::audience_events::{
-    parse_reaction, AcceptedAudienceEvent, Admission, AudienceEngine, RateBudget,
+    parse_event, AcceptedAudienceEvent, Admission, AudienceEngine, RateBudget,
 };
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -83,6 +83,13 @@ impl LocalAudienceSession {
                     let runtime = tokio::runtime::Builder::new_current_thread()
                         .enable_all()
                         .build()?;
+                    #[cfg(not(test))]
+                    {
+                        worker_engine
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .logger = Some(crate::audience_log::logger());
+                    }
                     runtime.block_on(run(
                         address,
                         worker_status.clone(),
@@ -122,6 +129,21 @@ impl LocalAudienceSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .drain(Instant::now())
+    }
+
+    pub fn advance_comment_generation(&self) -> u64 {
+        self.engine
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .advance_generation()
+    }
+    pub fn comment_log_failed(&self) -> bool {
+        self.engine
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .logger
+            .as_ref()
+            .is_some_and(|logger| logger.failed())
     }
 
     pub fn request_stop(&self) {
@@ -318,13 +340,14 @@ async fn connection(
     let participant_id = state.next_participant.fetch_add(1, Ordering::Relaxed);
     if !send_json(
         &mut socket,
-        serde_json::json!({"v":1,"type":"welcome","capabilities":["reactions"]}),
+        serde_json::json!({"v":1,"type":"welcome","capabilities":["reactions","comments"]}),
     )
     .await
     {
         return;
     }
     let mut budget = RateBudget::new(5, 2, Instant::now());
+    let mut comment_budget = RateBudget::new(2, 1, Instant::now());
     let mut heartbeat = tokio::time::interval(HEARTBEAT);
     heartbeat.tick().await;
     let mut waiting_for_pong = false;
@@ -340,10 +363,10 @@ async fn connection(
                 Some(Ok(Message::Pong(_))) => waiting_for_pong = false,
                 Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
                 Some(Ok(Message::Text(text))) => {
-                    let Some((request_id, kind)) = parse_reaction(&text) else { break; };
+                    let Some((request_id, event)) = parse_event(&text) else { break; };
                     let now = Instant::now();
-                    let status = if budget.allow(now) {
-                        state.engine.lock().unwrap_or_else(|e| e.into_inner()).accept(kind, participant_id, now)
+                    let status = if budget.allow(now) && (!matches!(event, crate::audience_events::AudienceEvent::Comment { .. }) || comment_budget.allow(now)) {
+                        state.engine.lock().unwrap_or_else(|e| e.into_inner()).accept_event(event, participant_id, now)
                     } else { Admission::RateLimited };
                     if !send_json(&mut socket, serde_json::json!({"v":1,"type":"result","request_id":request_id,"status":status})).await { break; }
                 },
@@ -479,7 +502,10 @@ mod tests {
         .unwrap();
         let welcome: serde_json::Value =
             serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
-        assert_eq!(welcome["capabilities"], serde_json::json!(["reactions"]));
+        assert_eq!(
+            welcome["capabilities"],
+            serde_json::json!(["reactions", "comments"])
+        );
         for id in 0..6 {
             ws.send(tungstenite::Message::Text(serde_json::json!({"v":1,"type":"reaction","request_id":id.to_string(),"kind":"applause"}).to_string().into())).unwrap();
             let reply: serde_json::Value =
@@ -522,6 +548,45 @@ mod tests {
         next.shutdown();
     }
 
+    #[test]
+    fn comments_authenticate_validate_rate_limit_and_capture_generation() {
+        let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+        let (url, token) = ready(&session);
+        let mut ws = connect(&url);
+        ws.send(tungstenite::Message::Text(
+            serde_json::json!({"v":1,"token":token}).to_string().into(),
+        ))
+        .unwrap();
+        assert!(ws.read().unwrap().into_text().unwrap().contains("comments"));
+        for n in 0..3 {
+            ws.send(tungstenite::Message::Text(serde_json::json!({"v":1,"type":"comment","request_id":n.to_string(),"body":"Hello\n世界", "handle":" Anonymous "}).to_string().into())).unwrap();
+            let response = ws.read().unwrap().into_text().unwrap();
+            assert!(response.contains(if n < 2 { "accepted" } else { "rate_limited" }));
+        }
+        assert_eq!(session.advance_comment_generation(), 1);
+        let events = session.drain_events();
+        assert_eq!(events.len(), 2);
+        assert!(events.iter().all(|e| e.display_generation == 0));
+        assert_eq!(
+            events[0].event,
+            crate::audience_events::AudienceEvent::Comment {
+                body: "Hello 世界".into(),
+                handle: " Anonymous ".into()
+            }
+        );
+        // Reactions remain available when the independent comment budget is empty.
+        ws.send(tungstenite::Message::Text(
+            r#"{"v":1,"type":"reaction","request_id":"r","kind":"heart"}"#.into(),
+        ))
+        .unwrap();
+        assert!(ws.read().unwrap().into_text().unwrap().contains("accepted"));
+        ws.send(tungstenite::Message::Text(
+            r#"{"v":1,"type":"comment","request_id":"bad","body":"  ","handle":""}"#.into(),
+        ))
+        .unwrap();
+        assert!(ws.read().is_err());
+        session.shutdown();
+    }
     #[test]
     fn unrecognized_application_message_closes_without_delivery() {
         let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();

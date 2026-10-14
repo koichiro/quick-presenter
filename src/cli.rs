@@ -17,6 +17,7 @@ pub struct StartupOptions {
     pub smoke_open_pdf_path: Option<PathBuf>,
     pub gui_smoke: Option<GuiSmokeOptions>,
     pub log_file_path: Option<PathBuf>,
+    pub config_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -36,6 +37,7 @@ impl StartupOptions {
             smoke_open_pdf_path: None,
             gui_smoke: None,
             log_file_path: None,
+            config_path: None,
         }
     }
 }
@@ -105,6 +107,18 @@ where
             continue;
         }
 
+        if arg == OsStr::new("--config") {
+            if options.config_path.is_some() {
+                bail!("--config can only be provided once");
+            }
+            let path = required_path_arg(&mut args, "--config")?;
+            if path.as_os_str().to_string_lossy().starts_with('-') {
+                bail!("--config requires a path, not an option");
+            }
+            options.config_path = Some(path);
+            continue;
+        }
+
         if arg == OsStr::new("--log-file") {
             if options.log_file_path.is_some() {
                 bail!("--log-file can only be provided once");
@@ -143,6 +157,7 @@ Options:
   --smoke-open-pdf <PATH>   Open and render the first page, then exit
   --gui-smoke <PATH>        Open a PDF in Slint windows and run GUI smoke checks
   --gui-smoke-report <PATH> Write the GUI smoke report to a file
+  --config <PATH>           Use this TOML file instead of the standard user configuration
   --log-file <PATH>         Write diagnostic logs to a specific file
   -h, --help                Print help
 "
@@ -169,6 +184,80 @@ mod tests {
     use super::*;
 
     #[test]
+    fn config_can_follow_pdf_and_coexist_with_each_smoke_mode() {
+        for mode in ["--pdf", "--smoke-open-pdf", "--gui-smoke"] {
+            for args in [
+                vec![mode, "deck.pdf", "--config", "settings with spaces.toml"],
+                vec!["--config", "settings with spaces.toml", mode, "deck.pdf"],
+            ] {
+                let StartupRequest::Run(options) = parse_startup_options(args).unwrap() else {
+                    panic!("expected startup options");
+                };
+                assert_eq!(
+                    options.config_path,
+                    Some(PathBuf::from("settings with spaces.toml"))
+                );
+                assert_eq!(options.is_smoke(), mode != "--pdf");
+                match mode {
+                    "--pdf" => assert_eq!(options.pdf_path, Some(PathBuf::from("deck.pdf"))),
+                    "--smoke-open-pdf" => {
+                        assert_eq!(options.smoke_open_pdf_path, Some(PathBuf::from("deck.pdf")))
+                    }
+                    _ => assert_eq!(
+                        options.gui_smoke.unwrap().pdf_path,
+                        PathBuf::from("deck.pdf")
+                    ),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn config_alone_does_not_select_a_pdf_or_smoke_mode() {
+        let StartupRequest::Run(options) =
+            parse_startup_options(["--config", "./-settings.toml"]).unwrap()
+        else {
+            panic!("expected startup options");
+        };
+        assert_eq!(options.config_path, Some(PathBuf::from("./-settings.toml")));
+        assert!(options.pdf_path.is_none());
+        assert!(!options.is_smoke());
+        assert!(help_text("quick-presenter").contains("--config <PATH>"));
+    }
+
+    #[test]
+    fn config_option_is_explicit_and_independent_of_pdf() {
+        let StartupRequest::Run(options) =
+            parse_startup_options(["--config", "debug.toml", "deck.pdf"]).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(options.config_path, Some(PathBuf::from("debug.toml")));
+        assert_eq!(options.pdf_path, Some(PathBuf::from("deck.pdf")));
+        for args in [
+            vec!["--config"],
+            vec!["--config", ""],
+            vec!["--config", "--pdf"],
+            vec!["--config", "a", "--config", "b"],
+        ] {
+            assert!(parse_startup_options(args).is_err());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn config_preserves_non_utf8_paths() {
+        use std::os::unix::ffi::OsStringExt;
+        let path = OsString::from_vec(vec![b'a', 255]);
+        let StartupRequest::Run(options) =
+            parse_startup_options([OsString::from("--config"), path.clone()]).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(options.config_path, Some(PathBuf::from(path)));
+    }
+
+    #[test]
     fn no_arguments_produces_empty_options() {
         let options = parse_startup_options(Vec::<&str>::new()).unwrap();
 
@@ -179,6 +268,7 @@ mod tests {
                 smoke_open_pdf_path: None,
                 gui_smoke: None,
                 log_file_path: None,
+                config_path: None,
             })
         );
     }
@@ -194,6 +284,7 @@ mod tests {
                 smoke_open_pdf_path: None,
                 gui_smoke: None,
                 log_file_path: None,
+                config_path: None,
             })
         );
     }
@@ -209,6 +300,7 @@ mod tests {
                 smoke_open_pdf_path: None,
                 gui_smoke: None,
                 log_file_path: None,
+                config_path: None,
             })
         );
     }
@@ -224,6 +316,7 @@ mod tests {
                 smoke_open_pdf_path: Some(PathBuf::from("deck.pdf")),
                 gui_smoke: None,
                 log_file_path: None,
+                config_path: None,
             })
         );
     }
@@ -242,6 +335,7 @@ mod tests {
                     report_path: None,
                 }),
                 log_file_path: None,
+                config_path: None,
             })
         );
     }
@@ -262,6 +356,7 @@ mod tests {
                     report_path: Some(PathBuf::from("out.txt")),
                 }),
                 log_file_path: None,
+                config_path: None,
             })
         );
     }
@@ -277,6 +372,7 @@ mod tests {
                 smoke_open_pdf_path: None,
                 gui_smoke: None,
                 log_file_path: Some(PathBuf::from("quick-presenter.log")),
+                config_path: None,
             })
         );
     }
@@ -293,6 +389,7 @@ mod tests {
                 smoke_open_pdf_path: None,
                 gui_smoke: None,
                 log_file_path: Some(PathBuf::from("app.log")),
+                config_path: None,
             })
         );
     }
@@ -312,6 +409,7 @@ mod tests {
                     report_path: None,
                 }),
                 log_file_path: Some(PathBuf::from("app.log")),
+                config_path: None,
             })
         );
     }
@@ -344,6 +442,7 @@ mod tests {
         assert!(help.contains("Quick Presenter"));
         assert!(help.contains("Usage: quick-presenter [OPTIONS] [PDF_PATH]"));
         assert!(help.contains("--pdf <PATH>"));
+        assert!(help.contains("--config <PATH>"));
         assert!(help.contains("--smoke-open-pdf <PATH>"));
         assert!(help.contains("--gui-smoke <PATH>"));
         assert!(help.contains("--gui-smoke-report <PATH>"));
