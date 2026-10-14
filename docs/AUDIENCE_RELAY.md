@@ -103,3 +103,18 @@ cargo check --all-targets
 cargo test
 scripts/coverage.sh
 ```
+
+## Presenter failure alerts
+
+Presenter shows a highlighted Audience Live alert with recovery guidance when
+access is refused, a room has ended, a connection cannot start or an established
+connection is lost. These alerts stay in the audience panel and do not block PDF
+navigation. Retry clears the previous alert while connecting. Configuration
+failures explain that the file/access permissions need attention and require an
+application restart after edits.
+
+HTTP 401/403 and WebSocket policy rejection indicate denied access. HTTP 404/410
+indicate that the configured session is unavailable/ended. A transport failure
+alone does not prove that access was revoked. Alerts use fixed application text,
+never raw server response bodies or credentials. Ended sessions need a new QR
+code; recovery does not resend earlier comments.
