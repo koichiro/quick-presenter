@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Quick Presenter Audience</title>
-<style>body{font:18px system-ui;background:#202124;color:#fff;max-width:36rem;margin:3rem auto;padding:1.5rem}p{line-height:1.6}button{font:inherit;padding:.7rem;min-width:48px;min-height:48px}#reactions{display:flex;flex-wrap:wrap;gap:.5rem}#reactions button{font-size:2rem}button:disabled{opacity:.45}input,textarea{display:block;box-sizing:border-box;width:100%;font:inherit;margin:.4rem 0 1rem;padding:.5rem}textarea{min-height:5rem}</style>
+<style>body{font:18px system-ui;background:#202124;color:#fff;max-width:36rem;margin:3rem auto;padding:1.5rem}p{line-height:1.6}button{font:inherit;padding:.7rem;min-width:48px;min-height:48px}#reactions{display:flex;flex-wrap:wrap;gap:.5rem}#reactions button{font-size:2rem}button:disabled{opacity:.45}input,textarea{display:block;box-sizing:border-box;width:100%;font:inherit;margin:.4rem 0 1rem;padding:.5rem}textarea{min-height:5rem}.comment-composer{display:flex;align-items:flex-end;gap:.5rem;margin:.4rem 0}.comment-composer textarea{flex:1;min-width:0;margin:0}.comment-composer button{flex-shrink:0}#comment-help{font-size:.85rem;color:#c7cbd1;margin:.5rem 0 1rem}</style>
 <h1>Quick Presenter</h1><h2>Audience Live</h2><p id="status" role="status">Connecting…</p>
 <div id="reactions" aria-label="Reactions">
 <button disabled data-kind="thumbs_up" aria-label="Thumbs up">👍</button>
@@ -12,16 +12,28 @@
 </div>
 <form id="comments">
 <label for="handle">Name</label><input id="handle" value="Anonymous" autocomplete="nickname">
-<label for="body">Comment (up to 200 characters)</label><textarea id="body" required></textarea>
-<button id="send-comment" disabled>Send comment</button>
+<label for="body">Comment (up to 200 characters)</label>
+<div class="comment-composer">
+<textarea id="body" required aria-describedby="comment-help"></textarea>
+<button id="send-comment" type="submit" disabled>Send</button>
+</div>
+<p id="comment-help">Enter to send · Shift+Enter for a new line</p>
 </form>
 <p id="feedback" role="status">Send a reaction to the presenter.</p>
 <button id="retry" hidden>Reconnect</button>
 <script>
 const status=document.getElementById('status'), retry=document.getElementById('retry'), feedback=document.getElementById('feedback');
 const buttons=[...document.querySelectorAll('[data-kind]')];
-const token=new URLSearchParams(location.hash.slice(1)).get('k');
-history.replaceState(null,'',location.pathname);
+let token=new URLSearchParams(location.hash.slice(1)).get('k');
+// Keep credentials only in this tab so reloading a cleaned join URL can reconnect.
+try{
+  const key='quick-presenter.join-token:'+location.pathname;
+  if(token)sessionStorage.setItem(key,token);
+  else token=sessionStorage.getItem(key);
+  history.replaceState(null,'',location.pathname);
+}catch{
+  // If tab storage is unavailable, retain the fragment for reloads.
+}
 const form=document.getElementById('comments'), body=document.getElementById('body'), handle=document.getElementById('handle'), sendComment=document.getElementById('send-comment');
 let socket, connected=false, commentsEnabled=false, nextId=0, pending=null, pendingType=null, pendingBody='', timeout;
 function updateButtons(){buttons.forEach(b=>b.disabled=!connected || pending!==null);sendComment.disabled=!connected || !commentsEnabled || pending!==null;}
@@ -67,6 +79,12 @@ function validateComments(){
   return body.validity.valid && handle.validity.valid;
 }
 body.oninput=handle.oninput=validateComments;
+body.onkeydown=event=>{
+  if(event.key==='Enter' && !event.shiftKey && !event.isComposing && event.keyCode!==229){
+    event.preventDefault();
+    if(!sendComment.disabled)form.requestSubmit();
+  }
+};
 form.onsubmit=event=>{
   event.preventDefault();
   if(!commentsEnabled)return;

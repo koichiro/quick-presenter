@@ -28,6 +28,11 @@ a moving overlay; see [Live Comments](AUDIENCE_COMMENTS.md).
 6. Click **Audience Live OFF** to invalidate the URL,
    clear the feed/join screen, and close all connections.
 
+The green indicator blinks while comments are paused and stays lit after
+**Resume**. In the audience browser, **Enter** sends a comment and
+**Shift+Enter** inserts a line break. Confirming an IME composition does not send.
+The **Send** button sits to the right of the comment field.
+
 The thumbnail column extends to the bottom of the main content, alongside the
 Audience area, and is clipped within its own viewport. The Audience area spans
 only the notes/keys columns. Its compact connection controls take at most 300
@@ -56,6 +61,10 @@ session remains active, or scan the new QR after a restart.
 - The server serves only its embedded audience page, not PDFs, notes, or files.
 - The 256-bit secret travels in the URL fragment and then the first WebSocket
   message. It is not rendered into the HTTP page or written to settings/logs.
+  The browser retains it in tab-scoped session storage before clearing the
+  fragment, allowing reloads to rejoin the active session. A new join link
+  replaces that credential. If session storage is unavailable, the fragment
+  remains so reloading still works. No persistent local storage is used.
 - HTTP Host and WebSocket Origin must match the selected listener authority.
 - Authentication has a five-second deadline and at most 32 concurrent pending
   WebSocket authentications. WebSocket frames/messages are limited to 4 KiB.
