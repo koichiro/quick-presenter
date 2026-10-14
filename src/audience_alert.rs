@@ -18,6 +18,7 @@ pub fn for_failure(error: &str) -> AudienceAlert {
         },
         "Cannot connect to relay." | "Relay connection timed out."
         | "Relay authentication timed out."
+        | "Relay startup send timed out." | "Relay connection closed during startup."
         | "Relay room creation is unavailable. Retry to recover the same room."
         | "Relay room creation timed out. Retry to recover the same room." => AudienceAlert {
             title: "Audience Live could not connect",
@@ -72,10 +73,15 @@ mod tests {
     }
     #[test]
     fn a_failed_start_is_not_reported_as_a_lost_connection() {
-        let alert =
-            for_failure("Relay room creation is unavailable. Retry to recover the same room.");
-        assert_eq!(alert.title, "Audience Live could not connect");
-        assert!(alert.guidance.contains("Check your network"));
+        for error in [
+            "Relay room creation is unavailable. Retry to recover the same room.",
+            "Relay startup send timed out.",
+            "Relay connection closed during startup.",
+        ] {
+            let alert = for_failure(error);
+            assert_eq!(alert.title, "Audience Live could not connect");
+            assert!(alert.guidance.contains("Check your network"));
+        }
     }
     #[test]
     fn untrusted_details_are_not_displayed() {

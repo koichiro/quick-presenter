@@ -368,6 +368,9 @@ impl RemoteAudienceSession {
                                 result = run(room, status.clone(), connections.clone(), engine.clone(), updates) => result,
                             }
                         } else { Ok(()) };
+                        if matches!(outcome, Err("Relay room expired. Start again to create a new room.")) {
+                            settings.clear();
+                        }
                         if *stopped.borrow() && settings.has_attempt() { crate::audience_relay_http::cleanup(&client, &settings).await?; }
                         outcome
                     } else {
@@ -611,8 +614,8 @@ async fn run(
         socket.send(Message::Text(hello.to_string().into())),
     )
     .await
-    .map_err(|_| "Relay send timed out.")?
-    .map_err(|_| "Relay connection closed.")?;
+    .map_err(|_| "Relay startup send timed out.")?
+    .map_err(|_| "Relay connection closed during startup.")?;
     let welcome = tokio::time::timeout(TIMEOUT, async {
         loop {
             match socket.next().await {
@@ -621,12 +624,12 @@ async fn run(
                     socket
                         .flush()
                         .await
-                        .map_err(|_| "Relay connection closed.")?;
+                        .map_err(|_| "Relay connection closed during startup.")?;
                 }
                 Some(Ok(Message::Close(Some(frame))))
                     if frame.code == tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Policy =>
                     return Err("Relay access was denied."),
-                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return Err("Relay connection closed."),
+                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return Err("Relay connection closed during startup."),
                 _ => return Err("Invalid relay WebSocket message."),
             }
         }
@@ -662,8 +665,8 @@ async fn run(
         socket.send(Message::Text(initial.to_string().into())),
     )
     .await
-    .map_err(|_| "Relay send timed out.")?
-    .map_err(|_| "Relay connection closed.")?;
+    .map_err(|_| "Relay startup send timed out.")?
+    .map_err(|_| "Relay connection closed during startup.")?;
     *status.lock().unwrap_or_else(|e| e.into_inner()) = SessionStatus::Running {
         url: config.join_url,
         code: config.code,
@@ -684,7 +687,7 @@ async fn run(
                     Some(Ok(Message::Ping(_))) => { tokio::time::timeout(SEND_TIMEOUT, socket.flush()).await.map_err(|_| "Relay send timed out.")?.map_err(|_| "Relay connection closed.")?; None }
                     Some(Ok(Message::Pong(_))) => None,
                     Some(Ok(Message::Close(Some(frame)))) if frame.code == tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Policy => return Err("Relay access was denied."),
-                    Some(Ok(Message::Close(_))) | None => return Err("Relay disconnected. Start again to resume; events are not replayed."),
+                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return Err("Relay disconnected. Start again to resume; events are not replayed."),
                     _ => return Err("Invalid relay WebSocket message."),
                 }
             }
@@ -1206,7 +1209,7 @@ mod tests {
             ),
             (
                 tungstenite::protocol::frame::coding::CloseCode::Normal,
-                "Relay connection closed.",
+                "Relay connection closed during startup.",
             ),
         ] {
             let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -1244,6 +1247,133 @@ mod tests {
             server.join().unwrap();
         }
     }
+    #[test]
+    fn managed_expired_handshakes_reset_identity_but_other_failures_preserve_it() {
+        use crate::{app_config::RelayEndpoint, audience_relay_http::ManagedRelay};
+        use axum::{
+            extract::State,
+            routing::{get, post},
+            Router,
+        };
+        for expired_status in [404, 410] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.set_nonblocking(true).unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let keys = Arc::new(Mutex::new(Vec::<String>::new()));
+            let captured = keys.clone();
+            let (stop, stopped) = tokio::sync::oneshot::channel();
+            let server = thread::spawn(move || {
+                tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
+                    let requests = Arc::new(AtomicUsize::new(0));
+                    let app = Router::new()
+                        .route("/api/relay/draft-1/rooms", post(move |State(keys): State<Arc<Mutex<Vec<String>>>>, body: axum::body::Bytes| async move {
+                            let body: Value = serde_json::from_slice(&body).unwrap();
+                            let mut keys = keys.lock().unwrap();
+                            let key = body["idempotency_key"].as_str().unwrap().to_owned();
+                            let index = keys.iter().position(|old| old == &key).unwrap_or(keys.len());
+                            keys.push(key);
+                            let mut room = config(port);
+                            room["room_id"] = json!(format!("test-{index}"));
+                            room["code"] = json!(format!("TEST{index}"));
+                            room["join_url"] = json!(format!("http://127.0.0.1:{port}/join/test-{index}#k={}", "A".repeat(43)));
+                            room.to_string()
+                        }))
+                        .route("/presenter", get(move || {
+                            let index = requests.fetch_add(1, Ordering::Relaxed);
+                            async move { axum::http::StatusCode::from_u16([expired_status, 401, 503][index]).unwrap() }
+                        }))
+                        .with_state(captured);
+                    axum::serve(tokio::net::TcpListener::from_std(listener).unwrap(), app)
+                        .with_graceful_shutdown(async { let _ = stopped.await; }).await.unwrap();
+                });
+            });
+            let settings = ManagedRelay::new(RelayEndpoint {
+                origin: url::Url::parse(&format!("http://127.0.0.1:{port}")).unwrap(),
+                create_token: "A".repeat(43),
+            });
+            for (index, expected) in [
+                "Relay room expired. Start again to create a new room.",
+                "Relay access was denied.",
+                "Cannot connect to relay.",
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let mut session = RemoteAudienceSession::start_managed(settings.clone()).unwrap();
+                let deadline = Instant::now() + Duration::from_secs(5);
+                while !session.is_finished() {
+                    assert!(Instant::now() < deadline, "Managed worker did not finish");
+                    thread::sleep(Duration::from_millis(5));
+                }
+                assert!(
+                    matches!(session.snapshot().status, SessionStatus::Failed(ref error) if error == expected)
+                );
+                if index == 0 {
+                    assert!(!settings.has_attempt());
+                } else {
+                    assert!(settings.has_attempt());
+                    assert!(settings
+                        .attempt()
+                        .unwrap()
+                        .room
+                        .unwrap()
+                        .join_url
+                        .contains("/join/test-1#"));
+                }
+                session.shutdown();
+            }
+            let keys = keys.lock().unwrap();
+            assert_eq!(keys.len(), 3);
+            assert_ne!(keys[0], keys[1]);
+            assert_eq!(keys[1], keys[2]);
+            stop.send(()).unwrap();
+            server.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn active_transport_read_failure_uses_connection_loss_guidance() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut ws = tungstenite::accept(stream).unwrap();
+            ws.read().unwrap();
+            ws.send(tungstenite::Message::Text(json!({"protocol":"qp.presenter","version":VERSION,"type":"presenter_welcome","presenter_epoch":"7","display_epoch":"10","audience_connections":0}).to_string().into())).unwrap();
+            ws.read().unwrap(); // Initial display is sent before Running.
+                                // Drop TCP without a WebSocket close handshake, producing a read error.
+        });
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (_sender, updates) = watch::channel(Display::default());
+        let status = Arc::new(Mutex::new(SessionStatus::Starting));
+        let result = runtime.block_on(run(
+            serde_json::from_value(config(port)).unwrap(),
+            status.clone(),
+            Arc::new(AtomicUsize::new(0)),
+            Arc::new(Mutex::new(AudienceEngine::new(Instant::now()))),
+            updates,
+        ));
+        assert!(matches!(
+            *status.lock().unwrap(),
+            SessionStatus::Running { .. }
+        ));
+        assert_eq!(
+            result,
+            Err("Relay disconnected. Start again to resume; events are not replayed.")
+        );
+        assert_eq!(
+            crate::audience_alert::for_failure(result.unwrap_err()).title,
+            "Audience Live connection was lost"
+        );
+        server.join().unwrap();
+    }
+
     #[test]
     fn socket_path_authenticates_delivers_receipts_and_stops_without_replay() {
         use std::net::TcpListener;
