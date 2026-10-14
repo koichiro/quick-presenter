@@ -572,6 +572,18 @@ impl WireState {
         }
     }
 }
+fn connection_failure(error: tokio_tungstenite::tungstenite::Error) -> &'static str {
+    use tokio_tungstenite::tungstenite::Error;
+    match error {
+        Error::Http(response) => match response.status().as_u16() {
+            401 | 403 => "Relay access was denied.",
+            404 | 410 => "Relay room expired. Start again to create a new room.",
+            _ => "Cannot connect to relay.",
+        },
+        _ => "Cannot connect to relay.",
+    }
+}
+
 async fn run(
     config: RelayConfig,
     status: Arc<Mutex<SessionStatus>>,
@@ -592,7 +604,7 @@ async fn run(
     )
     .await
     .map_err(|_| "Relay connection timed out.")?
-    .map_err(|_| "Cannot connect to relay.")?;
+    .map_err(connection_failure)?;
     let hello = json!({"protocol":"qp.presenter","version":VERSION,"type":"hello","token":config.presenter_token});
     tokio::time::timeout(
         SEND_TIMEOUT,
@@ -611,7 +623,11 @@ async fn run(
                         .await
                         .map_err(|_| "Relay connection closed.")?;
                 }
-                _ => return Err("Relay authentication failed."),
+                Some(Ok(Message::Close(Some(frame))))
+                    if frame.code == tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Policy =>
+                    return Err("Relay access was denied."),
+                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return Err("Relay connection closed."),
+                _ => return Err("Invalid relay WebSocket message."),
             }
         }
     })
@@ -667,6 +683,7 @@ async fn run(
                     Some(Ok(Message::Text(text))) => state.process(&text, &mut engine.lock().unwrap_or_else(|e| e.into_inner()), &connections, last_received)?.map(|v| Message::Text(v.to_string().into())),
                     Some(Ok(Message::Ping(_))) => { tokio::time::timeout(SEND_TIMEOUT, socket.flush()).await.map_err(|_| "Relay send timed out.")?.map_err(|_| "Relay connection closed.")?; None }
                     Some(Ok(Message::Pong(_))) => None,
+                    Some(Ok(Message::Close(Some(frame)))) if frame.code == tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Policy => return Err("Relay access was denied."),
                     Some(Ok(Message::Close(_))) | None => return Err("Relay disconnected. Start again to resume; events are not replayed."),
                     _ => return Err("Invalid relay WebSocket message."),
                 }
@@ -684,6 +701,27 @@ async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn handshake_errors_distinguish_access_from_expiry_and_transport_failure() {
+        use tokio_tungstenite::tungstenite::{http::Response, Error};
+        for (status, expected) in [
+            (401, "Relay access was denied."),
+            (403, "Relay access was denied."),
+            (404, "Relay room expired. Start again to create a new room."),
+            (410, "Relay room expired. Start again to create a new room."),
+            (503, "Cannot connect to relay."),
+        ] {
+            let response = Response::builder().status(status).body(None).unwrap();
+            assert_eq!(
+                connection_failure(Error::Http(Box::new(response))),
+                expected
+            );
+        }
+        assert_eq!(
+            connection_failure(Error::ConnectionClosed),
+            "Cannot connect to relay."
+        );
+    }
     fn state() -> WireState {
         WireState {
             presenter: "7".into(),
@@ -1158,6 +1196,53 @@ mod tests {
             "busy"
         );
         assert!(engine.drain(now).is_empty());
+    }
+    #[test]
+    fn authentication_close_distinguishes_denied_access_from_connection_loss() {
+        for (code, expected) in [
+            (
+                tungstenite::protocol::frame::coding::CloseCode::Policy,
+                "Relay access was denied.",
+            ),
+            (
+                tungstenite::protocol::frame::coding::CloseCode::Normal,
+                "Relay connection closed.",
+            ),
+        ] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            let server = thread::spawn(move || {
+                let (stream, _) = listener.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut ws = tungstenite::accept(stream).unwrap();
+                ws.read().unwrap();
+                ws.close(Some(tungstenite::protocol::CloseFrame {
+                    code,
+                    reason: "".into(),
+                }))
+                .unwrap();
+            });
+            let room: RelayConfig = serde_json::from_value(config(port)).unwrap();
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let (_sender, updates) = watch::channel(Display {
+                paused: false,
+                generation: 0,
+            });
+            let result = runtime.block_on(run(
+                room,
+                Arc::new(Mutex::new(SessionStatus::Starting)),
+                Arc::new(AtomicUsize::new(0)),
+                Arc::new(Mutex::new(AudienceEngine::new(Instant::now()))),
+                updates,
+            ));
+            assert_eq!(result, Err(expected));
+            server.join().unwrap();
+        }
     }
     #[test]
     fn socket_path_authenticates_delivers_receipts_and_stops_without_replay() {

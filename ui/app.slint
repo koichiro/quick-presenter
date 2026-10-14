@@ -694,6 +694,8 @@ export component PresenterWindow inherits Window {
     icon: @image-url("../assets/icons/png/quick-presenter-icon-256.png");
     in property <string> audience-address;
     in property <string> audience-status: "Stopped";
+    in property <string> audience-alert-title;
+    in property <string> audience-alert-guidance;
     in property <string> audience-url;
     in property <string> audience-code;
     in property <image> audience-qr;
@@ -1487,6 +1489,19 @@ export component PresenterWindow inherits Window {
                                 }
                             }
                         }
+                    }
+                }
+                if root.audience-alert-title != "": Rectangle {
+                    x: 0px; y: 0px;
+                    width: parent.width; height: parent.height;
+                    background: #30251a;
+                    border-color: #f0b45a;
+                    border-width: 2px;
+                    VerticalBox {
+                        padding: 14px; spacing: 8px;
+                        Text { text: "⚠ " + root.audience-alert-title; color: #ffd18a; font-size: 18px; font-weight: 700; wrap: word-wrap; }
+                        Text { text: root.audience-alert-guidance; color: white; font-size: 14px; wrap: word-wrap; }
+                        Rectangle { vertical-stretch: 1; }
                     }
                 }
             }

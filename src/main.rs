@@ -8,6 +8,7 @@ pub mod app_metadata;
 pub mod app_state;
 pub mod aspect;
 pub mod audience;
+mod audience_alert;
 pub mod audience_comments;
 pub mod audience_events;
 mod audience_log;
