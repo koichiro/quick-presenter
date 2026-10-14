@@ -102,6 +102,8 @@ impl AudienceUi {
                         if let Some(window) = window.upgrade() {
                             window.set_audience_can_start(false);
                             window.set_audience_status(error.into());
+                            window.set_audience_alert_title("Audience Live configuration needs attention".into());
+                            window.set_audience_alert_guidance("Check your configuration file and its access permissions, then restart Quick Presenter. PDF playback is still available.".into());
                         }
                     }
                 }
@@ -267,6 +269,8 @@ impl AudienceUi {
                         window.set_audience_active(true);
                         window.set_audience_busy(true);
                         window.set_audience_status("Starting…".into());
+                        window.set_audience_alert_title("".into());
+                        window.set_audience_alert_guidance("".into());
                     }
                     let weak = Rc::downgrade(&ui);
                     let window = window.clone();
@@ -288,9 +292,10 @@ impl AudienceUi {
                 }
                 Err(error) => {
                     if let Some(window) = window.upgrade() {
-                        window.set_audience_status(
-                            format!("Cannot start audience session: {error}").into(),
-                        );
+                        let alert = crate::audience_alert::for_failure(&error.to_string());
+                        window.set_audience_status(alert.title.into());
+                        window.set_audience_alert_title(alert.title.into());
+                        window.set_audience_alert_guidance(alert.guidance.into());
                     }
                 }
             }
@@ -553,8 +558,13 @@ impl AudienceUi {
                 {
                     return;
                 }
-                let message = match snapshot.status {
-                    SessionStatus::Failed(error) => format!("Audience unavailable: {error}"),
+                let message: String = match snapshot.status {
+                    SessionStatus::Failed(error) => {
+                        let alert = crate::audience_alert::for_failure(&error);
+                        window.set_audience_alert_title(alert.title.into());
+                        window.set_audience_alert_guidance(alert.guidance.into());
+                        alert.title.into()
+                    }
                     _ => "Stopped".into(),
                 };
                 self.clear_reactions(&window);

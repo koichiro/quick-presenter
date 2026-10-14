@@ -1,0 +1,86 @@
+//! Presenter-facing recovery guidance. Never render untrusted server text.
+#[derive(Debug, PartialEq)]
+pub struct AudienceAlert {
+    pub title: &'static str,
+    pub guidance: &'static str,
+}
+
+pub fn for_failure(error: &str) -> AudienceAlert {
+    match error {
+        "Relay creation credential was rejected." | "Relay denied room creation."
+        | "Relay authentication failed." | "Relay access was denied." => AudienceAlert {
+            title: "Audience Live access was not allowed",
+            guidance: "Check the relay credentials and session access with your server administrator, then turn Audience Live ON again. PDF playback is still available.",
+        },
+        "Relay room expired. Start again to create a new room." => AudienceAlert {
+            title: "Audience Live session has ended",
+            guidance: "Turn Audience Live ON to start a new session, then share the new QR code. PDF playback is still available.",
+        },
+        "Cannot connect to relay." | "Relay connection timed out."
+        | "Relay authentication timed out."
+        | "Relay room creation is unavailable. Retry to recover the same room."
+        | "Relay room creation timed out. Retry to recover the same room." => AudienceAlert {
+            title: "Audience Live could not connect",
+            guidance: "Check your network and relay server, then turn Audience Live ON again. PDF playback is still available.",
+        },
+        "Relay heartbeat timed out." | "Relay connection closed."
+        | "Relay send timed out."
+        | "Relay disconnected. Start again to resume; events are not replayed." => AudienceAlert {
+            title: "Audience Live connection was lost",
+            guidance: "Check your network and relay server, then turn Audience Live ON again. If a new session starts, share its new QR code. Previous comments will not be resent. PDF playback is still available.",
+        },
+        _ => AudienceAlert {
+            title: "Audience Live could not continue",
+            guidance: "Check your Audience Live configuration and relay server, then turn Audience Live ON again. PDF playback is still available.",
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn denied_access_has_actionable_guidance() {
+        for error in [
+            "Relay creation credential was rejected.",
+            "Relay denied room creation.",
+            "Relay authentication failed.",
+            "Relay access was denied.",
+        ] {
+            let alert = for_failure(error);
+            assert_eq!(alert.title, "Audience Live access was not allowed");
+            assert!(alert.guidance.contains("server administrator"));
+        }
+    }
+    #[test]
+    fn expired_session_requires_a_new_join_link() {
+        let alert = for_failure("Relay room expired. Start again to create a new room.");
+        assert_eq!(alert.title, "Audience Live session has ended");
+        assert!(alert.guidance.contains("new QR code"));
+    }
+    #[test]
+    fn transport_failure_does_not_claim_access_revocation() {
+        for error in [
+            "Relay heartbeat timed out.",
+            "Relay connection closed.",
+            "Relay disconnected. Start again to resume; events are not replayed.",
+        ] {
+            let alert = for_failure(error);
+            assert_eq!(alert.title, "Audience Live connection was lost");
+            assert!(alert.guidance.contains("PDF playback is still available"));
+        }
+    }
+    #[test]
+    fn a_failed_start_is_not_reported_as_a_lost_connection() {
+        let alert =
+            for_failure("Relay room creation is unavailable. Retry to recover the same room.");
+        assert_eq!(alert.title, "Audience Live could not connect");
+        assert!(alert.guidance.contains("Check your network"));
+    }
+    #[test]
+    fn untrusted_details_are_not_displayed() {
+        let alert = for_failure("https://secret.example/?token=secret");
+        assert!(!alert.guidance.contains("secret"));
+        assert_eq!(alert.title, "Audience Live could not continue");
+    }
+}
