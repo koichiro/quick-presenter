@@ -1388,6 +1388,12 @@ export component PresenterWindow inherits Window {
             }
 
             audience-toggle-row := Rectangle {
+                property <bool> led-dim: false;
+                Timer {
+                    interval: 500ms;
+                    running: root.audience-active && root.audience-comments-paused;
+                    triggered => { audience-toggle-row.led-dim = !audience-toggle-row.led-dim; }
+                }
                 x: main-area.x;
                 y: main-area.y + main-area.height + 6px;
                 width: main-area.width - main-area.thumbnail-column-width - main-area.column-gap;
@@ -1405,6 +1411,7 @@ export component PresenterWindow inherits Window {
                             height: 12px;
                             border-radius: 6px;
                             background: root.audience-active ? #36c56b : #666b70;
+                            opacity: root.audience-active && root.audience-comments-paused && audience-toggle-row.led-dim ? 0.2 : 1;
                         }
                     }
                     audience-live-toggle := Button {
