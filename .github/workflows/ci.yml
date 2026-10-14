@@ -47,6 +47,14 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: Set up Node for audience browser tests
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Test audience browser
+        run: python -m unittest tests/test_audience_browser.py
+
       - name: Test PDFium fetch script
         run: python -m unittest tests/test_fetch_pdfium.py
 

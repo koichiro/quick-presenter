@@ -21,7 +21,7 @@ const html = fs.readFileSync('assets/audience/index.html', 'utf8');
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
 assert.equal(scripts.length, 1, 'load the shipped audience script');
 
-function client(hash = '#k=synthetic-token') {
+function client(hash = '#k=synthetic-token', storage = new Map(), blockedStorage = false, pathname = '/join') {
   const elements = new Map();
   for (const id of ['status', 'retry', 'feedback', 'comments', 'body', 'handle', 'send-comment']) {
     elements.set(id, {
@@ -37,6 +37,9 @@ function client(hash = '#k=synthetic-token') {
   }));
   let validityReports = 0;
   elements.get('comments').reportValidity = () => { validityReports++; };
+  elements.get('comments').requestSubmit = () => {
+    elements.get('comments').onsubmit({preventDefault() {}});
+  };
   const sockets = [];
   class WebSocket {
     static OPEN = 1;
@@ -52,7 +55,11 @@ function client(hash = '#k=synthetic-token') {
       getElementById: id => { assert(elements.has(id)); return elements.get(id); },
       querySelectorAll: selector => { assert.equal(selector, '[data-kind]'); return reactions; }
     },
-    location: {hash, host: '127.0.0.1:4321', pathname: '/join'},
+    location: {hash, host: '127.0.0.1:4321', pathname},
+    sessionStorage: {
+      setItem(key, value) { if (blockedStorage) throw new Error('Storage unavailable'); storage.set(key, value); },
+      getItem(key) { if (blockedStorage) throw new Error('Storage unavailable'); return storage.get(key) ?? null; }
+    },
     history: {replaceState: (...args) => replaced.push(args)},
     URLSearchParams, TextEncoder, WebSocket,
     setTimeout: (callback, delay) => { timers.set(++timerId, {callback, delay}); return timerId; },
@@ -77,7 +84,7 @@ function client(hash = '#k=synthetic-token') {
   }
   return {
     elements, reactions, sockets, socket, open, receive, welcome, submit, result,
-    timers, replaced, validityReports: () => validityReports
+    timers, replaced, storage, validityReports: () => validityReports
   };
 }
 """
@@ -116,6 +123,67 @@ for (const hash of ['', '#k=']) {
   assert.match(c.elements.get('status').textContent, /complete join link/);
   assert(c.elements.get('send-comment').disabled);
 }
+""")
+
+    def test_reload_recovers_tab_token_and_new_join_replaces_it(self):
+        self.run_js(r"""
+const storage = new Map();
+const first = client('#k=first-token', storage); first.welcome(); first.socket().close();
+const reloaded = client('', storage); reloaded.welcome();
+assert.equal(reloaded.socket().sent[0].token, 'first-token');
+reloaded.submit('After reload');
+assert.equal(reloaded.socket().sent[1].body, 'After reload');
+const next = client('#k=new-token', storage); next.welcome();
+assert.equal(next.socket().sent[0].token, 'new-token');
+const again = client('', storage); again.welcome();
+assert.equal(again.socket().sent[0].token, 'new-token');
+assert.equal(client('', storage, false, '/different-join').sockets.length, 0);
+assert.equal(client('').sockets.length, 0, 'another tab has no retained credential');
+""")
+
+    def test_unavailable_tab_storage_keeps_join_fragment_reloadable(self):
+        self.run_js(r"""
+const c = client('#k=synthetic-token', new Map(), true); c.welcome();
+assert.deepEqual(c.replaced, []);
+assert.equal(c.socket().sent[0].token, 'synthetic-token');
+const missing = client('', new Map(), true);
+assert.equal(missing.sockets.length, 0);
+""")
+
+    def test_enter_sends_once_but_shift_enter_and_composition_do_not(self):
+        self.run_js(r"""
+const c = client(); c.welcome();
+c.elements.get('body').value = 'Line one\nLine two';
+function key(overrides = {}) {
+  let prevented = false;
+  c.elements.get('body').onkeydown({key: 'Enter', shiftKey: false, isComposing: false,
+    keyCode: 13, ...overrides, preventDefault() { prevented = true; }});
+  return prevented;
+}
+for (const modifiers of [{shiftKey: true}, {isComposing: true}, {keyCode: 229}, {key: 'a'}]) {
+  assert.equal(key(modifiers), false);
+  assert.equal(c.socket().sent.length, 1);
+}
+assert(key());
+assert.equal(c.socket().sent[1].body, 'Line one\nLine two');
+assert(key());
+assert.equal(c.socket().sent.length, 2, 'pending receipt prevents duplicate sends');
+c.result('accepted'); c.socket().close();
+assert(key());
+assert.equal(c.socket().sent.length, 2, 'disconnected Enter cannot submit');
+""")
+
+    def test_enter_uses_comment_validation_and_capabilities(self):
+        self.run_js(r"""
+const c = client(); c.welcome();
+c.elements.get('body').value = '   ';
+c.elements.get('body').onkeydown({key: 'Enter', preventDefault() {}});
+assert.equal(c.socket().sent.length, 1);
+assert.equal(c.validityReports(), 1);
+const reactions = client(); reactions.welcome(['reactions']);
+reactions.elements.get('body').value = 'Comment';
+reactions.elements.get('body').onkeydown({key: 'Enter', preventDefault() {}});
+assert.equal(reactions.socket().sent.length, 1);
 """)
 
     def test_reaction_only_welcome_keeps_comments_disabled(self):
