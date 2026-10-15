@@ -48,6 +48,8 @@ while True:
                 log.write(json.dumps(request) + "\n")
             if request["method"] == "presentation.status":
                 startup_polls += 1
+                if mode == "late_ready" and startup_polls == 1:
+                    time.sleep(16)
                 state["opening"] = mode == "restoring_forever" or (
                     mode == "restoring" and startup_polls <= 3
                 )

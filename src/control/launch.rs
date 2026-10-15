@@ -42,6 +42,11 @@ pub fn send(request: &Request) -> Result<Response, ControlError> {
                                 continue;
                             }
                             Outcome::Result(Reply::Status(_)) => {
+                                // A status response can arrive after the startup deadline.
+                                if Instant::now() >= deadline {
+                                    return Err(ControlError::new(ErrorCode::Timeout,
+                                        "Quick Presenter did not finish startup within 15 seconds. Check the GUI diagnostic log."));
+                                }
                                 return client::send_to(&endpoint, request);
                             }
                             Outcome::Result(_) => {

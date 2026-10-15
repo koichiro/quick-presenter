@@ -45,3 +45,23 @@ is pending. Existing no-restoration startup and open-failure tests still pass.
 The production signed/notarized Developer ID package was not available for this
 run. Repeat cold-start verification with the exact final package as part of
 #472; this development-build result does not waive that gate.
+
+## PR 474 review follow-up: late readiness response
+
+CodeRabbit identified that a status request can start before the startup deadline
+and return ready after it. The original code then submitted Open anyway.
+A process fixture delaying its first status response by 16 seconds reproduced
+this: the new regression expected TIMEOUT but received exit 0 before the fix.
+
+The ready-status branch now checks the deadline immediately before submitting
+Open. The regression verifies exit 9, typed TIMEOUT, empty stdout, and exactly
+one status request with no Open. The normal IPC response timeout still applies
+to an in-flight query; the readiness deadline prevents a subsequent mutation,
+not an interruption of that query.
+
+Formatting and Cargo check passed. All 11 startup process tests passed.
+The complete test run had one failure in the unchanged renderer test
+`stalled_broker_input_preserves_active_pdf_and_allows_shutdown` with
+`valid deck did not open`; all 13 renderer tests passed on an isolated repeat.
+The remaining slide-window layout test passed as well. Across those runs,
+all 489 tests passed at least once; the initial full run was not clean.

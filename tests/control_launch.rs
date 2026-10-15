@@ -355,3 +355,24 @@ fn file_dialog_busy_is_returned_without_replaying_open() {
         1
     );
 }
+
+#[test]
+fn late_ready_status_does_not_submit_open_after_startup_deadline() {
+    let installation = Installation::new();
+    let started = std::time::Instant::now();
+    let output = installation
+        .command(&["open", "requested.pdf", "--json"])
+        .env("QP_LAUNCH_MODE", "late_ready")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(9));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stderr).unwrap()["code"],
+        "TIMEOUT"
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(25));
+    let requests = installation.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["method"], "presentation.status");
+}
