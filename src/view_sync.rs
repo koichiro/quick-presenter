@@ -14,6 +14,17 @@ use crate::{
     PresenterWindow, ThumbnailItem,
 };
 
+pub fn apply_closed_state_to_windows(windows: &AppWindowRefs) {
+    apply_opening_state_to_windows(windows, "Quick Presenter");
+    if let Some(presenter) = windows.presenter.upgrade() {
+        presenter.set_status_text("Open a PDF to begin.".into());
+        presenter.set_has_notes(false);
+        presenter.set_notes_text("".into());
+        presenter.set_elapsed_time_label("00:00".into());
+        presenter.set_thumbnails(slint::ModelRc::default());
+    }
+}
+
 pub fn apply_opening_state_to_windows(windows: &AppWindowRefs, title: &str) {
     let placeholder = placeholder_slide();
 

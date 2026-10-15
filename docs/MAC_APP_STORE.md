@@ -14,6 +14,20 @@ and the [SBOM release gate](SBOM.md#release-gate). Signing/upload preparation is
 implemented here; Apple processing, review, and Store-installed runtime support
 still require independent evidence.
 
+## CLI/control limitation in v2.0.0
+
+CLI and Presentation Control Protocol support for the Mac App Store distribution
+is explicitly out of scope for v2.0.0. Store users must use the Developer ID / DMG
+distribution when they need local automation, including `qp open` GUI startup,
+state/content queries, navigation, blackout, or event watching. The Store GUI
+does not expose a supported control endpoint, even when a separate CLI is used.
+
+The current socket and arbitrary-path PDF opening workflow needs a
+sandbox-compatible IPC and file-access design. Existing GUI-selected PDF
+bookmarks do not grant access to every path supplied by a CLI. Future work and
+a preliminary estimate are tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422). This work is not a
+v2.0.0 Store release gate.
+
 ## Release checklist
 
 1. Select a clean checkout of the intended release source, including these Store

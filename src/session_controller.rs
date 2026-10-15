@@ -22,6 +22,29 @@ pub fn apply_session_command(
     command: PresentationCommand,
     now: Instant,
 ) -> SessionCommandOutcome {
+    // Close publishes its own transition for callers outside command dispatch.
+    if command == PresentationCommand::Close {
+        return apply_session_command_inner(state, command, now);
+    }
+    let before = crate::control_state::snapshot(state, now);
+    let outcome = apply_session_command_inner(state, command, now);
+    crate::control_state::publish_changes(state, before, now);
+    outcome
+}
+
+fn apply_session_command_inner(
+    state: &mut AppState,
+    command: PresentationCommand,
+    now: Instant,
+) -> SessionCommandOutcome {
+    if command == PresentationCommand::Close {
+        close_presentation_state(state);
+        return SessionCommandOutcome {
+            snapshot: None,
+            slide_fullscreen: None,
+        };
+    }
+
     if command == PresentationCommand::ExitSlideFullscreen {
         return SessionCommandOutcome {
             snapshot: None,
@@ -33,6 +56,15 @@ pub fn apply_session_command(
         state.black_screen.toggle();
         return SessionCommandOutcome {
             snapshot: state.presentation.snapshot(),
+            slide_fullscreen: None,
+        };
+    }
+
+    if let PresentationCommand::SetBlackScreen(value) = command {
+        let changed = state.black_screen.is_active() != value;
+        state.black_screen.set_active(value);
+        return SessionCommandOutcome {
+            snapshot: changed.then(|| state.presentation.snapshot()).flatten(),
             slide_fullscreen: None,
         };
     }
@@ -128,11 +160,16 @@ pub fn commit_render_opened_state(
         return None;
     }
 
+    let before = crate::control_state::snapshot(state, Instant::now());
     state.render_generation = state.render_generation.wrapping_add(1);
     state.audience_slide.last_good_current = None;
     state.audience_slide.failed_current_page = None;
     state.render_cache.clear();
     state.page_aspects.clear();
+    state.control.document_revision += 1;
+    state.control.notes_state = quick_presenter::control::protocol::NotesState::Loading;
+    state.control.slide_text.clear();
+    state.control.full_slide_text.clear();
     state.notes = SpeakerNotes::empty();
     state.presentation = PresentationState::open_document(title, page_count);
     state.thumbnails = ThumbnailState {
@@ -145,6 +182,7 @@ pub fn commit_render_opened_state(
     state.active_document_path = loaded_path.clone();
     state.automatic_reopen = None;
 
+    crate::control_state::publish_changes(state, before, Instant::now());
     Some(OpenedSessionOutcome {
         snapshot: state.presentation.snapshot(),
         loaded_path,
@@ -173,9 +211,14 @@ pub fn commit_render_reloaded_state(
         return None;
     }
 
+    let before = crate::control_state::snapshot(state, Instant::now());
     state.render_generation = state.render_generation.wrapping_add(1);
     state.render_cache.clear();
     state.page_aspects.clear();
+    state.control.document_revision += 1;
+    state.control.notes_state = quick_presenter::control::protocol::NotesState::Loading;
+    state.control.slide_text.clear();
+    state.control.full_slide_text.clear();
     state.notes = SpeakerNotes::empty();
     state.presentation = PresentationState::open_document_at(title, page_count, current_page_index);
     let snapshot = state.presentation.snapshot()?;
@@ -198,6 +241,7 @@ pub fn commit_render_reloaded_state(
         state.cache_context(presentation_cache_radius),
     );
     state.status_text = "PDF reloaded.".to_owned();
+    crate::control_state::publish_reload(state, before, Instant::now());
     Some(snapshot)
 }
 
@@ -224,11 +268,17 @@ pub fn commit_speaker_notes_loaded_state(
     session_id: RenderSessionId,
     notes: SpeakerNotes,
     status_text: String,
+    notes_ready: bool,
 ) -> bool {
     if !state.render_sessions.accepts(session_id) {
         return false;
     }
 
+    state.control.notes_state = if notes_ready {
+        quick_presenter::control::protocol::NotesState::Ready
+    } else {
+        quick_presenter::control::protocol::NotesState::Failed
+    };
     state.notes = notes;
     state.status_text = status_text;
     true
@@ -324,9 +374,47 @@ pub fn commit_render_worker_failed_state(
     if let Some(snapshot) = state.presentation.snapshot() {
         state.audience_slide.failed_current_page = Some(snapshot.current_index);
     }
+    if state.control.notes_state == quick_presenter::control::protocol::NotesState::Loading {
+        state.control.notes_state = quick_presenter::control::protocol::NotesState::Failed;
+    }
     state.status_text = "Rendering stopped. Open the PDF again.".to_owned();
     state.pending_open = None;
     true
+}
+
+pub fn close_presentation_state(state: &mut AppState) {
+    let before = crate::control_state::snapshot(state, Instant::now());
+    let changed = state.presentation.snapshot().is_some() || state.pending_open.is_some();
+    if let Some(scheduler) = state.render_scheduler.as_ref() {
+        scheduler.request_shutdown();
+    }
+    if let Some(watcher) = state.pdf_watcher.as_mut() {
+        if let Err(error) = watcher.replace_target(None) {
+            tracing::warn!(error = %error, "Could not clear PDF watch target");
+        }
+    }
+    state.hot_reload = Default::default();
+    state.render_sessions.close();
+    state.pending_open = None;
+    state.automatic_reopen = None;
+    state.active_document_path = None;
+    state.presentation = PresentationState::empty();
+    state.render_generation = state.render_generation.wrapping_add(1);
+    state.render_cache.clear();
+    state.page_aspects.clear();
+    state.audience_slide = Default::default();
+    state.thumbnails = Default::default();
+    state.notes = SpeakerNotes::empty();
+    if changed {
+        state.control.document_revision += 1;
+    }
+    state.control.notes_state = quick_presenter::control::protocol::NotesState::Empty;
+    state.control.slide_text.clear();
+    state.control.full_slide_text.clear();
+    state.black_screen.set_active(false);
+    state.timer.reset();
+    state.status_text = "Open a PDF to begin.".to_owned();
+    crate::control_state::publish_changes(state, before, Instant::now());
 }
 
 fn update_elapsed_timer_for_page_change(
@@ -766,10 +854,37 @@ mod tests {
             session_id,
             notes,
             "Ready".to_owned(),
+            true,
         ));
 
         assert_eq!(state.notes.note_for_page_number(2), Some("Presenter note"));
         assert_eq!(state.status_text, "Ready");
+    }
+
+    #[test]
+    fn notes_readiness_is_independent_of_display_status() {
+        use quick_presenter::control::protocol::NotesState;
+        for (notes_ready, status_text, expected) in [
+            (true, "Ready", NotesState::Ready),
+            (true, "PDF reloaded.", NotesState::Ready),
+            (false, "Could not read speaker notes", NotesState::Failed),
+            (false, "Ready", NotesState::Failed),
+        ] {
+            let mut state = AppState::default();
+            let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
+            commit_render_opened_state(&mut state, session_id, "Deck".into(), 2, "Ready".into());
+            let notes = SpeakerNotes::from_page_notes([(1, "Speaker note".into())]);
+            assert!(commit_speaker_notes_loaded_state(
+                &mut state,
+                session_id,
+                notes,
+                status_text.into(),
+                notes_ready,
+            ));
+            assert_eq!(state.control.notes_state, expected, "status: {status_text}");
+            assert_eq!(state.status_text, status_text);
+            assert_eq!(state.notes.note_for_page_number(1), Some("Speaker note"));
+        }
     }
 
     #[test]
@@ -783,6 +898,7 @@ mod tests {
             stale_session,
             SpeakerNotes::from_page_notes([(1, "Old note".to_owned())]),
             "Ready".to_owned(),
+            true,
         ));
 
         assert!(state.notes.is_empty());

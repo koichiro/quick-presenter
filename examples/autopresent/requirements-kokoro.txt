@@ -1,0 +1,3 @@
+# Optional speech engine; the say demo and orchestrator remain dependency-free.
+kokoro==0.9.4
+soundfile==0.13.1

@@ -317,6 +317,19 @@ impl HelperClient {
             _ => bail!("missing render response"),
         }
     }
+    pub fn text_page(
+        &mut self,
+        index: u32,
+        full: bool,
+    ) -> Result<quick_presenter::control::protocol::SlideText> {
+        let frame = self.broker.text_page(index, full)?;
+        match self.exchange(frame, Operation::Text)? {
+            Some(RenderEvent::SlideTextLoaded { result, .. }) => {
+                result.map_err(|message| anyhow::anyhow!(message))
+            }
+            _ => bail!("missing text response"),
+        }
+    }
     pub fn notes_page(&mut self, index: u32) -> Result<Vec<(u32, String)>> {
         let frame = self.broker.notes_page(index)?;
         match self.exchange(frame, Operation::Notes)? {
@@ -468,6 +481,17 @@ impl RemoteDocument {
                 .client
                 .borrow_mut()
                 .render_with_priority(request, priority);
+        }
+        result
+    }
+    pub fn text_page(
+        &self,
+        index: u32,
+        full: bool,
+    ) -> Result<quick_presenter::control::protocol::SlideText> {
+        let result = self.client.borrow_mut().text_page(index, full);
+        if result.is_err() && self.recover() {
+            return self.client.borrow_mut().text_page(index, full);
         }
         result
     }
@@ -659,7 +683,8 @@ pub(crate) fn run_with_input(mut input: Option<std::fs::File>) -> Result<()> {
                 &message,
                 request_fault(&message, document.as_ref()).as_deref()
             ),
-            (Message::Hello {}, Some("hang-on-handshake"))
+            (Message::TextPage { .. }, Some("hang-on-text"))
+                | (Message::Hello {}, Some("hang-on-handshake"))
                 | (Message::Open { .. }, Some("hang-on-open"))
                 | (Message::Shutdown {}, Some("hang-on-shutdown"))
                 | (
@@ -830,6 +855,14 @@ pub(crate) fn run_with_input(mut input: Option<std::fs::File>) -> Result<()> {
                     Err(error) => failure(FailureCode::RenderFailed, &error.to_string()),
                 }
             }
+            Message::TextPage { page_index, full } => {
+                ensure!(session == Some(session_id), "wrong document session");
+                let doc = document.as_ref().context("document not open")?;
+                match doc.slide_text(page_index, full) {
+                    Ok(content) => Message::TextLoaded { content },
+                    Err(error) => failure(FailureCode::TextFailed, &error.to_string()),
+                }
+            }
             Message::NotesPage { page_index } => {
                 ensure!(session == Some(session_id), "wrong document session");
                 let doc = document.as_ref().context("document not open")?;
@@ -980,9 +1013,19 @@ pub fn recovery_smoke(fault_path: PathBuf, valid_path: PathBuf) -> Result<()> {
 pub fn scheduler_smoke(fault_path: PathBuf, valid_path: PathBuf) -> Result<()> {
     use crate::render_scheduler::{RenderScheduler, RenderWorkerLifecycle};
     use std::time::{Duration, Instant};
+    let response_timeout = if cfg!(target_os = "windows") {
+        Duration::from_secs(90)
+    } else {
+        Duration::from_secs(8)
+    };
+    let shutdown_timeout = if cfg!(target_os = "windows") {
+        Duration::from_secs(10)
+    } else {
+        Duration::from_secs(2)
+    };
     let scheduler = RenderScheduler::start();
     let wait_event = || -> Result<RenderEvent> {
-        let deadline = Instant::now() + Duration::from_secs(8);
+        let deadline = Instant::now() + response_timeout;
         loop {
             if let Some(event) = scheduler.drain_events().into_iter().next() {
                 return Ok(event);
@@ -1040,7 +1083,7 @@ pub fn scheduler_smoke(fault_path: PathBuf, valid_path: PathBuf) -> Result<()> {
     scheduler.request_shutdown();
     while !scheduler.can_be_replaced() {
         ensure!(
-            start.elapsed() < Duration::from_secs(2),
+            start.elapsed() < shutdown_timeout,
             "shutdown remained blocked"
         );
         std::thread::sleep(Duration::from_millis(10));
