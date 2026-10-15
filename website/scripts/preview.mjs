@@ -65,7 +65,9 @@ const server = createServer((request, response) => {
       "content-length": end - start + 1,
     });
     if (request.method === "HEAD") response.end();
-    else createReadStream(requestedPath, { start, end }).pipe(response);
+    else createReadStream(requestedPath, { start, end })
+      .on("error", () => response.destroy())
+      .pipe(response);
     return;
   }
 

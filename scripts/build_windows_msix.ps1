@@ -1,6 +1,7 @@
 param(
     [string]$ArtifactDir = "artifacts/quick-presenter-windows-x64",
     [string]$Binary = "target/release/quick-presenter.exe",
+    [string]$CliBinary = "",
     [string]$OutputMsix = "",
     [string]$PackageName = "QuickPresenter.QuickPresenter",
     [string]$Publisher = "CN=Quick Presenter",
@@ -148,6 +149,11 @@ Assert-NonEmpty -Value $PublisherDisplayName -Name "MSIX publisher display name"
 
 $artifactDirPath = Resolve-RepoPath $ArtifactDir
 $binaryPath = Resolve-RepoPath $Binary
+$cliBinaryPath = if ([string]::IsNullOrWhiteSpace($CliBinary)) {
+    Join-Path (Split-Path $binaryPath -Parent) "qp.exe"
+} else {
+    Resolve-RepoPath $CliBinary
+}
 $pdfiumPath = Resolve-RepoPath "pdfium"
 $licensePath = Resolve-RepoPath "LICENSE"
 $sourceOfferPath = Resolve-RepoPath "packaging/SOURCE-OFFER.txt"
@@ -165,6 +171,9 @@ if ([string]::IsNullOrWhiteSpace($OutputMsix)) {
 
 if (-not (Test-Path $binaryPath -PathType Leaf)) {
     throw "Missing executable binary: $binaryPath"
+}
+if (-not (Test-Path $cliBinaryPath -PathType Leaf)) {
+    throw "Missing CLI executable: $cliBinaryPath"
 }
 if (-not (Test-Path $pdfiumPath -PathType Container)) {
     throw "Missing bundled PDFium directory: $pdfiumPath"
@@ -199,6 +208,10 @@ Remove-Item -Recurse -Force $stageDir -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $assetDir, $licenseDir | Out-Null
 
 Copy-Item $binaryPath (Join-Path $stageDir "quick-presenter.exe")
+Copy-Item $cliBinaryPath (Join-Path $stageDir "qp.exe")
+$docsDir = Join-Path $stageDir "docs"
+New-Item -ItemType Directory -Force -Path $docsDir | Out-Null
+Copy-Item (Join-Path $RepoRoot "docs/CLI.md"), (Join-Path $RepoRoot "docs/CONTROL_PROTOCOL.md") $docsDir
 Copy-Item -Recurse $pdfiumPath (Join-Path $stageDir "pdfium")
 Copy-Item $licensePath (Join-Path $licenseDir "QuickPresenter-LICENSE.txt")
 Copy-Item $sourceOfferPath (Join-Path $licenseDir "QuickPresenter-SOURCE-OFFER.txt")

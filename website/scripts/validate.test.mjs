@@ -197,18 +197,19 @@ test("localized pages declare their language and offer reciprocal language navig
 
 test("language routing remembers choices and preserves destinations without redirect loops", async () => {
   const script = await readFile(join(dist, "language.js"), "utf8");
-  function visit({ path = "/", languages = ["ja-JP", "en"], saved = null, blocked = false } = {}) {
+  function visit({ path = "/", languages = ["ja-JP", "en"], saved = null, blocked = false, search = "?from=demo", hash = "#download" } = {}) {
     let redirect;
     let click;
     let stored = saved;
     runInNewContext(script, {
+      URL, URLSearchParams,
       document: {
         documentElement: { lang: path.startsWith("/ja/") ? "ja" : "en" },
         addEventListener: (name, handler) => { if (name === "click") click = handler; },
       },
       navigator: { languages, language: "ja-JP" },
       location: {
-        pathname: path, search: "?from=demo", hash: "#download",
+        pathname: path, search, hash, href: `${origin}${path}${search}${hash}`,
         replace: (url) => { redirect = url; },
       },
       localStorage: {
@@ -234,9 +235,61 @@ test("language routing remembers choices and preserves destinations without redi
   assert.equal(visit({ saved: manual.stored() }).redirect, undefined);
   const blocked = visit({ blocked: true });
   assert.equal(blocked.redirect, "/ja/?from=demo#download");
-  blocked.click({ target: { closest: () => ({ hreflang: "en" }) } });
+  const englishLink = { hreflang: "en", href: "/?from=manual#demo" };
+  blocked.click({ target: { closest: () => englishLink } });
+  const destination = new URL(englishLink.href);
+  assert.equal(destination.searchParams.get("lang"), "en");
+  assert.equal(destination.searchParams.get("from"), "manual");
+  assert.equal(destination.hash, "#demo");
+  assert.equal(visit({ path: destination.pathname, search: destination.search,
+    hash: destination.hash, blocked: true }).redirect, undefined);
+  assert.equal(visit({ path: "/ja/", search: "?lang=ja", saved: "en" }).redirect, undefined);
+  assert.equal(visit({ search: "?lang=invalid" }).redirect, "/ja/?lang=invalid#download");
   assert.equal(visit({ path: "/ja/", blocked: true }).redirect, undefined);
   for (const [file] of pages) {
     assert.match(await readFile(join(dist, file), "utf8"), /<script src="\/language\.js"><\/script>/);
+  }
+});
+
+
+test("preview survives a range stream read failure", { timeout: 10000 }, async () => {
+  // Simulate a file disappearing between stat and the range stream opening it.
+  const bootstrap = `
+    import fs from 'node:fs';
+    import { syncBuiltinESMExports } from 'node:module';
+    import { Readable } from 'node:stream';
+    const original = fs.createReadStream;
+    fs.createReadStream = (path, options) => options?.start === 1 && options?.end === 2
+      ? new Readable({ read() { this.destroy(new Error('Simulated read failure')); } })
+      : original(path, options);
+    syncBuiltinESMExports();
+    await import(${JSON.stringify(new URL('./preview.mjs', import.meta.url).href)});
+  `;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", bootstrap], {
+    env: { ...process.env, HOST: "127.0.0.1", PORT: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const lines = createInterface({ input: child.stdout });
+  try {
+    const [line] = await once(lines, "line");
+    const base = line.match(/http:\/\/127\.0\.0\.1:\d+\//)?.[0];
+    assert.ok(base, line);
+    await assert.rejects(async () => {
+      const response = await fetch(`${base}assets/kokoro-demo.mp4`, {
+        headers: { Range: "bytes=1-2" },
+      });
+      await response.arrayBuffer();
+    });
+    const healthy = await fetch(base);
+    assert.equal(healthy.status, 200);
+    await healthy.arrayBuffer();
+    assert.equal(child.exitCode, null);
+  } finally {
+    lines.close();
+    if (child.exitCode === null) {
+      const exited = once(child, "exit");
+      child.kill();
+      await exited;
+    }
   }
 });

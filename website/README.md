@@ -144,8 +144,9 @@ The initial choice and subsequent manual language selections are saved in
 `localStorage` and take precedence on later visits. Redirects preserve the page,
 query string, and fragment. This is a browser-side redirect, not HTTP
 `Accept-Language` negotiation by GitHub Pages. Without JavaScript, both static
-pages and their language links remain usable; when storage is blocked, manual
-choices cannot persist across visits.
+pages and their language links remain usable. When storage is blocked, manual
+links carry a `lang` query parameter to honor the choice on the destination;
+the preference cannot persist across unrelated visits.
 Both languages share the same media files; the English narration has an original
 transcript and Japanese translation on the Japanese homepage.
 

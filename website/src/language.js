@@ -7,11 +7,13 @@
   } catch {
     // Language links still work when browser storage is unavailable.
   }
+  const explicit = new URLSearchParams(location.search).get("lang");
   const preferred = (navigator.languages?.[0] || navigator.language || "en")
     .toLowerCase().startsWith("ja") ? "ja" : "en";
   // Respect a direct Japanese URL on the first visit.
-  const language = saved === "ja" || saved === "en"
-    ? saved : current === "ja" ? "ja" : preferred;
+  const language = explicit === "ja" || explicit === "en" ? explicit
+    : saved === "ja" || saved === "en" ? saved
+    : current === "ja" ? "ja" : preferred;
   try {
     localStorage.setItem(key, language);
   } catch {
@@ -23,7 +25,10 @@
     try {
       localStorage.setItem(key, link.hreflang);
     } catch {
-      // Follow the ordinary link even if the preference cannot be saved.
+      // Carry the explicit choice to the destination without browser storage.
+      const destination = new URL(link.href, location.href);
+      destination.searchParams.set("lang", link.hreflang);
+      link.href = destination.href;
     }
   });
   if (language !== current) {

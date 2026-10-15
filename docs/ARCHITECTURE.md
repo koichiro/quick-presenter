@@ -35,6 +35,16 @@ the Rust diagnostics boundary. The v1.0.0 retention design is documented in
 [Diagnostic Log Retention](DIAGNOSTIC_LOG_RETENTION.md); Slint and presentation
 state do not manage log lifecycle.
 
+## Local presentation control
+
+The stable [Presentation Control Protocol v1](CONTROL_PROTOCOL.md) exposes
+GUI-owned presentation state through local IPC. Typed, bounded requests are
+dispatched on the existing event loop, using shared navigation/black-screen
+commands and the existing asynchronous PDF open pipeline. The server owns no
+independent presentation state. `qp` uses the protocol library without Slint
+initialization or PDFium access. Renderer IPC and presentation control IPC
+remain separate boundaries.
+
 ## PDFium ownership
 
 `src/pdf.rs` keeps PDFium initialization behind a helper-process-global
@@ -123,3 +133,39 @@ must be opened and have their current page rendered in a separate candidate
 helper before they can replace the last good document. The watcher boundary,
 debounce and retry policy, worker transaction, cache invalidation, and platform
 verification plan are defined in [PDF Hot Reload](PDF_HOT_RELOAD.md).
+
+### On-demand presentation source queries
+
+The local control adapter requests current/next page source text through
+`RenderCommand::ExtractSlideText`. The scheduler places this work at background
+priority, deduplicates pending page requests, and sends it to the existing
+isolated PDFium helper. Private renderer IPC v4 adds bounded, correlated text
+request/reply types; public Presentation Control Protocol remains v1.
+
+The helper extracts PDF text without OCR. The GUI owner caches at most 32 compact
+source results and two full results, keyed by page within the committed renderer
+session and separated by extraction mode. Open,
+reload, and close invalidate the cache; stale results are rejected. Pending
+control queries record the page and document revision, and return a typed
+cancellation if those change. The adapter assembles current/next text, existing
+`SpeakerNotes`, and presentation state on the event loop without blocking it.
+`qp` only parses requests and formats responses.
+
+Full source queries opt into bounded response transfer frames at both IPC
+boundaries. Each carries typed sequence/length metadata and at most 64 KiB of
+serialized response bytes. The client reconstructs one typed logical response,
+validating identity, ordering, and aggregate size before output. Native character
+and full-page byte guards, bounded caches, and existing watchdogs remain in
+force. Ordinary queries keep the compact single-frame response contract.
+
+
+### Control event delivery
+
+Committed session commands and open/reload/close transitions publish typed
+control events directly from the existing presentation owner. The event hub
+stores sequence numbers and bounded subscribers, not a second presentation
+state. Watch registration captures an atomic status/sequence baseline on the
+same UI event loop. IPC worker threads deliver frames and invisible heartbeats;
+slow watchers are removed without blocking GUI transitions. `qp watch --json`
+flushes NDJSON events. `qp timer elapsed` only reads the existing timer; no
+state-changing timer command is exposed in this version.

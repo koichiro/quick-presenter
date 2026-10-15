@@ -3,12 +3,13 @@ set -euo pipefail
 
 artifact_dir="artifacts/quick-presenter-ubuntu-x64"
 binary="target/release/quick-presenter"
+cli_binary=""
 output_deb=""
 keep_work_dir=0
 
 usage() {
   cat >&2 <<'EOF'
-Usage: scripts/build_linux_deb.sh [--artifact-dir DIR] [--binary PATH] [--output-deb PATH] [--keep-work-dir]
+Usage: scripts/build_linux_deb.sh [--artifact-dir DIR] [--binary PATH] [--cli-binary PATH] [--output-deb PATH] [--keep-work-dir]
 EOF
 }
 
@@ -20,6 +21,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --binary)
       binary="${2:-}"
+      shift 2
+      ;;
+    --cli-binary)
+      cli_binary="${2:-}"
       shift 2
       ;;
     --output-deb)
@@ -46,6 +51,8 @@ if [[ -z "$artifact_dir" || -z "$binary" ]]; then
   usage
   exit 2
 fi
+
+cli_binary="${cli_binary:-$(dirname "$binary")/qp}"
 
 version="$(
   awk -F '"' '/^version = / { print $2; exit }' Cargo.toml
@@ -76,6 +83,11 @@ fi
 
 if [[ ! -x "$binary" ]]; then
   echo "Missing executable binary: $binary" >&2
+  exit 1
+fi
+
+if [[ ! -x "$cli_binary" ]]; then
+  echo "Missing CLI executable: $cli_binary" >&2
   exit 1
 fi
 
@@ -125,7 +137,7 @@ fi
 normalize_deb_package_modes() {
   find "$package_root" -type d -exec chmod 755 {} +
   find "$package_root" -type f -exec chmod 644 {} +
-  chmod 755 "$install_dir/quick-presenter"
+  chmod 755 "$install_dir/quick-presenter" "$install_dir/qp"
 }
 
 rm -rf "$package_root"
@@ -134,12 +146,16 @@ mkdir -p "$debian_dir" "$install_dir" "$bin_dir" "$runtime_license_dir" "$doc_di
 cp "$binary" "$install_dir/quick-presenter"
 chmod 755 "$install_dir/quick-presenter"
 ln -s "../lib/quick-presenter/quick-presenter" "$bin_dir/quick-presenter"
+cp "$cli_binary" "$install_dir/qp"
+chmod 755 "$install_dir/qp"
+ln -s "../lib/quick-presenter/qp" "$bin_dir/qp"
 
 cp -R "pdfium" "$install_dir/pdfium"
 cp "LICENSE" "$runtime_license_dir/QuickPresenter-LICENSE.txt"
 cp "packaging/SOURCE-OFFER.txt" "$runtime_license_dir/QuickPresenter-SOURCE-OFFER.txt"
 cp "pdfium/LICENSE" "$runtime_license_dir/PDFium-LICENSE.txt"
 
+cp docs/CLI.md docs/CONTROL_PROTOCOL.md "$doc_dir/"
 cp "LICENSE" "$doc_dir/QuickPresenter-LICENSE.txt"
 cp "packaging/SOURCE-OFFER.txt" "$doc_dir/QuickPresenter-SOURCE-OFFER.txt"
 cp "pdfium/LICENSE" "$doc_dir/PDFium-LICENSE.txt"

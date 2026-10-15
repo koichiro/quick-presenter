@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "qp export full page JSON",
+  "description": "Successful CLI export output, not an IPC response. Default entries omit next; --include-next retains PR #449's nullable next field. Page ordering and consistent document identity are enforced by the CLI.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/defaultExport"
+    },
+    {
+      "$ref": "#/$defs/includeNextExport"
+    }
+  ],
+  "$defs": {
+    "defaultExport": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/exportEntry"
+          },
+          {
+            "not": {
+              "required": [
+                "next"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "includeNextExport": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/exportEntry"
+          },
+          {
+            "required": [
+              "next"
+            ]
+          }
+        ]
+      }
+    },
+    "exportEntry": {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "kind",
+        "presentation",
+        "current"
+      ],
+      "properties": {
+        "protocol_version": {
+          "const": 1
+        },
+        "kind": {
+          "const": "context"
+        },
+        "presentation": {
+          "$ref": "#/$defs/presentation"
+        },
+        "current": {
+          "$ref": "#/$defs/pageContext"
+        },
+        "next": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageContext"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "pageContext": {
+      "type": "object",
+      "description": "The existing full SlideContext: PDF text and speaker notes.",
+      "required": [
+        "page",
+        "text",
+        "truncated",
+        "notes"
+      ],
+      "properties": {
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "text": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "truncated": {
+          "const": false
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "presentation": {
+      "type": "object",
+      "description": "The complete initial Status snapshot; loading and failure states are retained.",
+      "required": [
+        "session_id",
+        "document_revision",
+        "document",
+        "page",
+        "pages",
+        "fullscreen",
+        "blackout",
+        "timer",
+        "opening",
+        "render_state",
+        "notes_state"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string"
+        },
+        "document_revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        },
+        "document": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pages": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "fullscreen": {
+          "type": "boolean"
+        },
+        "blackout": {
+          "type": "boolean"
+        },
+        "timer": {
+          "type": "object",
+          "required": [
+            "running",
+            "elapsed_seconds"
+          ],
+          "properties": {
+            "running": {
+              "type": "boolean"
+            },
+            "elapsed_seconds": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 18446744073709551615
+            }
+          }
+        },
+        "opening": {
+          "type": "boolean"
+        },
+        "render_state": {
+          "enum": [
+            "empty",
+            "rendering",
+            "ready",
+            "failed"
+          ]
+        },
+        "notes_state": {
+          "enum": [
+            "empty",
+            "loading",
+            "ready",
+            "failed"
+          ]
+        }
+      }
+    }
+  }
+}

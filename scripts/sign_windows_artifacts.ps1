@@ -167,6 +167,7 @@ if ($Path.Count -gt 0) {
 
     $artifactPaths = @(
         (Join-Path $artifactDirPath "quick-presenter.exe"),
+        (Join-Path $artifactDirPath "qp.exe"),
         (Resolve-SingleArtifact -Directory $artifactDirPath -Filter "QuickPresenter-*.msi"),
         (Resolve-SingleArtifact -Directory $artifactDirPath -Filter "QuickPresenter-*.msix")
     )
