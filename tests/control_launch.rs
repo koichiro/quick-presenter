@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::{
     fs,
     os::unix::fs::PermissionsExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Output},
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -50,7 +50,10 @@ impl Installation {
         }
     }
     fn command(&self, args: &[&str]) -> Command {
-        let mut command = Command::new(self.root.join("bin/qp"));
+        self.command_at(&self.root.join("bin/qp"), args)
+    }
+    fn command_at(&self, executable: &Path, args: &[&str]) -> Command {
+        let mut command = Command::new(executable);
         command
             .args(args)
             .current_dir(&self.root)
@@ -136,12 +139,14 @@ fn simultaneous_open_calls_launch_only_one_gui() {
     let installation = Installation::new();
     let first = installation
         .command(&["open", "first.pdf", "--json"])
+        .env("QP_LAUNCH_MODE", "restoring")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
     let second = installation
         .command(&["open", "second.pdf", "--json"])
+        .env("QP_LAUNCH_MODE", "restoring")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -266,4 +271,160 @@ fn server_open_failure_is_returned_without_command_replay_or_relaunch() {
             .count(),
         1
     );
+}
+
+#[test]
+fn cold_open_waits_for_startup_restoration_before_sending_once() {
+    let installation = Installation::new();
+    let response = success(
+        installation
+            .command(&["open", "requested.pdf", "--json"])
+            .env("QP_LAUNCH_MODE", "restoring")
+            .output()
+            .unwrap(),
+    );
+    assert_eq!(
+        response["state"]["document"],
+        installation.root.join("requested.pdf").to_str().unwrap()
+    );
+    let requests = installation.requests();
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|r| r["method"] == "presentation.status")
+            .count(),
+        4
+    );
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|r| r["method"] == "presentation.open")
+            .count(),
+        1
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn debian_symlink_cold_open_waits_for_restoration_and_reuses_packaged_gui() {
+    use std::os::unix::fs::symlink;
+
+    let installation = Installation::new();
+    let package = installation.root.join("usr/lib/quick-presenter");
+    fs::create_dir_all(package.parent().unwrap()).unwrap();
+    fs::rename(installation.root.join("bin"), &package).unwrap();
+    fs::create_dir_all(installation.root.join("usr/bin")).unwrap();
+    for executable in ["qp", "quick-presenter"] {
+        symlink(
+            format!("../lib/quick-presenter/{executable}"),
+            installation.root.join("usr/bin").join(executable),
+        )
+        .unwrap();
+    }
+    let command = |pdf: &str| {
+        let mut command = installation.command_at(
+            &installation.root.join("usr/bin/qp"),
+            &["open", pdf, "--json"],
+        );
+        command.env("QP_LAUNCH_MODE", "restoring");
+        command
+    };
+    let requested = "requested slides 日本語.pdf";
+    let response = success(command(requested).output().unwrap());
+    assert_eq!(
+        response["state"]["document"],
+        installation.root.join(requested).to_str().unwrap()
+    );
+    let requests = installation.requests();
+    assert_eq!(requests.len(), 5);
+    assert!(requests[..4]
+        .iter()
+        .all(|r| r["method"] == "presentation.status"));
+    assert_eq!(requests[4]["method"], "presentation.open");
+
+    success(command("second.pdf").output().unwrap());
+    assert_eq!(installation.requests().len(), 6);
+    assert_eq!(
+        fs::read_to_string(installation.root.join("launches"))
+            .unwrap()
+            .lines()
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn cold_open_restoration_timeout_never_submits_mutation() {
+    let installation = Installation::new();
+    let started = std::time::Instant::now();
+    let output = installation
+        .command(&["open", "requested.pdf", "--json"])
+        .env("QP_LAUNCH_MODE", "restoring_forever")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(9));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stderr).unwrap()["code"],
+        "TIMEOUT"
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(25));
+    assert!(installation
+        .requests()
+        .iter()
+        .all(|r| r["method"] == "presentation.status"));
+}
+
+#[test]
+fn file_dialog_busy_is_returned_without_replaying_open() {
+    let installation = Installation::new();
+    for _ in 0..2 {
+        let output = installation
+            .command(&["open", "requested.pdf", "--json"])
+            .env("QP_LAUNCH_MODE", "dialog_busy")
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(8));
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stderr).unwrap()["code"],
+            "BUSY"
+        );
+    }
+    assert_eq!(
+        installation
+            .requests()
+            .iter()
+            .filter(|r| r["method"] == "presentation.open")
+            .count(),
+        2
+    );
+    assert_eq!(
+        fs::read_to_string(installation.root.join("launches"))
+            .unwrap()
+            .lines()
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn late_ready_status_does_not_submit_open_after_startup_deadline() {
+    let installation = Installation::new();
+    let started = std::time::Instant::now();
+    let output = installation
+        .command(&["open", "requested.pdf", "--json"])
+        .env("QP_LAUNCH_MODE", "late_ready")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(9));
+    assert!(output.stdout.is_empty());
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stderr).unwrap()["code"],
+        "TIMEOUT"
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(25));
+    let requests = installation.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0]["method"], "presentation.status");
 }

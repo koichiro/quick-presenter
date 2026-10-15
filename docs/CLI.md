@@ -90,9 +90,12 @@ On macOS and Linux, the GUI and CLI must share their `XDG_RUNTIME_DIR`
 environment when it is set. Windows uses the per-machine name
 `\\.\pipe\quick-presenter` with a local-only, write-restricted Named Pipe ACL.
 `qp open <file>` starts the companion GUI when no control server is running,
-then waits for local control before sending the open request. Other commands
-require a running GUI. It has its own `--help`;
-it does not replace the GUI's existing startup arguments.
+then waits for local control and any startup PDF restoration to finish before
+sending the open request once. Startup readiness has a 15-second deadline; a
+stalled restoration or a ready status received after that deadline returns
+`TIMEOUT` without submitting the open request. An in-flight status query retains
+the normal IPC response timeout. Other commands require a running GUI. The CLI
+has its own `--help`; it does not replace the GUI's existing startup arguments.
 
 ## Command reference
 
