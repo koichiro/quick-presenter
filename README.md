@@ -5,8 +5,6 @@
 [Changelog](CHANGELOG.md) ·
 [Privacy](https://quickpresenter.com/privacy/)
 
-[![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/ci.yml)
-[![Build Binaries](https://img.shields.io/badge/builds-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml)
 ![Rust](https://img.shields.io/badge/language-Rust-b7410e)
 ![Coverage target](https://img.shields.io/badge/coverage%20target-80%25-brightgreen)
 [![License](https://img.shields.io/badge/license-GPL--3.0--only-blue)](LICENSE)
@@ -22,6 +20,40 @@ and online presentations over tools such as Zoom and Google Meet.
 Quick Presenter focuses on one job: open a PDF slide deck and help the speaker
 present it reliably. It is not a slide editor, a deck authoring tool, or a
 document management app.
+
+## New in v2.0.0: CLI and AI Workflows
+
+The `qp` CLI lets scripts and external AI agents read slide text and speaker
+notes, control page navigation, and observe presentation state through stable
+JSON/NDJSON interfaces backed by Control Protocol v1.
+
+With `qp` on PATH, try:
+
+```sh
+qp open slides.pdf --json          # Start the GUI if needed and open a PDF
+qp status --json                   # Check the current page and readiness
+qp context --full --json           # Read current and next slide text and notes
+qp export --json > deck-context.json  # Read the whole deck without navigating
+qp goto 3 --json                   # Jump to a page (one-based)
+qp watch --json                    # Stream presentation events
+```
+
+Use these commands to build workflows such as:
+
+- **Interactive AI Presenter:** an external agent reads the deck, answers
+  questions, displays a relevant slide, and returns to the saved page when asked.
+- **Autopilot:** an external runner reads speaker notes aloud and advances only
+  after playback finishes. See the [narration example](examples/autopresent/README.md)
+  for macOS speech and optional Kokoro setup.
+
+Quick Presenter supplies PDF content and playback controls; your external tools
+provide the AI model, speech, and orchestration. Check rendering and note
+readiness with `qp status --json` before reading content.
+
+Supported Windows and Linux packages and macOS Developer ID / DMG builds include
+`qp`. **Mac App Store CLI/control support is unavailable in v2.0.0; use the DMG
+for macOS automation.** See [CLI installation and usage](docs/CLI.md) and the
+[protocol reference](docs/CONTROL_PROTOCOL.md) for setup, commands, and errors.
 
 ## Core Components
 
@@ -39,23 +71,15 @@ document management app.
 
 ### Presenter Window
 
-![Windows presenter window with an English sample slide and speaker notes](docs/assets/presenter-window-en-windows.png)
-
 ![macOS presenter window with an English sample slide and speaker notes](docs/assets/presenter-window-en-macos.png)
 
 ### Slide Window
 
-![Windows slide window with an English title slide](docs/assets/slide-window-title-en-windows.png)
-
-![Windows slide window with an English sample workflow slide](docs/assets/slide-window-en-windows.png)
-
-![Windows slide window with a Japanese sample slide](docs/assets/slide-window-ja-windows.png)
-
 ![macOS slide window with an English title slide](docs/assets/slide-window-title-en-macos.png)
 
-![macOS slide window with an English sample workflow slide](docs/assets/slide-window-en-macos.png)
+![macOS slide window with English bullet points](docs/assets/slide-window-en-macos.png)
 
-![macOS slide window with a Japanese sample slide](docs/assets/slide-window-ja-macos.png)
+![macOS slide window with Japanese bullet points](docs/assets/slide-window-ja-macos.png)
 
 The screenshots use the repository-owned sample deck in
 [docs/samples/quick-presenter-demo.md](docs/samples/quick-presenter-demo.md).
@@ -135,6 +159,8 @@ are available in
   speaker notes, timer, and clock.
 - Support keyboard-first navigation, including common presenter remote keys.
 - Bundle the PDF runtime in packaged builds for predictable playback.
+- Read presentation content and control playback through the `qp` CLI for
+  scripts and external AI agents.
 
 ## Basic Usage
 
@@ -177,44 +203,13 @@ atomically refreshes the deck while preserving the current page when possible.
 No hot reload setting is required.
 
 The Cargo package and GUI executable are both named `quick-presenter`. The separate
-`qp` executable provides the local automation interface described below.
+`qp` executable provides the [CLI interface described above](#new-in-v200-cli-and-ai-workflows).
 
 Keyboard controls are documented in [docs/KEYBOARD.md](docs/KEYBOARD.md).
 Recent-file privacy behavior is documented in
 [docs/PRIVACY.md](docs/PRIVACY.md).
 Packaged app diagnostic logs are documented in
 [docs/PACKAGING.md](docs/PACKAGING.md#diagnostic-logs).
-
-## Local Automation
-
-Supported Windows and Linux packages and macOS Developer ID / DMG builds include
-`qp`, a CLI for AI agents and other automation tools to query and control
-Quick Presenter. Control Protocol v1 and the documented JSON/NDJSON output and
-exit codes are stable public automation interfaces for v2.0.0:
-
-```sh
-# With qp on PATH:
-qp open slides.pdf --json
-qp status --json
-qp timer elapsed --json
-qp next
-qp notes --json
-qp slide --json
-qp context --json
-qp context --full --json
-qp export --json > deck-context.json
-qp export --json --include-next > deck-context-with-next.json
-qp watch --json
-```
-
-`qp open` starts the GUI if needed. The CLI uses local IPC and the same
-presentation operations as the GUI. **Mac App Store CLI/control support is out of
-scope for v2.0.0.** For packaged macOS automation, use the Developer ID / DMG
-distribution. Nonsandboxed development builds also support CLI control.
-Future Store support is tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422).
-See [CLI usage](docs/CLI.md) and the
-[Presentation Control Protocol](docs/CONTROL_PROTOCOL.md) for the command set,
-JSON output, errors, operating limits, and compatibility policy.
 
 ## Build and Development
 
@@ -229,10 +224,10 @@ CI and release packaging fetch PDFium with `--clean` so extraction starts from a
 clean output directory. See [docs/PACKAGING.md](docs/PACKAGING.md) for the
 release-oriented PDFium fetch requirements.
 
-Build the app:
+Build the GUI and CLI:
 
 ```sh
-cargo build --bin quick-presenter
+cargo build --bins
 ```
 
 Run the standard checks:
@@ -268,7 +263,7 @@ python3 scripts/stats.py --ref origin/main
 ## Releases
 
 Quick Presenter is an OSS project focused on reliable PDF presentation
-playback. Windows v1.0.0 is distributed exclusively through Microsoft Store;
+playback. Windows is distributed through Microsoft Store;
 the signed/notarized macOS package and Linux package are published through
 GitHub Releases. Download and launch steps are documented in
 [docs/RELEASE.md](docs/RELEASE.md).
@@ -295,9 +290,9 @@ delivery and AI-assisted presentation workflows.
 - **v1.5.0: More polished live delivery.** Presenter-focused enhancements such
   as pointer tools should make talks easier to run, with donation-friendly
   distribution through desktop app stores.
-- **v2.0.0: AI-centric presentation operations.** Quick Presenter should grow a
-  CLI interface and AI-friendly workflows while continuing to treat PDF as the
-  presentation source of truth.
+- **v2.0.0: CLI and AI-assisted presentation operations.** The `qp` CLI exposes
+  presentation content and playback controls to external tools while keeping
+  PDF as the presentation source of truth.
 
 ## Related Projects
 
