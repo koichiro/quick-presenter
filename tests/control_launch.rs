@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::{
     fs,
     os::unix::fs::PermissionsExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Output},
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -50,7 +50,10 @@ impl Installation {
         }
     }
     fn command(&self, args: &[&str]) -> Command {
-        let mut command = Command::new(self.root.join("bin/qp"));
+        self.command_at(&self.root.join("bin/qp"), args)
+    }
+    fn command_at(&self, executable: &Path, args: &[&str]) -> Command {
+        let mut command = Command::new(executable);
         command
             .args(args)
             .current_dir(&self.root)
@@ -296,6 +299,55 @@ fn cold_open_waits_for_startup_restoration_before_sending_once() {
         requests
             .iter()
             .filter(|r| r["method"] == "presentation.open")
+            .count(),
+        1
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn debian_symlink_cold_open_waits_for_restoration_and_reuses_packaged_gui() {
+    use std::os::unix::fs::symlink;
+
+    let installation = Installation::new();
+    let package = installation.root.join("usr/lib/quick-presenter");
+    fs::create_dir_all(package.parent().unwrap()).unwrap();
+    fs::rename(installation.root.join("bin"), &package).unwrap();
+    fs::create_dir_all(installation.root.join("usr/bin")).unwrap();
+    for executable in ["qp", "quick-presenter"] {
+        symlink(
+            format!("../lib/quick-presenter/{executable}"),
+            installation.root.join("usr/bin").join(executable),
+        )
+        .unwrap();
+    }
+    let command = |pdf: &str| {
+        let mut command = installation.command_at(
+            &installation.root.join("usr/bin/qp"),
+            &["open", pdf, "--json"],
+        );
+        command.env("QP_LAUNCH_MODE", "restoring");
+        command
+    };
+    let requested = "requested slides 日本語.pdf";
+    let response = success(command(requested).output().unwrap());
+    assert_eq!(
+        response["state"]["document"],
+        installation.root.join(requested).to_str().unwrap()
+    );
+    let requests = installation.requests();
+    assert_eq!(requests.len(), 5);
+    assert!(requests[..4]
+        .iter()
+        .all(|r| r["method"] == "presentation.status"));
+    assert_eq!(requests[4]["method"], "presentation.open");
+
+    success(command("second.pdf").output().unwrap());
+    assert_eq!(installation.requests().len(), 6);
+    assert_eq!(
+        fs::read_to_string(installation.root.join("launches"))
+            .unwrap()
+            .lines()
             .count(),
         1
     );
