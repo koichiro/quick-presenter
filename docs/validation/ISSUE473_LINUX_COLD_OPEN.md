@@ -6,8 +6,8 @@ qualification #475.
 ## Change and source
 
 The startup-wait implementation from #474 is common CLI code and also fixes the
-Linux reproduction. This follow-up adds Linux package-layout coverage and
-records real desktop regression results; it does not add another retry path.
+Linux reproduction. The Linux additions to #474 provide package-layout coverage
+and real desktop regression results; they do not add another retry path.
 The prerequisite is `b3019cd105c28927caaebdf763c04fea5a550aa9`, including the
 startup deadline recheck, plus this PR's `tests/control_launch.rs` regression.
 
