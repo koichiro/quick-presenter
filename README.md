@@ -5,8 +5,6 @@
 [Changelog](CHANGELOG.md) ·
 [Privacy](https://quickpresenter.com/privacy/)
 
-[![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/ci.yml)
-[![Build Binaries](https://img.shields.io/badge/builds-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml)
 ![Rust](https://img.shields.io/badge/language-Rust-b7410e)
 ![Coverage target](https://img.shields.io/badge/coverage%20target-80%25-brightgreen)
 [![License](https://img.shields.io/badge/license-GPL--3.0--only-blue)](LICENSE)
