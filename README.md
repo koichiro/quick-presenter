@@ -6,8 +6,6 @@
 [Changelog](CHANGELOG.md) ·
 [Privacy](https://quickpresenter.com/privacy/)
 
-[![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/ci.yml)
-[![Build Binaries](https://img.shields.io/badge/builds-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml)
 ![Rust](https://img.shields.io/badge/language-Rust-b7410e)
 ![Coverage target](https://img.shields.io/badge/coverage%20target-80%25-brightgreen)
 [![License](https://img.shields.io/badge/license-GPL--3.0--only-blue)](LICENSE)
@@ -152,27 +150,19 @@ Quick Presenter also works without an agent. The presenter window keeps slide
 context and controls together; the audience window shows only the deck.
 
 <details>
-<summary>View Windows and macOS screenshots</summary>
+<summary>View macOS screenshots</summary>
 
 ### Presenter Window
-
-![Windows presenter window with an English sample slide and speaker notes](docs/assets/presenter-window-en-windows.png)
 
 ![Quick Presenter v2.0.0 macOS presenter window with slide text and speaker notes](website/src/assets/presenter-window-v2-macos.png)
 
 ### Slide Window
 
-![Windows slide window with an English title slide](docs/assets/slide-window-title-en-windows.png)
-
-![Windows slide window with an English sample workflow slide](docs/assets/slide-window-en-windows.png)
-
-![Windows slide window with a Japanese sample slide](docs/assets/slide-window-ja-windows.png)
-
 ![macOS slide window with an English title slide](docs/assets/slide-window-title-en-macos.png)
 
-![macOS slide window with an English sample workflow slide](docs/assets/slide-window-en-macos.png)
+![macOS slide window with English bullet points](docs/assets/slide-window-en-macos.png)
 
-![macOS slide window with a Japanese sample slide](docs/assets/slide-window-ja-macos.png)
+![macOS slide window with Japanese bullet points](docs/assets/slide-window-ja-macos.png)
 
 The screenshots use the repository-owned sample deck in
 [docs/samples/quick-presenter-demo.md](docs/samples/quick-presenter-demo.md).
@@ -335,7 +325,7 @@ CI and release packaging fetch PDFium with `--clean` so extraction starts from a
 clean output directory. See [docs/PACKAGING.md](docs/PACKAGING.md) for the
 release-oriented PDFium fetch requirements.
 
-Build both the GUI and CLI from the v2.0.0 source:
+Build the GUI and CLI:
 
 ```sh
 cargo build --bins
