@@ -60,15 +60,33 @@ and Apple-re-signed TestFlight/Store identity and container access. The probe
 does not exercise GUI operations, production watch/response assembly, startup,
 or PDF file-authority handoff. #432 and #433 retain those responsibilities.
 
-As of 2026-10-11 JST, further validation and implementation are **pending at the
-maintainer's request until the current Apple review completes**. Reflecting
-this feedback is documentation work only; it does not resume development or
-select either transport. Local checks above remain useful evidence, but they
-cannot substitute for Apple-re-signed installed-runtime qualification. After
-the review completes and the maintainer resumes this work, establish which
-distribution artifacts are available, run the remaining gates, and update the
-socket-versus-XPC decision. Review completion alone does not pass those gates.
-Keep #431/#422 open and do not advance #432/#433 implementation during this hold.
+The maintainer lifted the 2026-10-11 hold on 2026-10-15 after reporting
+v1.4.0 approval and customer availability. Validation has resumed; review
+completion does not pass any future IPC adoption gate. The
+[follow-up evidence in #440](https://github.com/koichiro/quick-presenter/blob/codex/431-store-cli-ipc-probe/docs/validation/ISSUE431_STORE_IPC_FOLLOWUP_20261015.md)
+adds four successful diagnostic load/lifecycle cases and static identity
+inspection of the existing Apple-re-signed TestFlight v1.4.0 (14005). That app
+has no probe group or probe IPC; Apple-re-signed IPC remains unqualified.
+
+The new local inherited-FD experiment reproduced an identity-binding limitation
+in 30 raw and 30 Developer ID-signed sandbox runs: a child queues a byte, the
+original parent holder touches the shared sender endpoint without writing,
+and the receiver observes the parent's original token before and after reading
+the child's byte. Equal token snapshots therefore do not generally establish
+byte origin across shared endpoint holders. This is consistent with XNU's
+`last_pid` lookup. The fixture deliberately cooperates in sharing a descriptor
+and uses the same code identity; it does not demonstrate an unrelated process
+obtaining a production descriptor or bypassing `qp` signing checks. Close-on-exec
+and the product's no-fork/no-transfer policy still need an explicit threat-model
+review rather than being assumed to establish the missing per-message contract.
+
+Do not integrate the socket into production on the strength of ordinary
+roundtrips or future TestFlight success. Keep its identity gate unpassed;
+review the restricted descriptor threat model and evaluate the XPC per-message
+identity alternative before selecting a transport. TestFlight can qualify
+Apple re-signing, provisioning, placement, and container behavior, but cannot
+turn a socket ownership snapshot into message-bound provenance. Keep #431/#422
+open; #432/#433 retain their startup/file-authority and distribution gates.
 
 ## Scope and ownership
 
