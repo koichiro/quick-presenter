@@ -192,7 +192,6 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
         "end-of-deck context mismatch"
     );
     ready(path)?;
-<<<<<<< HEAD
     let Reply::Status(before_export) = call(path, Command::Status(Empty {}))? else {
         anyhow::bail!("missing export status");
     };
@@ -201,18 +200,6 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
             client::export(include_next, |request| client::send_to(path, request))
                 .map_err(|error| anyhow::anyhow!(error.message))?;
         let exported: Vec<serde_json::Value> = serde_json::from_reader(&mut export_file)?;
-=======
-    let export_started = Instant::now();
-    let before_export = call(path, Command::Status(Empty {}))?;
-    let mut export_file = client::export(|request| client::send_to(path, request))
-        .map_err(|error| anyhow::anyhow!(error.message))?;
-    let exported: Vec<serde_json::Value> = serde_json::from_reader(&mut export_file)?;
-    anyhow::ensure!(
-        exported.len() == total as usize,
-        "export page count mismatch"
-    );
-    for (index, item) in exported.iter().enumerate() {
->>>>>>> 6e0b800 (Fix dependency audit and export smoke timer comparison)
         anyhow::ensure!(
             exported.len() == total as usize,
             "export page count mismatch"
@@ -255,30 +242,6 @@ fn check_commands(path: &Path, pdf: &Path) -> Result<()> {
             "export changed presentation state"
         );
     }
-<<<<<<< HEAD
-=======
-    let mut after_export = call(path, Command::Status(Empty {}))?;
-    // A running timer may cross a second boundary while export is in flight.
-    // Allow only natural elapsed time; still compare every other status field.
-    if let (Reply::Status(before), Reply::Status(after)) = (&before_export, &mut after_export) {
-        if before.timer.running {
-            let elapsed = after
-                .timer
-                .elapsed_seconds
-                .checked_sub(before.timer.elapsed_seconds)
-                .context("export reset the running timer")?;
-            anyhow::ensure!(
-                elapsed <= export_started.elapsed().as_secs().saturating_add(1),
-                "export advanced the timer beyond elapsed wall time"
-            );
-            after.timer.elapsed_seconds = before.timer.elapsed_seconds;
-        }
-    }
-    anyhow::ensure!(
-        after_export == before_export,
-        "export changed presentation state: before={before_export:?}, after={after_export:?}"
-    );
->>>>>>> 6e0b800 (Fix dependency audit and export smoke timer comparison)
     call(path, Command::GoTo(PageParams { page: 1 }))?;
     anyhow::ensure!(
         matches!(
