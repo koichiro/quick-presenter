@@ -1,5 +1,8 @@
 # Interactive AI Presenter
 
+Microsoft Store v2.0.0 is coming soon. Use the macOS DMG or Debian package
+to try the released version now.
+
 Use Quick Presenter's v2.0.0 interface with an external agent. The recorded demo
 uses Codex, configured to execute the local CLI and read its output. Configure
 that access for your chosen agent; support for every model or service is not

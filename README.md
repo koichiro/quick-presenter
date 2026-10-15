@@ -34,7 +34,9 @@ See [downloads](https://quickpresenter.com/#download) and
 [CLI installation](https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md#installation)
 for package paths and PATH setup. macOS automation requires the Developer ID /
 DMG distribution; Mac App Store control is unsupported in v2.0.0. Windows
-Store provides the `qp.exe` execution alias; Debian installs `/usr/bin/qp`.
+Store v2.0.0 is coming soon and will provide the `qp.exe` execution alias;
+Debian installs `/usr/bin/qp`. Use the macOS DMG or Debian package to try the
+released version now.
 
 From the repository root, open the checked-in notes-bearing sample:
 
