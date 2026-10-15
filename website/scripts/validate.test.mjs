@@ -11,7 +11,7 @@ import { createInterface } from "node:readline";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dist = join(root, "dist");
 const origin = "https://quickpresenter.com";
-const oldOrigin = "https://koichiro.github.io/quick-presenter/";
+const oldOrigin = "https://koichiro.github.io/quick-presenter";
 const pages = [
   ["index.html", "/"],
   ["privacy/index.html", "/privacy/"],

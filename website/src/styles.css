@@ -472,18 +472,16 @@ h3 {
   justify-content: end;
 }
 
-.store-coming-soon {
+.store-options {
   display: grid;
   justify-items: center;
   gap: 8px;
 }
 
-.store-coming-soon span {
+.store-region-link {
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .store-link {
