@@ -1,9 +1,9 @@
 # Quick Presenter
 
-[Website](https://koichiro.github.io/quick-presenter/) ·
+[Website](https://quickpresenter.com/) ·
 [Downloads](https://github.com/koichiro/quick-presenter/releases) ·
 [Changelog](CHANGELOG.md) ·
-[Privacy](https://koichiro.github.io/quick-presenter/privacy/)
+[Privacy](https://quickpresenter.com/privacy/)
 
 [![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/ci.yml)
 [![Build Binaries](https://img.shields.io/badge/builds-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](https://github.com/koichiro/quick-presenter/actions/workflows/build-binaries.yml)
