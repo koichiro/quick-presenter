@@ -1,5 +1,12 @@
 # Mac App Store IPC probe
 
+The [2026-10-15 follow-up](validation/ISSUE431_STORE_IPC_FOLLOWUP_20261015.md)
+records resumed validation after v1.4.0 approval: signed lifecycle/load checks,
+existing TestFlight identity inspection, and a reproducible inherited-FD
+limitation in `LOCAL_PEERTOKEN`. Token equality before/after a read does not
+prove queued-byte origin when the endpoint is shared. The socket adoption gate
+remains open; no Apple-re-signed IPC result is claimed.
+
 This development-only experiment makes the initial socket proposal in
 [design PR #434](https://github.com/koichiro/quick-presenter/pull/434) executable
 before that PR is merged. It targets [#431](https://github.com/koichiro/quick-presenter/issues/431)
