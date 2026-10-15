@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v1.5.0) — 2026-10-15
+
+This release marks a distribution milestone: Quick Presenter is now publicly
+available on the Mac App Store. It also celebrates the launch of the official
+website at [quickpresenter.com](https://quickpresenter.com/).
+
+### Distribution
+
+- Make Quick Presenter available on the
+  [Mac App Store](https://apps.apple.com/app/quick-presenter-pdf-slides/id6820406883)
+  following completed App Review and public release.
+- Add Mac App Store packaging with App Sandbox, security-scoped PDF bookmarks,
+  provisioning and signing validation, and reusable submission and
+  Store-installed validation checklists
+  ([#415](https://github.com/koichiro/quick-presenter/pull/415)).
+- Require macOS 14.4 or later for the Mac App Store channel and authenticate
+  Apple-resigned renderer processes with the native same-team XPC identity API
+  ([#417](https://github.com/koichiro/quick-presenter/pull/417)).
+- Remove unused private CoreGraphics blur imports from Mac App Store binaries by
+  patching the pinned `winit` dependency, and reject private API imports during
+  Store package validation
+  ([#421](https://github.com/koichiro/quick-presenter/pull/421)).
+- Move the official website and privacy policy to `quickpresenter.com`, with
+  HTTPS, redirects from the previous GitHub Pages URL and `www`, and links to
+  the published global and Japan Mac App Store listings
+  ([#444](https://github.com/koichiro/quick-presenter/pull/444)).
+
+### Fixed
+
+- Describe the **X** shortcut as swapping presenter and audience displays,
+  matching its actual behavior
+  ([#441](https://github.com/koichiro/quick-presenter/pull/441)).
+
+### Development
+
+- Add a Rails-style source statistics tool with implementation and test
+  breakdowns, including support for measuring another Git revision
+  ([#419](https://github.com/koichiro/quick-presenter/pull/419)).
+
 ## [1.4.0](https://github.com/koichiro/quick-presenter/releases/tag/v1.4.0) — 2026-10-08
 
 Release ahead of v1.5.0 to validate signed packages and the next Microsoft Store
