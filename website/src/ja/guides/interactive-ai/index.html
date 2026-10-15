@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8" /><script src="/language.js"></script><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Interactive AI Presenterを試す — Quick Presenter</title>
+<link rel="stylesheet" href="/styles.css" /><link rel="canonical" href="https://quickpresenter.com/ja/guides/interactive-ai/" />
+<link rel="alternate" hreflang="en" href="https://quickpresenter.com/guides/interactive-ai/" /><link rel="alternate" hreflang="ja" href="https://quickpresenter.com/ja/guides/interactive-ai/" /><link rel="alternate" hreflang="x-default" href="https://quickpresenter.com/guides/interactive-ai/" /></head>
+<body><header class="site-header"><a class="brand" href="/ja/"><img src="/assets/quick-presenter-icon-256.png" alt="" /><span>Quick Presenter</span></a><nav class="nav-links" aria-label="ナビゲーション"><span class="language-switch" role="group" aria-label="言語"><a href="/guides/interactive-ai/" lang="en" hreflang="en" >EN</a><a href="/ja/guides/interactive-ai/" lang="ja" hreflang="ja" aria-current="page">日本語</a></span></nav></header>
+<main class="guide-content"><p class="eyebrow">Try it yourself</p><h1>Interactive AI Presenterを試す</h1><p>このデモではCodexを使いました。必要なローカルCLI実行とファイル読み込みを許可した外部エージェントで、次の手順とプロンプトを試せます。すべてのエージェントやモデルとの互換性を保証するものではありません。</p>
+<section><h2>1. GUIとCLIを準備</h2><p>OSに合うQuick Presenter v2.0.0をインストールし、同じパッケージのGUIとCLIを使用してください。このデモはv2.0.0のexportインターフェースを使います。Microsoft Store版v2.0.0はComing soonです。公開済みのバージョンを試すにはmacOSのDMG版またはDebianパッケージを使用してください。</p><p>macOSはDeveloper ID / DMG内の<code>/Applications/Quick Presenter.app/Contents/MacOS/qp</code>、Windows Storeは<code>qp.exe</code>の実行エイリアス、Debianは<code>/usr/bin/qp</code>を使います。Mac App Store版はv2.0.0のCLI操作に対応しません。以下はqpがPATHにある場合の例です。必要に応じて配布パッケージの実行パスを指定してください。</p><p><a class="text-link" href="/ja/#download">OS別ダウンロード</a> · <a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md#installation">CLIのインストール手順</a></p></section>
+<section><h2>2. サンプルPDFと全ページを取得</h2><p>下のサンプルを<code>interactive-ai-sample.pdf</code>として作業フォルダに保存します。これはv2.0.0ブランチの<code>docs/samples/quick-presenter-demo.pdf</code>から取得した、ノート付きの12ページPDFです。GUIとCLIは同じパッケージを使い、XDG_RUNTIME_DIRを設定している場合は両方で同じ値にしてください。</p><p><a class="button secondary" href="/assets/interactive-ai-sample.pdf" download="interactive-ai-sample.pdf">ノート付きPDFをダウンロード</a></p><pre><code>qp --version --json
+qp open interactive-ai-sample.pdf --json
+qp status --json
+qp export --json &gt; deck-context.json
+qp context --full --json</code></pre><p>statusの<code>opening: false</code>、<code>render_state: "ready"</code>、<code>notes_state: "ready"</code>を確認してからexportします。<code>NOTES_LOADING</code>なら準備を待って読み込みを再試行してください。失敗時は空の出力を資料として渡さず、エラーを確認します。exportは表示ページを移動せず、全ページの本文とノートをJSON配列で返します。</p><p>Python 3があれば、次の確認で全ページのノートの有無を表示できます。空のノートはノートなしを意味します。exportには画像、図の解釈、OCRは含まれません。</p><pre><code>python3 - &lt;&lt;&#x27;PYCODE&#x27;
+import json
+from pathlib import Path
+pages = json.loads(Path(&quot;deck-context.json&quot;).read_text())
+print(&quot;Pages:&quot;, len(pages))
+for entry in pages:
+    page = entry[&quot;current&quot;]
+    print(page[&quot;page&quot;], &quot;notes:&quot;, bool(page[&quot;notes&quot;].strip()))
+PYCODE</code></pre></section>
+<section><h2>3. 質問し、指示して戻る</h2><p>質問例：「なぜElectronではなくRustを使ったのですか？」。取得した資料全体から関連ページを判断し、必要な場合だけ<code>qp goto N --json</code>を実行します。Nはエージェントが資料から選んだ1始まりのページ番号です。「元の位置へ戻って」と指示したら、同じ資料・セッションであることを確認して保存したページへ復帰します。毎回の移動や自動復帰を前提にしません。</p><p>JSONの各項目はcurrent.page、current.text、current.notesです。presentation.pageはexport開始時の表示ページであり、各ページの番号ではありません。</p></section>
+<section><h2>4. エージェント向けプロンプト</h2><p>ローカルCLIを実行できるエージェントに渡してください。PDFのパスとqpの実行パスは環境に合わせて設定します。</p><pre lang="en"><code>You are an external interactive presenter for Quick Presenter.
+Use the configured qp CLI; do not simulate application actions.
+1. Read qp status --json and save session_id, document_revision, and page.
+2. Read qp export --json once for the whole deck. Use current.page,
+   current.text, and current.notes in each entry. presentation.page is the
+   initial live page, not the exported page number. Confirm notes are available.
+3. Answer the user&#x27;s questions using this deck. Distinguish source facts from
+   your interpretation. Say when the deck does not support an answer.
+4. Select a relevant page from the exported material. Use qp goto N --json
+   only when showing that page helps. Confirm state with qp status --json.
+5. Return to the saved page only when the user asks. Check that session_id and
+   document_revision still match before restoring. Do not reopen an old PDF or
+   restore a page into a different document. Confirm the result.
+6. Refresh the export if the document changes. If notes are loading, wait for
+   notes_state ready and retry the read. Report failures; check status before
+   retrying an action whose outcome is uncertain. Do not invent successful
+   actions, missing notes, image contents, or claims absent from the deck.
+Do not narrate automatically or advance continuously unless explicitly asked.</code></pre></section>
+<p><a class="text-link" href="/ja/#agentic-presentation">デモに戻る</a></p></main><footer class="site-footer"><span>Quick Presenter</span><a href="/ja/privacy/">プライバシー</a></footer></body></html>

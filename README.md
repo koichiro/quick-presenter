@@ -2,6 +2,7 @@
 
 [Website](https://quickpresenter.com/) ·
 [Downloads](https://github.com/koichiro/quick-presenter/releases) ·
+[CLI reference](https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md) ·
 [Changelog](CHANGELOG.md) ·
 [Privacy](https://quickpresenter.com/privacy/)
 
@@ -13,65 +14,149 @@
 
 ![Quick Presenter icon](assets/icons/png/quick-presenter-icon-128.png)
 
-Quick Presenter is a lightweight cross-platform presenter tool for PDF slide
-decks, built for academic talks, research presentations, technical conferences,
-and online presentations over tools such as Zoom and Google Meet.
+**Your PDF slides. Your AI agent. New possibilities.**
 
-Quick Presenter focuses on one job: open a PDF slide deck and help the speaker
-present it reliably. It is not a slide editor, a deck authoring tool, or a
-document management app.
+Quick Presenter is a cross-platform PDF presentation app built with Rust,
+Slint, and PDFium. Version 2.0 adds `qp`, a stable local CLI that gives scripts
+and external AI agents access to slide text, speaker notes, presentation state,
+and playback controls.
 
-## New in v2.0.0: CLI and AI Workflows
+Use the same prepared PDF for a conventional talk, an interactive agent, or a
+workflow you build yourself. Quick Presenter owns PDF display and presentation
+state. Your external tools interpret the material, generate answers or audio,
+and decide which operations to request. The app does not bundle an AI model
+or TTS engine.
 
-The `qp` CLI lets scripts and external AI agents read slide text and speaker
-notes, control page navigation, and observe presentation state through stable
-JSON/NDJSON interfaces backed by Control Protocol v1.
+## Start with the CLI
 
-With `qp` on PATH, try:
+Install Quick Presenter v2.0.0 and use the GUI and CLI from the same package.
+See [downloads](https://quickpresenter.com/#download) and
+[CLI installation](https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md#installation)
+for package paths and PATH setup. macOS automation requires the Developer ID /
+DMG distribution; Mac App Store control is unsupported in v2.0.0. Windows
+Store v2.0.0 is coming soon and will provide the `qp.exe` execution alias;
+Debian installs `/usr/bin/qp`. Use the macOS DMG or Debian package to try the
+released version now.
+
+From the repository root, open the checked-in notes-bearing sample:
 
 ```sh
-qp open slides.pdf --json          # Start the GUI if needed and open a PDF
-qp status --json                   # Check the current page and readiness
-qp context --full --json           # Read current and next slide text and notes
-qp export --json > deck-context.json  # Read the whole deck without navigating
-qp goto 3 --json                   # Jump to a page (one-based)
-qp watch --json                    # Stream presentation events
+qp --version --json
+qp open website/src/assets/interactive-ai-sample.pdf --json
+qp status --json
 ```
 
-Use these commands to build workflows such as:
+Wait for `opening: false`, `render_state: "ready"`, and
+`notes_state: "ready"`. Then read the deck and try the controls:
 
-- **Interactive AI Presenter:** an external agent reads the deck, answers
-  questions, displays a relevant slide, and returns to the saved page when asked.
-- **Autopilot:** an external runner reads speaker notes aloud and advances only
-  after playback finishes. See the [narration example](examples/autopresent/README.md)
-  for macOS speech and optional Kokoro setup.
+```sh
+# Read all pages without changing the displayed slide
+qp export --json > deck-context.json
 
-Quick Presenter supplies PDF content and playback controls; your external tools
-provide the AI model, speech, and orchestration. Check rendering and note
-readiness with `qp status --json` before reading content.
+# Read current and next page context
+qp context --full --json
 
-Supported Windows and Linux packages and macOS Developer ID / DMG builds include
-`qp`. **Mac App Store CLI/control support is unavailable in v2.0.0; use the DMG
-for macOS automation.** See [CLI installation and usage](docs/CLI.md) and the
-[protocol reference](docs/CONTROL_PROTOCOL.md) for setup, commands, and errors.
+# Choose a page (one-based syntax example), then advance
+qp goto 3 --json
+qp next --json
 
-## Core Components
+# Check state and observe subsequent changes; stop watch with Ctrl-C
+qp status --json
+qp watch --json
+```
 
-- [PDFium](https://pdfium.googlesource.com/pdfium/), accessed through
-  [`pdfium-render`](https://crates.io/crates/pdfium-render), loads and renders
-  PDF slide decks.
-- [Slint](https://slint.dev/) provides the cross-platform user interface for
-  presenter controls and slide output.
+`qp open` can start the companion GUI if it is not running. The other commands
+require a running GUI; content queries also require an open PDF.
 
-## Demo
+## Build on the presentation interface
 
-![Quick Presenter demo showing PDF navigation in the presenter window](docs/assets/quick-presenter-demo.gif)
+| Capability | What your tool can do | Commands |
+| --- | --- | --- |
+| Read | Export every page's full text and speaker notes without navigating; query current and next page context. | `qp export --json`, `qp context --full --json` |
+| Control | Open a PDF, select a one-based page, or advance explicitly. | `qp open deck.pdf --json`, `qp goto 3 --json`, `qp next --json` |
+| Observe | Query presentation state and stream changes as NDJSON. | `qp status --json`, `qp watch --json` |
 
-## Screenshots
+The interface uses Control Protocol v1. Application versions and protocol
+versions are independent. Parse JSON fields and error codes rather than
+human-readable output, and accept additional object fields.
+
+- `export` returns one JSON array. Each entry's `current.page`, `current.text`,
+  and `current.notes` describe the exported page. `presentation.page` is the
+  live page at the start of export. The default omits `next`; use
+  `--include-next` if your consumer needs that field.
+- Other one-shot JSON commands return one object. `watch --json` emits one
+  independently valid event per line; it does not acknowledge render or note
+  readiness. Query `status` for those states.
+- Text extraction does not include images, diagram interpretation, or OCR.
+  Image-only pages can have `text: []`; pages without notes have `notes: ""`.
+  Ordinary PDF export does not guarantee extractable speaker notes.
+- Check exit codes and JSON errors on stderr. `NOTES_LOADING` means wait for
+  notes readiness and retry the read. After a timeout or disconnection, query
+  status before retrying a mutation whose outcome may be uncertain.
+
+Connect a local model, hosted service, or script through the CLI integration
+you configure. Quick Presenter provides the source information and controls;
+your integration determines what to do with them. The two demos below are
+examples, not the limits of the interface or a guarantee of compatibility
+with every agent.
+
+See the [CLI reference](https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md),
+[protocol contract](https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CONTROL_PROTOCOL.md),
+and [export JSON Schema](https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/schemas/qp-export.schema.json)
+for the complete contract and limits.
+
+## Two integration examples
+
+### Interactive AI Presenter
+
+Codex reads text and speaker notes from the whole deck using `qp export --json`.
+Ask a question in natural language; the external agent uses the deck to answer
+and selects a related page when useful. It returns to the saved presentation
+position when you ask. Quick Presenter supplies PDF display, context, state,
+and controls; the external agent interprets the material and makes decisions.
+
+[![Watch Interactive AI Presenter with Codex](website/src/assets/interactive-ai-poster.jpg)](https://quickpresenter.com/#agentic-presentation)
+
+[Watch the short demo (29 seconds, no audio)](https://quickpresenter.com/#agentic-presentation)
+· [Short MP4](website/src/assets/interactive-ai-short.mp4)
+· [Full demo (76 seconds, no audio)](website/src/assets/agentic-presentation-demo.mp4)
+· [Prompt and reproduction guide](docs/INTERACTIVE_AI_PRESENTER.md)
+· [Sample PDF with notes](website/src/assets/interactive-ai-sample.pdf)
+
+Integration pattern: export the deck once, save the current session/document
+identity and page, then choose controls based on the question. Restore the
+saved page only on request, after checking that the same document is open.
+The short recording edits processing waits; it is not a latency benchmark.
+
+### Autopilot
+
+An external Python runner reads prepared speaker notes aloud with optional
+[Kokoro](https://github.com/hexgrad/kokoro) TTS and advances after playback.
+It waits for rendering, note readiness, and audio completion, stopping on
+failure. Quick Presenter provides PDF context and presentation controls.
+
+[![Watch Autopilot: notes and automatic page advance](website/src/assets/kokoro-demo-poster.jpg)](https://quickpresenter.com/#autopilot)
+
+[Watch Autopilot (72 seconds, English narration)](https://quickpresenter.com/#autopilot)
+· [MP4](website/src/assets/kokoro-demo.mp4)
+· [Runner and Kokoro setup](https://github.com/koichiro/quick-presenter/blob/v2.0.0/examples/autopresent/README.md)
+
+Integration pattern: read the current note, hand it to an external player,
+wait for playback completion, and only then request `qp next --json`. The
+Kokoro adapter synthesizes a complete WAV before playback and caches it for
+reuse. Its setup and model download are separate from Quick Presenter.
+
+## Presenter and audience views
+
+Quick Presenter also works without an agent. The presenter window keeps slide
+context and controls together; the audience window shows only the deck.
+
+<details>
+<summary>View macOS screenshots</summary>
 
 ### Presenter Window
 
-![macOS presenter window with an English sample slide and speaker notes](docs/assets/presenter-window-en-macos.png)
+![Quick Presenter v2.0.0 macOS presenter window with slide text and speaker notes](website/src/assets/presenter-window-v2-macos.png)
 
 ### Slide Window
 
@@ -84,7 +169,9 @@ for macOS automation.** See [CLI installation and usage](docs/CLI.md) and the
 The screenshots use the repository-owned sample deck in
 [docs/samples/quick-presenter-demo.md](docs/samples/quick-presenter-demo.md).
 
-## What Quick Presenter Solves
+</details>
+
+## Reliable PDF playback
 
 Many speakers create slides in a separate authoring tool, then export the final
 deck to PDF. PDF is stable and portable, but ordinary PDF viewers are not
@@ -117,6 +204,21 @@ exported from authoring tools such as:
 The supported input remains the exported PDF, not the source project from any
 authoring tool. Representative exports from these tools are covered by the
 [PDF export compatibility fixtures](docs/PDF_COMPATIBILITY.md).
+
+### Marp speaker notes
+
+Write notes in Markdown comments and preserve their PDF annotations when
+exporting:
+
+```sh
+marp --no-config --pdf --pdf-notes talk.md --output talk.pdf
+```
+
+Check the resulting notes in Quick Presenter or through the CLI before the talk.
+The [interactive sample](website/src/assets/interactive-ai-sample.pdf) and
+[Autopilot sample](website/src/assets/autopilot-sample.pdf) include notes.
+See the [Autopilot setup guide](https://github.com/koichiro/quick-presenter/blob/v2.0.0/examples/autopresent/README.md)
+for the sample source, exact export command, and optional TTS dependencies.
 
 ### Beamer speaker notes
 
@@ -159,8 +261,8 @@ are available in
   speaker notes, timer, and clock.
 - Support keyboard-first navigation, including common presenter remote keys.
 - Bundle the PDF runtime in packaged builds for predictable playback.
-- Read presentation content and control playback through the `qp` CLI for
-  scripts and external AI agents.
+- Expose full-deck text/notes, page context, state, navigation, and change events
+  through the v2.0.0 CLI for external integrations.
 
 ## Basic Usage
 
@@ -202,8 +304,9 @@ The active PDF is watched automatically. Saving it in place or replacing it
 atomically refreshes the deck while preserving the current page when possible.
 No hot reload setting is required.
 
-The Cargo package and GUI executable are both named `quick-presenter`. The separate
-`qp` executable provides the [CLI interface described above](#new-in-v200-cli-and-ai-workflows).
+The Cargo package and GUI executable are both named `quick-presenter`.
+The automation executable is `qp`; see the
+[v2.0.0 CLI reference](https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md).
 
 Keyboard controls are documented in [docs/KEYBOARD.md](docs/KEYBOARD.md).
 Recent-file privacy behavior is documented in
@@ -229,6 +332,23 @@ Build the GUI and CLI:
 ```sh
 cargo build --bins
 ```
+
+For development CLI examples, replace `qp` with `./target/debug/qp` (or
+`target/debug/qp.exe` on Windows). Keep the companion GUI binary alongside it.
+
+### Core components
+
+- Rust owns application state, PDF loading, rendering requests, caching, IO,
+  and error handling.
+- [PDFium](https://pdfium.googlesource.com/pdfium/), accessed through
+  [`pdfium-render`](https://crates.io/crates/pdfium-render), parses and renders PDFs.
+- [Slint](https://slint.dev/) handles layout and user events.
+
+Keep state transitions and PDF operations in Rust. See
+[architecture](docs/ARCHITECTURE.md) and [repository conventions](AGENTS.md)
+when changing these boundaries.
+
+### Validation
 
 Run the standard checks:
 
@@ -263,7 +383,7 @@ python3 scripts/stats.py --ref origin/main
 ## Releases
 
 Quick Presenter is an OSS project focused on reliable PDF presentation
-playback. Windows is distributed through Microsoft Store;
+playback and external automation. Windows is distributed through Microsoft Store;
 the signed/notarized macOS package and Linux package are published through
 GitHub Releases. Download and launch steps are documented in
 [docs/RELEASE.md](docs/RELEASE.md).
@@ -271,28 +391,13 @@ GitHub Releases. Download and launch steps are documented in
 Packaging and signing details for maintainers are documented in
 [docs/PACKAGING.md](docs/PACKAGING.md).
 
-The current CLI and AI-assisted presentation work targets the
-[`v2.0.0` development branch](https://github.com/koichiro/quick-presenter/tree/v2.0.0)
-and [v2.0.0 milestone](https://github.com/koichiro/quick-presenter/milestone/2).
-This replaces the provisional `v1.9.0` development name; release publication
-and package validation remain separate gates. Mac App Store CLI support targets
-v2.5.0, and Audience Live targets v3.0.0.
+## Development priorities
 
-## Roadmap
-
-Quick Presenter is built around one core promise: dependable PDF playback for
-live talks. The roadmap keeps that promise first, then expands toward smoother
-delivery and AI-assisted presentation workflows.
-
-- **v1.0.0: Reliable desktop presentation playback.** Quick Presenter should
-  cover the essential presenter workflow and provide installable packages for
-  macOS, Windows, and Linux.
-- **v1.5.0: More polished live delivery.** Presenter-focused enhancements such
-  as pointer tools should make talks easier to run, with donation-friendly
-  distribution through desktop app stores.
-- **v2.0.0: CLI and AI-assisted presentation operations.** The `qp` CLI exposes
-  presentation content and playback controls to external tools while keeping
-  PDF as the presentation source of truth.
+Version 2.0 opens presentation information and controls to external tools while
+keeping reliable PDF playback central. Contributions should preserve predictable
+rendering, navigation, error recovery, and platform behavior. Extend integrations
+through the documented CLI contract and keep editing, model inference, and
+speech orchestration outside the playback core.
 
 ## Related Projects
 
@@ -312,6 +417,8 @@ Useful starting points:
 
 - Read [AGENTS.md](AGENTS.md) for repository conventions.
 - Read the architecture notes in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- For integrations, read the [v2.0.0 CLI contract](https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md)
+  and [interactive presenter guide](docs/INTERACTIVE_AI_PRESENTER.md).
 - Read the current and target PDFium trust boundaries in
   [docs/PDF_RENDERING_SECURITY.md](docs/PDF_RENDERING_SECURITY.md).
 - Check keyboard behavior in [docs/KEYBOARD.md](docs/KEYBOARD.md).
@@ -330,4 +437,4 @@ for that exact build.
 
 Quick Presenter uses PDFium through `pdfium-render`. Packaged builds that bundle
 PDFium must include PDFium and third-party component license files. See
-[pdfium/LICENSE](pdfium/LICENSE) and [docs/PACKAGING.md](docs/PACKAGING.md).
+the fetched runtime's `pdfium/LICENSE` and [docs/PACKAGING.md](docs/PACKAGING.md).

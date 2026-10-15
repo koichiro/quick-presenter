@@ -3,6 +3,10 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { createInterface } from "node:readline";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dist = join(root, "dist");
@@ -11,6 +15,10 @@ const oldOrigin = "https://koichiro.github.io/quick-presenter";
 const pages = [
   ["index.html", "/"],
   ["privacy/index.html", "/privacy/"],
+  ["ja/index.html", "/ja/"],
+  ["ja/privacy/index.html", "/ja/privacy/"],
+  ["guides/interactive-ai/index.html", "/guides/interactive-ai/"],
+  ["ja/guides/interactive-ai/index.html", "/ja/guides/interactive-ai/"],
 ];
 
 function attributes(tag) {
@@ -36,11 +44,11 @@ test("generated pages have canonical and Open Graph URLs on the new domain", asy
       tags.filter((tag) => tag.rel === "canonical").map((tag) => tag.href),
       [`${origin}${pathname}`],
     );
-    if (pathname === "/") {
-      assert.equal(tags.find((tag) => tag.property === "og:url")?.content, `${origin}/`);
+    if (pathname === "/" || pathname === "/ja/") {
+      assert.equal(tags.find((tag) => tag.property === "og:url")?.content, `${origin}${pathname}`);
       assert.equal(
         tags.find((tag) => tag.property === "og:image")?.content,
-        `${origin}/assets/presenter-window-en.png`,
+        `${origin}/assets/interactive-ai-poster.jpg`,
       );
     }
     for (const tag of tags.filter((tag) => ["og:url", "og:image"].includes(tag.property))) {
@@ -52,8 +60,16 @@ test("generated pages have canonical and Open Graph URLs on the new domain", asy
 
 test("required stylesheet and image assets are generated and nonempty", async () => {
   for (const file of [
+    "assets/interactive-ai-short.mp4",
+    "assets/interactive-ai-poster.jpg",
+    "assets/interactive-ai-sample.pdf",
+    "assets/autopilot-sample.pdf",
+    "assets/agentic-presentation-demo.mp4",
+    "assets/agentic-presentation-poster.jpg",
+    "assets/kokoro-demo.mp4",
+    "assets/kokoro-demo-poster.jpg",
     "styles.css",
-    "assets/presenter-window-en.png",
+    "assets/presenter-window-v2-macos.png",
     "assets/slide-window-title-en.png",
     "assets/slide-window-en.png",
     "assets/quick-presenter-demo.gif",
@@ -73,7 +89,7 @@ test("internal navigation, fragments, and assets resolve at the domain root", as
     const resolved = [];
     for (const [tag] of html.matchAll(/<[a-z][^>]*>/gi)) {
       const attrs = attributes(tag);
-      for (const ref of [attrs.href, attrs.src].filter(Boolean)) {
+      for (const ref of [attrs.href, attrs.src, attrs.poster].filter(Boolean)) {
         const url = new URL(ref, `${origin}${pathname}`);
         if (url.origin !== origin) continue;
         resolved.push(url.pathname);
@@ -88,7 +104,8 @@ test("internal navigation, fragments, and assets resolve at the domain root", as
         }
       }
     }
-    assert.ok(resolved.includes(pathname === "/" ? "/privacy/" : "/"));
+    const localeRoot = pathname.startsWith("/ja/") ? "/ja/" : "/";
+    assert.ok(resolved.includes(pathname.endsWith("privacy/") ? localeRoot : `${localeRoot}privacy/`));
     assert.ok(resolved.includes("/styles.css"));
   }
   const css = await readFile(join(dist, "styles.css"), "utf8");
@@ -112,5 +129,167 @@ test("published output and current public documentation do not use the old URL",
   await checkDirectory(join(root, "src"));
   for (const file of ["README.md", "docs/PACKAGING.md"]) {
     assert.ok(!(await readFile(join(root, "..", file), "utf8")).includes(oldOrigin), file);
+  }
+});
+
+
+test("preview serves video metadata and seek ranges", { timeout: 10000 }, async () => {
+  const child = spawn(process.execPath, [join(root, "scripts/preview.mjs")], {
+    env: { ...process.env, HOST: "127.0.0.1", PORT: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const lines = createInterface({ input: child.stdout });
+  try {
+    const [line] = await once(lines, "line");
+    const base = line.match(/http:\/\/127\.0\.0\.1:\d+\//)?.[0];
+    assert.ok(base, line);
+    for (const asset of ["assets/kokoro-demo.mp4", "assets/agentic-presentation-demo.mp4", "assets/interactive-ai-short.mp4"]) {
+      const url = `${base}${asset}`;
+      const info = await stat(join(dist, asset));
+      const head = await fetch(url, { method: "HEAD" });
+      assert.equal(head.status, 200);
+      assert.equal(head.headers.get("content-type"), "video/mp4");
+      assert.equal(Number(head.headers.get("content-length")), info.size);
+      const first = await fetch(url, { headers: { Range: "bytes=0-31" } });
+      assert.equal(first.status, 206);
+      assert.equal(first.headers.get("content-range"), `bytes 0-31/${info.size}`);
+      assert.equal((await first.arrayBuffer()).byteLength, 32);
+      const suffix = await fetch(url, { headers: { Range: "bytes=-16" } });
+      assert.equal(suffix.status, 206);
+      assert.equal(suffix.headers.get("content-range"), `bytes ${info.size - 16}-${info.size - 1}/${info.size}`);
+      assert.equal((await suffix.arrayBuffer()).byteLength, 16);
+      const invalid = await fetch(url, { headers: { Range: `bytes=${info.size}-` } });
+      assert.equal(invalid.status, 416);
+      assert.equal(invalid.headers.get("content-range"), `bytes */${info.size}`);
+      await invalid.arrayBuffer();
+    }
+  } finally {
+    lines.close();
+    const exited = once(child, "exit");
+    child.kill();
+    await exited;
+  }
+});
+
+
+test("localized pages declare their language and offer reciprocal language navigation", async () => {
+  for (const [file, pathname] of pages) {
+    const html = await readFile(join(dist, file), "utf8");
+    const japanese = pathname.startsWith("/ja/");
+    assert.match(html, new RegExp(`<html lang="${japanese ? "ja" : "en"}">`));
+    const englishPath = japanese ? pathname.slice(3) : pathname;
+    const japanesePath = `/ja${englishPath}`;
+    const alternateTags = [...html.matchAll(/<link\b[^>]*>/g)]
+      .map(([tag]) => attributes(tag)).filter((tag) => tag.rel === "alternate");
+    assert.deepEqual(Object.fromEntries(alternateTags.map((tag) => [tag.hreflang, tag.href])), {
+      en: `${origin}${englishPath}`,
+      ja: `${origin}${japanesePath}`,
+      "x-default": `${origin}${englishPath}`,
+    });
+    const switchHtml = html.match(/<span class="language-switch"[^>]*>([\s\S]*?)<\/span>/)?.[1];
+    assert.ok(switchHtml, file);
+    const links = [...switchHtml.matchAll(/<a\b[^>]*>/g)].map(([tag]) => attributes(tag));
+    assert.deepEqual(links.map((link) => link.href), [englishPath, japanesePath]);
+    assert.deepEqual(links.filter((link) => link["aria-current"] === "page").map((link) => link.href), [pathname]);
+  }
+});
+
+
+test("language routing remembers choices and preserves destinations without redirect loops", async () => {
+  const script = await readFile(join(dist, "language.js"), "utf8");
+  function visit({ path = "/", languages = ["ja-JP", "en"], saved = null, blocked = false, search = "?from=demo", hash = "#download" } = {}) {
+    let redirect;
+    let click;
+    let stored = saved;
+    runInNewContext(script, {
+      URL, URLSearchParams,
+      document: {
+        documentElement: { lang: path.startsWith("/ja/") ? "ja" : "en" },
+        addEventListener: (name, handler) => { if (name === "click") click = handler; },
+      },
+      navigator: { languages, language: "ja-JP" },
+      location: {
+        pathname: path, search, hash, href: `${origin}${path}${search}${hash}`,
+        replace: (url) => { redirect = url; },
+      },
+      localStorage: {
+        getItem: () => { if (blocked) throw Error("Blocked"); return stored; },
+        setItem: (key, value) => { if (blocked) throw Error("Blocked"); stored = value; },
+      },
+    });
+    return { redirect, stored: () => stored, click };
+  }
+  assert.equal(visit().redirect, "/ja/?from=demo#download");
+  assert.equal(visit({ path: "/privacy/" }).redirect, "/ja/privacy/?from=demo#download");
+  assert.equal(visit({ languages: ["en-US", "ja"] }).redirect, undefined);
+  assert.equal(visit({ languages: ["fr-FR"] }).stored(), "en");
+  assert.equal(visit({ languages: [] }).stored(), "ja");
+  assert.equal(visit({ path: "/ja/", languages: ["en-US"] }).redirect, undefined);
+  assert.equal(visit({ saved: "en" }).redirect, undefined);
+  assert.equal(visit({ saved: "ja", languages: ["en-US"] }).redirect, "/ja/?from=demo#download");
+  assert.equal(visit({ path: "/ja/privacy/", saved: "en" }).redirect, "/privacy/?from=demo#download");
+  assert.equal(visit({ saved: "invalid" }).stored(), "ja");
+  const manual = visit();
+  manual.click({ target: { closest: () => ({ hreflang: "en" }) } });
+  assert.equal(manual.stored(), "en");
+  assert.equal(visit({ saved: manual.stored() }).redirect, undefined);
+  const blocked = visit({ blocked: true });
+  assert.equal(blocked.redirect, "/ja/?from=demo#download");
+  const englishLink = { hreflang: "en", href: "/?from=manual#demo" };
+  blocked.click({ target: { closest: () => englishLink } });
+  const destination = new URL(englishLink.href);
+  assert.equal(destination.searchParams.get("lang"), "en");
+  assert.equal(destination.searchParams.get("from"), "manual");
+  assert.equal(destination.hash, "#demo");
+  assert.equal(visit({ path: destination.pathname, search: destination.search,
+    hash: destination.hash, blocked: true }).redirect, undefined);
+  assert.equal(visit({ path: "/ja/", search: "?lang=ja", saved: "en" }).redirect, undefined);
+  assert.equal(visit({ search: "?lang=invalid" }).redirect, "/ja/?lang=invalid#download");
+  assert.equal(visit({ path: "/ja/", blocked: true }).redirect, undefined);
+  for (const [file] of pages) {
+    assert.match(await readFile(join(dist, file), "utf8"), /<script src="\/language\.js"><\/script>/);
+  }
+});
+
+
+test("preview survives a range stream read failure", { timeout: 10000 }, async () => {
+  // Simulate a file disappearing between stat and the range stream opening it.
+  const bootstrap = `
+    import fs from 'node:fs';
+    import { syncBuiltinESMExports } from 'node:module';
+    import { Readable } from 'node:stream';
+    const original = fs.createReadStream;
+    fs.createReadStream = (path, options) => options?.start === 1 && options?.end === 2
+      ? new Readable({ read() { this.destroy(new Error('Simulated read failure')); } })
+      : original(path, options);
+    syncBuiltinESMExports();
+    await import(${JSON.stringify(new URL('./preview.mjs', import.meta.url).href)});
+  `;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", bootstrap], {
+    env: { ...process.env, HOST: "127.0.0.1", PORT: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const lines = createInterface({ input: child.stdout });
+  try {
+    const [line] = await once(lines, "line");
+    const base = line.match(/http:\/\/127\.0\.0\.1:\d+\//)?.[0];
+    assert.ok(base, line);
+    await assert.rejects(async () => {
+      const response = await fetch(`${base}assets/kokoro-demo.mp4`, {
+        headers: { Range: "bytes=1-2" },
+      });
+      await response.arrayBuffer();
+    });
+    const healthy = await fetch(base);
+    assert.equal(healthy.status, 200);
+    await healthy.arrayBuffer();
+    assert.equal(child.exitCode, null);
+  } finally {
+    lines.close();
+    if (child.exitCode === null) {
+      const exited = once(child, "exit");
+      child.kill();
+      await exited;
+    }
   }
 });

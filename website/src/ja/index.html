@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <script src="/language.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quick Presenter 2.0 — PDFスライドに、AIエージェントで新しい可能性を</title>
+    <meta
+      name="description"
+      content="Quick Presenterは、AIエージェントがスライドとスピーカーノートを読み、プレゼンテーションを操作し、その能力をさまざまな用途へ発展させるためのインターフェースを提供します。"
+    />
+    <link rel="canonical" href="https://quickpresenter.com/ja/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Quick Presenter" />
+    <meta
+      property="og:description"
+      content="PDFスライドに、AIエージェントで新しい可能性を。 Quick Presenterは、AIエージェントがスライドとスピーカーノートを読み、プレゼンテーションを操作し、その能力をさまざまな用途へ発展させるためのインターフェースを提供します。"
+    />
+    <meta
+      property="og:image"
+      content="https://quickpresenter.com/assets/interactive-ai-poster.jpg"
+    />
+    <meta property="og:url" content="https://quickpresenter.com/ja/" />
+    <link rel="icon" href="/assets/quick-presenter-icon-256.png" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="alternate" hreflang="en" href="https://quickpresenter.com/" />
+    <link rel="alternate" hreflang="ja" href="https://quickpresenter.com/ja/" />
+    <link rel="alternate" hreflang="x-default" href="https://quickpresenter.com/" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Quick Presenter ホーム">
+        <img src="/assets/quick-presenter-icon-256.png" alt="" />
+        <span>Quick Presenter</span>
+      </a>
+      <nav class="nav-links" aria-label="メインナビゲーション">
+        <details class="navigation-menu"><summary>メニュー</summary><div class="navigation-items"><a href="#demo">デモ</a><a href="#automation">CLI・AI連携</a><a href="#features">発表者画面</a><a href="#download">ダウンロード</a><a href="/ja/privacy/">プライバシー</a></div></details>
+        <span class="language-switch" role="group" aria-label="言語"><a href="/" lang="en" hreflang="en" >EN</a><a href="/ja/" lang="ja" hreflang="ja" aria-current="page">日本語</a></span>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Quick Presenter · OPEN SOURCE</p>
+          <h1 class="ai-headline">PDFスライドに、AIエージェントで新しい可能性を。</h1>
+          <p class="hero-subtitle">Quick Presenterは、AIエージェントがスライドとスピーカーノートを読み、プレゼンテーションを操作し、その能力をさまざまな用途へ発展させるためのインターフェースを提供します。</p>
+          <div class="hero-actions" aria-label="主な操作">
+            <a class="button primary" href="#agentic-presentation">対話デモを見る<span aria-hidden="true">↗</span></a>
+            <a class="button secondary" href="#download">Get Quick Presenter 2.0</a>
+          </div>
+          <dl class="hero-facts" aria-label="プロジェクト情報">
+            <div>
+              <dt>入力形式</dt>
+              <dd>PDFスライド</dd>
+            </div>
+            <div>
+              <dt>AI連携</dt>
+              <dd>安定したCLI・JSON</dd>
+            </div>
+            <div>
+              <dt>対応OS</dt>
+              <dd>macOS・Windows・Linux</dd>
+            </div>
+          </dl>
+        </div>
+        <figure class="hero-shot">
+          <a href="#agentic-presentation"><img src="/assets/interactive-ai-poster.jpg" width="1920" height="1080" alt="Quick Presenterの観客用スライドと発表者ビューを、外部AIエージェントCodexとの対話と並べた実際のデモ画面。" /></a>
+          <figcaption class="hero-terminal"><a href="#agentic-presentation">CodexとQuick Presenterの連携を見る <span aria-hidden="true">↗</span></a></figcaption>
+        </figure>
+      </section>
+
+      <section id="demo" class="demo-section demo-overview" aria-labelledby="demo-title">
+        <div class="section-heading">
+          <p class="eyebrow">ふたつの実例。その先に広がる可能性。</p>
+          <h2 id="demo-title">読み上げから、対話へ。</h2>
+          <p>Quick Presenterのインターフェースに外部ツールを組み合わせた、ふたつの活用例です。スライド本文、スピーカーノート、プレゼンテーション操作を、あなたの用途に活かせます。</p>
+        </div>
+        <div class="demo-choices">
+          <a href="#agentic-presentation"><strong>Interactive AI Presenter</strong><span>外部エージェントに資料について質問し、関連ページを示してもらい、指示して元の位置へ。</span></a>
+          <a href="#autopilot"><strong>Autopilot</strong><span>外部ランナーがノートをTTSで読み上げ、音声終了後にページを進めます。</span></a>
+        </div>
+      </section>
+
+      <section id="agentic-presentation" class="demo-section agentic-demo" aria-labelledby="agentic-title">
+        <div class="section-heading">
+          <p class="eyebrow">質問・資料に基づく回答・指示を受けて復帰</p>
+          <h2 id="agentic-title">Interactive AI Presenter</h2>
+          <p>Codexが<code>qp export --json</code>で資料全体の本文とスピーカーノートを取得します。自然言語で質問すると、外部エージェントが資料に基づいて回答し、必要に応じて関連ページを選びます。指示を受けて、保存した発表位置へ戻ります。</p>
+        </div>
+        <figure class="demo-player">
+          <video controls playsinline preload="none" width="1920" height="1080" poster="/assets/interactive-ai-poster.jpg" aria-label="Codexが資料に基づいて回答し、Quick Presenterの関連ページを選ぶ対話デモ" aria-describedby="agentic-description">
+            <source src="/assets/interactive-ai-short.mp4" type="video/mp4" />
+            <p><a href="/assets/interactive-ai-short.mp4">短縮版の対話デモをダウンロード</a></p>
+          </video>
+          <figcaption id="agentic-description">約29秒・使用エージェント：Codex・英語の画面デモ・音声なし。処理待ちを短縮した編集版で、応答速度の測定動画ではありません。</figcaption>
+        </figure>
+        <p class="demo-summary">「なぜElectronではなくRustを使ったのか」と質問すると、Codexが資料を参照し、アーキテクチャのスライドを選んでノートに基づき回答します。その後、元の位置へ戻るよう指示すると、保存したページへ復帰します。</p>
+        <div class="demo-links"><a class="button secondary" href="/ja/guides/interactive-ai/">自分で試す<span aria-hidden="true">↗</span></a><a class="text-link" href="/assets/interactive-ai-sample.pdf">ノート付きサンプルPDF</a></div>
+        <details class="demo-transcript">
+          <summary>正式版を見る（約76秒・音声なし）</summary>
+          <video controls playsinline preload="none" width="1920" height="1080" poster="/assets/agentic-presentation-poster.jpg" aria-label="CodexとQuick Presenterの対話デモ正式版">
+            <source src="/assets/agentic-presentation-demo.mp4" type="video/mp4" />
+            <p><a href="/assets/agentic-presentation-demo.mp4">正式版をダウンロード</a></p>
+          </video>
+          <p>正式版では、連携の説明、CLIに関する質問、対話の終了まで確認できます。</p>
+        </details>
+        <p class="demo-note">資料の解釈、回答生成、操作判断は外部エージェントが担います。Quick PresenterはPDFの表示、取得可能な本文とノート、プレゼンテーションの状態と操作を提供します。</p>
+      </section>
+
+      <section id="autopilot" class="demo-section" aria-labelledby="autopilot-title">
+        <div class="section-heading">
+          <p class="eyebrow">ノートの読み上げ・自動ページ送り</p>
+          <h2 id="autopilot-title">Autopilot</h2>
+          <p>PDFに埋め込まれた発表者ノートを、ローカルの音声エンジンで読み上げます。音声が終わるたびにページが進む、発表者ビューの動きをご覧ください。</p>
+        </div>
+        <div class="demo-layout">
+          <figure class="demo-player">
+            <video controls playsinline preload="none" width="1024" height="720"
+              poster="/assets/kokoro-demo-poster.jpg" aria-label="Quick Presenterの発表者ウィンドウで動くKokoroの読み上げデモ"
+              aria-describedby="demo-description">
+              <source src="/assets/kokoro-demo.mp4" type="video/mp4" />
+              <p><a href="/assets/kokoro-demo.mp4">音声付きデモをダウンロード</a></p>
+            </video>
+            <figcaption id="demo-description">約72秒・英語のナレーション・macOSで収録。再生すると音声が流れます。</figcaption>
+          </figure>
+          <div class="demo-story">
+            <ol class="workflow-steps">
+              <li><span>01</span><div><h3>ノートを取得</h3><p>外部の実行スクリプトが、Marpで作成したPDFの発表者ノートを<code>qp</code>で取得します。</p></div></li>
+              <li><span>02</span><div><h3>TTSで読み上げ</h3><p>ローカルの音声合成（Kokoro）でノートを音声に変換し、最後まで再生されるのを待ちます。</p></div></li>
+              <li><span>03</span><div><h3>次のページへ</h3><p>CLIでページを進めると、現在のスライド、ノート、次ページのプレビューも切り替わります。</p></div></li>
+            </ol>
+            <p class="demo-note">このデモはノートをそのまま読み上げます。<a class="text-link" href="https://github.com/hexgrad/kokoro">Kokoro</a>は任意で導入する外部エンジンです。Quick PresenterはPDFの情報取得と再生操作を担います。</p>
+            <a class="text-link" href="https://github.com/koichiro/quick-presenter/tree/v2.0.0/examples/autopresent">デモを試す<span aria-hidden="true">↗</span></a>
+          </div>
+        </div>
+        <p class="demo-note">外部Pythonランナーは描画とノートの準備を確認し、音声の終了を待ってからページを進めます。生成や再生に失敗すると停止します。</p>
+        <p><a class="text-link" href="/assets/autopilot-sample.pdf">ノート付きサンプルPDF</a></p>
+        <details class="demo-transcript">
+          <summary>読み上げ原文と日本語訳を見る</summary>
+          <p>動画の音声は英語です。各スライドの原文と日本語訳を掲載しています。</p>
+          <p lang="en"><strong lang="ja">スライド 1.</strong> Welcome to this short Quick Presenter demo. Each slide has a speaker note containing the words you are hearing. The demo reads those notes aloud, waits for the speech to finish, and then moves to the next slide.</p>
+          <p class="translated-note">Quick Presenterの短いデモへようこそ。各スライドには、いま聞こえている文章を発表者ノートとして埋め込んであります。このデモはそのノートを読み上げ、音声が終わるのを待ってから次のスライドへ進みます。</p>
+          <p lang="en"><strong lang="ja">スライド 2.</strong> The audience sees only the key ideas on this slide. The full explanation lives in the speaker notes embedded in the PDF. This demo reads that explanation word for word. It does not invent an explanation or read the bullet points instead.</p>
+          <p class="translated-note">聴衆に見えるのは、このスライドの要点だけです。詳しい説明はPDFに埋め込まれた発表者ノートにあります。このデモは、その説明を一語ずつそのまま読み上げます。説明を創作したり、代わりに箇条書きを読み上げたりはしません。</p>
+          <p lang="en"><strong lang="ja">スライド 3.</strong> Notice that this slide stays on screen while the narration is playing. Only after the speech finishes does the demo ask Quick Presenter to move forward. If speech playback fails, the demo stops without sending a page change. Keep presentation control exclusive while the demo runs.</p>
+          <p class="translated-note">読み上げ中、このスライドが画面に表示されたままであることに注目してください。音声が終わってから、デモはQuick Presenterに次のページへの移動を指示します。音声再生が失敗した場合、ページ移動を送信せずに停止します。デモ実行中は、ほかの操作でプレゼンを動かさないでください。</p>
+          <p lang="en"><strong lang="ja">スライド 4.</strong> That is the end of the demo. The presentation will stay on this final slide. To make your own version, edit the slide text and the speaker notes in the Markdown source, then export a new PDF with Marp&#x27;s PDF notes option enabled. Thank you for listening.</p>
+          <p class="translated-note">デモはこれで終わりです。プレゼンは最後のスライドで止まります。ご自分の資料にするには、Markdownのスライド本文と発表者ノートを編集し、MarpのPDFノート出力オプションを有効にして新しいPDFを書き出してください。ご視聴ありがとうございました。</p>
+        </details>
+      </section>
+
+      <section id="automation" class="automation-section" aria-labelledby="automation-title">
+        <div class="section-heading"><p class="eyebrow">2.0のAIエージェント向けインターフェース</p><h2 id="automation-title">資料を読み、操作し、変化を捉える。</h2><p>安定したCLIを通じて、外部ツールから資料の情報とプレゼンテーション操作にアクセスできます。対話や読み上げは、活用方法の一例です。</p></div>
+        <div class="capability-grid">
+          <article><span class="capability-label">Read</span><h3>資料全体を参照</h3><p>資料全体の本文とノートをJSONで取得。表示中のページを変えずに参照できます。現在・次のページは<code>qp context --full --json</code>で取得します。画像・図・OCRの結果は含まれません。</p><code>qp export --json</code></article>
+          <article><span class="capability-label">Control</span><h3>必要なページへ</h3><p>PDFを開く、ページを選ぶ、次へ進む。ページ番号は1から始まります。以下の3は構文例で、質問と移動先が固定されているわけではありません。</p><code>qp goto 3 --json<br />qp next --json</code></article>
+          <article><span class="capability-label">Observe</span><h3>状態と変化を把握</h3><p>現在ページ、描画やノートの状態を確認し、変更をNDJSONで監視できます。準備完了の確認にはstatusを使います。</p><code>qp status --json<br />qp watch --json</code></article>
+        </div>
+        <div class="agent-workflow">
+          <div><p class="eyebrow">Bring your own agent</p><h3>あなたのエージェントとつなぐ。</h3><p>必要なCLI連携を構成して、ローカルモデル、ホスト型サービス、スクリプトを活用できます。資料の解釈、回答生成、操作判断はエージェントが担い、Quick PresenterはPDF表示、取得可能な資料情報、状態と操作を担います。</p><a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md">CLIリファレンス <span aria-hidden="true">↗</span></a></div>
+          <figure class="command-panel"><figcaption><span class="terminal-dots" aria-hidden="true">● ● ●</span> qpでつなぐワークフロー</figcaption>
+            <pre><code><span class="code-comment"># PDFを開く</span>
+qp open talk.pdf --json
+
+<span class="code-comment"># 全ページの本文とノートを取得</span>
+qp export --json
+
+<span class="code-comment"># 必要なページを選ぶ（構文例）</span>
+qp goto 3 --json
+
+<span class="code-comment"># 状態を確認</span>
+qp status --json</code></pre></figure>
+        </div>
+        <p class="demo-note">Control Protocol v1、JSONの結果、型付きエラー、文書化された終了コードが、外部ツールとの安定した連携を支えます。</p>
+      </section>
+
+      <section id="features" class="feature-stack" aria-labelledby="features-title">
+        <div class="section-heading">
+          <p class="eyebrow">発表を支える機能</p>
+          <h2 id="features-title">自動化しても、状況はひと目で。</h2>
+        </div>
+
+        <article class="feature feature-large">
+          <div class="feature-copy">
+            <p class="eyebrow">発表者ウィンドウ</p>
+            <h3>発表に必要な情報を、ひとつに。</h3>
+            <p>現在のスライド、次ページのプレビュー、発表者ノート、タイマー、時計、ページ番号をひとつのウィンドウにまとめています。</p>
+          </div>
+          <figure>
+            <img
+              src="/assets/presenter-window-v2-macos.png"
+              width="889"
+              height="519"
+              alt="現在のスライド、次ページ、スピーカーノート、タイマーを表示するQuick Presenterの発表者画面。"
+            />
+          </figure>
+        </article>
+
+        <article class="feature split">
+          <figure>
+            <img
+              src="/assets/slide-window-title-en.png"
+              width="1024"
+              height="548"
+              alt="Quick Presenterのタイトルスライドを表示した投影用ウィンドウ。"
+            />
+          </figure>
+          <div class="feature-copy">
+            <p class="eyebrow">投影用の画面</p>
+            <h3>聴衆には、スライドだけを。</h3>
+            <p>投影用ウィンドウにはスライドだけを表示。発表者向けの情報は手元のウィンドウにまとめます。</p>
+          </div>
+        </article>
+
+      </section>
+
+      <section id="authoring" class="authoring" aria-labelledby="authoring-title">
+        <span id="scope" class="anchor-alias" aria-hidden="true"></span>
+        <div class="section-heading"><p class="eyebrow">PDFとノートの準備</p><h2 id="authoring-title">スライドを書き出す。ノートを含める。</h2><p>AIを使わず、通常のPDFプレゼンテーションにも利用できます。作成ツールで資料を用意し、PDFを書き出して発表者画面と観客用画面で再生します。編集は作成ツールで行います。</p></div>
+        <div class="preparation-grid">
+          <article><h3>1. 表示用PDFを書き出す</h3><p>Keynote、PowerPoint、Google Slides、Marp、LaTeX Beamerなどで資料を作成します。Quick Presenterが扱うのは、書き出したPDFです。</p></article>
+          <article><h3>2. 取得可能なノートを含める</h3><p>PDFを書き出しても、取得できるノートが含まれるとは限りません。MarpではMarkdownのコメントにノートを書き、<code>--pdf-notes</code>を指定して書き出します。発表前にQuick Presenterで取得できるか確認してください。</p><code>marp --no-config --pdf --pdf-notes talk.md --output talk.pdf</code></article>
+        </div>
+        <p class="demo-links"><a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/v2.0.0/examples/autopresent/README.md">MarpのノートとAutopilotの準備手順</a><a class="text-link" href="/assets/interactive-ai-sample.pdf">ノート付きサンプルPDF</a><a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/PDF_COMPATIBILITY.md">PDFの対応条件</a></p>
+      </section>
+
+      <section id="download" class="download" aria-labelledby="download-title">
+        <p class="eyebrow">Get Quick Presenter 2.0</p><h2 id="download-title">OSと用途に合う配布先を選ぶ</h2>
+        <p class="release-status">OSに合うQuick Presenter 2.0をインストールしてください。AI連携には、同じv2.0.0パッケージに含まれるGUIとCLIを使います。</p>
+        <div class="download-grid">
+          <article><h3>Windows</h3><p>Quick Presenter 2.0のMicrosoft Store版はComing soonです。2.0パッケージにはqp.exeのCLI実行エイリアスを同梱予定です。</p><a class="button secondary" href="https://apps.microsoft.com/detail/9N913S9NJ6D1">Microsoft Store <span aria-hidden="true">↗</span></a></article>
+          <article><h3>macOS</h3><p>AI・CLI連携にはDeveloper ID / DMG版が必要です。Mac App Store版はv2.0.0のCLI操作に対応しません。</p><a class="button secondary" href="https://github.com/koichiro/quick-presenter/releases">DMGのリリース一覧 <span aria-hidden="true">↗</span></a></article>
+          <article><h3>Linux</h3><p>GitHub Releasesからv2.0.0のDebianパッケージを入手できます。qp CLIを同梱しています。</p><a class="button secondary" href="https://github.com/koichiro/quick-presenter/releases">Debianのリリース一覧 <span aria-hidden="true">↗</span></a></article>
+        </div>
+        <p><a class="text-link" href="/ja/guides/interactive-ai/">CLIのセットアップとデモ再現手順</a></p>
+        <p>通常のPDFプレゼンテーションには、<a href="https://apps.apple.com/jp/app/quick-presenter-pdf-slides/id6820406883">Mac App Store版</a>も利用できます。ストアでの購入は開発の支援につながります。AI・CLI連携にはDMG版を使用してください。</p>
+      </section>
+      <section id="support" class="oss" aria-labelledby="oss-title">
+        <div><p class="eyebrow">Open source · Support development</p><h2 id="oss-title">発表を支えるOSSを、一緒に。</h2><p>公開ソース、リリースノート、Issueを通じて開発を進めています。不具合の報告、改善提案、コードへの貢献が、マルチプラットフォームでの安定したPDF再生とCLI連携を支えます。</p></div>
+        <div class="oss-actions"><a class="button secondary" href="https://github.com/koichiro/quick-presenter">ソースコード</a><a class="button secondary" href="https://github.com/koichiro/quick-presenter/issues">Issueを報告</a></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>Quick Presenter</span>
+      <a href="./privacy/">プライバシー</a>
+      <a href="https://github.com/koichiro/quick-presenter/blob/main/LICENSE">
+        GPL-3.0-only
+      </a>
+    </footer>
+  </body>
+</html>

@@ -108,3 +108,121 @@ These live checks remain pending until the manual migration is performed.
    the old project URL serves the site without a stale custom-domain redirect.
 
 Do not execute rollback automatically.
+
+## Version 2.0 local release preview
+
+The homepage introduces the stable `qp` interface alongside PDF playback:
+source context, explicit presentation control, and NDJSON change observation.
+The optional external narration runner is linked from the `v2.0.0` examples.
+It is separate from the player; Quick Presenter does not bundle an AI model or
+Kokoro. macOS automation requires the Developer ID / DMG distribution in v2.0.0.
+
+The checked-in `src/assets/kokoro-demo.mp4` is an actual macOS presenter-window
+recording of the four-slide Marp notes demo from #445, with the cursor hidden.
+Its audio uses the exact cached Kokoro WAV files used in that run, synchronized
+with recorded playback launch times because system-audio capture was silent.
+The 1024×720 H.264/AAC MP4 has faststart metadata and is approximately 1.8 MB.
+This recording is presented as **Autopilot** at `#autopilot`.
+The homepage provides native playback controls, a poster, and the full text
+transcript; it does not autoplay or download the video before playback.
+
+Run `npm test` to rebuild and validate the output, links, assets, and local
+video range requests. Run `npm run preview` for a local browser preview.
+The preview server serves MP4/JPEG content types and byte ranges so video
+seeking works locally. A local preview does not publish a release or deploy
+GitHub Pages; confirm package availability and release copy before publishing.
+
+## English and Japanese pages
+
+The English homepage stays at `/`, with Japanese at `/ja/`. Privacy pages are
+`/privacy/` and `/ja/privacy/`. Each page provides explicit language navigation,
+a self-referencing canonical URL, and reciprocal `hreflang` alternatives.
+On the first visit to an English URL, `language.js` uses the browser's first
+preferred language (`navigator.languages`, with `navigator.language` as a
+fallback) to select Japanese or English. A direct Japanese URL is respected.
+The initial choice and subsequent manual language selections are saved in
+`localStorage` and take precedence on later visits. Redirects preserve the page,
+query string, and fragment. This is a browser-side redirect, not HTTP
+`Accept-Language` negotiation by GitHub Pages. Without JavaScript, both static
+pages and their language links remain usable. When storage is blocked, manual
+links carry a `lang` query parameter to honor the choice on the destination;
+the preference cannot persist across unrelated visits.
+Both languages share the same media files; the English narration has an original
+transcript and Japanese translation on the Japanese homepage.
+
+Edit the static pages under `src/` and `src/ja/` together when changing product
+copy. Keep command names and API options unchanged in translated examples.
+The output tests cover both locales and language navigation.
+
+
+## Interactive AI Presenter recording and guide
+
+The display name is **Interactive AI Presenter**. The legacy
+`#agentic-presentation` anchor and full-recording filenames remain valid.
+The homepage presents this example before Autopilot, and keeps both as examples
+of a broader interface rather than the only supported workflows.
+
+The main player uses `src/assets/interactive-ai-short.mp4` and the matching
+short preview supplied from the recording's `short/output/` folder. It is
+28.7 seconds, 1920×1080 H.264, 2,448,799 bytes, faststart, and has no audio.
+Processing waits were edited; it is not a latency benchmark. Codex is the
+recorded external agent. The question, related-slide selection, answer,
+return request, and restored page remain in their original order.
+
+`src/assets/agentic-presentation-demo.mp4` and its poster retain the supplied
+formal recording. It is 75.5 seconds, 1920×1080 H.264, approximately 5.3 MB,
+and has no audio. It appears in a collapsed full-demo player; neither player
+autoplays or preloads video data. The hero and Open Graph use the actual
+interactive demo preview instead of a generated UI.
+
+The localized guides are `/guides/interactive-ai/` and
+`/ja/guides/interactive-ai/`, with the repository guide at
+`docs/INTERACTIVE_AI_PRESENTER.md`. The copies of
+`docs/samples/quick-presenter-demo.pdf` (12 pages) and
+`examples/autopresent/demo.pdf` (4 pages) in `src/assets/` come from v2.0.0
+commit `926882b01befc0f9937ec93c7a182fc324975010`. Update their provenance when
+replacing the samples. Keep source notes in Marp comments and export with
+`--pdf-notes`; ordinary PDF export does not guarantee extractable notes.
+
+The site documents `qp export --json`, `goto`, `status`, and `watch` from the
+verified v2.0.0 CLI contract. Export provides text and notes, not images or OCR.
+The external agent interprets data and chooses actions; restoration requires
+a user request. The guide prompt checks document and session identity before
+restoring a saved page.
+
+## Release and local verification checklist
+
+This website is intended for publication after the v2.0.0 release. Public copy
+assumes v2.0.0 packages are available and guides users to matching GUI/CLI
+binaries. Confirm the download destinations and Store package version when
+publishing this prepared site.
+GitHub Releases lists macOS DMG and Linux Debian packages; the Windows link
+retains the existing Microsoft Store product ID. Store version availability
+has not been independently verified. No Mac App Store review status or planned
+price is asserted. Mac App Store CLI control is excluded in the v2.0.0 contract.
+
+The presenter feature uses a static screenshot rather than an unpausable GIF.
+All videos use native controls. Focus outlines, a native details-based compact
+navigation menu, and reduced-motion rules are supplied. The `#scope` alias is
+kept within PDF preparation; `#support` now includes open source and support.
+
+Before publishing, manually inspect English and Japanese at desktop, tablet,
+and phone widths, keyboard focus, menu behavior, media playback, and language
+switching. Automated tests cover six generated pages, reciprocal locale links,
+internal links/assets, and seeking for all three videos. Browser rendering,
+responsive geometry, playback interaction, and screenshots remain unverified
+in this session because the in-app browser's connection-error document is
+blocked by its URL policy. Do not treat source-level checks as visual QA.
+
+
+## Presenter screenshot
+
+`src/assets/presenter-window-v2-macos.png` replaces the older presenter UI in
+both homepage locales and the README's macOS presenter example. It is an
+889×519 crop of the actual v2.0.0 presenter window at 1 second in the original
+2026-10-12 12-52-19 interactive demo recording, showing page 1 of the deck.
+It includes the
+first/previous/next/last icon controls and the 12-slide deck's speaker notes.
+The screenshot retains the source recording's visible window area and pixel
+geometry; no UI was recreated. The original recording's SHA-256 is
+`b6726cf89d255da4bcb07bff7491d2e3bc47d2030404902badbf286eaf474e4e`.
