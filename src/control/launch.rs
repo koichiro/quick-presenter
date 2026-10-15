@@ -26,20 +26,34 @@ pub fn send(request: &Request) -> Result<Response, ControlError> {
             let mut lock = None;
             let mut child = None;
             loop {
+                if Instant::now() >= deadline {
+                    return Err(ControlError::new(ErrorCode::Timeout,
+                        "Quick Presenter did not finish startup within 15 seconds. Check the GUI diagnostic log."));
+                }
                 // Recheck after obtaining the startup lock: another qp may have launched it.
                 match client::send_to(&endpoint, &status) {
                     Ok(response) => {
-                        if let Outcome::Error(error) = response.outcome {
-                            return Err(error);
+                        match response.outcome {
+                            Outcome::Error(error) => return Err(error),
+                            // The endpoint is available before the saved PDF finishes opening.
+                            // Wait before submitting Open; never replay the mutation itself.
+                            Outcome::Result(Reply::Status(state)) if state.opening => {
+                                std::thread::sleep(POLL_INTERVAL);
+                                continue;
+                            }
+                            Outcome::Result(Reply::Status(_)) => {
+                                return client::send_to(&endpoint, request);
+                            }
+                            Outcome::Result(_) => {
+                                return Err(ControlError::new(
+                                    ErrorCode::IpcFailure,
+                                    "Unexpected response while waiting for Quick Presenter startup.",
+                                ));
+                            }
                         }
-                        return client::send_to(&endpoint, request);
                     }
                     Err(error) if error.code == ErrorCode::NotRunning => {}
                     Err(error) => return Err(error),
-                }
-                if Instant::now() >= deadline {
-                    return Err(ControlError::new(ErrorCode::Timeout,
-                        "Quick Presenter did not expose local control within 15 seconds. Check the GUI diagnostic log."));
                 }
                 if lock.is_none() {
                     if let Some(acquired) = try_startup_lock(&endpoint).map_err(startup_error)? {

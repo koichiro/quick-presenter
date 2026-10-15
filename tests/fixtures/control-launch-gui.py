@@ -37,6 +37,7 @@ def read_exact(peer, count):
         data += part
     return data
 
+startup_polls = 0
 while True:
     peer, _ = server.accept()
     with peer:
@@ -45,6 +46,11 @@ while True:
             request = json.loads(read_exact(peer, size))
             with (root / "requests").open("a") as log:
                 log.write(json.dumps(request) + "\n")
+            if request["method"] == "presentation.status":
+                startup_polls += 1
+                state["opening"] = mode == "restoring_forever" or (
+                    mode == "restoring" and startup_polls <= 3
+                )
             if request["method"] == "presentation.open":
                 state["document"] = request["params"]["file"]
                 result = {"kind": "mutation", "changed": True, "state": state}
@@ -54,6 +60,11 @@ while True:
             if mode == "reject_open" and request["method"] == "presentation.open":
                 response.pop("result")
                 response["error"] = {"code": "OPEN_FAILED", "message": "Fixture rejection"}
+            if request["method"] == "presentation.open" and (
+                state["opening"] or mode == "dialog_busy"
+            ):
+                response.pop("result", None)
+                response["error"] = {"code": "BUSY", "message": "Open already in progress"}
             data = json.dumps(response).encode()
             peer.sendall(struct.pack(">I", len(data)) + data)
         except (EOFError, BrokenPipeError):
