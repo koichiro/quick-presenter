@@ -1,12 +1,16 @@
 # Changelog
 
-## [1.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v1.5.0) — Unreleased
+## [1.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v1.5.0) — 2026-10-15
 
-This section records changes since v1.4.0. The release date will be set when
-v1.5.0 is published.
+This release marks a distribution milestone: Quick Presenter is now publicly
+available on the Mac App Store. It also celebrates the launch of the official
+website at [quickpresenter.com](https://quickpresenter.com/).
 
 ### Distribution
 
+- Make Quick Presenter available on the
+  [Mac App Store](https://apps.apple.com/app/quick-presenter-pdf-slides/id6820406883)
+  following completed App Review and public release.
 - Add Mac App Store packaging with App Sandbox, security-scoped PDF bookmarks,
   provisioning and signing validation, and reusable submission and
   Store-installed validation checklists
@@ -18,6 +22,10 @@ v1.5.0 is published.
   patching the pinned `winit` dependency, and reject private API imports during
   Store package validation
   ([#421](https://github.com/koichiro/quick-presenter/pull/421)).
+- Move the official website and privacy policy to `quickpresenter.com`, with
+  HTTPS, redirects from the previous GitHub Pages URL and `www`, and links to
+  the published global and Japan Mac App Store listings
+  ([#444](https://github.com/koichiro/quick-presenter/pull/444)).
 
 ### Fixed
 
