@@ -17,6 +17,7 @@ pub mod audience_relay;
 mod audience_relay_http;
 mod audience_session;
 mod audience_ui;
+mod audience_wire;
 pub mod black_screen;
 mod browser;
 pub mod cli;
