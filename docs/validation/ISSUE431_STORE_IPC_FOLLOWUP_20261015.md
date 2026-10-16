@@ -1,5 +1,9 @@
 # Store IPC follow-up validation
 
+The subsequent [2026-10-16 TestFlight record](ISSUE431_STORE_IPC_TESTFLIGHT_20261016.md)
+qualifies the installed diagnostic IPC layout. The sign-in/distribution blocker
+recorded below is historical; the descriptor-origin limitation remains open.
+
 Date: 2026-10-15 JST. The maintainer reported approval and availability of Store
 v1.4.0 and requested resuming #440 validation. The previous hold is lifted.
 The socket adoption gate remains open: the new descriptor experiment shows
