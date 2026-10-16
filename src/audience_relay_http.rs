@@ -177,7 +177,12 @@ pub async fn cleanup(
             .and_then(|a| a.room.clone());
         let room = match cached {
             Some(room) => room,
-            None => create(client, settings).await?,
+            None => match create(client, settings).await {
+                Ok(room) => room,
+                // A terminal creation response confirms there is no live room to end.
+                Err(ROOM_EXPIRED) => return Ok(()),
+                Err(error) => return Err(error),
+            },
         };
         end(client, &settings.endpoint, &room).await
     })
@@ -412,7 +417,7 @@ mod tests {
 
     #[tokio::test]
     async fn stop_during_terminal_response_never_creates_a_replacement() {
-        use crate::audience_relay::RemoteAudienceSession;
+        use crate::{audience::SessionStatus, audience_relay::RemoteAudienceSession};
         let s = server().await;
         let key = s.settings.attempt().unwrap().key;
         let gate = Arc::new(tokio::sync::Notify::new());
@@ -432,6 +437,7 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
         session.shutdown();
+        assert!(matches!(session.snapshot().status, SessionStatus::Stopped));
         let requests = s.peer.requests.lock().unwrap();
         assert!(requests.len() <= 2);
         assert!(requests.iter().all(|request| request.1 == key));
@@ -494,6 +500,19 @@ mod tests {
         assert_eq!(create(&http, &s.settings).await.unwrap().room_id, "test");
         assert_eq!(s.peer.requests.lock().unwrap().len(), 2);
         assert_eq!(s.settings.attempt().unwrap().key, key);
+    }
+
+    #[tokio::test]
+    async fn cleanup_of_a_confirmed_terminal_creation_succeeds_without_replacement() {
+        let s = server().await;
+        let key = s.settings.attempt().unwrap().key;
+        push(&s, 410, "{}".into());
+        cleanup(&client().unwrap(), &s.settings).await.unwrap();
+        assert!(!s.settings.has_attempt());
+        let requests = s.peer.requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].1, key);
+        assert_eq!(s.peer.ends.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]
