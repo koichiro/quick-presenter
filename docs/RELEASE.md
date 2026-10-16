@@ -14,10 +14,10 @@ Routine pull requests are validated by the lightweight `CI` workflow. The full
 `Build Binaries` workflow is release/package validation and does not run for
 every source-only pull request.
 
-The CLI and AI-assisted presentation release is developed on `v2.0.0`,
-renamed from the provisional `v1.9.0` branch. Its Cargo package version is
-`2.0.0`; Control Protocol remains v1. Renaming the development branch does not
-publish a release or satisfy the validation gates below.
+The v2.0.0 CLI and AI-assisted presentation release uses Cargo package version
+`2.0.0` and Control Protocol v1. GitHub publication and Microsoft Store
+submission, certification, and installed-version qualification are separate
+events. Record the exact source and package identity for each channel.
 
 Before publishing a release:
 
@@ -39,15 +39,15 @@ Before publishing a release:
 7. Confirm the Linux and macOS packages use the intended release version and
    their package smoke tests pass. For Linux, verify the Debian file name and
    the `Version` reported by `dpkg-deb --field <package> Version`. Confirm the
-   existing Microsoft Store listing remains publicly reachable; the v1.0.0
+   existing Microsoft Store listing remains publicly reachable; the v2.0.0
    Store update is verified after the GitHub release as described below.
 8. Review the uploaded `quick-presenter-ubuntu-x64-gui-smoke` report and the
    macOS/Windows GUI smoke skip-reason reports from `Build Binaries`.
 9. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
    macOS and Ubuntu Linux artifacts and the existing public Microsoft Store
-   build before publishing. Rerun the Windows checks on v1.0.0 after its Store
+   build before publishing. Rerun the Windows checks on v2.0.0 after its Store
    update is certified.
-10. Complete the platform trust checks in the v1.0.0 policy below.
+10. Complete the platform trust checks in the v2.0.0 policy below.
 11. Verify SBOM sidecars against the final DMG and Debian package, review their
     source/target/PDFium metadata, and attach the sidecars to the GitHub release.
     Record package hashes and follow the [SBOM release gate](SBOM.md#release-gate).
@@ -70,37 +70,56 @@ is available to customers. Preserve the corresponding source and SBOM required
 by [PACKAGING.md](PACKAGING.md#source-code-for-binary-releases) and
 [SBOM.md](SBOM.md#release-gate), including any Store-specific source changes.
 
-### v1.0.0 distribution and trust policy
+### v2.0.0 distribution and trust policy
 
-The supported v1.0.0 distribution channels are intentionally narrow:
+The supported v2.0.0 distribution channels are intentionally narrow:
 
-| Platform/channel | User package | Trust and identity | v1.0.0 status | Review lead time and fallback |
+| Platform/channel | User package | Trust and identity | v2.0.0 status | Review lead time and fallback |
 | --- | --- | --- | --- | --- |
 | macOS direct | Developer ID DMG | Developer ID signed, Apple-notarized, and stapled | Required release gate | Notarization must finish before publishing; there is no unsigned fallback. |
 | Mac App Store | App Store package | App Sandbox, App Store entitlements, and App Store review | Best effort; not a blocker | Review timing is external; use the signed/notarized direct DMG if the Store version is not ready. |
-| Windows | Microsoft Store MSIX | Partner Center identity, certification, and Store-managed signing | Store availability is required; the v1.0.0 package update is post-release | Verify the existing public listing before release, then submit v1.0.0 and verify the updated Store installation. Never use a direct installer as a fallback. |
-| Ubuntu Linux direct | Debian package | Package version, SHA-256, bundled licenses, and real-machine smoke test | Required release gate | There is no alternate v1.0.0 package channel. |
+| Windows | Microsoft Store MSIX | Partner Center identity, certification, and Store-managed signing | Store availability is required; the v2.0.0 package update is post-release | Verify the existing public listing before release, then submit v2.0.0 and verify the updated Store installation. Never use a direct installer as a fallback. |
+| Ubuntu Linux direct | Debian package | Package version, SHA-256, bundled licenses, and real-machine smoke test | Required release gate | There is no alternate v2.0.0 package channel. |
 
 Validate the final macOS DMG with `codesign --verify --deep --strict`,
 `xcrun stapler validate`, and `spctl --assess`. An unsigned or unnotarized CI
 DMG is a validation artifact and must not be published as the release.
 
 For Windows, the already-public Store version establishes that the distribution
-channel is available before the GitHub v1.0.0 release. After that release,
-submit the v1.0.0 Store package, wait for certification, and confirm that the
-Store-installed app reports v1.0.0 and launches without an untrusted-publisher
+channel is available before the GitHub v2.0.0 release. After that release,
+submit the v2.0.0 Store package, wait for certification, and confirm that the
+Store-installed app reports v2.0.0 and launches without an untrusted-publisher
 or SmartScreen warning. This post-release verification does not block the
 GitHub release. Direct MSI, MSIX, and raw executable artifacts are CI
 validation artifacts and must not be published as supported downloads. A
 self-signed certificate only exercises the signing pipeline and is never a
 production trust credential.
 
+For v2.0.0, record the submission MSIX filename and SHA-256, source revision,
+`2.0.0.0` manifest version, x64 architecture, package-bound SBOM, and
+`qp.exe` console execution alias. The expected identity is
+`KoichiroOhba.QuickPresenter`, publisher
+`CN=A3F64AFD-6298-42F8-BAC9-DB0AB1831F51`, and package family
+`KoichiroOhba.QuickPresenter_pma9xfvs5bmmy`. An extracted submission candidate
+can validate its payload and behavior, but does not establish Store signing,
+installed package identity, alias registration, or upgrade behavior.
+
+After certification, verify the Store-installed GUI and `qp --version --json`
+report application 2.0.0 / Control Protocol v1. Repeat cold `qp open` checks
+with a different remembered deck, no remembered deck, and a missing remembered
+file; check the final `status.document` as well as the Open result. On a
+TIMEOUT, query Status without replaying an Open whose outcome is uncertain.
+Run installed-package renderer isolation and the manual GUI checklist without
+development PDFium overrides. Run `scripts/check_windows_msix_sandbox.ps1`
+only on its designated disposable CI runner; its certificate/install flow must
+not be used on a maintainer machine.
+
 For Ubuntu Linux, record the Debian package SHA-256, confirm the filename and
 package metadata version, and install and smoke-test that exact package on a
 supported real machine before publishing.
 
 Homebrew Cask, WinGet, Flatpak/Flathub, and other package-manager channels are
-outside the v1.0.0 scope.
+outside the v2.0.0 scope.
 
 `Build Binaries` still runs automatically for pull requests that change
 packaging-sensitive files, such as packaging scripts, installer metadata,
@@ -145,7 +164,7 @@ the normal desktop sessions needed for reliable platform GUI release gates. The
 GUI checklist remains the release gate for OS-owned title-bar, menu,
 keyboard-focus, shell integration, and readability behavior.
 
-Manual GUI smoke reports are release artifacts. For v1.0.0 and later releases,
+Manual GUI smoke reports are release artifacts. For each release,
 attach one report per supported platform to the GitHub release using the
 filenames and required metadata in [GUI_SMOKE_CHECKLIST.md](GUI_SMOKE_CHECKLIST.md).
 Each report must identify the exact tested distribution. Record the final file
@@ -169,7 +188,7 @@ it keeps the executable, bundled PDFium files, desktop metadata, and license
 files in the expected layout.
 
 The Windows CI artifact may include MSI, MSIX, and raw executable files for
-layout, packaging, and signing validation. They are not supported v1.0.0
+layout, packaging, and signing validation. They are not supported v2.0.0
 downloads. The Store-identity MSIX is submitted to Partner Center and becomes
 the supported package only after Microsoft Store certification and signing.
 
@@ -185,7 +204,7 @@ Download `quick-presenter-macos` and open `QuickPresenter-<version>.dmg`.
 5. Use the presenter window for controls and the slide window for audience
    output.
 
-The v1.0.0 release disk image must be Developer ID signed, Apple-notarized, and
+The v2.0.0 release disk image must be Developer ID signed, Apple-notarized, and
 stapled. Gatekeeper must accept the final DMG without an unidentified-developer
 warning. Unsigned CI disk images are packaging validation artifacts only.
 
@@ -201,7 +220,7 @@ Install Quick Presenter from Microsoft Store ID `9N913S9NJ6D1`.
    output.
 
 The Microsoft Store is the only supported Windows distribution channel for
-v1.0.0. Do not publish the workflow-generated MSI, direct MSIX, or raw
+v2.0.0. Do not publish the workflow-generated MSI, direct MSIX, or raw
 executable as a release download. Microsoft Store certification and signing
 provide the production trust boundary; a self-signed CI artifact does not.
 
@@ -252,7 +271,7 @@ window. Keyboard controls are documented in [KEYBOARD.md](KEYBOARD.md).
 
 If opening a PDF fails, try a known-good PDF first. Quick Presenter reports
 short presenter-facing errors and does not attempt to repair invalid PDFs.
-Password-protected and encrypted PDFs are not supported in v1.0.0. Export an
+Password-protected and encrypted PDFs are not supported in v2.0.0. Export an
 unprotected PDF before opening it in Quick Presenter; the app does not prompt
 for or store PDF passwords.
 

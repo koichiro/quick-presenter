@@ -1,0 +1,381 @@
+[
+  {
+    "attempt": 1,
+    "case": "saved",
+    "open_seconds": 4.139999999999986,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "17ec-18dedc8aed97eb30-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true,
+    "reuse_exit": 0,
+    "reuse_same_session": true
+  },
+  {
+    "attempt": 2,
+    "case": "saved",
+    "open_seconds": 3.7970000000000255,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "4c14-18dedc8c63fcfd14-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 3,
+    "case": "saved",
+    "open_seconds": 7.3279999999999745,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "392c-18dedc8d7b390080-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 4,
+    "case": "saved",
+    "open_seconds": 8.765999999999849,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "1d68-18dedc909294e994-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 5,
+    "case": "saved",
+    "open_seconds": 8.375,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "4bbc-18dedc9478a8bfd4-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 6,
+    "case": "saved",
+    "open_seconds": 4.234000000000151,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "f08-18dedc96c68b4e2c-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 7,
+    "case": "saved",
+    "open_seconds": 5.125,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "518-18dedc97ff557a74-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 8,
+    "case": "saved",
+    "open_seconds": 3.4689999999998236,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "3da4-18dedc99520e8a34-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 9,
+    "case": "saved",
+    "open_seconds": 3.969000000000051,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "4b2c-18dedc9a4a3b4648-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 10,
+    "case": "saved",
+    "open_seconds": 5.328000000000202,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "130-18dedc9b98e26fdc-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 11,
+    "case": "none",
+    "open_seconds": 4.625,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "24b0-18dedc9cc56cf080-0",
+      "document_revision": 1,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 12,
+    "case": "none",
+    "open_seconds": 7.3279999999999745,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "25b0-18dedc9f12e9a888-0",
+      "document_revision": 1,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 13,
+    "case": "none",
+    "open_seconds": 4.438000000000102,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "2114-18dedca0e1909f88-0",
+      "document_revision": 1,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 14,
+    "case": "none",
+    "open_seconds": 4.359000000000151,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "d88-18dedca21d7cb094-0",
+      "document_revision": 1,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 15,
+    "case": "none",
+    "open_seconds": 3.875,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "42c8-18dedca3516f6d28-0",
+      "document_revision": 1,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 16,
+    "case": "missing",
+    "open_seconds": 3.359000000000151,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "5318-18dedca4625d2020-0",
+      "document_revision": 1,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 17,
+    "case": "missing",
+    "open_seconds": 6.375,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "52f8-18dedca54bae4894-0",
+      "document_revision": 1,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true
+  },
+  {
+    "attempt": 1,
+    "case": "simultaneous",
+    "open_seconds": 7.718000000000075,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "4ccc-18dedcb05ee2f9cc-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true,
+    "concurrent_exit": 8,
+    "concurrent_result": {
+      "code": "BUSY",
+      "message": "A PDF open or file dialog is already in progress."
+    },
+    "reuse_exit": 0,
+    "reuse_same_session": true
+  },
+  {
+    "attempt": 2,
+    "case": "simultaneous",
+    "open_seconds": 4.9379999999998745,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "2588-18dedcb2b5c2dc60-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true,
+    "concurrent_exit": 8,
+    "concurrent_result": {
+      "code": "BUSY",
+      "message": "A PDF open or file dialog is already in progress."
+    }
+  },
+  {
+    "attempt": 3,
+    "case": "simultaneous",
+    "open_seconds": 9.483999999999924,
+    "passed": true,
+    "open_exit": 0,
+    "final_state": {
+      "session_id": "9cc-18dedcb4079bbbf0-0",
+      "document_revision": 2,
+      "page": 1,
+      "pages": 3,
+      "opening": false,
+      "render_state": "ready",
+      "notes_state": "ready"
+    },
+    "requested_filename": "requested slides 日本語.pdf",
+    "requested_document_matches": true,
+    "concurrent_exit": 8,
+    "concurrent_result": {
+      "code": "BUSY",
+      "message": "A PDF open or file dialog is already in progress."
+    }
+  }
+]

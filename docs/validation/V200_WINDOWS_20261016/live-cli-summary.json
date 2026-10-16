@@ -1,0 +1,237 @@
+[
+  {
+    "name": "demo ready",
+    "passed": true,
+    "exit": null
+  },
+  {
+    "name": "qp prev",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp goto 12",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp next",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp goto 0",
+    "passed": true,
+    "exit": 5
+  },
+  {
+    "name": "qp goto 13",
+    "passed": true,
+    "exit": 5
+  },
+  {
+    "name": "qp goto 2",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp timer elapsed",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp blackout on",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp next",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp blackout off",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp notes",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp slide",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp slide --full",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp context",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp context --full",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp export",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp export --include-next",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp close",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp notes",
+    "passed": true,
+    "exit": 4
+  },
+  {
+    "name": "qp open $WORKSPACE\\release\\tests\\fixtures\\marp-speaker-notes.pdf",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp context --full",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\release\\tests\\fixtures\\latex-beamer.pdf",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp context --full",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\release\\tests\\fixtures\\keynote-15-macos.pdf",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp context --full",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\release\\tests\\fixtures\\power-point-16-macos.pdf",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp context --full",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\release\\tests\\fixtures\\google-slide.pdf",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp context --full",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\release\\tests\\fixtures\\long-speaker-notes.pdf",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp context --full",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\release\\tests\\fixtures\\mixed-speaker-notes.pdf",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp context --full",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\release\\tests\\fixtures\\generic-comments.pdf",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp context --full",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\windows-results\\live\\missing.pdf",
+    "passed": true,
+    "exit": 10
+  },
+  {
+    "name": "qp status",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\release\\tests\\fixtures\\password-protected.pdf",
+    "passed": true,
+    "exit": 10
+  },
+  {
+    "name": "qp status",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\windows-results\\live\\invalid.pdf",
+    "passed": true,
+    "exit": 10
+  },
+  {
+    "name": "qp open $WORKSPACE\\release\\tests\\fixtures\\marp-speaker-notes.pdf",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\windows-results\\live\\reload.pdf",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "hot reload 2 to 12 pages",
+    "passed": true,
+    "exit": null
+  },
+  {
+    "name": "qp close",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "qp open $WORKSPACE\\release\\docs\\samples\\quick-presenter-demo.pdf",
+    "passed": true,
+    "exit": 0
+  },
+  {
+    "name": "watch event coverage",
+    "passed": true,
+    "exit": null
+  }
+]

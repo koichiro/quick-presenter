@@ -1,0 +1,2 @@
+Smoke open PDF succeeded through renderer helper: title="marp-speaker-notes.pdf" pages=3 first_page=320x180 helper_pid=19780
+Renderer sandbox file/read/write, network/inbound/outbound, and child denial gate passed

@@ -1,0 +1,12 @@
+{
+  "sha256": "63a8095822c6952fa9f14936a7bb61bbf317ce2785fa4259d86e92773924a507",
+  "payload_files": 58,
+  "identity": {
+    "Name": "KoichiroOhba.QuickPresenter",
+    "Publisher": "CN=A3F64AFD-6298-42F8-BAC9-DB0AB1831F51",
+    "Version": "2.0.0.0",
+    "ProcessorArchitecture": "x64"
+  },
+  "schema": true,
+  "references": true
+}
