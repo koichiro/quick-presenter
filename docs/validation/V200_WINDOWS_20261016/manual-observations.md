@@ -34,6 +34,25 @@ page/status text. This does not prove every custom thumbnail/menu state,
 dynamic update announcement, keyboard activation or scaling combination.
 Broader accessibility acceptance remains #339.
 
+## Notes-focus keyboard limitation
+
+After the Narrator check and exit, UI Automation reported the read-only notes
+as focused. On the demo deck:
+
+| Target and input | Observed page |
+| --- | --- |
+| Presenter Home, then Space | 1, then 2 |
+| Presenter Return with notes focused | Stayed at 2; expected 3 for presentation navigation |
+| Slide window Return | Advanced to 3 |
+| Presenter Right with notes focused | Stayed at 3; expected 4 for presentation navigation |
+
+The no-advance results and slide-window recovery were independently checked
+with the matching CLI's Status. This is a bounded injected-native-key
+observation, separate from the maintainer's physical display/recovery pass.
+It establishes a notes-focus limitation to retain under #339, not a complete
+diagnosis of Slint's input dispatch. Focus the slide window for the observed
+working navigation path. No production fix or release waiver is claimed.
+
 The automation helper intermittently failed window activation/click/capture,
 and its separate subprocess context could not access the authenticated control
 pipe (access denied). The shell-based CLI matrix had already passed. No
