@@ -338,6 +338,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn denied_creation_keeps_the_attempt_for_a_later_explicit_retry() {
+        let s = server().await;
+        let http = client().unwrap();
+        push(&s, 403, "untrusted server detail".into());
+        assert_eq!(
+            create(&http, &s.settings).await.err(),
+            Some("Relay denied room creation.")
+        );
+        let attempt = s.settings.attempt().unwrap();
+        assert!(attempt.room.is_none());
+        push(&s, 201, room(&s.settings).to_string());
+        assert_eq!(create(&http, &s.settings).await.unwrap().room_id, "test");
+        let requests = s.peer.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(requests.iter().all(|(_, key)| key == &attempt.key));
+    }
+
+    #[tokio::test]
     async fn stop_before_creation_is_polled_does_not_create_a_room_during_cleanup() {
         let s = server().await;
         let http = client().unwrap();
