@@ -125,7 +125,7 @@ custom proxy and private-CA configuration are outside this milestone.
 1. ON starts the remote worker and publishes `Starting…`. There is no network
    runtime, HTTP request, or heartbeat while Audience Live is OFF.
 2. Generate a cryptographically random idempotency key for this start operation.
-   Submit `POST /api/relay/draft-1/rooms` with `Authorization: Bearer <create_token>`,
+   Submit `POST /api/relay/v1/rooms` with `Authorization: Bearer <create_token>`,
    JSON content type, and `{ "idempotency_key": "..." }`.
 3. Accept 201 for a new room and 200 for an idempotent recovery. Validate a bounded
    response with exactly `room_id`, `code`, `join_url`, `presenter_url`, and
@@ -165,7 +165,7 @@ Failed -> explicit ON -> recover pending creation / reconnect existing room
 
 OFF means end this Audience session, rather than suspend it. Immediately fence
 events, clear overlays and QR metadata, and prevent further user starts until the
-worker finishes. Send `POST /api/relay/draft-1/rooms/{room_id}/end` using the
+worker finishes. Send `POST /api/relay/v1/rooms/{room_id}/end` using the
 room's presenter Bearer credential. This is different from the operator creation
 credential. Bound termination to two seconds, then close the socket and runtime.
 The next ON starts a new room and gets a new join URL. Pause Comments continues to

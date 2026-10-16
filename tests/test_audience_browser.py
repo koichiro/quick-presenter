@@ -76,7 +76,7 @@ function client(hash = '#k=' + 'A'.repeat(43), storage = new Map(), blockedStora
   function open() { socket().readyState = WebSocket.OPEN; socket().onopen(); }
   function receive(message, target = socket()) { target.onmessage({data: JSON.stringify(message)}); }
   function welcome(capabilities = ['reactions', 'comments'], available = true) {
-    open(); receive({protocol: 'qp.audience', version: '1-draft.1', type: 'welcome', connection_id: 'a1', capabilities, available, limits: {max_message_bytes:4096, request_cache_ms:30000}});
+    open(); receive({protocol: 'qp.audience', version: '1', type: 'welcome', connection_id: 'a1', capabilities, available, limits: {max_message_bytes:4096, request_cache_ms:30000}});
   }
   function submit(body = 'Hello', handle = 'Anonymous') {
     elements.get('body').value = body;
@@ -86,7 +86,7 @@ function client(hash = '#k=' + 'A'.repeat(43), storage = new Map(), blockedStora
     assert(prevented);
   }
   function result(status, request_id = socket().sent.at(-1).request_id) {
-    receive({protocol: 'qp.audience', version: '1-draft.1', type: 'result', request_id, status});
+    receive({protocol: 'qp.audience', version: '1', type: 'result', request_id, status});
   }
   return {
     elements, reactions, sockets, socket, open, receive, welcome, submit, result,
@@ -111,10 +111,10 @@ const c = client();
 assert.equal(c.socket().url, 'ws://127.0.0.1:4321/ws/audience/join');
 assert.equal(JSON.stringify(c.replaced), JSON.stringify([[{}, '', '/join']]));
 c.open();
-assert.deepEqual(c.socket().sent, [{protocol: 'qp.audience', version: '1-draft.1', type: 'hello', token: 'A'.repeat(43)}]);
+assert.deepEqual(c.socket().sent, [{protocol: 'qp.audience', version: '1', type: 'hello', token: 'A'.repeat(43)}]);
 assert(c.reactions.every(button => button.disabled));
 assert(c.elements.get('send-comment').disabled);
-c.receive({protocol: 'qp.audience', version: '1-draft.1', type: 'welcome', connection_id: 'a1', capabilities: ['reactions', 'comments'], available: true, limits: {max_message_bytes:4096, request_cache_ms:30000}});
+c.receive({protocol: 'qp.audience', version: '1', type: 'welcome', connection_id: 'a1', capabilities: ['reactions', 'comments'], available: true, limits: {max_message_bytes:4096, request_cache_ms:30000}});
 assert(c.reactions.every(button => !button.disabled));
 assert.equal(c.elements.get('send-comment').disabled, false);
 """)
@@ -198,7 +198,7 @@ const c = client(); c.welcome(['reactions','comments','future'], false);
 assert(c.reactions.every(button => button.disabled));
 assert(c.elements.get('send-comment').disabled);
 c.submit(); assert.equal(c.socket().sent.length, 1);
-c.receive({protocol:'qp.audience',version:'1-draft.1',type:'state',revision:'1',available:true});
+c.receive({protocol:'qp.audience',version:'1',type:'state',revision:'1',available:true});
 assert(c.reactions.every(button => !button.disabled));
 assert.equal(c.elements.get('send-comment').disabled, false);
 """)
@@ -209,7 +209,7 @@ const c = client(); c.welcome();
 const body = '<script>alert("x")</script>\n世界';
 const handle = ' Name\t ';
 c.submit(body, handle);
-assert.deepEqual(c.socket().sent[1], {protocol:'qp.audience',version:'1-draft.1', type: 'comment', request_id: '1', body, handle});
+assert.deepEqual(c.socket().sent[1], {protocol:'qp.audience',version:'1', type: 'comment', request_id: '1', body, handle});
 assert(c.elements.get('send-comment').disabled);
 assert(c.reactions.every(button => button.disabled));
 assert.equal(c.elements.get('feedback').textContent, 'Sending…');
@@ -346,7 +346,7 @@ assert.equal(c.socket().sent[1].request_id, '2');
 const c = client(); c.welcome(); c.submit('First');
 const old = c.socket(); old.close();
 c.elements.get('retry').onclick(); c.welcome(); c.submit('Second');
-c.receive({protocol:'qp.audience',version:'1-draft.1', type: 'result', request_id: '2', status: 'accepted'}, old);
+c.receive({protocol:'qp.audience',version:'1', type: 'result', request_id: '2', status: 'accepted'}, old);
 old.onclose(); old.onerror();
 assert.equal(c.elements.get('body').value, 'Second');
 assert(c.elements.get('send-comment').disabled);
@@ -370,17 +370,17 @@ for (const data of ['{', JSON.stringify({v: 2, type: 'welcome', capabilities: ['
 
     def test_strict_receiver_rejects_malformed_frames_without_clearing_pending_draft(self):
         self.run_js(r"""
-const welcome = {protocol:'qp.audience',version:'1-draft.1',type:'welcome',connection_id:'a1',capabilities:['comments','reactions'],available:true,limits:{max_message_bytes:4096,request_cache_ms:30000}};
+const welcome = {protocol:'qp.audience',version:'1',type:'welcome',connection_id:'a1',capabilities:['comments','reactions'],available:true,limits:{max_message_bytes:4096,request_cache_ms:30000}};
 for (const data of [
   JSON.stringify({...welcome, extra:true}),
-  JSON.stringify({protocol:'qp.audience',version:'1-draft.1',type:'welcome',available:true}),
+  JSON.stringify({protocol:'qp.audience',version:'1',type:'welcome',available:true}),
   JSON.stringify(welcome).replace('"available":true', '"available":false,"\\u0061vailable":true'),
   JSON.stringify({...welcome, capabilities:['\ud800']}),
   JSON.stringify({...welcome, capabilities:['\udfff']}),
   JSON.stringify({...welcome, capabilities:['x','x']}),
   JSON.stringify({...welcome, limits:{...welcome.limits, extra:true}}),
-  JSON.stringify({protocol:'qp.audience',version:'1-draft.1',type:'state',revision:'01',available:true}),
-  JSON.stringify({protocol:'qp.audience',version:'1-draft.1',type:'result',request_id:'1',status:'rate_limited'}),
+  JSON.stringify({protocol:'qp.audience',version:'1',type:'state',revision:'01',available:true}),
+  JSON.stringify({protocol:'qp.audience',version:'1',type:'result',request_id:'1',status:'rate_limited'}),
   ' '.repeat(4097), new ArrayBuffer(2)
 ]) {
   const c=client(); c.welcome(); c.submit('Keep this draft');

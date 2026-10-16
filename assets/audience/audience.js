@@ -40,7 +40,7 @@ function validServerMessage(message) {
       })
     );
   };
-  if (!object(message) || message.protocol !== "qp.audience" || message.version !== "1-draft.1")
+  if (!object(message) || message.protocol !== "qp.audience" || message.version !== "1")
     return false;
   const base = ["protocol", "version", "type"];
   switch (message.type) {
@@ -140,9 +140,7 @@ export function mountAudience({
     pending = { request_id, ...payload };
     updateControls();
     feedback.textContent = "Sending…";
-    socket.send(
-      JSON.stringify({ protocol: "qp.audience", version: "1-draft.1", request_id, ...payload }),
-    );
+    socket.send(JSON.stringify({ protocol: "qp.audience", version: "1", request_id, ...payload }));
     timeout = setTimeout(() => {
       feedback.textContent = "No response. Reconnect to try again.";
       socket.close();
@@ -165,7 +163,7 @@ export function mountAudience({
     current.addEventListener("open", () => {
       if (socket === current)
         current.send(
-          JSON.stringify({ protocol: "qp.audience", version: "1-draft.1", type: "hello", token }),
+          JSON.stringify({ protocol: "qp.audience", version: "1", type: "hello", token }),
         );
     });
     current.addEventListener("message", ({ data }) => {

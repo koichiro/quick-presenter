@@ -68,13 +68,7 @@ pub async fn create(
                 tokio::time::sleep(Duration::from_millis(200 * index)).await;
             }
             let response = client
-                .post(
-                    settings
-                        .endpoint
-                        .origin
-                        .join("api/relay/draft-1/rooms")
-                        .unwrap(),
-                )
+                .post(settings.endpoint.origin.join("api/relay/v1/rooms").unwrap())
                 .bearer_auth(&settings.endpoint.create_token)
                 .json(&serde_json::json!({"idempotency_key": attempt.key}))
                 .send()
@@ -145,7 +139,7 @@ pub async fn end(
         .post(
             endpoint
                 .origin
-                .join(&format!("api/relay/draft-1/rooms/{}/end", room.room_id))
+                .join(&format!("api/relay/v1/rooms/{}/end", room.room_id))
                 .unwrap(),
         )
         .bearer_auth(&room.presenter_token)
@@ -231,7 +225,7 @@ mod tests {
         };
         let app = Router::new()
             .route(
-                "/api/relay/draft-1/rooms",
+                "/api/relay/v1/rooms",
                 post(
                     |State(peer): State<Peer>, headers: HeaderMap, body: Bytes| async move {
                         let body: Value = serde_json::from_slice(&body).unwrap();
@@ -250,7 +244,7 @@ mod tests {
                 ),
             )
             .route(
-                "/api/relay/draft-1/rooms/test/end",
+                "/api/relay/v1/rooms/test/end",
                 post(|State(peer): State<Peer>, headers: HeaderMap| async move {
                     if headers["authorization"] != format!("Bearer {}", "B".repeat(43)) {
                         return StatusCode::UNAUTHORIZED;

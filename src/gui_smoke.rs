@@ -1247,7 +1247,7 @@ fn check_live_comments(
     let submit = |body: &str| {
         submit_audience_smoke_event(
             url,
-            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"comment","request_id":"c","body":body,"handle":"Anonymous"}),
+            serde_json::json!({"protocol":"qp.audience","version":"1","type":"comment","request_id":"c","body":body,"handle":"Anonymous"}),
         )
     };
     submit("Hello 世界")?;
@@ -1361,7 +1361,7 @@ fn check_live_comments(
 fn submit_audience_smoke_reaction(url: &str) -> Result<()> {
     submit_audience_smoke_event(
         url,
-        serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":"smoke","kind":"applause"}),
+        serde_json::json!({"protocol":"qp.audience","version":"1","type":"reaction","request_id":"smoke","kind":"applause"}),
     )
 }
 fn submit_audience_smoke_event(url: &str, event: serde_json::Value) -> Result<()> {
@@ -1429,7 +1429,7 @@ fn submit_audience_smoke_event(url: &str, event: serde_json::Value) -> Result<()
     }
     send(
         &mut socket,
-        serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}),
+        serde_json::json!({"protocol":"qp.audience","version":"1","type":"hello","token":token}),
     )?;
     anyhow::ensure!(
         read(&mut socket)?["type"] == "welcome",

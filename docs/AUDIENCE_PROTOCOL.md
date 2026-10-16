@@ -1,4 +1,4 @@
-# Audience protocol `1-draft.1` (Local)
+# Audience protocol `1` (Local)
 
 Audience Live development targets v3.0.0. The protocol carries events and session
 metadata only; it exposes neither PDFs nor presentation-control commands. This
@@ -17,7 +17,7 @@ the fragment remains. It opens `/ws/audience/{session-code}` on the same authori
 The first text message is:
 
 ```json
-{"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":"<43-character-secret>"}
+{"protocol":"qp.audience","version":"1","type":"hello","token":"<43-character-secret>"}
 ```
 
 The five-second authentication deadline, Host/Origin validation, heartbeat and
@@ -28,7 +28,7 @@ a new code/secret. There is no draft/stable version negotiation or downgrade.
 After authentication the server sends a complete welcome:
 
 ```json
-{"protocol":"qp.audience","version":"1-draft.1","type":"welcome","connection_id":"1","capabilities":["reactions","comments"],"available":true,"limits":{"max_message_bytes":4096,"request_cache_ms":30000}}
+{"protocol":"qp.audience","version":"1","type":"welcome","connection_id":"1","capabilities":["reactions","comments"],"available":true,"limits":{"max_message_bytes":4096,"request_cache_ms":30000}}
 ```
 
 The browser validates complete welcome identity/limits, exact fields, version,
@@ -39,11 +39,11 @@ reaction kinds are `thumbs_up`, `heart`, `applause`, `laugh` and `question`.
 Question is a reaction, not Q&A. A reaction request is:
 
 ```json
-{"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":"42","kind":"applause"}
+{"protocol":"qp.audience","version":"1","type":"reaction","request_id":"42","kind":"applause"}
 ```
 
 Request IDs are nonempty ASCII letters/digits/hyphens/underscores, at most 64
-bytes. Requests must use the exact draft version, the known fields, type and
+bytes. Requests must use the exact v1 version, the known fields, type and
 kind. Duplicate decoded JSON keys, invalid Unicode and malformed messages close
 the connection with 1002; bad authentication closes with 1008. Unsupported
 questions and poll votes
@@ -52,7 +52,7 @@ are not silently accepted. New capabilities can be advertised when implemented.
 The server responds with the same request ID:
 
 ```json
-{"protocol":"qp.audience","version":"1-draft.1","type":"result","request_id":"42","status":"accepted"}
+{"protocol":"qp.audience","version":"1","type":"result","request_id":"42","status":"accepted"}
 ```
 
 The local endpoint additionally emits `busy` for resource/rate pressure and
@@ -92,7 +92,7 @@ changing the PDF renderer or presentation-control protocol.
 ## Live comments
 
 ```json
-{"protocol":"qp.audience","version":"1-draft.1","type":"comment","request_id":"43","body":"Hello everyone!","handle":"Anonymous"}
+{"protocol":"qp.audience","version":"1","type":"comment","request_id":"43","body":"Hello everyone!","handle":"Anonymous"}
 ```
 
 Comments use the same authentication, request ID rules, acknowledgements, and
