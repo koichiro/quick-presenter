@@ -9,6 +9,8 @@ use std::{
     time::Duration,
 };
 
+pub(crate) const ROOM_EXPIRED: &str = "Relay room expired. Start again to create a new room.";
+
 #[derive(Clone)]
 pub struct ManagedRelay {
     pub endpoint: RelayEndpoint,
@@ -83,7 +85,7 @@ pub async fn create(
                 403 => return Err("Relay denied room creation."),
                 410 => {
                     settings.clear();
-                    return Err("Relay room expired. Start again to create a new room.");
+                    return Err(ROOM_EXPIRED);
                 }
                 503 => continue,
                 _ => return Err("Relay returned an unsupported creation response."),
@@ -169,7 +171,12 @@ pub async fn cleanup(
             .and_then(|a| a.room.clone());
         let room = match cached {
             Some(room) => room,
-            None => create(client, settings).await?,
+            None => match create(client, settings).await {
+                Ok(room) => room,
+                // A terminal creation response confirms there is no live room to end.
+                Err(ROOM_EXPIRED) => return Ok(()),
+                Err(error) => return Err(error),
+            },
         };
         end(client, &settings.endpoint, &room).await
     })
@@ -184,9 +191,13 @@ mod tests {
     use super::*;
     use axum::{
         body::Bytes,
-        extract::State,
+        extract::{
+            ws::{Message as WsMessage, WebSocketUpgrade},
+            State,
+        },
         http::{HeaderMap, StatusCode},
-        routing::post,
+        response::IntoResponse,
+        routing::{get, post},
         Router,
     };
     use serde_json::{json, Value};
@@ -200,6 +211,8 @@ mod tests {
         responses: Arc<Mutex<VecDeque<(u16, String)>>>,
         requests: Arc<Mutex<Vec<(String, String)>>>,
         ends: Arc<AtomicUsize>,
+        handshakes: Arc<Mutex<VecDeque<u16>>>,
+        creation_gate: Arc<Mutex<Option<Arc<tokio::sync::Notify>>>>,
     }
     struct Server {
         settings: ManagedRelay,
@@ -222,6 +235,8 @@ mod tests {
             responses: Arc::new(Mutex::new(VecDeque::new())),
             requests: Arc::new(Mutex::new(Vec::new())),
             ends: Arc::new(AtomicUsize::new(0)),
+            handshakes: Arc::new(Mutex::new(VecDeque::new())),
+            creation_gate: Arc::new(Mutex::new(None)),
         };
         let app = Router::new()
             .route(
@@ -233,6 +248,10 @@ mod tests {
                             headers["authorization"].to_str().unwrap().into(),
                             body["idempotency_key"].as_str().unwrap().into(),
                         ));
+                        let gate = peer.creation_gate.lock().unwrap().take();
+                        if let Some(gate) = gate {
+                            gate.notified().await;
+                        }
                         let (status, text) = peer
                             .responses
                             .lock()
@@ -253,6 +272,26 @@ mod tests {
                     StatusCode::OK
                 }),
             )
+            .route("/api/relay/{version}/rooms/fresh/end", post(|State(peer): State<Peer>, headers: HeaderMap| async move {
+                    if headers["authorization"] != format!("Bearer {}", "B".repeat(43)) {
+                        return StatusCode::UNAUTHORIZED;
+                    }
+                    peer.ends.fetch_add(1, Ordering::SeqCst);
+                    StatusCode::OK
+                }))
+            .route("/presenter/test", get(|State(peer): State<Peer>, ws: WebSocketUpgrade| async move {
+                let status = peer.handshakes.lock().unwrap().pop_front().unwrap_or(101);
+                if status != 101 {
+                    return StatusCode::from_u16(status).unwrap().into_response();
+                }
+                ws.on_upgrade(|mut socket| async move {
+                    let _ = socket.recv().await;
+                    let welcome = json!({"protocol":"qp.presenter","version":crate::audience_relay::VERSION,"type":"presenter_welcome","presenter_epoch":"1","display_epoch":"0","audience_connections":0});
+                    if socket.send(WsMessage::Text(welcome.to_string().into())).await.is_ok() {
+                        while socket.recv().await.is_some() {}
+                    }
+                }).into_response()
+            }))
             .with_state(peer.clone());
         let task = tokio::spawn(async move {
             axum::serve(listener, app).await.unwrap();
@@ -321,6 +360,123 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn one_on_replaces_confirmed_terminal_rooms_and_reaches_running() {
+        use crate::{audience::SessionStatus, audience_relay::RemoteAudienceSession};
+        for terminal_status in [0, 404, 410] {
+            let s = server().await;
+            let old_key = s.settings.attempt().unwrap().key;
+            if terminal_status == 0 {
+                push(&s, 410, "{}".into());
+            } else {
+                push(&s, 200, room(&s.settings).to_string());
+                s.peer.handshakes.lock().unwrap().push_back(terminal_status);
+            }
+            let mut fresh = room(&s.settings);
+            fresh["room_id"] = json!("fresh");
+            fresh["code"] = json!("FRESH");
+            fresh["join_url"] = json!(format!(
+                "{}join/fresh#k={}",
+                s.settings.endpoint.origin,
+                "C".repeat(43)
+            ));
+            push(&s, 201, fresh.to_string());
+            let mut session = RemoteAudienceSession::start_managed(s.settings.clone()).unwrap();
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            loop {
+                match session.snapshot().status {
+                    SessionStatus::Running { code, url } => {
+                        assert_eq!(code, "FRESH");
+                        assert!(url.contains("/join/fresh#"));
+                        break;
+                    }
+                    SessionStatus::Failed(error) => panic!("Recovery failed: {error}"),
+                    _ => {}
+                }
+                assert!(tokio::time::Instant::now() < deadline);
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            let requests = s.peer.requests.lock().unwrap().clone();
+            assert_eq!(requests.len(), 2);
+            assert_eq!(requests[0].1, old_key);
+            assert_ne!(requests[0].1, requests[1].1);
+            session.request_stop();
+            while !session.is_finished() {
+                assert!(tokio::time::Instant::now() < deadline);
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            session.shutdown();
+            assert_eq!(s.peer.ends.load(Ordering::SeqCst), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn stop_during_terminal_response_never_creates_a_replacement() {
+        use crate::{audience::SessionStatus, audience_relay::RemoteAudienceSession};
+        let s = server().await;
+        let key = s.settings.attempt().unwrap().key;
+        let gate = Arc::new(tokio::sync::Notify::new());
+        *s.peer.creation_gate.lock().unwrap() = Some(gate.clone());
+        push(&s, 410, "{}".into());
+        push(&s, 410, "{}".into());
+        let mut session = RemoteAudienceSession::start_managed(s.settings.clone()).unwrap();
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        while s.peer.requests.lock().unwrap().is_empty() {
+            assert!(tokio::time::Instant::now() < deadline);
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        session.request_stop();
+        gate.notify_one();
+        while !session.is_finished() {
+            assert!(tokio::time::Instant::now() < deadline);
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        session.shutdown();
+        assert!(matches!(session.snapshot().status, SessionStatus::Stopped));
+        let requests = s.peer.requests.lock().unwrap();
+        assert!(requests.len() <= 2);
+        assert!(requests.iter().all(|request| request.1 == key));
+        assert!(!s.settings.has_attempt());
+    }
+
+    #[tokio::test]
+    async fn terminal_replacement_is_bounded_and_ambiguous_failures_keep_the_key() {
+        use crate::{audience::SessionStatus, audience_relay::RemoteAudienceSession};
+        for statuses in [
+            &[410, 410][..],
+            &[401][..],
+            &[403][..],
+            &[404][..],
+            &[503, 503, 503][..],
+        ] {
+            let s = server().await;
+            let old_key = s.settings.attempt().unwrap().key;
+            for status in statuses {
+                push(&s, *status, "{}".into());
+            }
+            let mut session = RemoteAudienceSession::start_managed(s.settings.clone()).unwrap();
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+            while !session.is_finished() {
+                assert!(tokio::time::Instant::now() < deadline);
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            assert!(matches!(
+                session.snapshot().status,
+                SessionStatus::Failed(_)
+            ));
+            let requests = s.peer.requests.lock().unwrap().clone();
+            assert_eq!(requests.len(), statuses.len());
+            if statuses[0] == 410 {
+                assert_ne!(requests[0].1, requests[1].1);
+                assert!(!s.settings.has_attempt());
+            } else {
+                assert!(requests.iter().all(|request| request.1 == old_key));
+                assert_eq!(s.settings.attempt().unwrap().key, old_key);
+            }
+            session.shutdown();
+        }
+    }
+
+    #[tokio::test]
     async fn exact_response_size_is_accepted_and_overflow_retains_retry_identity() {
         let s = server().await;
         let http = client().unwrap();
@@ -338,6 +494,19 @@ mod tests {
         assert_eq!(create(&http, &s.settings).await.unwrap().room_id, "test");
         assert_eq!(s.peer.requests.lock().unwrap().len(), 2);
         assert_eq!(s.settings.attempt().unwrap().key, key);
+    }
+
+    #[tokio::test]
+    async fn cleanup_of_a_confirmed_terminal_creation_succeeds_without_replacement() {
+        let s = server().await;
+        let key = s.settings.attempt().unwrap().key;
+        push(&s, 410, "{}".into());
+        cleanup(&client().unwrap(), &s.settings).await.unwrap();
+        assert!(!s.settings.has_attempt());
+        let requests = s.peer.requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].1, key);
+        assert_eq!(s.peer.ends.load(Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

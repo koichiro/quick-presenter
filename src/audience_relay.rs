@@ -294,22 +294,34 @@ impl RemoteAudienceSession {
                     }
                     if let Some(settings) = managed {
                         let client = crate::audience_relay_http::client()?;
-                        let room = tokio::select! {
-                            biased;
-                            _ = stopped.changed() => None,
-                            result = crate::audience_relay_http::create(&client, &settings) => Some(result?),
-                        };
-                        let outcome = if let Some(room) = room {
-                            tokio::select! {
-                                _ = stopped.changed() => Ok(()),
-                                result = run(room, status.clone(), connections.clone(), engine.clone(), updates) => result,
+                        let mut replaced_terminal_room = false;
+                        loop {
+                            let room = tokio::select! {
+                                biased;
+                                _ = stopped.changed() => None,
+                                result = crate::audience_relay_http::create(&client, &settings) => Some(result),
+                            };
+                            let outcome = match room {
+                                Some(Ok(room)) => tokio::select! {
+                                    biased;
+                                    _ = stopped.changed() => Ok(()),
+                                    result = run(room, status.clone(), connections.clone(), engine.clone(), updates.clone()) => result,
+                                },
+                                Some(Err(error)) => Err(error),
+                                None => Ok(()),
+                            };
+                            if matches!(outcome, Err(crate::audience_relay_http::ROOM_EXPIRED)) {
+                                settings.clear();
+                                // Only a confirmed terminal room permits a fresh creation identity.
+                                // Keep one ON action bounded, including servers that immediately expire rooms.
+                                if !replaced_terminal_room && !*stopped.borrow() {
+                                    replaced_terminal_room = true;
+                                    continue;
+                                }
                             }
-                        } else { Ok(()) };
-                        if matches!(outcome, Err("Relay room expired. Start again to create a new room.")) {
-                            settings.clear();
+                            if *stopped.borrow() && settings.has_attempt() { crate::audience_relay_http::cleanup(&client, &settings).await?; }
+                            break outcome;
                         }
-                        if *stopped.borrow() && settings.has_attempt() { crate::audience_relay_http::cleanup(&client, &settings).await?; }
-                        outcome
                     } else {
                         tokio::select! {
                             _ = stopped.changed() => Ok(()),
@@ -517,7 +529,7 @@ fn connection_failure(error: tokio_tungstenite::tungstenite::Error) -> &'static 
     match error {
         Error::Http(response) => match response.status().as_u16() {
             401 | 403 => "Relay access was denied.",
-            404 | 410 => "Relay room expired. Start again to create a new room.",
+            404 | 410 => crate::audience_relay_http::ROOM_EXPIRED,
             _ => "Cannot connect to relay.",
         },
         _ => "Cannot connect to relay.",
@@ -1228,14 +1240,7 @@ mod tests {
                 origin: url::Url::parse(&format!("http://127.0.0.1:{port}")).unwrap(),
                 create_token: "A".repeat(43),
             });
-            for (index, expected) in [
-                "Relay room expired. Start again to create a new room.",
-                "Relay access was denied.",
-                "Cannot connect to relay.",
-            ]
-            .into_iter()
-            .enumerate()
-            {
+            for expected in ["Relay access was denied.", "Cannot connect to relay."] {
                 let mut session = RemoteAudienceSession::start_managed(settings.clone()).unwrap();
                 let deadline = Instant::now() + Duration::from_secs(5);
                 while !session.is_finished() {
@@ -1245,18 +1250,14 @@ mod tests {
                 assert!(
                     matches!(session.snapshot().status, SessionStatus::Failed(ref error) if error == expected)
                 );
-                if index == 0 {
-                    assert!(!settings.has_attempt());
-                } else {
-                    assert!(settings.has_attempt());
-                    assert!(settings
-                        .attempt()
-                        .unwrap()
-                        .room
-                        .unwrap()
-                        .join_url
-                        .contains("/join/test-1#"));
-                }
+                assert!(settings.has_attempt());
+                assert!(settings
+                    .attempt()
+                    .unwrap()
+                    .room
+                    .unwrap()
+                    .join_url
+                    .contains("/join/test-1#"));
                 session.shutdown();
             }
             let keys = keys.lock().unwrap();
