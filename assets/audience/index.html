@@ -1,98 +1,49 @@
 <!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Quick Presenter Audience</title>
-<style>body{font:18px system-ui;background:#202124;color:#fff;max-width:36rem;margin:3rem auto;padding:1.5rem}p{line-height:1.6}button{font:inherit;padding:.7rem;min-width:48px;min-height:48px}#reactions{display:flex;flex-wrap:wrap;gap:.5rem}#reactions button{font-size:2rem}button:disabled{opacity:.45}input,textarea{display:block;box-sizing:border-box;width:100%;font:inherit;margin:.4rem 0 1rem;padding:.5rem}textarea{min-height:5rem}.comment-composer{display:flex;align-items:flex-end;gap:.5rem;margin:.4rem 0}.comment-composer textarea{flex:1;min-width:0;margin:0}.comment-composer button{flex-shrink:0}#comment-help{font-size:.85rem;color:#c7cbd1;margin:.5rem 0 1rem}</style>
-<h1>Quick Presenter</h1><h2>Audience Live</h2><p id="status" role="status">Connecting…</p>
-<div id="reactions" aria-label="Reactions">
-<button disabled data-kind="thumbs_up" aria-label="Thumbs up">👍</button>
-<button disabled data-kind="heart" aria-label="Heart">❤️</button>
-<button disabled data-kind="applause" aria-label="Applause">👏</button>
-<button disabled data-kind="laugh" aria-label="Laugh">😂</button>
-<button disabled data-kind="question" aria-label="Question">❓</button>
-</div>
-<form id="comments">
-<label for="handle">Name</label><input id="handle" value="Anonymous" autocomplete="nickname">
-<label for="body">Comment (up to 200 characters)</label>
-<div class="comment-composer">
-<textarea id="body" required aria-describedby="comment-help"></textarea>
-<button id="send-comment" type="submit" disabled>Send</button>
-</div>
-<p id="comment-help">Enter to send · Shift+Enter for a new line</p>
-</form>
-<p id="feedback" role="status">Send a reaction to the presenter.</p>
-<button id="retry" hidden>Reconnect</button>
-<script>
-const status=document.getElementById('status'), retry=document.getElementById('retry'), feedback=document.getElementById('feedback');
-const buttons=[...document.querySelectorAll('[data-kind]')];
-let token=new URLSearchParams(location.hash.slice(1)).get('k');
-// Keep credentials only in this tab so reloading a cleaned join URL can reconnect.
-try{
-  const key='quick-presenter.join-token:'+location.pathname;
-  if(token)sessionStorage.setItem(key,token);
-  else token=sessionStorage.getItem(key);
-  history.replaceState(null,'',location.pathname);
-}catch{
-  // If tab storage is unavailable, retain the fragment for reloads.
-}
-const form=document.getElementById('comments'), body=document.getElementById('body'), handle=document.getElementById('handle'), sendComment=document.getElementById('send-comment');
-let socket, connected=false, commentsEnabled=false, nextId=0, pending=null, pendingType=null, pendingBody='', timeout;
-function updateButtons(){buttons.forEach(b=>b.disabled=!connected || pending!==null);sendComment.disabled=!connected || !commentsEnabled || pending!==null;}
-function finish(){clearTimeout(timeout);pending=null;updateButtons();}
-function connect(){
-  if(!token){status.textContent='Open the complete join link or scan the QR code.';return;}
-  retry.hidden=true;connected=false;commentsEnabled=false;finish();status.textContent='Connecting…';
-  const current=new WebSocket(`ws://${location.host}/ws`);socket=current;
-  current.onopen=()=>current.send(JSON.stringify({v:1,token}));
-  current.onmessage=event=>{
-    if(socket!==current)return;
-    try{
-      const message=JSON.parse(event.data);
-      if(message.v!==1){current.close();return;}
-      if(message.type==='welcome'){
-        connected=Array.isArray(message.capabilities) && message.capabilities.includes('reactions');
-        commentsEnabled=Array.isArray(message.capabilities) && message.capabilities.includes('comments');
-        status.textContent='Connected to the presentation.';
-        updateButtons();
-      }else if(message.type==='result' && message.request_id===pending){
-        feedback.textContent=({accepted:pendingType==='comment'?'Comment received.':'Reaction received.',stopped:'This session has ended.',rate_limited:'Please slow down.',busy:'The presentation is busy. Try again shortly.'})[message.status] || 'Unable to send reaction.';
-        if(message.status==='accepted' && pendingType==='comment' && body.value===pendingBody)body.value='';
-        finish();
-      }
-    }catch{current.close();}
-  };
-  current.onclose=()=>{if(socket!==current)return;connected=false;finish();status.textContent='Disconnected. Reconnect while the session is active, or scan the new QR code.';retry.hidden=false;};
-  current.onerror=()=>{if(socket===current)status.textContent='Unable to connect. Check that you are on the same network.';};
-}
-function send(type,fields){
-  if(!connected || pending!==null || socket.readyState!==WebSocket.OPEN)return;
-  pending=String(++nextId);pendingType=type;pendingBody=body.value;updateButtons();feedback.textContent='Sending…';
-  socket.send(JSON.stringify({v:1,type,request_id:pending,...fields}));
-  timeout=setTimeout(()=>{feedback.textContent='No response. Reconnect to try again.';socket.close();},4000);
-}
-buttons.forEach(button=>button.onclick=()=>send('reaction',{kind:button.dataset.kind}));
-function validateComments(){
-  const bytes=new TextEncoder();
-  body.setCustomValidity(!body.value.trim()?'Enter a comment.':
-    [...body.value].length>200 || bytes.encode(body.value).length>800?'Use up to 200 characters and 800 UTF-8 bytes.':'');
-  handle.setCustomValidity([...handle.value].length>32 || bytes.encode(handle.value).length>128?
-    'Use up to 32 characters and 128 UTF-8 bytes.':'');
-  return body.validity.valid && handle.validity.valid;
-}
-body.oninput=handle.oninput=validateComments;
-body.onkeydown=event=>{
-  if(event.key==='Enter' && !event.shiftKey && !event.isComposing && event.keyCode!==229){
-    event.preventDefault();
-    if(!sendComment.disabled)form.requestSubmit();
-  }
-};
-form.onsubmit=event=>{
-  event.preventDefault();
-  if(!commentsEnabled)return;
-  if(!validateComments()){
-    form.reportValidity();return;
-  }
-  send('comment',{body:body.value,handle:handle.value});
-};
-retry.onclick=connect;
-connect();
-</script></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quick Presenter Audience</title>
+  <style>
+    html { background: #202124; }
+    body { background: #202124; color: white; font-family: system-ui; font-size: 18px;
+      max-inline-size: 36rem; margin-block: 3rem; margin-inline: auto; padding: 1.5rem; }
+    p { line-height: 1.6; }
+    button { font: inherit; padding: .7rem; min-inline-size: 48px; min-block-size: 48px; }
+    button:disabled { opacity: .45; }
+    .reaction-list { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .reaction-list button { font-size: 2rem; }
+    input, textarea { box-sizing: border-box; display: block; inline-size: 100%;
+      font: inherit; margin: .4rem 0 1rem; padding: .5rem; }
+    .composer { display: flex; align-items: flex-end; gap: .5rem; margin: .4rem 0; }
+    .composer textarea { flex: 1; min-inline-size: 0; min-block-size: 5rem; margin: 0; }
+    .composer button { flex-shrink: 0; }
+    #comment-help { font-size: .85rem; color: #c7cbd1; margin: .5rem 0 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Quick Presenter</h1>
+  <h2>Audience Live</h2>
+  <p id="connection-status" role="status">Connecting…</p>
+  <section class="reaction-list" aria-label="Reactions">
+    <button type="button" disabled data-kind="thumbs_up" aria-label="Thumbs up">👍</button>
+    <button type="button" disabled data-kind="heart" aria-label="Heart">❤️</button>
+    <button type="button" disabled data-kind="applause" aria-label="Applause">👏</button>
+    <button type="button" disabled data-kind="laugh" aria-label="Laugh">😂</button>
+    <button type="button" disabled data-kind="question" aria-label="Question">❓</button>
+  </section>
+  <form>
+    <label for="nickname">Name</label>
+    <input id="nickname" name="nickname" value="Anonymous" autocomplete="nickname">
+    <label for="message">Comment (up to 200 characters)</label>
+    <div class="composer">
+      <textarea id="message" name="message" required aria-describedby="comment-help"></textarea>
+      <button id="send-comment" type="submit" disabled>Send</button>
+    </div>
+    <p id="comment-help">Enter to send · Shift+Enter for a new line</p>
+  </form>
+  <p id="feedback" role="status">Send a reaction to the presenter.</p>
+  <button id="retry" type="button" hidden>Reconnect</button>
+  <script type="module" src="/assets/audience.js"></script>
+</body>
+</html>

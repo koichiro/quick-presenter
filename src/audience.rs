@@ -2,7 +2,9 @@
 use crate::audience_events::{
     parse_event, AcceptedAudienceEvent, Admission, AudienceEngine, RateBudget,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use std::{
+    collections::VecDeque,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
@@ -14,7 +16,7 @@ use std::{
 
 use axum::{
     extract::{
-        ws::{Message, WebSocket},
+        ws::{CloseFrame, Message, WebSocket},
         State, WebSocketUpgrade,
     },
     http::{header, HeaderMap, StatusCode},
@@ -23,6 +25,11 @@ use axum::{
     Router,
 };
 use tokio::sync::{watch, Semaphore};
+
+const PROTOCOL: &str = "qp.audience";
+const VERSION: &str = "1-draft.1";
+const REQUEST_CACHE: Duration = Duration::from_secs(30);
+const MAX_REQUESTS: usize = 256;
 
 const AUTH_TIMEOUT: Duration = Duration::from_secs(5);
 const HEARTBEAT: Duration = Duration::from_secs(15);
@@ -192,7 +199,10 @@ fn credentials() -> std::io::Result<(String, String)> {
     let mut bytes = [0u8; 36];
     getrandom::fill(&mut bytes).map_err(std::io::Error::other)?;
     let encode = |bytes: &[u8]| bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
-    Ok((encode(&bytes[..4]).to_uppercase(), encode(&bytes[4..])))
+    Ok((
+        encode(&bytes[..4]).to_uppercase(),
+        URL_SAFE_NO_PAD.encode(&bytes[4..]),
+    ))
 }
 
 async fn run(
@@ -219,7 +229,10 @@ async fn run(
     };
     let app = Router::new()
         .route("/join/{code}", get(join_page))
-        .route("/ws", get(upgrade))
+        .route("/ws/audience/{code}", get(upgrade))
+        .route("/assets/audience.js", get(browser_script))
+        .route("/assets/LICENSE", get(browser_license))
+        .route("/assets/NOTICE", get(browser_notice))
         .with_state(state);
     *status.lock().unwrap_or_else(|e| e.into_inner()) = SessionStatus::Running { url, code };
     if *stop.borrow() {
@@ -247,15 +260,64 @@ async fn join_page(
         return StatusCode::NOT_FOUND.into_response();
     }
     ([(header::CACHE_CONTROL, "no-store"), (header::REFERRER_POLICY, "no-referrer"),
-        (header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'")],
+        (header::CONTENT_SECURITY_POLICY, "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")],
         Html(include_str!("../assets/audience/index.html"))).into_response()
+}
+
+fn asset(
+    headers: &HeaderMap,
+    state: &ServerState,
+    mime: &'static str,
+    content: &'static str,
+) -> Response {
+    if !valid_headers(headers, &state.authority, false) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    (
+        [
+            (header::CONTENT_TYPE, mime),
+            (header::CACHE_CONTROL, "no-store"),
+            (header::REFERRER_POLICY, "no-referrer"),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        ],
+        content,
+    )
+        .into_response()
+}
+async fn browser_script(State(state): State<ServerState>, headers: HeaderMap) -> Response {
+    asset(
+        &headers,
+        &state,
+        "text/javascript; charset=utf-8",
+        include_str!("../assets/audience/audience.js"),
+    )
+}
+async fn browser_license(State(state): State<ServerState>, headers: HeaderMap) -> Response {
+    asset(
+        &headers,
+        &state,
+        "text/plain; charset=utf-8",
+        include_str!("../assets/audience/LICENSE"),
+    )
+}
+async fn browser_notice(State(state): State<ServerState>, headers: HeaderMap) -> Response {
+    asset(
+        &headers,
+        &state,
+        "text/plain; charset=utf-8",
+        include_str!("../assets/audience/NOTICE"),
+    )
 }
 
 async fn upgrade(
     State(state): State<ServerState>,
+    axum::extract::Path(code): axum::extract::Path<String>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
+    if code != state.code {
+        return StatusCode::NOT_FOUND.into_response();
+    }
     if !valid_headers(&headers, &state.authority, true) {
         return StatusCode::FORBIDDEN.into_response();
     }
@@ -279,7 +341,9 @@ async fn upgrade(
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Hello {
-    v: u32,
+    protocol: String,
+    version: String,
+    r#type: String,
     token: String,
 }
 
@@ -308,7 +372,101 @@ impl HandshakeBudget {
 }
 
 fn authenticated(text: &str, secret: &str) -> bool {
-    serde_json::from_str::<Hello>(text).is_ok_and(|hello| hello.v == 1 && hello.token == secret)
+    crate::audience_wire::strict_json(text.as_bytes())
+        .ok()
+        .and_then(|value| serde_json::from_value::<Hello>(value).ok())
+        .is_some_and(|hello| {
+            hello.protocol == PROTOCOL
+                && hello.version == VERSION
+                && hello.r#type == "hello"
+                && hello.token == secret
+        })
+}
+
+fn audience_input(
+    text: &str,
+) -> Option<(
+    String,
+    crate::audience_events::AudienceEvent,
+    serde_json::Value,
+)> {
+    let mut value = crate::audience_wire::strict_json(text.as_bytes()).ok()?;
+    let fingerprint = value.clone();
+    let fields = value.as_object_mut()?;
+    if fields.remove("protocol")? != PROTOCOL
+        || fields.remove("version")? != VERSION
+        || fields.contains_key("v")
+    {
+        return None;
+    }
+    fields.insert("v".into(), serde_json::json!(1));
+    let (id, event) = parse_event(&value.to_string())?;
+    Some((id, event, fingerprint))
+}
+
+struct CachedResult {
+    id: String,
+    fingerprint: serde_json::Value,
+    finished: Instant,
+    status: &'static str,
+}
+#[derive(Default)]
+struct RequestCache(VecDeque<CachedResult>);
+impl RequestCache {
+    fn expire(&mut self, now: Instant) {
+        self.0
+            .retain(|entry| now.saturating_duration_since(entry.finished) < REQUEST_CACHE);
+    }
+    fn check(
+        &mut self,
+        id: &str,
+        fingerprint: &serde_json::Value,
+        now: Instant,
+    ) -> Result<Option<&'static str>, u16> {
+        self.expire(now);
+        if let Some(entry) = self.0.iter().find(|entry| entry.id == id) {
+            return if &entry.fingerprint == fingerprint {
+                Ok(Some(entry.status))
+            } else {
+                Err(1002)
+            };
+        }
+        if self.0.len() >= MAX_REQUESTS {
+            return Err(1013);
+        }
+        Ok(None)
+    }
+    fn insert(
+        &mut self,
+        id: String,
+        fingerprint: serde_json::Value,
+        status: &'static str,
+        now: Instant,
+    ) {
+        self.0.push_back(CachedResult {
+            id,
+            fingerprint,
+            finished: now,
+            status,
+        });
+    }
+}
+fn wire_status(admission: Admission) -> &'static str {
+    match admission {
+        Admission::Accepted => "accepted",
+        Admission::Stopped => "stopped",
+        Admission::Busy | Admission::RateLimited => "busy",
+    }
+}
+async fn close(socket: &mut WebSocket, code: u16) {
+    let _ = tokio::time::timeout(
+        Duration::from_secs(2),
+        socket.send(Message::Close(Some(CloseFrame {
+            code,
+            reason: "".into(),
+        }))),
+    )
+    .await;
 }
 
 struct CountGuard(Arc<AtomicUsize>);
@@ -329,9 +487,11 @@ async fn connection(
         _ = stop.changed() => return,
     };
     let Ok(Some(Ok(Message::Text(text)))) = first else {
+        close(&mut socket, 1008).await;
         return;
     };
     if !authenticated(&text, &state.secret) || *stop.borrow() {
+        close(&mut socket, 1008).await;
         return;
     }
     drop(permit);
@@ -340,12 +500,13 @@ async fn connection(
     let participant_id = state.next_participant.fetch_add(1, Ordering::Relaxed);
     if !send_json(
         &mut socket,
-        serde_json::json!({"v":1,"type":"welcome","capabilities":["reactions","comments"]}),
+        serde_json::json!({"protocol":PROTOCOL,"version":VERSION,"type":"welcome","connection_id":participant_id.to_string(),"available":true,"capabilities":["reactions","comments"],"limits":{"max_message_bytes":MAX_MESSAGE_BYTES,"request_cache_ms":30000}}),
     )
     .await
     {
         return;
     }
+    let mut requests = RequestCache::default();
     let mut budget = RateBudget::new(5, 2, Instant::now());
     let mut comment_budget = RateBudget::new(2, 1, Instant::now());
     let mut heartbeat = tokio::time::interval(HEARTBEAT);
@@ -355,6 +516,7 @@ async fn connection(
         tokio::select! {
             _ = stop.changed() => break,
             _ = heartbeat.tick() => {
+                requests.expire(Instant::now());
                 if waiting_for_pong { break; }
                 waiting_for_pong = true;
                 if !matches!(tokio::time::timeout(Duration::from_secs(2), socket.send(Message::Ping(Vec::new().into()))).await, Ok(Ok(()))) { break; }
@@ -363,14 +525,25 @@ async fn connection(
                 Some(Ok(Message::Pong(_))) => waiting_for_pong = false,
                 Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
                 Some(Ok(Message::Text(text))) => {
-                    let Some((request_id, event)) = parse_event(&text) else { break; };
+                    let Some((request_id, event, fingerprint)) = audience_input(&text) else { close(&mut socket, 1002).await; break; };
                     let now = Instant::now();
+                    match requests.check(&request_id, &fingerprint, now) {
+                        Ok(Some(status)) => {
+                            if !send_json(&mut socket, serde_json::json!({"protocol":PROTOCOL,"version":VERSION,"type":"result","request_id":request_id,"status":status})).await { break; }
+                            continue;
+                        },
+                        Err(code) => { close(&mut socket, code).await; break; },
+                        Ok(None) => (),
+                    }
                     let status = if budget.allow(now) && (!matches!(event, crate::audience_events::AudienceEvent::Comment { .. }) || comment_budget.allow(now)) {
                         state.engine.lock().unwrap_or_else(|e| e.into_inner()).accept_event(event, participant_id, now)
                     } else { Admission::RateLimited };
-                    if !send_json(&mut socket, serde_json::json!({"v":1,"type":"result","request_id":request_id,"status":status})).await { break; }
+                    let status = wire_status(status);
+                    requests.insert(request_id.clone(), fingerprint, status, now);
+                    if !send_json(&mut socket, serde_json::json!({"protocol":PROTOCOL,"version":VERSION,"type":"result","request_id":request_id,"status":status})).await { break; }
                 },
-                _ => break,
+                Some(Ok(Message::Ping(_))) => (),
+                _ => { close(&mut socket, 1002).await; break; },
             }
         }
     }
@@ -417,9 +590,12 @@ mod tests {
             .split('/')
             .next()
             .unwrap();
-        let mut request = format!("ws://{authority}/ws")
-            .into_client_request()
-            .unwrap();
+        let mut request = format!(
+            "ws://{authority}/ws/audience/{}",
+            url.rsplit('/').next().unwrap()
+        )
+        .into_client_request()
+        .unwrap();
         request
             .headers_mut()
             .insert("Origin", format!("http://{authority}").parse().unwrap());
@@ -459,14 +635,17 @@ mod tests {
         let mut rejected = connect(&url);
         rejected
             .send(tungstenite::Message::Text(
-                r#"{"v":1,"token":"wrong"}"#.into(),
+                r#"{"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":"wrong"}"#.into(),
             ))
             .unwrap();
-        assert!(rejected.read().is_err());
+        assert!(matches!(
+            rejected.read().unwrap(),
+            tungstenite::Message::Close(_)
+        ));
         assert_eq!(session.snapshot().connections, 0);
         let mut ws = connect(&url);
         ws.send(tungstenite::Message::Text(
-            serde_json::json!({"v":1,"token":token}).to_string().into(),
+            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
         ))
         .unwrap();
         let welcome = ws.read().unwrap().into_text().unwrap();
@@ -476,7 +655,7 @@ mod tests {
         wait_until(|| session.snapshot().connections == 0);
         let mut ws = connect(&url);
         ws.send(tungstenite::Message::Text(
-            serde_json::json!({"v":1,"token":token}).to_string().into(),
+            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
         ))
         .unwrap();
         ws.read().unwrap();
@@ -497,7 +676,7 @@ mod tests {
         let (url, token) = ready(&session);
         let mut ws = connect(&url);
         ws.send(tungstenite::Message::Text(
-            serde_json::json!({"v":1,"token":token}).to_string().into(),
+            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
         ))
         .unwrap();
         let welcome: serde_json::Value =
@@ -507,13 +686,10 @@ mod tests {
             serde_json::json!(["reactions", "comments"])
         );
         for id in 0..6 {
-            ws.send(tungstenite::Message::Text(serde_json::json!({"v":1,"type":"reaction","request_id":id.to_string(),"kind":"applause"}).to_string().into())).unwrap();
+            ws.send(tungstenite::Message::Text(serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":id.to_string(),"kind":"applause"}).to_string().into())).unwrap();
             let reply: serde_json::Value =
                 serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
-            assert_eq!(
-                reply["status"],
-                if id < 5 { "accepted" } else { "rate_limited" }
-            );
+            assert_eq!(reply["status"], if id < 5 { "accepted" } else { "busy" });
         }
         let events = session.drain_events();
         assert_eq!(events.len(), 5);
@@ -524,13 +700,13 @@ mod tests {
         let mut second = connect(&url);
         second
             .send(tungstenite::Message::Text(
-                serde_json::json!({"v":1,"token":token}).to_string().into(),
+                serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
             ))
             .unwrap();
         second.read().unwrap();
         second
             .send(tungstenite::Message::Text(
-                r#"{"v":1,"type":"reaction","request_id":"second","kind":"heart"}"#.into(),
+                r#"{"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":"second","kind":"heart"}"#.into(),
             ))
             .unwrap();
         assert!(second
@@ -554,14 +730,14 @@ mod tests {
         let (url, token) = ready(&session);
         let mut ws = connect(&url);
         ws.send(tungstenite::Message::Text(
-            serde_json::json!({"v":1,"token":token}).to_string().into(),
+            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
         ))
         .unwrap();
         assert!(ws.read().unwrap().into_text().unwrap().contains("comments"));
         for n in 0..3 {
-            ws.send(tungstenite::Message::Text(serde_json::json!({"v":1,"type":"comment","request_id":n.to_string(),"body":"Hello\n世界", "handle":" Anonymous "}).to_string().into())).unwrap();
+            ws.send(tungstenite::Message::Text(serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"comment","request_id":n.to_string(),"body":"Hello\n世界", "handle":" Anonymous "}).to_string().into())).unwrap();
             let response = ws.read().unwrap().into_text().unwrap();
-            assert!(response.contains(if n < 2 { "accepted" } else { "rate_limited" }));
+            assert!(response.contains(if n < 2 { "accepted" } else { "busy" }));
         }
         assert_eq!(session.advance_comment_generation(), 1);
         let events = session.drain_events();
@@ -576,15 +752,15 @@ mod tests {
         );
         // Reactions remain available when the independent comment budget is empty.
         ws.send(tungstenite::Message::Text(
-            r#"{"v":1,"type":"reaction","request_id":"r","kind":"heart"}"#.into(),
+            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":"r","kind":"heart"}"#.into(),
         ))
         .unwrap();
         assert!(ws.read().unwrap().into_text().unwrap().contains("accepted"));
         ws.send(tungstenite::Message::Text(
-            r#"{"v":1,"type":"comment","request_id":"bad","body":"  ","handle":""}"#.into(),
+            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"comment","request_id":"bad","body":"  ","handle":""}"#.into(),
         ))
         .unwrap();
-        assert!(ws.read().is_err());
+        assert!(matches!(ws.read().unwrap(), tungstenite::Message::Close(_)));
         session.shutdown();
     }
     #[test]
@@ -593,15 +769,15 @@ mod tests {
         let (url, token) = ready(&session);
         let mut ws = connect(&url);
         ws.send(tungstenite::Message::Text(
-            serde_json::json!({"v":1,"token":token}).to_string().into(),
+            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
         ))
         .unwrap();
         ws.read().unwrap();
         ws.send(tungstenite::Message::Text(
-            r#"{"v":1,"type":"reaction","request_id":"1","kind":"unknown"}"#.into(),
+            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":"1","kind":"unknown"}"#.into(),
         ))
         .unwrap();
-        assert!(ws.read().is_err());
+        assert!(matches!(ws.read().unwrap(), tungstenite::Message::Close(_)));
         assert!(session.drain_events().is_empty());
         session.shutdown();
     }
@@ -629,7 +805,7 @@ mod tests {
             for _ in 0..16 {
                 let mut ws = connect(&url);
                 ws.send(tungstenite::Message::Text(
-                    serde_json::json!({"v":1,"token":token}).to_string().into(),
+                    serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
                 ))
                 .unwrap();
                 let welcome: serde_json::Value =
@@ -640,7 +816,7 @@ mod tests {
         }
         assert_eq!(session.snapshot().connections, 48);
         let started = Instant::now();
-        let mut totals = [0usize; 3];
+        let mut totals = [0usize; 2];
         let mut max_round = Duration::ZERO;
         for round in 0..rounds {
             let round_started = Instant::now();
@@ -649,11 +825,11 @@ mod tests {
                 .enumerate()
                 .map(|(index, mut ws)| {
                     thread::spawn(move || {
-                        let mut counts = [0usize; 3];
+                        let mut counts = [0usize; 2];
                         for request in 0..6 {
                             let id = format!("{round}-{index}-{request}");
                             ws.send(tungstenite::Message::Text(
-                                serde_json::json!({"v":1,"type":"reaction","request_id":id,"kind":"heart"})
+                                serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":id,"kind":"heart"})
                                     .to_string().into(),
                             )).unwrap();
                             let reply: serde_json::Value = loop {
@@ -667,8 +843,7 @@ mod tests {
                             assert_eq!(reply["request_id"], id);
                             let outcome = match reply["status"].as_str() {
                                 Some("accepted") => 0,
-                                Some("rate_limited") => 1,
-                                Some("busy") => 2,
+                                Some("busy") => 1,
                                 status => panic!("unexpected admission status: {status:?}"),
                             };
                             counts[outcome] += 1;
@@ -700,8 +875,8 @@ mod tests {
             }
         }
         assert_eq!(totals.iter().sum::<usize>(), 48 * 6 * rounds);
-        println!("Local load: clients=48 rounds={rounds} requests={} accepted={} rate_limited={} busy={} elapsed_ms={} max_round_ms={}",
-            48 * 6 * rounds, totals[0], totals[1], totals[2], started.elapsed().as_millis(), max_round.as_millis());
+        println!("Local load: clients=48 rounds={rounds} requests={} accepted={} busy={} elapsed_ms={} max_round_ms={}",
+            48 * 6 * rounds, totals[0], totals[1], started.elapsed().as_millis(), max_round.as_millis());
         let authority = url
             .strip_prefix("http://")
             .unwrap()
@@ -743,11 +918,14 @@ mod tests {
     }
     #[test]
     fn authentication_requires_version_and_secret() {
-        assert!(authenticated(r#"{"v":1,"token":"secret"}"#, "secret"));
+        assert!(authenticated(
+            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":"secret"}"#,
+            "secret"
+        ));
         for text in [
-            r#"{"v":2,"token":"secret"}"#,
-            r#"{"v":1,"token":"wrong"}"#,
-            r#"{"v":1,"token":"secret","extra":true}"#,
+            r#"{"protocol":"qp.audience","version":"2","type":"hello","token":"secret"}"#,
+            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":"wrong"}"#,
+            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":"secret","extra":true}"#,
             "{}",
             "invalid",
         ] {
@@ -771,7 +949,7 @@ mod tests {
         let a = credentials().unwrap();
         let b = credentials().unwrap();
         assert_eq!(a.0.len(), 8);
-        assert_eq!(a.1.len(), 64);
+        assert_eq!(a.1.len(), 43);
         assert_ne!(a.1, b.1);
     }
     #[test]
@@ -780,5 +958,245 @@ mod tests {
         session.shutdown();
         assert_eq!(session.snapshot().status, SessionStatus::Stopped);
         assert_eq!(session.snapshot().connections, 0);
+    }
+    fn hello(token: &str) -> String {
+        serde_json::json!({"protocol":PROTOCOL,"version":VERSION,"type":"hello","token":token})
+            .to_string()
+    }
+    fn input(id: &str, body: &str) -> String {
+        serde_json::json!({"protocol":PROTOCOL,"version":VERSION,"type":"comment","request_id":id,"body":body,"handle":"👩🏽‍💻"}).to_string()
+    }
+    fn authed(url: &str, token: &str) -> tungstenite::WebSocket<std::net::TcpStream> {
+        let mut ws = connect(url);
+        ws.send(tungstenite::Message::Text(hello(token).into()))
+            .unwrap();
+        let welcome: serde_json::Value =
+            serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
+        assert_eq!(welcome["protocol"], PROTOCOL);
+        assert_eq!(welcome["version"], VERSION);
+        assert_eq!(welcome["available"], true);
+        assert!(welcome["connection_id"].as_str().unwrap().len() <= 64);
+        assert_eq!(
+            welcome["limits"],
+            serde_json::json!({"max_message_bytes":4096,"request_cache_ms":30000})
+        );
+        ws
+    }
+    fn result(ws: &mut tungstenite::WebSocket<std::net::TcpStream>) -> serde_json::Value {
+        let value: serde_json::Value =
+            serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
+        assert_eq!(value["protocol"], PROTOCOL);
+        assert_eq!(value["version"], VERSION);
+        assert_eq!(value["type"], "result");
+        value
+    }
+    #[test]
+    fn repeated_request_returns_cached_result_without_duplicate_delivery_or_budget_cost() {
+        let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+        let (url, token) = ready(&session);
+        let mut ws = authed(&url, &token);
+        let request = input("same", "Hello\n世界");
+        for _ in 0..6 {
+            ws.send(tungstenite::Message::Text(request.clone().into()))
+                .unwrap();
+            assert_eq!(result(&mut ws)["status"], "accepted");
+        }
+        assert_eq!(session.drain_events().len(), 1);
+        ws.send(tungstenite::Message::Text(
+            input("same", "different").into(),
+        ))
+        .unwrap();
+        let tungstenite::Message::Close(Some(frame)) = ws.read().unwrap() else {
+            panic!("expected protocol close");
+        };
+        assert_eq!(u16::from(frame.code), 1002);
+        assert!(session.drain_events().is_empty());
+        session.shutdown();
+    }
+    #[test]
+    fn shared_emoji_comments_survive_actual_local_websockets_and_reload() {
+        for body in [
+            "😀 👍 ❤️ 👏 😂 ❓".to_owned(),
+            "👨‍👩‍👧‍👦".into(),
+            "🇯🇵 🇺🇸".into(),
+            "👍🏽 👩🏽‍💻".into(),
+            "e\u{301} 🏳️‍🌈".into(),
+            "😀".repeat(200),
+        ] {
+            let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+            let (url, token) = ready(&session);
+            let mut ws = authed(&url, &token);
+            ws.send(tungstenite::Message::Text(input("1", &body).into()))
+                .unwrap();
+            assert_eq!(result(&mut ws)["status"], "accepted");
+            let events = session.drain_events();
+            assert_eq!(events.len(), 1);
+            assert_eq!(
+                events[0].event,
+                crate::audience_events::AudienceEvent::Comment {
+                    body: body.clone(),
+                    handle: "👩🏽‍💻".into()
+                }
+            );
+            drop(ws);
+            wait_until(|| session.snapshot().connections == 0);
+            let mut reloaded = authed(&url, &token);
+            reloaded
+                .send(tungstenite::Message::Text(input("1", &body).into()))
+                .unwrap();
+            assert_eq!(result(&mut reloaded)["status"], "accepted");
+            let fresh = session.drain_events();
+            assert_eq!(fresh.len(), 1);
+            assert_ne!(events[0].participant_id, fresh[0].participant_id);
+            session.shutdown();
+        }
+    }
+    #[test]
+    fn invalid_local_frames_close_with_protocol_error_without_delivery() {
+        let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+        let (url, token) = ready(&session);
+        let raw = input("bad", "text");
+        for message in [
+            tungstenite::Message::Text(
+                raw.replace(
+                    "\"request_id\":\"bad\"",
+                    "\"request_id\":\"bad\",\"request_id\":\"bad\"",
+                )
+                .into(),
+            ),
+            tungstenite::Message::Text(
+                raw.replace("\"version\":\"1-draft.1\"", "\"version\":\"1\"")
+                    .into(),
+            ),
+            tungstenite::Message::Text(raw.replace("qp.audience", "qp.presenter").into()),
+            tungstenite::Message::Text(
+                raw.replace("\"body\":\"text\"", "\"body\":\"text\",\"v\":1")
+                    .into(),
+            ),
+            tungstenite::Message::Text(
+                raw.replace("\"body\":\"text\"", "\"body\":\"\\ud800\"")
+                    .into(),
+            ),
+            tungstenite::Message::Text(input("bad", &"😀".repeat(201)).into()),
+            tungstenite::Message::Text("{".into()),
+            tungstenite::Message::Binary(vec![123, 125].into()),
+        ] {
+            let mut ws = authed(&url, &token);
+            ws.send(message).unwrap();
+            let tungstenite::Message::Close(Some(frame)) = ws.read().unwrap() else {
+                panic!("expected protocol close");
+            };
+            assert_eq!(u16::from(frame.code), 1002);
+        }
+        assert!(session.drain_events().is_empty());
+        session.shutdown();
+    }
+    #[test]
+    fn cache_expiry_conflict_and_capacity_are_bounded() {
+        let now = Instant::now();
+        let value = serde_json::json!({"body":"test"});
+        let mut cache = RequestCache::default();
+        cache.insert("x".into(), value.clone(), "accepted", now);
+        assert_eq!(
+            cache.check("x", &value, now + REQUEST_CACHE - Duration::from_nanos(1)),
+            Ok(Some("accepted"))
+        );
+        assert_eq!(
+            cache.check("x", &serde_json::json!({"body":"other"}), now),
+            Err(1002)
+        );
+        assert_eq!(cache.check("x", &value, now + REQUEST_CACHE), Ok(None));
+        for n in 0..MAX_REQUESTS {
+            cache.insert(n.to_string(), value.clone(), "busy", now);
+        }
+        assert_eq!(cache.check("overflow", &value, now), Err(1013));
+        assert_eq!(cache.check("0", &value, now), Ok(Some("busy")));
+        assert_eq!(
+            cache.check("overflow", &value, now + REQUEST_CACHE),
+            Ok(None)
+        );
+        assert_eq!(wire_status(Admission::RateLimited), "busy");
+        assert_eq!(wire_status(Admission::Busy), "busy");
+        assert_eq!(wire_status(Admission::Stopped), "stopped");
+    }
+    #[test]
+    fn strict_local_authentication_and_frame_limits() {
+        let valid = hello("A");
+        assert!(authenticated(&valid, "A"));
+        for invalid in [
+            valid.replace("\"token\":\"A\"", "\"token\":\"A\",\"token\":\"A\""),
+            valid.replace("\"type\":\"hello\"", "\"type\":\"hello\",\"extra\":true"),
+            valid.replace("qp.audience", "qp.presenter"),
+            valid.replace("1-draft.1", "1"),
+            "{\"v\":1,\"token\":\"A\"}".into(),
+        ] {
+            assert!(!authenticated(&invalid, "A"));
+        }
+        assert!(audience_input(&format!(
+            "{}{}",
+            input("x", "test"),
+            " ".repeat(4096 - input("x", "test").len())
+        ))
+        .is_some());
+        assert!(audience_input(&format!(
+            "{}{}",
+            input("x", "test"),
+            " ".repeat(4097 - input("x", "test").len())
+        ))
+        .is_none());
+    }
+    #[test]
+    fn embedded_module_and_notices_are_served_with_scoped_security_headers() {
+        let mut session = LocalAudienceSession::start(Ipv4Addr::LOCALHOST).unwrap();
+        let (url, token) = ready(&session);
+        let authority = url
+            .strip_prefix("http://")
+            .unwrap()
+            .split('/')
+            .next()
+            .unwrap();
+        for (path, body) in [
+            (
+                "/assets/audience.js",
+                include_str!("../assets/audience/audience.js"),
+            ),
+            (
+                "/assets/LICENSE",
+                include_str!("../assets/audience/LICENSE"),
+            ),
+            ("/assets/NOTICE", include_str!("../assets/audience/NOTICE")),
+        ] {
+            let mut http = std::net::TcpStream::connect(authority).unwrap();
+            http.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+            write!(
+                http,
+                "GET {path} HTTP/1.1\r\nHost: {authority}\r\nConnection: close\r\n\r\n"
+            )
+            .unwrap();
+            let mut response = String::new();
+            http.read_to_string(&mut response).unwrap();
+            assert!(response.starts_with("HTTP/1.1 200"));
+            assert!(response.ends_with(body));
+            assert!(response.contains("x-content-type-options: nosniff"));
+            assert!(response.contains("cache-control: no-store"));
+            assert!(!response.contains(&token));
+        }
+        for (path, host, status) in [
+            ("/assets/audience.js", "other.invalid", 404),
+            ("/ws", "", 404),
+            ("/ws/audience/other", "", 404),
+        ] {
+            let mut http = std::net::TcpStream::connect(authority).unwrap();
+            http.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+            let host = if host.is_empty() { authority } else { host };
+            write!(http,"GET {path} HTTP/1.1\r\nHost: {host}\r\nOrigin: http://{authority}\r\nUpgrade: websocket\r\nConnection: Upgrade, close\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").unwrap();
+            let mut response = String::new();
+            http.read_to_string(&mut response).unwrap();
+            assert!(
+                response.starts_with(&format!("HTTP/1.1 {status}")),
+                "{response}"
+            );
+        }
+        session.shutdown();
     }
 }
