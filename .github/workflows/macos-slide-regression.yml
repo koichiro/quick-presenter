@@ -1,0 +1,84 @@
+name: macOS Slide Regression
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'ui/**'
+      - 'vendor/**'
+      - 'assets/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - '.cargo/config*'
+      - 'rust-toolchain*'
+      - 'scripts/fetch_pdfium.py'
+      - 'scripts/pdfium_manifest.json'
+      - 'tests/fixtures/marp-speaker-notes.pdf'
+      - '.github/workflows/macos-slide-regression.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'ui/**'
+      - 'vendor/**'
+      - 'assets/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - '.cargo/config*'
+      - 'rust-toolchain*'
+      - 'scripts/fetch_pdfium.py'
+      - 'scripts/pdfium_manifest.json'
+      - 'tests/fixtures/marp-speaker-notes.pdf'
+      - '.github/workflows/macos-slide-regression.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_HTTP_MULTIPLEXING: "false"
+  CARGO_NET_RETRY: "10"
+
+jobs:
+  macos-slide-regression:
+    name: macOS audience window regression
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - name: Fetch PDFium
+        run: python scripts/fetch_pdfium.py --clean
+
+      - name: Build GUI smoke binary
+        run: cargo build --locked
+
+      - name: Verify audience window geometry and rendered edges
+        timeout-minutes: 5
+        run: |
+          mkdir -p artifacts
+          target/debug/quick-presenter \
+            --gui-smoke tests/fixtures/marp-speaker-notes.pdf \
+            --gui-smoke-report artifacts/macos-audience-regression.txt
+
+      - name: Upload regression report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-audience-regression
+          path: artifacts/macos-audience-regression.txt
+          if-no-files-found: warn
