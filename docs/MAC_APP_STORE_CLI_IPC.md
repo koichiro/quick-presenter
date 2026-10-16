@@ -17,7 +17,7 @@ The socket identity proof is the largest uncertainty in #431. If public socket
 and Security APIs cannot establish an adequate identity binding on every
 supported Store OS, stop this approach and evaluate the XPC broker alternative.
 Do not ship a weaker same-user socket as a fallback. This is a design proposal;
-the signed and Apple-re-signed runtime gates remain open.
+the broader signed and Apple-re-signed runtime gates remain open.
 
 ## Probe feedback and pending status
 
@@ -66,7 +66,25 @@ completion does not pass any future IPC adoption gate. The
 [follow-up evidence in #440](https://github.com/koichiro/quick-presenter/blob/codex/431-store-cli-ipc-probe/docs/validation/ISSUE431_STORE_IPC_FOLLOWUP_20261015.md)
 adds four successful diagnostic load/lifecycle cases and static identity
 inspection of the existing Apple-re-signed TestFlight v1.4.0 (14005). That app
-has no probe group or probe IPC; Apple-re-signed IPC remains unqualified.
+has no probe group or probe IPC; that initial run did not qualify installed IPC.
+
+On 2026-10-16, diagnostic TestFlight 1.9.0 (19001), sourced from #440 at
+`f73794ac30aca6a336d42b6714d195af6db697c4`, completed Apple processing with no
+errors or warnings and passed all eleven original and four load/lifecycle cases
+after installation. The GUI and all four diagnostic helpers were re-signed by
+`TestFlight Beta Distribution`; exact identifiers and a consistent nonempty
+team passed verification. The independent helpers resolved the dedicated group
+and performed mutual dynamic checks, roundtrips, negative-identifier rejection,
+watcher-limit/recovery, and finite-lifetime shutdown. Individually embedded
+helper profiles were not needed for this observed artifact/OS. This supports
+the feasibility of the diagnostic layout, not a universal provisioning rule.
+The GUI and renderer received no new group, and the diagnostic server did not
+dispatch real presentation operations. See the
+[installed TestFlight record](https://github.com/koichiro/quick-presenter/blob/codex/431-store-cli-ipc-probe/docs/validation/ISSUE431_STORE_IPC_TESTFLIGHT_20261016.md)
+for input/installed hashes, reproduction, and exact limits. The candidate was
+assigned to the existing internal tester group; no external or customer release
+was submitted. A customer Store installation, macOS 14.4/Intel, real GUI/Protocol
+v1 integration, and the remaining resource/adversarial gates remain open.
 
 The new local inherited-FD experiment reproduced an identity-binding limitation
 in 30 raw and 30 Developer ID-signed sandbox runs: a child queues a byte, the
