@@ -71,7 +71,7 @@ session remains active, or scan the new QR after a restart.
   WebSocket authentications. WebSocket frames/messages are limited to 4 KiB.
 - A session-wide handshake budget permits 20 attempts per second, including
   reconnects. This is a resource protection measure, not a participant limit.
-- After authentication, `qp.audience` / `1-draft.1` reactions with five known kinds
+- After authentication, `qp.audience` / `1` reactions with five known kinds
   and comments are accepted. Invalid application messages close the connection. Heartbeats
   detect stale connections.
 - Per connection: an all-event burst of five, refilling at two per second.

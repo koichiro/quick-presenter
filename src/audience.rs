@@ -27,7 +27,7 @@ use axum::{
 use tokio::sync::{watch, Semaphore};
 
 const PROTOCOL: &str = "qp.audience";
-const VERSION: &str = "1-draft.1";
+const VERSION: &str = "1";
 const REQUEST_CACHE: Duration = Duration::from_secs(30);
 const MAX_REQUESTS: usize = 256;
 
@@ -635,7 +635,7 @@ mod tests {
         let mut rejected = connect(&url);
         rejected
             .send(tungstenite::Message::Text(
-                r#"{"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":"wrong"}"#.into(),
+                r#"{"protocol":"qp.audience","version":"1","type":"hello","token":"wrong"}"#.into(),
             ))
             .unwrap();
         assert!(matches!(
@@ -645,7 +645,7 @@ mod tests {
         assert_eq!(session.snapshot().connections, 0);
         let mut ws = connect(&url);
         ws.send(tungstenite::Message::Text(
-            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
+            serde_json::json!({"protocol":"qp.audience","version":"1","type":"hello","token":token}).to_string().into(),
         ))
         .unwrap();
         let welcome = ws.read().unwrap().into_text().unwrap();
@@ -655,7 +655,7 @@ mod tests {
         wait_until(|| session.snapshot().connections == 0);
         let mut ws = connect(&url);
         ws.send(tungstenite::Message::Text(
-            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
+            serde_json::json!({"protocol":"qp.audience","version":"1","type":"hello","token":token}).to_string().into(),
         ))
         .unwrap();
         ws.read().unwrap();
@@ -676,7 +676,7 @@ mod tests {
         let (url, token) = ready(&session);
         let mut ws = connect(&url);
         ws.send(tungstenite::Message::Text(
-            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
+            serde_json::json!({"protocol":"qp.audience","version":"1","type":"hello","token":token}).to_string().into(),
         ))
         .unwrap();
         let welcome: serde_json::Value =
@@ -686,7 +686,7 @@ mod tests {
             serde_json::json!(["reactions", "comments"])
         );
         for id in 0..6 {
-            ws.send(tungstenite::Message::Text(serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":id.to_string(),"kind":"applause"}).to_string().into())).unwrap();
+            ws.send(tungstenite::Message::Text(serde_json::json!({"protocol":"qp.audience","version":"1","type":"reaction","request_id":id.to_string(),"kind":"applause"}).to_string().into())).unwrap();
             let reply: serde_json::Value =
                 serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
             assert_eq!(reply["status"], if id < 5 { "accepted" } else { "busy" });
@@ -700,13 +700,13 @@ mod tests {
         let mut second = connect(&url);
         second
             .send(tungstenite::Message::Text(
-                serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
+                serde_json::json!({"protocol":"qp.audience","version":"1","type":"hello","token":token}).to_string().into(),
             ))
             .unwrap();
         second.read().unwrap();
         second
             .send(tungstenite::Message::Text(
-                r#"{"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":"second","kind":"heart"}"#.into(),
+                r#"{"protocol":"qp.audience","version":"1","type":"reaction","request_id":"second","kind":"heart"}"#.into(),
             ))
             .unwrap();
         assert!(second
@@ -730,12 +730,12 @@ mod tests {
         let (url, token) = ready(&session);
         let mut ws = connect(&url);
         ws.send(tungstenite::Message::Text(
-            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
+            serde_json::json!({"protocol":"qp.audience","version":"1","type":"hello","token":token}).to_string().into(),
         ))
         .unwrap();
         assert!(ws.read().unwrap().into_text().unwrap().contains("comments"));
         for n in 0..3 {
-            ws.send(tungstenite::Message::Text(serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"comment","request_id":n.to_string(),"body":"Hello\n世界", "handle":" Anonymous "}).to_string().into())).unwrap();
+            ws.send(tungstenite::Message::Text(serde_json::json!({"protocol":"qp.audience","version":"1","type":"comment","request_id":n.to_string(),"body":"Hello\n世界", "handle":" Anonymous "}).to_string().into())).unwrap();
             let response = ws.read().unwrap().into_text().unwrap();
             assert!(response.contains(if n < 2 { "accepted" } else { "busy" }));
         }
@@ -752,12 +752,12 @@ mod tests {
         );
         // Reactions remain available when the independent comment budget is empty.
         ws.send(tungstenite::Message::Text(
-            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":"r","kind":"heart"}"#.into(),
+            r#"{"protocol":"qp.audience","version":"1","type":"reaction","request_id":"r","kind":"heart"}"#.into(),
         ))
         .unwrap();
         assert!(ws.read().unwrap().into_text().unwrap().contains("accepted"));
         ws.send(tungstenite::Message::Text(
-            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"comment","request_id":"bad","body":"  ","handle":""}"#.into(),
+            r#"{"protocol":"qp.audience","version":"1","type":"comment","request_id":"bad","body":"  ","handle":""}"#.into(),
         ))
         .unwrap();
         assert!(matches!(ws.read().unwrap(), tungstenite::Message::Close(_)));
@@ -769,12 +769,12 @@ mod tests {
         let (url, token) = ready(&session);
         let mut ws = connect(&url);
         ws.send(tungstenite::Message::Text(
-            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
+            serde_json::json!({"protocol":"qp.audience","version":"1","type":"hello","token":token}).to_string().into(),
         ))
         .unwrap();
         ws.read().unwrap();
         ws.send(tungstenite::Message::Text(
-            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":"1","kind":"unknown"}"#.into(),
+            r#"{"protocol":"qp.audience","version":"1","type":"reaction","request_id":"1","kind":"unknown"}"#.into(),
         ))
         .unwrap();
         assert!(matches!(ws.read().unwrap(), tungstenite::Message::Close(_)));
@@ -805,7 +805,7 @@ mod tests {
             for _ in 0..16 {
                 let mut ws = connect(&url);
                 ws.send(tungstenite::Message::Text(
-                    serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}).to_string().into(),
+                    serde_json::json!({"protocol":"qp.audience","version":"1","type":"hello","token":token}).to_string().into(),
                 ))
                 .unwrap();
                 let welcome: serde_json::Value =
@@ -829,7 +829,7 @@ mod tests {
                         for request in 0..6 {
                             let id = format!("{round}-{index}-{request}");
                             ws.send(tungstenite::Message::Text(
-                                serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":id,"kind":"heart"})
+                                serde_json::json!({"protocol":"qp.audience","version":"1","type":"reaction","request_id":id,"kind":"heart"})
                                     .to_string().into(),
                             )).unwrap();
                             let reply: serde_json::Value = loop {
@@ -919,13 +919,14 @@ mod tests {
     #[test]
     fn authentication_requires_version_and_secret() {
         assert!(authenticated(
-            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":"secret"}"#,
+            r#"{"protocol":"qp.audience","version":"1","type":"hello","token":"secret"}"#,
             "secret"
         ));
         for text in [
             r#"{"protocol":"qp.audience","version":"2","type":"hello","token":"secret"}"#,
-            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":"wrong"}"#,
-            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":"secret","extra":true}"#,
+            r#"{"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":"secret"}"#,
+            r#"{"protocol":"qp.audience","version":"1","type":"hello","token":"wrong"}"#,
+            r#"{"protocol":"qp.audience","version":"1","type":"hello","token":"secret","extra":true}"#,
             "{}",
             "invalid",
         ] {
@@ -1065,7 +1066,7 @@ mod tests {
                 .into(),
             ),
             tungstenite::Message::Text(
-                raw.replace("\"version\":\"1-draft.1\"", "\"version\":\"1\"")
+                raw.replace("\"version\":\"1\"", "\"version\":\"1-draft.1\"")
                     .into(),
             ),
             tungstenite::Message::Text(raw.replace("qp.audience", "qp.presenter").into()),
@@ -1127,7 +1128,7 @@ mod tests {
             valid.replace("\"token\":\"A\"", "\"token\":\"A\",\"token\":\"A\""),
             valid.replace("\"type\":\"hello\"", "\"type\":\"hello\",\"extra\":true"),
             valid.replace("qp.audience", "qp.presenter"),
-            valid.replace("1-draft.1", "1"),
+            valid.replace("\"version\":\"1\"", "\"version\":\"1-draft.1\""),
             "{\"v\":1,\"token\":\"A\"}".into(),
         ] {
             assert!(!authenticated(&invalid, "A"));
