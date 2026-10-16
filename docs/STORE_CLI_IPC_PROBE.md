@@ -147,6 +147,47 @@ proofs.
 
 ## Interpretation and remaining gates
 
+### Diagnostic TestFlight candidate
+
+`scripts/package_macos_store_ipc_testflight.py` stages the existing GUI/renderer
+plus an independent `Contents/Helpers/StoreIPCProbe.app` and its three nested
+helpers. Only these diagnostic helpers receive the dedicated probe group; the
+GUI's file authority and renderer boundary stay unchanged. The unsupported
+production `qp` is omitted. The candidate is for internal validation only and
+must never be selected for customer release. Its marketing version comes from
+Cargo; pass a fresh explicit build number after checking App Store Connect.
+
+```sh
+cargo build --release --locked --bin quick-presenter --bin qp --example store_ipc_probe
+python3 scripts/package_macos_store_ipc_testflight.py \
+  /tmp/qp-ipc-testflight target/release/quick-presenter target/release/qp \
+  target/release/examples/store_ipc_probe /path/to/product.provisionprofile \
+  'Apple Distribution: Account Name (TEAMID)' \
+  '3rd Party Mac Developer Installer: Account Name (TEAMID)' BUILD_NUMBER
+```
+
+The script requires a fresh absolute destination and the pinned PDFium bundle
+used by normal packaging. It checks the root distribution profile, signs nested
+code before the outer app, verifies signatures/private imports, produces a
+signed installer, and records source/input/package hashes. It does not upload,
+create profiles, declare encryption compliance, add testers, or release a build.
+`--helper-profiles DIRECTORY` can embed explicitly matching distribution
+profiles named `Server.provisionprofile`, `Client.provisionprofile`,
+`WrongPeer.provisionprofile`, and `MissingGroup.provisionprofile`. Without them,
+helper provisioning remains a processing/runtime gate; the outer profile must
+not be treated as proof of helper authorization. A successful local package is
+not evidence of Apple processing or TestFlight runtime acceptance.
+
+Upload using the existing authenticated Transporter account, record processing
+results, and assign only the intended internal tester group. Complete the actual
+candidate's export-compliance requirements before testing. After installing the
+Apple-produced build, create a temporary directory containing a `Probe.app`
+symlink to the installed `Contents/Helpers/StoreIPCProbe.app`; pass that directory
+to the existing diagnostic runners. This adapter preserves installed bytes and
+signatures. Capture the Apple signing authority, version/build, team/identifiers,
+group access, and both successful and rejected cases. Do not re-sign the installed
+app or substitute local helper copies to make an installed test pass.
+
 A successful roundtrip shows that this signed configuration can resolve the
 container, establish a socket, and pass the selected dynamic signature checks.
 It does not prove that a socket token is tied to each received byte or that
