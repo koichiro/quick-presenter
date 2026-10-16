@@ -113,7 +113,13 @@ navigation. Retry clears the previous alert while connecting. Configuration
 failures explain that the file/access permissions need attention and require an
 application restart after edits.
 
-HTTP 401/403 and WebSocket policy rejection indicate denied access. During managed
+HTTP 401 and WebSocket policy rejection indicate denied access. HTTP 403 during
+room creation can also mean that a previous presenter session is still active or
+that new sessions are restricted. qp suggests stopping the previous presenter or
+asking the relay administrator to check access/end the old session. It does not
+automatically terminate another session or infer the cause from server text. An
+explicit retry preserves the creation key until a terminal response confirms
+replacement is safe. During managed
 startup, a creation 410 or presenter handshake 404/410 confirms an ended/missing
 room: the same ON action tries one fresh room and presents its new QR. If that
 replacement is also terminal, an alert is shown. Other failures retain the same
