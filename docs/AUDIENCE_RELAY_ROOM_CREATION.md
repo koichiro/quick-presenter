@@ -147,9 +147,14 @@ unsupported protocol, room expiration, and cancellation with safe messages.
 
 A timeout does not prove that creation failed. Keep the operation key and any
 validated room credentials in application memory across manual retry of a failed
-start. Recover the same room instead of allocating a replacement. A terminal-room
-410 requires a fresh key on the next explicit ON. A manual retry revalidates cached room identity through the creation API before
-connecting, so a terminal room can yield 410. A create/connect failure must
+start. Recover the same room instead of allocating a replacement. If creation
+returns terminal-room 410, or the presenter handshake confirms a missing/ended
+room with 404/410, the same ON action clears the old identity and tries one new
+room. A second terminal response stops with an alert; there is no creation loop.
+Creation API 404 (for example an unsupported API), authentication failures,
+timeouts and unavailable/invalid responses never switch to a fresh identity.
+OFF cancels the replacement attempt and cleanup never creates a new identity.
+A create/connect failure must
 not silently fall back to the local server. No automatic infinite reconnect loop
 is included in this milestone.
 
