@@ -5,7 +5,9 @@ records resumed validation after v1.4.0 approval: signed lifecycle/load checks,
 existing TestFlight identity inspection, and a reproducible inherited-FD
 limitation in `LOCAL_PEERTOKEN`. Token equality before/after a read does not
 prove queued-byte origin when the endpoint is shared. The socket adoption gate
-remains open; no Apple-re-signed IPC result is claimed.
+remains open. The [2026-10-16 TestFlight run](validation/ISSUE431_STORE_IPC_TESTFLIGHT_20261016.md)
+subsequently passed all fifteen diagnostic cases on the installed Apple-re-signed
+1.9.0 (19001) package; production GUI and socket identity adoption remain open.
 
 This development-only experiment makes the initial socket proposal in
 [design PR #434](https://github.com/koichiro/quick-presenter/pull/434) executable
@@ -145,9 +147,7 @@ rejection, partial-frame deadlines, watcher-slot cleanup, stale recovery, and
 preservation of unexpected endpoint files. These tests are not native identity
 proofs.
 
-## Interpretation and remaining gates
-
-### Diagnostic TestFlight candidate
+## Diagnostic TestFlight candidate
 
 `scripts/package_macos_store_ipc_testflight.py` stages the existing GUI/renderer
 plus an independent `Contents/Helpers/StoreIPCProbe.app` and its three nested
@@ -187,6 +187,17 @@ to the existing diagnostic runners. This adapter preserves installed bytes and
 signatures. Capture the Apple signing authority, version/build, team/identifiers,
 group access, and both successful and rejected cases. Do not re-sign the installed
 app or substitute local helper copies to make an installed test pass.
+
+Alternatively, `check_macos_store_ipc_testflight.py INSTALLED_APP RAW_PROBE BUILD`
+checks the receipt, exact build, deep signatures, expected helper identifiers,
+Apple distribution authorities, and a consistent nonempty team before running
+both suites through that adapter. It rejects a local Developer ID candidate or
+the older installed build. It normalizes the older runners' scope labels for
+the verified Apple-signed artifact; this does not qualify production GUI IPC.
+See the [19001 TestFlight record](validation/ISSUE431_STORE_IPC_TESTFLIGHT_20261016.md)
+for the successful installed-layout run and its remaining gates.
+
+## Interpretation and remaining gates
 
 A successful roundtrip shows that this signed configuration can resolve the
 container, establish a socket, and pass the selected dynamic signature checks.
