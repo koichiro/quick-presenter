@@ -1,6 +1,6 @@
 # Audience Live relay client
 
-qp implements Relay Protocol `1-draft.1` with TOML relay configuration, HTTP room
+qp implements Relay Protocol `1` with TOML relay configuration, HTTP room
 creation/termination and an outbound presenter WebSocket. qp remains GPL-3.0-only.
 Server code, browser assets and shared protocol fixtures belong to the separate
 `quick-presenter-relay` project. See the [configuration and lifecycle contract](AUDIENCE_RELAY_ROOM_CREATION.md).

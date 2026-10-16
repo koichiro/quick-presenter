@@ -1,4 +1,4 @@
-//! Opt-in draft relay client. No network or credential IO occurs on the UI thread.
+//! Opt-in v1 relay client. No network or credential IO occurs on the UI thread.
 use crate::{
     audience::{SessionSnapshot, SessionStatus},
     audience_events::{
@@ -24,7 +24,7 @@ use std::{
 use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::{protocol::WebSocketConfig, Message};
 
-pub const VERSION: &str = "1-draft.1";
+pub const VERSION: &str = "1";
 const MAX_BYTES: usize = 4096;
 const TIMEOUT: Duration = Duration::from_secs(10);
 const SEND_TIMEOUT: Duration = Duration::from_secs(2);
@@ -923,7 +923,7 @@ mod tests {
         assert!(strict_json(&vec![b' '; 4097]).is_err());
         let base: Value = serde_json::from_str(&offer("e1", "7", "11", true)).unwrap();
         for (key, value) in [
-            ("version", json!("1")),
+            ("version", json!("1-draft.1")),
             ("protocol", json!("qp.audience")),
             ("display_epoch", json!("01")),
             ("presenter_epoch", json!(7)),
@@ -1203,7 +1203,7 @@ mod tests {
                 tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
                     let requests = Arc::new(AtomicUsize::new(0));
                     let app = Router::new()
-                        .route("/api/relay/draft-1/rooms", post(move |State(keys): State<Arc<Mutex<Vec<String>>>>, body: axum::body::Bytes| async move {
+                        .route("/api/relay/v1/rooms", post(move |State(keys): State<Arc<Mutex<Vec<String>>>>, body: axum::body::Bytes| async move {
                             let body: Value = serde_json::from_slice(&body).unwrap();
                             let mut keys = keys.lock().unwrap();
                             let key = body["idempotency_key"].as_str().unwrap().to_owned();
