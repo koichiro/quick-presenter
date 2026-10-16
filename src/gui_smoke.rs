@@ -1247,7 +1247,7 @@ fn check_live_comments(
     let submit = |body: &str| {
         submit_audience_smoke_event(
             url,
-            serde_json::json!({"v":1,"type":"comment","request_id":"c","body":body,"handle":"Anonymous"}),
+            serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"comment","request_id":"c","body":body,"handle":"Anonymous"}),
         )
     };
     submit("Hello 世界")?;
@@ -1361,7 +1361,7 @@ fn check_live_comments(
 fn submit_audience_smoke_reaction(url: &str) -> Result<()> {
     submit_audience_smoke_event(
         url,
-        serde_json::json!({"v":1,"type":"reaction","request_id":"smoke","kind":"applause"}),
+        serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"reaction","request_id":"smoke","kind":"applause"}),
     )
 }
 fn submit_audience_smoke_event(url: &str, event: serde_json::Value) -> Result<()> {
@@ -1376,7 +1376,8 @@ fn submit_audience_smoke_event(url: &str, event: serde_json::Value) -> Result<()
     let mut socket = std::net::TcpStream::connect(authority)?;
     socket.set_read_timeout(Some(Duration::from_secs(2)))?;
     socket.set_write_timeout(Some(Duration::from_secs(2)))?;
-    write!(socket, "GET /ws HTTP/1.1\r\nHost: {authority}\r\nOrigin: http://{authority}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")?;
+    let code = url.rsplit('/').next().unwrap();
+    write!(socket, "GET /ws/audience/{code} HTTP/1.1\r\nHost: {authority}\r\nOrigin: http://{authority}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")?;
     let mut headers = Vec::new();
     while !headers.ends_with(b"\r\n\r\n") && headers.len() < 4096 {
         let mut byte = [0];
@@ -1389,9 +1390,14 @@ fn submit_audience_smoke_event(url: &str, event: serde_json::Value) -> Result<()
     );
     fn send(socket: &mut std::net::TcpStream, value: serde_json::Value) -> Result<()> {
         let payload = value.to_string().into_bytes();
-        anyhow::ensure!(payload.len() < 126, "smoke message too large");
+        anyhow::ensure!(payload.len() <= 4096, "smoke message too large");
         let mask = [1u8, 2, 3, 4];
-        socket.write_all(&[0x81, 0x80 | payload.len() as u8])?;
+        if payload.len() < 126 {
+            socket.write_all(&[0x81, 0x80 | payload.len() as u8])?;
+        } else {
+            socket.write_all(&[0x81, 0x80 | 126])?;
+            socket.write_all(&(payload.len() as u16).to_be_bytes())?;
+        }
         socket.write_all(&mask)?;
         socket.write_all(
             &payload
@@ -1406,14 +1412,25 @@ fn submit_audience_smoke_event(url: &str, event: serde_json::Value) -> Result<()
         let mut header = [0; 2];
         socket.read_exact(&mut header)?;
         anyhow::ensure!(
-            header[0] == 0x81 && header[1] < 126,
+            header[0] == 0x81 && header[1] <= 126,
             "unexpected smoke server frame"
         );
-        let mut payload = vec![0; header[1] as usize];
+        let length = if header[1] == 126 {
+            let mut bytes = [0; 2];
+            socket.read_exact(&mut bytes)?;
+            u16::from_be_bytes(bytes) as usize
+        } else {
+            header[1] as usize
+        };
+        anyhow::ensure!(length <= 4096, "smoke server frame too large");
+        let mut payload = vec![0; length];
         socket.read_exact(&mut payload)?;
         Ok(serde_json::from_slice(&payload)?)
     }
-    send(&mut socket, serde_json::json!({"v":1,"token":token}))?;
+    send(
+        &mut socket,
+        serde_json::json!({"protocol":"qp.audience","version":"1-draft.1","type":"hello","token":token}),
+    )?;
     anyhow::ensure!(
         read(&mut socket)?["type"] == "welcome",
         "audience authentication failed"

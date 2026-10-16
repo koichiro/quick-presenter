@@ -58,7 +58,8 @@ session remains active, or scan the new QR after a restart.
   not protect against someone observing network traffic.
 - No router, firewall, or port-forwarding settings are changed automatically.
   Client isolation on venue Wi-Fi can prevent joining even on the same SSID.
-- The server serves only its embedded audience page, not PDFs, notes, or files.
+- The server serves only its embedded shared audience page/module and their
+  license notices, not PDFs, notes, or arbitrary files.
 - The 256-bit secret travels in the URL fragment and then the first WebSocket
   message. It is not rendered into the HTTP page or written to settings/logs.
   The browser retains it in tab-scoped session storage before clearing the
@@ -70,8 +71,8 @@ session remains active, or scan the new QR after a restart.
   WebSocket authentications. WebSocket frames/messages are limited to 4 KiB.
 - A session-wide handshake budget permits 20 attempts per second, including
   reconnects. This is a resource protection measure, not a participant limit.
-- After authentication, version 1 reactions with five known kinds and comments
-  are accepted. Invalid application messages close the connection. Heartbeats
+- After authentication, `qp.audience` / `1-draft.1` reactions with five known kinds
+  and comments are accepted. Invalid application messages close the connection. Heartbeats
   detect stale connections.
 - Per connection: an all-event burst of five, refilling at two per second.
   Comments additionally have a burst of two, refilling at one per second.
@@ -217,3 +218,14 @@ GUI smoke instances use a six-second reaction lifetime on all desktop platforms,
 so slow native snapshots and resizes can still observe motion. Ordinary Audience
 Live instances retain the 1.8-second lifetime. Smoke checks still assert movement,
 normalized bounds, expiry, and rejection of stale inputs.
+
+## Shared audience browser contract
+
+Local and compatible relay sessions use the same embedded browser assets and
+Audience-role message shapes. See [the local wire contract](AUDIENCE_PROTOCOL.md)
+and `assets/audience/README.md` for scoped licensing and update discipline.
+Enter sends, Shift+Enter inserts a newline, and IME composition does not send.
+Name defaults to Anonymous, Send sits beside the composer, and reload reuses the
+current tab's join token. A pending or disconnected message is not resent
+automatically. The local listener keeps native lifecycle, LAN binding and resource
+budgets; there is no new account, cloud requirement or audience-size product cap.

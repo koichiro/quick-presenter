@@ -1,0 +1,11 @@
+{
+  "package": "quick-presenter-audience-web",
+  "version": "0.0.1",
+  "license": "Apache-2.0",
+  "sha256": {
+    "index.html": "a9df7dadf9c5e27fd4680d008f53587282bed6544bb307e1a71e12f1f234c4f5",
+    "audience.js": "2fd80715dad7355c99f4ff2fd19437dddd8020e3ffc8525125768be672e02bdb",
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "NOTICE": "1a7e37fa60102dcb9597fbf87931f2578077f8461a75860bd08a381246a3e8c1"
+  }
+}

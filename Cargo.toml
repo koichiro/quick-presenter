@@ -26,6 +26,7 @@ url = "2"
 toml = "0.9"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots", "json", "stream"] }
 getrandom = "0.3"
+base64 = "0.22"
 if-addrs = "0.15"
 qrcode = { version = "0.14", default-features = false }
 webbrowser = "1.2"
