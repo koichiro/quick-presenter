@@ -1,6 +1,6 @@
 # GUI Release Smoke Checklist
 
-Use this checklist before publishing a v1.0.0 release. The packaged artifact
+Use this checklist before publishing a v2.0.0 release. The packaged artifact
 smoke mode validates bundled PDFium lookup and first-page rendering without
 creating Slint windows. This checklist covers the interactive presenter workflow
 that must be checked in a real desktop session.
@@ -47,10 +47,18 @@ Record the successful `Build Binaries` workflow run URL, tested artifact name,
 app version, operating system version, display setup, and test PDF for each
 platform.
 
-After the GitHub release, update the Microsoft Store package to v1.0.0, wait
-for certification, and rerun this checklist against the Store-installed v1.0.0
+After the GitHub release, update the Microsoft Store package to v2.0.0, wait
+for certification, and rerun this checklist against the Store-installed v2.0.0
 app. Record that post-release result separately; a direct MSI or MSIX does not
 replace it.
+
+Keep pre-certification candidate results separate from certified Store-installed
+acceptance. Record submission, certification, and public availability separately.
+An extracted MSIX can establish payload rendering and CLI behavior, but cannot
+pass Store trust, execution-alias registration, upgrade, or installed package
+identity checks. Record untested physical-display and assistive-technology checks
+as pending, or link an explicit maintainer-approved waiver; do not infer a pass
+from automated GUI state assertions.
 
 ## Manual Report Artifacts
 
@@ -73,7 +81,7 @@ following fields before the checklist results:
 ```markdown
 # Quick Presenter Manual GUI Smoke Report
 
-- Release: v1.0.0
+- Release: v2.0.0
 - Platform: macOS | Windows x64 | Ubuntu x64
 - Result: pass | fail | waived
 - Tester:
@@ -110,7 +118,7 @@ installed package identity, and the installed app version.
 
 ## Semi-Automated Path
 
-The first v1.0.0 gate can remain manual, but repeatable app-observable checks
+The release gate includes manual checks; repeatable app-observable checks
 can run through the packaged app's semi-automated GUI smoke mode:
 
 ```sh
@@ -231,7 +239,7 @@ Test on a normal signed-in desktop session, not a headless CI session.
 
 The existing public Store version may be used to confirm channel availability
 before the GitHub release. After publishing the GitHub release, rerun this
-section against the Microsoft Store-installed v1.0.0 app. A direct MSI, MSIX,
+section against the Microsoft Store-installed v2.0.0 app. A direct MSI, MSIX,
 or raw `quick-presenter.exe` test does not satisfy the Windows trust check.
 
 - Install Quick Presenter from Microsoft Store ID `9N913S9NJ6D1`.
@@ -334,3 +342,20 @@ deliberately bypass saved startup state.
   launch still restores the original record.
 - On Wayland, confirm compositor placement remains in control, the old placement
   section is preserved, and PDF reopening still works.
+
+## Windows CLI startup acceptance
+
+On the exact final package, with development PDFium overrides unset:
+
+- Verify `qp --version --json` reports application 2.0.0 / protocol v1.
+- Quit with deck A remembered, then cold `qp open` a different deck B. Repeat
+  independently and verify the returned state and final `status.document` name B.
+- Repeat with no saved state and a missing remembered PDF; include first-run
+  timing and final render/notes readiness in the report.
+- Exercise simultaneous cold CLI startup and confirm both invocations finish
+  without duplicate mutation replay or an incorrect final document.
+- Preserve stdout, stderr, exit codes, timings, and diagnostics for IPC_FAILURE
+  or TIMEOUT. Query Status after an uncertain Open result; do not blindly retry.
+- Rerun notes/context/export/watch and renderer isolation via the certified
+  Store installation and registered `qp.exe` alias. Extracted executable results
+  remain separate evidence.
