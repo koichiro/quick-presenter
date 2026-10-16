@@ -7,10 +7,14 @@ pub struct AudienceAlert {
 
 pub fn for_failure(error: &str) -> AudienceAlert {
     match error {
-        "Relay creation credential was rejected." | "Relay denied room creation."
+        "Relay creation credential was rejected."
         | "Relay authentication failed." | "Relay access was denied." => AudienceAlert {
             title: "Audience Live access was not allowed",
             guidance: "Check the relay credentials and session access with your server administrator, then turn Audience Live ON again. PDF playback is still available.",
+        },
+        "Relay denied room creation." => AudienceAlert {
+            title: "Audience Live could not start a new session",
+            guidance: "Another session may still be active, or new sessions may be restricted. Stop Audience Live on the previous presenter, or ask your relay administrator to check session access and end the old session if needed. Then turn Audience Live ON again. PDF playback is still available.",
         },
         "Relay room expired. Start again to create a new room." => AudienceAlert {
             title: "Audience Live session has ended",
@@ -44,7 +48,6 @@ mod tests {
     fn denied_access_has_actionable_guidance() {
         for error in [
             "Relay creation credential was rejected.",
-            "Relay denied room creation.",
             "Relay authentication failed.",
             "Relay access was denied.",
         ] {
@@ -52,6 +55,15 @@ mod tests {
             assert_eq!(alert.title, "Audience Live access was not allowed");
             assert!(alert.guidance.contains("server administrator"));
         }
+    }
+    #[test]
+    fn denied_creation_explains_possible_previous_session_without_assuming_its_cause() {
+        let alert = for_failure("Relay denied room creation.");
+        assert_eq!(alert.title, "Audience Live could not start a new session");
+        assert!(alert.guidance.contains("may still be active"));
+        assert!(alert.guidance.contains("previous presenter"));
+        assert!(alert.guidance.contains("check session access"));
+        assert!(alert.guidance.contains("PDF playback is still available"));
     }
     #[test]
     fn expired_session_requires_a_new_join_link() {
