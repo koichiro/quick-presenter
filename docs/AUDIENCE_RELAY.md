@@ -113,8 +113,11 @@ navigation. Retry clears the previous alert while connecting. Configuration
 failures explain that the file/access permissions need attention and require an
 application restart after edits.
 
-HTTP 401/403 and WebSocket policy rejection indicate denied access. HTTP 404/410
-indicate that the configured session is unavailable/ended. A transport failure
+HTTP 401/403 and WebSocket policy rejection indicate denied access. During managed
+startup, a creation 410 or presenter handshake 404/410 confirms an ended/missing
+room: the same ON action tries one fresh room and presents its new QR. If that
+replacement is also terminal, an alert is shown. Other failures retain the same
+creation identity; creation API 404 does not trigger replacement. A transport failure
 alone does not prove that access was revoked. Alerts use fixed application text,
 never raw server response bodies or credentials. Ended sessions need a new QR
 code; recovery does not resend earlier comments.
