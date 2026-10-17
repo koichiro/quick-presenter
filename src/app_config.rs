@@ -53,7 +53,11 @@ fn load_from(
     if text.len() > 16384 {
         return Err("Audience configuration is too large.");
     }
-    let endpoint = parse(&text)?;
+    let mut table: toml::Table =
+        toml::from_str(&text).map_err(|_| "Invalid Audience TOML configuration.")?;
+    table.retain(|key, _| key == "audience");
+    let endpoint =
+        parse(&toml::to_string(&table).map_err(|_| "Invalid Audience TOML configuration.")?)?;
     #[cfg(unix)]
     if endpoint.is_some() {
         use std::os::unix::fs::MetadataExt;
@@ -101,6 +105,61 @@ fn parse(text: &str) -> Result<Option<RelayEndpoint>, &'static str> {
     }
 }
 
+/// Preview an imported download without requiring its original permissions.
+/// The destination is protected separately before credential bytes are written.
+pub fn preview_import(path: &std::path::Path) -> Result<RelayEndpoint, &'static str> {
+    let file = File::open(path).map_err(|_| "Cannot open configuration import.")?;
+    if !file
+        .metadata()
+        .map_err(|_| "Cannot inspect configuration import.")?
+        .is_file()
+    {
+        return Err("Configuration import must be a regular file.");
+    }
+    let mut text = String::new();
+    file.take(16385)
+        .read_to_string(&mut text)
+        .map_err(|_| "Cannot read configuration import.")?;
+    if text.len() > 16384 {
+        return Err("Configuration import is too large.");
+    }
+    parse(&text)?.ok_or("Import requires a remote Audience configuration.")
+}
+
+pub fn import_destination(explicit: Option<PathBuf>) -> Result<PathBuf, &'static str> {
+    explicit
+        .or_else(|| crate::settings_storage::platform_config_dir().map(|p| p.join("config.toml")))
+        .ok_or("Cannot locate configuration directory.")
+}
+
+/// Merge only Audience fields; an invalid existing file is never overwritten.
+pub fn save_import(path: &std::path::Path, endpoint: &RelayEndpoint) -> Result<(), &'static str> {
+    if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
+        return Err("Configuration destination must not be a symbolic link.");
+    }
+    let mut current: toml::Table = match std::fs::read_to_string(path) {
+        Ok(text) if text.len() <= 16384 => toml::from_str(&text)
+            .map_err(|_| "Existing configuration is invalid; it was not changed.")?,
+        Ok(_) => return Err("Existing configuration is too large; it was not changed."),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => toml::Table::new(),
+        Err(_) => return Err("Cannot read existing configuration; it was not changed."),
+    };
+    let mut audience = toml::Table::new();
+    audience.insert("transport".into(), "remote".into());
+    audience.insert("relay".into(), endpoint.origin.as_str().into());
+    audience.insert("create_token".into(), endpoint.create_token.clone().into());
+    current.insert("audience".into(), audience.into());
+    let text = toml::to_string(&current).map_err(|_| "Cannot serialize configuration.")?;
+    if text.len() > 16384 {
+        return Err("Merged configuration is too large.");
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|_| "Cannot create configuration directory.")?;
+    }
+    crate::settings_storage::write_atomic(path, text.as_bytes())
+        .map_err(|_| "Cannot save protected configuration; previous settings are retained.")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,6 +168,53 @@ mod tests {
             "[audience]\ntransport='remote'\nrelay='{origin}'\ncreate_token='{}'\n",
             "A".repeat(43)
         )
+    }
+
+    #[test]
+    fn import_merges_unrelated_settings_and_reloads_without_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("download.toml");
+        let destination = dir.path().join("config.toml");
+        std::fs::write(&source, remote("https://relay.example")).unwrap();
+        std::fs::write(&destination, "[presentation]\nkeep = 'unchanged'\n").unwrap();
+        let endpoint = preview_import(&source).unwrap();
+        save_import(&destination, &endpoint).unwrap();
+        let saved = std::fs::read_to_string(&destination).unwrap();
+        assert!(saved.contains("unchanged"));
+        assert_eq!(
+            load(Some(destination.clone())).unwrap().unwrap().origin,
+            endpoint.origin
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&destination)
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        std::fs::write(&source, "invalid?").unwrap();
+        assert!(preview_import(&source).is_err());
+        assert_eq!(std::fs::read_to_string(&destination).unwrap(), saved);
+        std::fs::write(&destination, "invalid?").unwrap();
+        assert!(save_import(&destination, &endpoint).is_err());
+        assert_eq!(std::fs::read_to_string(&destination).unwrap(), "invalid?");
+    }
+
+    #[test]
+    fn import_rejects_oversized_local_and_non_file_sources() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("download.toml");
+        assert!(preview_import(dir.path()).is_err());
+        std::fs::write(&source, " ".repeat(16385)).unwrap();
+        assert!(preview_import(&source).is_err());
+        std::fs::write(&source, "[audience]\ntransport='local'").unwrap();
+        assert!(preview_import(&source).is_err());
+        assert_eq!(import_destination(Some(source.clone())).unwrap(), source);
     }
 
     #[test]

@@ -26,6 +26,8 @@ pub struct AudienceUi {
     addresses: RefCell<Vec<Ipv4Addr>>,
     relay_config: RefCell<Option<crate::audience_relay_http::ManagedRelay>>,
     config_timer: Timer,
+    config_path: RefCell<Option<std::path::PathBuf>>,
+    pending_import: RefCell<Option<crate::app_config::RelayEndpoint>>,
     configuring: std::cell::Cell<bool>,
     config_error: RefCell<Option<&'static str>>,
     stopping: RefCell<bool>,
@@ -54,6 +56,7 @@ impl AudienceUi {
             OverlayEngine::default(),
             None,
         );
+        *ui.config_path.borrow_mut() = config_path.clone();
         ui.configuring.set(true);
         windows.presenter.set_audience_can_start(false);
         windows
@@ -138,6 +141,8 @@ impl AudienceUi {
             addresses: RefCell::new(Vec::new()),
             relay_config: RefCell::new(relay_config),
             config_timer: Timer::default(),
+            config_path: RefCell::new(None),
+            pending_import: RefCell::new(None),
             configuring: std::cell::Cell::new(false),
             config_error: RefCell::new(None),
             stopping: RefCell::new(false),
@@ -178,6 +183,63 @@ impl AudienceUi {
             if let Some(ui) = weak.upgrade() {
                 ui.clear_overlay();
             }
+        });
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_import_configuration(move || {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            if ui.session.borrow().is_some() || ui.configuring.get() {
+                return;
+            }
+            let Some(path) = rfd::FileDialog::new()
+                .add_filter("TOML configuration", &["toml"])
+                .pick_file()
+            else {
+                return;
+            };
+            if let Some(window) = ui.windows.presenter.upgrade() {
+                match crate::app_config::preview_import(&path) {
+                    Ok(endpoint) => {
+                        window.set_audience_import_preview(endpoint.origin.as_str().into());
+                        window.set_audience_can_start(false);
+                        *ui.pending_import.borrow_mut() = Some(endpoint);
+                    }
+                    Err(message) => window.set_audience_status(message.into()),
+                }
+            }
+        });
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_confirm_import(move |apply| {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let endpoint = ui.pending_import.borrow_mut().take();
+            let Some(window) = ui.windows.presenter.upgrade() else {
+                return;
+            };
+            window.set_audience_import_preview("".into());
+            if let Some(endpoint) = endpoint.filter(|_| apply) {
+                let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
+                    .and_then(|destination| {
+                        crate::app_config::save_import(&destination, &endpoint)
+                    });
+                match result {
+                    Ok(()) => {
+                        *ui.relay_config.borrow_mut() =
+                            Some(crate::audience_relay_http::ManagedRelay::new(endpoint));
+                        *ui.config_error.borrow_mut() = None;
+                        window.set_audience_address(ui.address_label().into());
+                        window.set_audience_status(
+                            "Configuration imported. Check connection and start when ready.".into(),
+                        );
+                        window.set_audience_alert_title("".into());
+                        window.set_audience_alert_guidance("".into());
+                    }
+                    Err(message) => window.set_audience_status(message.into()),
+                }
+            }
+            window.set_audience_can_start(ui.can_start());
         });
         presenter.set_audience_address(ui.address_label().into());
         let weak = Rc::downgrade(&ui);
@@ -229,7 +291,11 @@ impl AudienceUi {
             let Some(ui) = weak.upgrade() else {
                 return;
             };
-            if *ui.stopping.borrow() || ui.configuring.get() || ui.config_error.borrow().is_some() {
+            if *ui.stopping.borrow()
+                || ui.configuring.get()
+                || ui.pending_import.borrow().is_some()
+                || ui.config_error.borrow().is_some()
+            {
                 return;
             }
             if let Some(session) = ui.session.borrow().as_ref() {
