@@ -169,3 +169,22 @@ same UI event loop. IPC worker threads deliver frames and invisible heartbeats;
 slow watchers are removed without blocking GUI transitions. `qp watch --json`
 flushes NDJSON events. `qp timer elapsed` only reads the existing timer; no
 state-changing timer command is exposed in this version.
+
+### Audience configuration import
+
+The presenter exposes **Import settings** while Audience Live is stopped. The
+native picker validates a bounded TOML configuration and displays the relay origin
+for confirmation without displaying its credential. Import merges only the
+Audience fields into the default configuration or the explicit `--config` path;
+unrelated TOML values are preserved. Invalid source/destination files leave the
+previous settings intact. The atomic writer restricts Unix files to mode 0600 and
+Windows files to a protected owner/SYSTEM DACL before writing secret bytes.
+
+The imported endpoint applies on the next explicit start without an application
+restart. **Check connection and start** uses the normal Audience session lifecycle
+and creates the visible session/QR, rather than a separate hidden room. It retains
+existing retry identity, refusal guidance and confirmed stop behavior. Import
+cannot replace an active session or bypass pending startup configuration loading.
+
+See [native import validation](AUDIENCE_CONFIG_IMPORT_VALIDATION.md) for the
+isolated Windows/macOS checklist and credential-safe evidence requirements.

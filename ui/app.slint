@@ -714,6 +714,9 @@ export component PresenterWindow inherits Window {
     in property <int> audience-reaction-count;
     callback audience-open-url();
     callback audience-toggle-session();
+    callback audience-import-configuration();
+    callback audience-confirm-import(bool);
+    in property <string> audience-import-preview;
     callback audience-next-address();
     callback audience-refresh-addresses();
     in property <image> current-page-image;
@@ -1416,6 +1419,11 @@ export component PresenterWindow inherits Window {
                             opacity: root.audience-active && root.audience-comments-paused && audience-toggle-row.led-dim ? 0.2 : 1;
                         }
                     }
+                    Button {
+                        text: "Import settings";
+                        enabled: !root.audience-active && !root.audience-busy;
+                        clicked => { root.audience-import-configuration(); }
+                    }
                     audience-live-toggle := Button {
                         text: root.audience-active ? "Audience Live OFF 👍️" : "Audience Live ON 👍️";
                         enabled: !root.audience-busy && (root.audience-active || root.audience-can-start);
@@ -1449,6 +1457,11 @@ export component PresenterWindow inherits Window {
                             spacing: 6px;
                             Text { text: "Connected: " + root.audience-count; color: white; font-size: 16px; }
                             Text { text: root.audience-status; color: #d9dce0; wrap: word-wrap; }
+                            Button {
+                                text: "Check connection and start";
+                                enabled: root.audience-can-start && !root.audience-active && !root.audience-busy;
+                                clicked => { root.audience-toggle-session(); }
+                            }
                             audience-address-row := HorizontalBox {
                                 padding: 0px;
                                 spacing: 4px;
@@ -1655,6 +1668,33 @@ export component PresenterWindow inherits Window {
             }
         }
 
+    }
+
+    if root.audience-import-preview != "" : Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #00000080;
+        TouchArea { width: parent.width; height: parent.height; }
+        Rectangle {
+            width: min(parent.width - 48px, 560px);
+            height: 250px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: #202124;
+            border-color: #5f6368;
+            border-width: 1px;
+            VerticalBox {
+                padding: 24px;
+                spacing: 12px;
+                Text { text: "Import Audience Live configuration"; color: white; font-size: 20px; wrap: word-wrap; }
+                Text { text: "Destination: " + root.audience-import-preview; color: white; wrap: word-wrap; }
+                Text { text: "Apply for the next start. Other settings are retained. Check connection and start explicitly to create a session and show its QR code."; color: #d9dce0; wrap: word-wrap; }
+                HorizontalBox {
+                    Button { text: "Cancel"; clicked => { root.audience-confirm-import(false); } }
+                    Button { text: "Import"; clicked => { root.audience-confirm-import(true); } }
+                }
+            }
+        }
     }
 
     if root.about-visible : Rectangle {
