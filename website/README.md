@@ -200,9 +200,17 @@ assumes v2.0.0 packages are available and guides users to matching GUI/CLI
 binaries. Confirm the download destinations and Store package version when
 publishing this prepared site.
 GitHub Releases lists macOS DMG and Linux Debian packages; the Windows link
-retains the existing Microsoft Store product ID. Store version availability
-has not been independently verified. No Mac App Store review status or planned
-price is asserted. Mac App Store CLI control is excluded in the v2.0.0 contract.
+retains the existing Microsoft Store product ID. Microsoft Store distribution
+of v2.0.0 was confirmed by the maintainer on 2026-10-18. The
+[release qualification follow-up in #472](https://github.com/koichiro/quick-presenter/issues/472#issuecomment-6247334587)
+records maintainer-confirmed Windows Store completion: the 1.4.0.0 to 2.0.0.0
+Store update, Store signing, GUI smoke (63/63), CLI workflows (47/47), cold
+startup (5/5), renderer isolation, About, and lifecycle checks. It also records
+the maintainer's acceptance of the modal file-picker CLI timeout as a Windows
+limitation. This confirmation does not claim that previously unperformed
+uninstall or mixed-DPI checks passed; their scope remains documented in #472.
+No Mac App Store review status or planned price is asserted. Mac App Store CLI
+control is excluded in the v2.0.0 contract.
 
 The presenter feature uses a static screenshot rather than an unpausable GIF.
 All videos use native controls. Focus outlines, a native details-based compact
