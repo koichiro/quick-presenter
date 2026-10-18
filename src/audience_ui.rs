@@ -20,12 +20,27 @@ use std::{
     time::{Duration, Instant},
 };
 
+const RELAY_RECOVERY_GUIDANCE: &str =
+    "Close Settings, retry Audience Live on, then stop it before importing or resetting settings.";
+
+fn ensure_relay_replaceable(
+    relay: Option<&crate::audience_relay_http::ManagedRelay>,
+) -> Result<(), &'static str> {
+    if relay.is_some_and(|relay| relay.has_attempt()) {
+        Err(RELAY_RECOVERY_GUIDANCE)
+    } else {
+        Ok(())
+    }
+}
+
 pub struct AudienceUi {
     session: RefCell<Option<AudienceSession>>,
     timer: Timer,
     addresses: RefCell<Vec<Ipv4Addr>>,
     relay_config: RefCell<Option<crate::audience_relay_http::ManagedRelay>>,
     config_timer: Timer,
+    config_path: RefCell<Option<std::path::PathBuf>>,
+    pending_import: RefCell<Option<crate::app_config::RelayEndpoint>>,
     configuring: std::cell::Cell<bool>,
     config_error: RefCell<Option<&'static str>>,
     stopping: RefCell<bool>,
@@ -54,7 +69,9 @@ impl AudienceUi {
             OverlayEngine::default(),
             None,
         );
+        *ui.config_path.borrow_mut() = config_path.clone();
         ui.configuring.set(true);
+        windows.presenter.set_audience_can_import(false);
         windows.presenter.set_audience_can_start(false);
         windows
             .presenter
@@ -67,6 +84,7 @@ impl AudienceUi {
             });
         if spawned.is_err() {
             ui.configuring.set(false);
+            windows.presenter.set_audience_can_import(true);
             *ui.config_error.borrow_mut() = Some("Cannot load Audience configuration.");
             windows
                 .presenter
@@ -87,6 +105,7 @@ impl AudienceUi {
                 };
                 ui.config_timer.stop();
                 ui.configuring.set(false);
+                if let Some(window) = window.upgrade() { window.set_audience_can_import(true); }
                 match result {
                     Ok(endpoint) => {
                         *ui.relay_config.borrow_mut() =
@@ -103,7 +122,7 @@ impl AudienceUi {
                             window.set_audience_can_start(false);
                             window.set_audience_status(error.into());
                             window.set_audience_alert_title("Audience Live configuration needs attention".into());
-                            window.set_audience_alert_guidance("Check your configuration file and its access permissions, then restart Quick Presenter. PDF playback is still available.".into());
+                            window.set_audience_alert_guidance("Open Settings to import a valid configuration, or check the file and its access permissions. PDF playback is still available.".into());
                         }
                     }
                 }
@@ -138,6 +157,8 @@ impl AudienceUi {
             addresses: RefCell::new(Vec::new()),
             relay_config: RefCell::new(relay_config),
             config_timer: Timer::default(),
+            config_path: RefCell::new(None),
+            pending_import: RefCell::new(None),
             configuring: std::cell::Cell::new(false),
             config_error: RefCell::new(None),
             stopping: RefCell::new(false),
@@ -177,6 +198,114 @@ impl AudienceUi {
         windows.slide.on_audience_clear_overlay(move || {
             if let Some(ui) = weak.upgrade() {
                 ui.clear_overlay();
+            }
+        });
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_import_configuration(move || {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            if !ui
+                .windows
+                .presenter
+                .upgrade()
+                .is_some_and(|w| w.get_settings_visible())
+                || ui.session.borrow().is_some()
+                || ui.configuring.get()
+            {
+                return;
+            }
+            if let Err(message) = ensure_relay_replaceable(ui.relay_config.borrow().as_ref()) {
+                if let Some(window) = ui.windows.presenter.upgrade() {
+                    window.set_audience_status(message.into());
+                }
+                return;
+            }
+            let Some(path) = rfd::FileDialog::new()
+                .add_filter("TOML configuration", &["toml"])
+                .pick_file()
+            else {
+                return;
+            };
+            if let Some(window) = ui.windows.presenter.upgrade() {
+                match crate::app_config::preview_import(&path) {
+                    Ok(endpoint) => {
+                        window.set_audience_import_preview(endpoint.origin.as_str().into());
+                        window.set_audience_can_start(false);
+                        *ui.pending_import.borrow_mut() = Some(endpoint);
+                    }
+                    Err(message) => window.set_audience_status(message.into()),
+                }
+            }
+        });
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_confirm_import(move |apply| {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let endpoint = ui.pending_import.borrow_mut().take();
+            let Some(window) = ui.windows.presenter.upgrade() else {
+                return;
+            };
+            window.set_audience_import_preview("".into());
+            if let Some(endpoint) = endpoint.filter(|_| apply) {
+                if let Err(message) = ensure_relay_replaceable(ui.relay_config.borrow().as_ref()) {
+                    window.set_audience_status(message.into());
+                    window.set_audience_can_start(ui.can_start());
+                    return;
+                }
+                let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
+                    .and_then(|destination| {
+                        crate::app_config::save_import(&destination, &endpoint)
+                    });
+                match result {
+                    Ok(()) => {
+                        *ui.relay_config.borrow_mut() =
+                            Some(crate::audience_relay_http::ManagedRelay::new(endpoint));
+                        *ui.config_error.borrow_mut() = None;
+                        window.set_audience_address(ui.address_label().into());
+                        window.set_audience_status(
+                            "Configuration imported. Close Settings and turn Audience Live on when ready.".into(),
+                        );
+                        window.set_audience_alert_title("".into());
+                        window.set_audience_alert_guidance("".into());
+                    }
+                    Err(message) => window.set_audience_status(message.into()),
+                }
+            }
+            window.set_audience_can_start(ui.can_start());
+        });
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_reset_configuration(move || {
+            let Some(ui) = weak.upgrade() else { return; };
+            let Some(window) = ui.windows.presenter.upgrade() else { return; };
+            if !window.get_settings_visible()
+                || ui.session.borrow().is_some()
+                || ui.configuring.get()
+                || ui.pending_import.borrow().is_some()
+            {
+                return;
+            }
+            if let Err(message) = ensure_relay_replaceable(ui.relay_config.borrow().as_ref()) {
+                window.set_audience_status(message.into());
+                return;
+            }
+            let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
+                .and_then(|path| crate::app_config::reset_relay(&path));
+            match result {
+                Ok(()) => {
+                    *ui.relay_config.borrow_mut() = None;
+                    *ui.config_error.borrow_mut() = None;
+                    window.set_audience_alert_title("".into());
+                    window.set_audience_alert_guidance("".into());
+                    window.invoke_audience_refresh_addresses();
+                    window.set_audience_address(ui.address_label().into());
+                    window.set_audience_can_start(ui.can_start());
+                    window.set_audience_status(
+                        "Relay settings reset. Close Settings and turn Audience Live on to use the local server.".into(),
+                    );
+                }
+                Err(message) => window.set_audience_status(message.into()),
             }
         });
         presenter.set_audience_address(ui.address_label().into());
@@ -229,7 +358,11 @@ impl AudienceUi {
             let Some(ui) = weak.upgrade() else {
                 return;
             };
-            if *ui.stopping.borrow() || ui.configuring.get() || ui.config_error.borrow().is_some() {
+            if *ui.stopping.borrow()
+                || ui.configuring.get()
+                || ui.pending_import.borrow().is_some()
+                || ui.config_error.borrow().is_some()
+            {
                 return;
             }
             if let Some(session) = ui.session.borrow().as_ref() {
@@ -574,6 +707,9 @@ impl AudienceUi {
                 self.last_url.borrow_mut().clear();
                 window.set_audience_active(false);
                 window.set_audience_busy(false);
+                window.set_audience_recovery_pending(
+                    ensure_relay_replaceable(self.relay_config.borrow().as_ref()).is_err(),
+                );
                 window.set_audience_status(message.into());
                 window.set_audience_url("".into());
                 window.set_audience_code("".into());
@@ -661,4 +797,35 @@ pub(crate) fn qr_image(url: &str) -> Result<slint::Image, qrcode::types::QrError
         }
     }
     Ok(slint::Image::from_rgba8(buffer))
+}
+
+#[cfg(test)]
+mod configuration_change_tests {
+    use super::*;
+    use crate::{app_config::RelayEndpoint, audience_relay_http::ManagedRelay};
+
+    #[test]
+    fn pending_creation_blocks_configuration_changes_without_losing_retry_identity() {
+        let relay = ManagedRelay::new(RelayEndpoint {
+            origin: url::Url::parse("https://relay.example/").unwrap(),
+            create_token: "A".repeat(43),
+        });
+        assert!(ensure_relay_replaceable(None).is_ok());
+        assert!(ensure_relay_replaceable(Some(&relay)).is_ok());
+        let attempt = relay.attempt().unwrap();
+        // A failed creation can retain only its request identity, without room metadata.
+        assert!(attempt.room.is_none());
+        let shared = relay.clone();
+        for _ in 0..3 {
+            assert_eq!(
+                ensure_relay_replaceable(Some(&relay)),
+                Err(RELAY_RECOVERY_GUIDANCE)
+            );
+            assert!(shared.has_attempt());
+            assert_eq!(shared.attempt().unwrap().key, attempt.key);
+        }
+        // The session lifecycle, not a settings action, releases the retained identity.
+        shared.clear();
+        assert!(ensure_relay_replaceable(Some(&relay)).is_ok());
+    }
 }

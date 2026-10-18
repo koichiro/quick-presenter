@@ -163,6 +163,9 @@ jobs:
       - name: Test Audience Live transport, admission, and overlay on each platform
         run: cargo test --bin quick-presenter audience
 
+      - name: Test Audience configuration import on each platform
+        run: cargo test --bin quick-presenter app_config
+
       - name: Build release binaries
         run: cargo build --release --bins
 

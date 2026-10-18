@@ -172,6 +172,7 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
     });
     check_notes_font_size(&windows, &state, report, "with a PDF open")?;
     check_audience_join_screen(&windows, &state, report)?;
+    check_settings_dialog(&windows, &state, report)?;
     report_presenter_progress(
         report,
         &windows,
@@ -1471,6 +1472,57 @@ fn settle_presenter_notes_layout(presenter: &crate::PresenterWindow) -> Result<(
         .window()
         .dispatch_event(slint::platform::WindowEvent::PointerExited);
     settle_notes_layout()
+}
+
+fn check_settings_dialog(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let before = state.borrow().presentation.snapshot();
+    presenter.invoke_open_settings();
+    settle_notes_layout()?;
+    if let Some(path) = std::env::var_os("QP_GUI_SMOKE_SETTINGS_SNAPSHOT") {
+        let snapshot = presenter.window().take_snapshot()?;
+        let mut bytes =
+            format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+        for pixel in snapshot.as_bytes().chunks_exact(4) {
+            bytes.extend_from_slice(&pixel[..3]);
+        }
+        fs::write(path, bytes).context("failed to save Settings smoke snapshot")?;
+    }
+    report.check(
+        "Settings opens independently of Audience Live",
+        presenter.get_settings_visible() && !presenter.get_audience_active(),
+        "settings opened without starting an audience session",
+        "settings did not open independently",
+    );
+    for text in [" ", "\n"] {
+        presenter
+            .window()
+            .dispatch_event(slint::platform::WindowEvent::KeyPressed { text: text.into() });
+        presenter
+            .window()
+            .dispatch_event(slint::platform::WindowEvent::KeyReleased { text: text.into() });
+    }
+    settle_notes_layout()?;
+    report.check(
+        "Settings isolates presentation keyboard navigation",
+        state.borrow().presentation.snapshot() == before,
+        "Space/Return in Settings did not turn the page",
+        "Settings forwarded a navigation key to the presentation",
+    );
+    presenter.set_audience_import_preview("https://relay.example/".into());
+    presenter.invoke_close_settings();
+    settle_notes_layout()?;
+    report.check(
+        "Closing Settings clears pending import preview",
+        !presenter.get_settings_visible() && presenter.get_audience_import_preview().is_empty(),
+        "settings closed and preview was discarded",
+        "settings or preview remained open",
+    );
+    Ok(())
 }
 
 fn check_notes_font_size(
