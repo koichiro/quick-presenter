@@ -1,3 +1,4 @@
+/* Quick Presenter color theme: see ../COLOR_THEME.md. */
 :root {
   color-scheme: light;
   --ink: #172026;
@@ -10,6 +11,10 @@
   --accent-strong: #124c55;
   --accent-soft: #e2f3f1;
   --warm: #f7b955;
+  --code-surface: #0c2635;
+  --code-ink: #e9f4f7;
+  --code-muted: #a5c4cd;
+  --on-dark: #b7c9cf;
   --shadow: 0 24px 60px rgba(23, 32, 38, 0.14);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -514,7 +519,7 @@ h3 {
 
 .download .eyebrow,
 .download p {
-  color: #b7c9cf;
+  color: var(--on-dark);
 }
 
 .download p {
@@ -684,9 +689,6 @@ h3 {
 }
 
 /* Release 2.0: source context and external automation. */
-:root {
-  --code-surface: #0c2635;
-}
 
 section[id] {
   scroll-margin-top: 100px;
@@ -720,7 +722,7 @@ a:focus-visible, summary:focus-visible {
 
 .hero-shot::before {
   inset: -20px -16px auto auto;
-  background: var(--accent-soft);
+  background: var(--warm);
 }
 
 .hero-terminal {
@@ -729,7 +731,7 @@ a:focus-visible, summary:focus-visible {
   padding: 15px 20px;
   border-radius: 8px;
   background: var(--code-surface);
-  color: #e9f4f7;
+  color: var(--code-ink);
   font: .85rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
 }
 
@@ -761,7 +763,7 @@ a:focus-visible, summary:focus-visible {
   width: 100%;
   height: auto;
   aspect-ratio: 1024 / 720;
-  background: #172026;
+  background: var(--ink);
   border-radius: 10px;
   box-shadow: var(--shadow);
 }
@@ -906,7 +908,7 @@ code {
   overflow: hidden;
   border-radius: 10px;
   background: var(--code-surface);
-  color: #e9f4f7;
+  color: var(--code-ink);
   box-shadow: var(--shadow);
 }
 
@@ -932,7 +934,7 @@ code {
 }
 
 .code-comment {
-  color: #a5c4cd;
+  color: var(--code-muted);
 }
 
 .interface-facts {
@@ -1224,11 +1226,11 @@ a:focus-visible, summary:focus-visible, video:focus-visible { outline: 3px solid
 .guide-content h1 { max-width: none; font-size: clamp(2.2rem, 5vw, 3.5rem); }
 .guide-content h2 { font-size: 1.6rem; margin-top: 38px; }
 .guide-content p { line-height: 1.7; }
-.guide-content pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 22px; background: var(--code-surface); color: #e9f4f7; border-radius: 8px; }
+.guide-content pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 22px; background: var(--code-surface); color: var(--code-ink); border-radius: 8px; }
 
 .download-grid article { color: var(--ink); }
 .download .download-grid p { color: var(--muted); }
-.download > p .text-link { color: #a8e8df; }
+.download > p .text-link { color: var(--accent-soft); }
 .navigation-items a { color: var(--ink); }
 @media (max-width: 760px) {
   :lang(ja) .nav-links { gap: 6px; }

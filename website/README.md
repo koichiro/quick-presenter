@@ -1,5 +1,8 @@
 # Website deployment and custom domain
 
+The shared [color theme](COLOR_THEME.md) defines the v1.0.0 brand palette
+and its application to the v2.0.0 website.
+
 `npm ci` installs the dependency-free Node project. `npm run build` copies the
 HTML, CSS, and selected repository assets into `dist`; `npm test` rebuilds and
 validates the output with Node's built-in test runner. `npm run preview` serves
