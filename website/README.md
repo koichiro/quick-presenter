@@ -200,8 +200,8 @@ assumes v2.0.0 packages are available and guides users to matching GUI/CLI
 binaries. Confirm the download destinations and Store package version when
 publishing this prepared site.
 GitHub Releases lists macOS DMG and Linux Debian packages; the Windows link
-retains the existing Microsoft Store product ID. Store version availability
-has not been independently verified. No Mac App Store review status or planned
+retains the existing Microsoft Store product ID. Microsoft Store distribution
+of v2.0.0 was confirmed by the maintainer on 2026-10-18. No Mac App Store review status or planned
 price is asserted. Mac App Store CLI control is excluded in the v2.0.0 contract.
 
 The presenter feature uses a static screenshot rather than an unpausable GIF.
