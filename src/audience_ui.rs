@@ -58,6 +58,7 @@ impl AudienceUi {
         );
         *ui.config_path.borrow_mut() = config_path.clone();
         ui.configuring.set(true);
+        windows.presenter.set_audience_can_import(false);
         windows.presenter.set_audience_can_start(false);
         windows
             .presenter
@@ -70,6 +71,7 @@ impl AudienceUi {
             });
         if spawned.is_err() {
             ui.configuring.set(false);
+            windows.presenter.set_audience_can_import(true);
             *ui.config_error.borrow_mut() = Some("Cannot load Audience configuration.");
             windows
                 .presenter
@@ -90,6 +92,7 @@ impl AudienceUi {
                 };
                 ui.config_timer.stop();
                 ui.configuring.set(false);
+                if let Some(window) = window.upgrade() { window.set_audience_can_import(true); }
                 match result {
                     Ok(endpoint) => {
                         *ui.relay_config.borrow_mut() =
@@ -106,7 +109,7 @@ impl AudienceUi {
                             window.set_audience_can_start(false);
                             window.set_audience_status(error.into());
                             window.set_audience_alert_title("Audience Live configuration needs attention".into());
-                            window.set_audience_alert_guidance("Check your configuration file and its access permissions, then restart Quick Presenter. PDF playback is still available.".into());
+                            window.set_audience_alert_guidance("Open Settings to import a valid configuration, or check the file and its access permissions. PDF playback is still available.".into());
                         }
                     }
                 }
@@ -189,7 +192,14 @@ impl AudienceUi {
             let Some(ui) = weak.upgrade() else {
                 return;
             };
-            if ui.session.borrow().is_some() || ui.configuring.get() {
+            if !ui
+                .windows
+                .presenter
+                .upgrade()
+                .is_some_and(|w| w.get_settings_visible())
+                || ui.session.borrow().is_some()
+                || ui.configuring.get()
+            {
                 return;
             }
             let Some(path) = rfd::FileDialog::new()

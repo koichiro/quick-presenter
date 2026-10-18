@@ -268,15 +268,41 @@ impl MudaAdapter {
 
                 // Until we have menu roles, always create an app menu on macOS.
                 #[cfg(target_os = "macos")]
-                if matches!(muda_type, MudaType::Menubar)
-                    && let Some(menu) = self.menu.as_ref()
-                {
-                    create_default_app_menu(menu).unwrap();
-                }
+                let app_menu = if matches!(muda_type, MudaType::Menubar) {
+                    self.menu.as_ref().map(|menu| create_default_app_menu(menu).unwrap())
+                } else {
+                    None
+                };
 
                 let window_id = u64::from(winit_window.id()).to_string();
                 if let Some(menu) = self.menu.as_ref() {
                     for e in menu_entries {
+                        // The declared Application menu supplies actions for the native app menu.
+                        #[cfg(target_os = "macos")]
+                        if e.has_sub_menu
+                            && e.title == "Application"
+                            && let Some(app_menu) = app_menu.as_ref()
+                        {
+                            let mut actions = Default::default();
+                            vtable::VRc::borrow(menu_tree).sub_menu(Some(&e), &mut actions);
+                            let action_count = actions.len();
+                            for (index, action) in actions.into_iter().enumerate() {
+                                let item = generate_menu_entry(
+                                    vtable::VRc::borrow(menu_tree),
+                                    &action,
+                                    1,
+                                    &mut self.entries,
+                                    &window_id,
+                                    generation,
+                                    muda_type,
+                                );
+                                app_menu.insert(&*item, index + 2).unwrap();
+                            }
+                            if action_count > 0 {
+                                app_menu.insert(&muda::PredefinedMenuItem::separator(), action_count + 2).unwrap();
+                            }
+                            continue;
+                        }
                         menu.append(&*generate_menu_entry(
                             vtable::VRc::borrow(menu_tree),
                             &e,
@@ -411,7 +437,7 @@ fn install_event_handler_if_necessary(proxy: EventLoopProxy<SlintEvent>) {
 }
 
 #[cfg(target_os = "macos")]
-fn create_default_app_menu(menu_bar: &muda::Menu) -> Result<(), i_slint_core::api::PlatformError> {
+fn create_default_app_menu(menu_bar: &muda::Menu) -> Result<muda::Submenu, i_slint_core::api::PlatformError> {
     let app_menu = muda::Submenu::new("App", true);
     menu_bar
         .append(&app_menu)
@@ -441,7 +467,7 @@ fn create_default_app_menu(menu_bar: &muda::Menu) -> Result<(), i_slint_core::ap
         .map_err(|menu_bar_err| {
             i_slint_core::api::PlatformError::Other(menu_bar_err.to_string())
         })?;
-    Ok(())
+    Ok(app_menu)
 }
 
 /// On Windows, we need to disable window redraw while rebuilding the menu, otherwise

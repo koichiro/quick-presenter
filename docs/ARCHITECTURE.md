@@ -172,8 +172,14 @@ state-changing timer command is exposed in this version.
 
 ### Audience configuration import
 
-The presenter exposes **Import settings** while Audience Live is stopped. The
-native picker validates a bounded TOML configuration and displays the relay origin
+Choose **Settings...** from the application menu to open the Settings dialog.
+On macOS this is the native app-name menu; Windows uses **Application**, and
+Linux uses the inline **Application** menu. Import and connection-check actions
+appear only in Settings. The presentation controls retain the Audience Live
+on/off and pause actions.
+
+**Import settings...** is available in Settings while Audience Live is stopped
+and configuration loading has completed. The native picker validates a bounded TOML configuration and displays the relay origin
 for confirmation without displaying its credential. Import merges only the
 Audience fields into the default configuration or the explicit `--config` path;
 unrelated TOML values are preserved. Invalid source/destination files leave the
@@ -188,3 +194,10 @@ cannot replace an active session or bypass pending startup configuration loading
 
 See [native import validation](AUDIENCE_CONFIG_IMPORT_VALIDATION.md) for the
 isolated Windows/macOS checklist and credential-safe evidence requirements.
+
+Settings traps presentation shortcuts while open. Escape or Close discards a
+pending import preview and restores presenter focus; confirming an import keeps
+Settings open to show the result. Checking the connection closes Settings and
+uses the normal explicit start. The vendored menu adapter places the declared
+Application actions in the existing macOS app-name menu during menu construction,
+with the same tracked dispatch as the other menu actions.

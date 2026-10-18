@@ -42,12 +42,16 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
 
 ## Import and recovery checks
 
-1. While stopped, choose **Import settings** and select `download.toml`. Verify
+1. Verify the presenter has no always-visible import or connection-check button.
+   Choose **Settings...** from the application menu (the app-name menu on macOS,
+   **Application** on Windows/Linux). While stopped, choose **Import settings...**
+   in Settings and select `download.toml`. Verify
    the preview shows `https://relay.example/` without displaying its credential.
-   Cancel; the destination must remain byte-for-byte unchanged.
+   Use Cancel import, then repeat with Escape or Close; the destination must remain byte-for-byte unchanged.
 2. Select the same file and confirm **Import**. The application must remain
    responsive after the native file picker closes. Verify the success message and
-   that **Check connection and start** is available without restarting qp.
+   that **Check connection and start** is available in Settings without restarting qp.
+   While Settings is open, Space/Return must not change the presentation page.
 3. Inspect the isolated destination locally. The `presentation.keep` value must
    remain `unchanged`; Audience settings must match the fixture. Do not paste
    configuration contents containing real credentials into validation evidence.
@@ -81,8 +85,9 @@ the isolated import fixture. The example-origin fixture above is not suitable.
 - **Check connection and start** creates the normal visible Audience session and
   QR. It is an explicit start, not a separate hidden probe. Confirm audience join,
   reaction/comment delivery and PDF playback.
-- Import must not replace an active room. Verify the import action is unavailable
-  while running and during stop/start work; normal PDF controls remain usable.
+- Import must not replace an active room. Open Settings while running and verify
+  import and connection-check actions are unavailable; close Settings and verify
+  normal PDF controls remain usable.
 - Stop, wait for confirmed termination, then start again and verify the new QR.
   Test interrupted/lost creation and stop responses using the existing controlled
   relay test procedures; unknown outcomes must retain their retry identity.
@@ -94,5 +99,16 @@ the isolated import fixture. The example-origin fixture above is not suitable.
 Repeat the import/cancel/invalid-file/restart checks with an isolated `--config`
 path. Confirm the saved file mode is 0600 and unrelated TOML values survive. The
 preview is application UI so the native picker is not followed by a nested native
-confirmation dialog. A local macOS exercise verified selection, preview, confirmed
-import, preserved settings and mode 0600; Windows device/ACL results remain pending.
+confirmation dialog. The initial import implementation was validated on macOS and Windows before
+the actions moved into Settings. Repeat menu navigation, focus, cancel and import
+checks for the revised UI; earlier platform results do not validate its new entry
+point.
+
+## Settings dialog regression
+
+The GUI smoke run checks that Settings opens without starting Audience Live,
+Space/Return do not navigate the presentation while Settings has focus, and
+closing Settings discards the import preview. Set
+`QP_GUI_SMOKE_SETTINGS_SNAPSHOT` to an output `.ppm` path to retain the rendered
+Settings view during an isolated smoke run. The snapshot contains the selected
+fixture PDF; use synthetic input when sharing it.
