@@ -714,6 +714,13 @@ export component PresenterWindow inherits Window {
     in property <int> audience-reaction-count;
     callback audience-open-url();
     callback audience-toggle-session();
+    callback audience-import-configuration();
+    callback audience-reset-configuration();
+    callback audience-confirm-import(bool);
+    in property <string> audience-import-preview;
+    in property <bool> audience-can-import: true;
+    in property <bool> audience-recovery-pending: false;
+    in-out property <bool> settings-visible: false;
     callback audience-next-address();
     callback audience-refresh-addresses();
     in property <image> current-page-image;
@@ -815,8 +822,27 @@ export component PresenterWindow inherits Window {
     background: #202124;
     forward-focus: presenter-focus;
 
+    public function open-settings() {
+        root.active-menu-index = -1;
+        root.settings-visible = true;
+        settings-focus.focus();
+    }
+
+    public function close-settings() {
+        root.audience-confirm-import(false);
+        root.settings-visible = false;
+        presenter-focus.focus();
+    }
+
     // BEGIN_NATIVE_MENU_BAR
     if root.use-native-menu-bar: MenuBar {
+        Menu {
+            title: "Application";
+            MenuItem {
+                title: "Settings...";
+                activated => { root.open-settings(); }
+            }
+        }
         Menu {
             title: "File";
 
@@ -980,6 +1006,7 @@ export component PresenterWindow inherits Window {
     // END_NATIVE_MENU_BAR
 
     presenter-focus := FocusScope {
+        enabled: !root.settings-visible;
         width: root.width;
         height: root.height;
 
@@ -1541,6 +1568,14 @@ export component PresenterWindow inherits Window {
 
                 PresenterMenuButton {
                     x: 0px;
+                    width: 100px;
+                    text: "Application";
+                    active: root.active-menu-index == 5;
+                    clicked => { root.active-menu-index = root.active-menu-index == 5 ? -1 : 5; }
+                }
+
+                PresenterMenuButton {
+                    x: 100px;
                     width: 56px;
                     text: "File";
                     active: root.active-menu-index == 0;
@@ -1548,7 +1583,7 @@ export component PresenterWindow inherits Window {
                 }
 
                 PresenterMenuButton {
-                    x: 56px;
+                    x: 156px;
                     width: 92px;
                     text: "Navigate";
                     active: root.active-menu-index == 1;
@@ -1556,7 +1591,7 @@ export component PresenterWindow inherits Window {
                 }
 
                 PresenterMenuButton {
-                    x: 148px;
+                    x: 248px;
                     width: 64px;
                     text: "View";
                     active: root.active-menu-index == 2;
@@ -1564,7 +1599,7 @@ export component PresenterWindow inherits Window {
                 }
 
                 PresenterMenuButton {
-                    x: 212px;
+                    x: 312px;
                     width: 86px;
                     text: "Window";
                     active: root.active-menu-index == 3;
@@ -1572,7 +1607,7 @@ export component PresenterWindow inherits Window {
                 }
 
                 PresenterMenuButton {
-                    x: 298px;
+                    x: 398px;
                     width: 64px;
                     text: "Help";
                     active: root.active-menu-index == 4;
@@ -1581,7 +1616,7 @@ export component PresenterWindow inherits Window {
             }
 
             if !root.use-native-menu-bar && root.active-menu-index == 0: Rectangle {
-                x: 0px;
+                x: 100px;
                 y: root.inline-menu-height;
                 width: 220px;
                 height: 196px;
@@ -1599,7 +1634,7 @@ export component PresenterWindow inherits Window {
             }
 
             if !root.use-native-menu-bar && root.active-menu-index == 1: Rectangle {
-                x: 56px;
+                x: 156px;
                 y: root.inline-menu-height;
                 width: 180px;
                 height: 112px;
@@ -1614,7 +1649,7 @@ export component PresenterWindow inherits Window {
             }
 
             if !root.use-native-menu-bar && root.active-menu-index == 2: Rectangle {
-                x: 148px;
+                x: 248px;
                 y: root.inline-menu-height;
                 width: 210px;
                 height: 56px;
@@ -1627,7 +1662,7 @@ export component PresenterWindow inherits Window {
             }
 
             if !root.use-native-menu-bar && root.active-menu-index == 3: Rectangle {
-                x: 212px;
+                x: 312px;
                 y: root.inline-menu-height;
                 width: 240px;
                 height: 140px;
@@ -1643,7 +1678,7 @@ export component PresenterWindow inherits Window {
             }
 
             if !root.use-native-menu-bar && root.active-menu-index == 4: Rectangle {
-                x: 298px;
+                x: 398px;
                 y: root.inline-menu-height;
                 width: 210px;
                 height: 28px;
@@ -1653,8 +1688,77 @@ export component PresenterWindow inherits Window {
 
                 PresenterMenuItem { width: parent.width; text: "About Quick Presenter"; clicked => { root.active-menu-index = -1; root.about-visible = true; } }
             }
+            if !root.use-native-menu-bar && root.active-menu-index == 5: Rectangle {
+                x: 0px;
+                y: root.inline-menu-height;
+                width: 220px;
+                height: 28px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+                PresenterMenuItem { width: parent.width; text: "Settings..."; clicked => { root.open-settings(); } }
+            }
+
         }
 
+    }
+
+    settings-backdrop := Rectangle {
+        visible: root.settings-visible;
+        width: parent.width;
+        height: parent.height;
+        background: #00000080;
+        TouchArea { width: parent.width; height: parent.height; }
+        settings-focus := FocusScope {
+            width: parent.width;
+            height: parent.height;
+            KeyBinding { keys: @keys(Escape); activated => { root.close-settings(); } }
+            Rectangle {
+                width: min(parent.width - 48px, 600px);
+                height: min(parent.height - 48px, 440px);
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                background: #202124;
+                border-color: #5f6368;
+                border-width: 1px;
+                VerticalBox {
+                    padding: 24px;
+                    spacing: 12px;
+                    Text { text: "Settings"; color: white; font-size: 24px; }
+                    Text { text: "Audience Live"; color: white; font-size: 18px; }
+                    Text { text: "Import relay settings, or Reset to use the local server. Changes apply to the next start and preserve other settings."; color: #d9dce0; wrap: word-wrap; }
+                    if root.audience-active || root.audience-busy: Text { text: "Stop Audience Live before changing settings."; color: #ffd18a; wrap: word-wrap; }
+                    if root.audience-recovery-pending: Text {
+                        text: "Relay recovery is pending. Close Settings, retry Audience Live on, then stop it before changing settings.";
+                        color: #ffd18a;
+                        wrap: word-wrap;
+                    }
+                    Text { text: root.audience-status; color: #d9dce0; wrap: word-wrap; }
+                    if root.audience-import-preview == "": HorizontalBox {
+                        Button {
+                            text: "Import settings...";
+                            enabled: root.audience-can-import && !root.audience-active && !root.audience-busy && !root.audience-recovery-pending;
+                            clicked => { root.audience-import-configuration(); }
+                        }
+                        Button {
+                            text: "Reset";
+                            enabled: root.audience-can-import && !root.audience-active && !root.audience-busy && !root.audience-recovery-pending;
+                            clicked => { root.audience-reset-configuration(); }
+                        }
+                    }
+                    if root.audience-import-preview != "": VerticalBox {
+                        Text { text: "Destination: " + root.audience-import-preview; color: white; wrap: word-wrap; }
+                        Text { text: "Apply for the next start? Import does not start a session."; color: #d9dce0; wrap: word-wrap; }
+                        HorizontalBox {
+                            Button { text: "Cancel import"; clicked => { root.audience-confirm-import(false); } }
+                            Button { text: "Import"; clicked => { root.audience-confirm-import(true); } }
+                        }
+                    }
+                    Rectangle { vertical-stretch: 1; }
+                    Button { text: "Close"; clicked => { root.close-settings(); } }
+                }
+            }
+        }
     }
 
     if root.about-visible : Rectangle {
