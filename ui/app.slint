@@ -715,6 +715,7 @@ export component PresenterWindow inherits Window {
     callback audience-open-url();
     callback audience-toggle-session();
     callback audience-import-configuration();
+    callback audience-reset-configuration();
     callback audience-confirm-import(bool);
     in property <string> audience-import-preview;
     in property <bool> audience-can-import: true;
@@ -1724,14 +1725,19 @@ export component PresenterWindow inherits Window {
                     spacing: 12px;
                     Text { text: "Settings"; color: white; font-size: 24px; }
                     Text { text: "Audience Live"; color: white; font-size: 18px; }
-                    Text { text: "Import your relay configuration. It applies to the next start and preserves other settings."; color: #d9dce0; wrap: word-wrap; }
-                    if root.audience-active || root.audience-busy: Text { text: "Stop Audience Live before importing settings."; color: #ffd18a; wrap: word-wrap; }
+                    Text { text: "Import relay settings, or Reset to use the local server. Changes apply to the next start and preserve other settings."; color: #d9dce0; wrap: word-wrap; }
+                    if root.audience-active || root.audience-busy: Text { text: "Stop Audience Live before changing settings."; color: #ffd18a; wrap: word-wrap; }
                     Text { text: root.audience-status; color: #d9dce0; wrap: word-wrap; }
                     if root.audience-import-preview == "": HorizontalBox {
                         Button {
                             text: "Import settings...";
                             enabled: root.audience-can-import && !root.audience-active && !root.audience-busy;
                             clicked => { root.audience-import-configuration(); }
+                        }
+                        Button {
+                            text: "Reset";
+                            enabled: root.audience-can-import && !root.audience-active && !root.audience-busy;
+                            clicked => { root.audience-reset-configuration(); }
                         }
                     }
                     if root.audience-import-preview != "": VerticalBox {

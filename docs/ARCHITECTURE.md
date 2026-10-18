@@ -175,7 +175,12 @@ state-changing timer command is exposed in this version.
 Choose **Settings...** from the application menu to open the Settings dialog.
 On macOS this is the native app-name menu; Windows uses **Application**, and
 Linux uses the inline **Application** menu. Configuration import appears only in
-Settings. Audience Live on/off and pause are controlled from the presenter
+Settings, along with **Reset** to remove relay credentials and persist local
+transport. Reset preserves unrelated settings, applies immediately to the next
+start without restarting qp, and never starts a server. Import and Reset are
+disabled during an active session or configuration loading; persistence failures
+retain the current in-memory endpoint. Invalid existing TOML is not overwritten.
+Audience Live on/off and pause are controlled from the presenter
 window. Each function has one primary UI location; menu shortcuts may provide
 another entry point.
 

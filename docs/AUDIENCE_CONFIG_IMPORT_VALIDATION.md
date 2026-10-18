@@ -79,6 +79,23 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
 8. Repeat with spaces and non-ASCII characters in source and destination paths.
    Confirm the native picker, preview, persistence and restart work.
 
+## Reset to local server
+
+- While stopped, open Settings and choose **Reset**. Verify the message directs
+  the user to close Settings and start Audience Live from the presenter.
+- Verify the saved Audience table contains only `transport = "local"`; relay
+  origin and creation credential are removed, unrelated settings survive, and
+  file permissions remain protected (0600 on Unix, owner/SYSTEM DACL on Windows).
+- Reset must not start a room or local server. Close Settings and turn Audience
+  Live on; verify the local LAN join URL/QR, audience events and normal stop.
+- Restart using the same configuration and verify local mode persists without
+  another Reset. Import a relay configuration again and verify remote start.
+- While active/starting/stopping, verify Import and Reset are disabled. During
+  import preview, cancel or finish the preview before Reset becomes available.
+- With an invalid/unwritable destination, Reset must show a redacted error and
+  preserve both the file and current relay endpoint. Correct the file/access and
+  retry. No normal user credentials should be used in validation.
+
 ## Connection and event checks
 
 Use a controlled relay and a disposable credential for these checks. Replace only

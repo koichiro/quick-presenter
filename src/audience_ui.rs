@@ -251,6 +251,35 @@ impl AudienceUi {
             }
             window.set_audience_can_start(ui.can_start());
         });
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_reset_configuration(move || {
+            let Some(ui) = weak.upgrade() else { return; };
+            let Some(window) = ui.windows.presenter.upgrade() else { return; };
+            if !window.get_settings_visible()
+                || ui.session.borrow().is_some()
+                || ui.configuring.get()
+                || ui.pending_import.borrow().is_some()
+            {
+                return;
+            }
+            let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
+                .and_then(|path| crate::app_config::reset_relay(&path));
+            match result {
+                Ok(()) => {
+                    *ui.relay_config.borrow_mut() = None;
+                    *ui.config_error.borrow_mut() = None;
+                    window.set_audience_alert_title("".into());
+                    window.set_audience_alert_guidance("".into());
+                    window.invoke_audience_refresh_addresses();
+                    window.set_audience_address(ui.address_label().into());
+                    window.set_audience_can_start(ui.can_start());
+                    window.set_audience_status(
+                        "Relay settings reset. Close Settings and turn Audience Live on to use the local server.".into(),
+                    );
+                }
+                Err(message) => window.set_audience_status(message.into()),
+            }
+        });
         presenter.set_audience_address(ui.address_label().into());
         let weak = Rc::downgrade(&ui);
         let window = presenter.as_weak();

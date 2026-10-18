@@ -1,4 +1,4 @@
-//! User-owned TOML configuration; all file IO is performed by the initialization worker.
+//! User-owned TOML configuration loading and protected Audience settings updates.
 use serde::Deserialize;
 use std::{fs::File, io::Read, path::PathBuf};
 
@@ -134,6 +134,21 @@ pub fn import_destination(explicit: Option<PathBuf>) -> Result<PathBuf, &'static
 
 /// Merge only Audience fields; an invalid existing file is never overwritten.
 pub fn save_import(path: &std::path::Path, endpoint: &RelayEndpoint) -> Result<(), &'static str> {
+    let mut audience = toml::Table::new();
+    audience.insert("transport".into(), "remote".into());
+    audience.insert("relay".into(), endpoint.origin.as_str().into());
+    audience.insert("create_token".into(), endpoint.create_token.clone().into());
+    save_audience(path, audience)
+}
+
+/// Remove relay credentials and persist local transport without changing other settings.
+pub fn reset_relay(path: &std::path::Path) -> Result<(), &'static str> {
+    let mut audience = toml::Table::new();
+    audience.insert("transport".into(), "local".into());
+    save_audience(path, audience)
+}
+
+fn save_audience(path: &std::path::Path, audience: toml::Table) -> Result<(), &'static str> {
     if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
         return Err("Configuration destination must not be a symbolic link.");
     }
@@ -144,10 +159,6 @@ pub fn save_import(path: &std::path::Path, endpoint: &RelayEndpoint) -> Result<(
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => toml::Table::new(),
         Err(_) => return Err("Cannot read existing configuration; it was not changed."),
     };
-    let mut audience = toml::Table::new();
-    audience.insert("transport".into(), "remote".into());
-    audience.insert("relay".into(), endpoint.origin.as_str().into());
-    audience.insert("create_token".into(), endpoint.create_token.clone().into());
     current.insert("audience".into(), audience.into());
     let text = toml::to_string(&current).map_err(|_| "Cannot serialize configuration.")?;
     if text.len() > 16384 {
@@ -203,6 +214,62 @@ mod tests {
         std::fs::write(&destination, "invalid?").unwrap();
         assert!(save_import(&destination, &endpoint).is_err());
         assert_eq!(std::fs::read_to_string(&destination).unwrap(), "invalid?");
+    }
+
+    #[test]
+    fn reset_removes_relay_credentials_preserves_other_settings_and_reloads_local() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let endpoint = parse(&remote("https://relay.example")).unwrap().unwrap();
+        std::fs::write(&path, "[presentation]\nkeep = 'unchanged'\n").unwrap();
+        save_import(&path, &endpoint).unwrap();
+        reset_relay(&path).unwrap();
+        let saved = std::fs::read_to_string(&path).unwrap();
+        let table: toml::Table = toml::from_str(&saved).unwrap();
+        assert_eq!(table["presentation"]["keep"].as_str(), Some("unchanged"));
+        assert_eq!(table["audience"]["transport"].as_str(), Some("local"));
+        assert_eq!(table["audience"].as_table().unwrap().len(), 1);
+        assert!(!saved.contains(&endpoint.create_token));
+        assert!(!saved.contains("relay.example"));
+        assert!(load(Some(path.clone())).unwrap().is_none());
+        reset_relay(&path).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), saved);
+        // Import remains available after returning to local transport.
+        save_import(&path, &endpoint).unwrap();
+        assert!(load(Some(path)).unwrap().is_some());
+    }
+
+    #[test]
+    fn reset_creates_missing_config_and_preserves_invalid_or_oversized_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("new/config.toml");
+        reset_relay(&path).unwrap();
+        assert!(load(Some(path.clone())).unwrap().is_none());
+        for text in ["invalid?".to_owned(), " ".repeat(16385)] {
+            std::fs::write(&path, &text).unwrap();
+            assert!(reset_relay(&path).is_err());
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+        }
+        assert!(reset_relay(dir.path()).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reset_rejects_symlink_and_protects_saved_config() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let link = dir.path().join("link.toml");
+        std::fs::write(&path, remote("https://relay.example")).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        symlink(&path, &link).unwrap();
+        assert!(reset_relay(&link).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        reset_relay(&path).unwrap();
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
     }
 
     #[test]
