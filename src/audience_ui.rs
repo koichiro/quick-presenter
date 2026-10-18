@@ -20,6 +20,19 @@ use std::{
     time::{Duration, Instant},
 };
 
+const RELAY_RECOVERY_GUIDANCE: &str =
+    "Close Settings, retry Audience Live on, then stop it before importing or resetting settings.";
+
+fn ensure_relay_replaceable(
+    relay: Option<&crate::audience_relay_http::ManagedRelay>,
+) -> Result<(), &'static str> {
+    if relay.is_some_and(|relay| relay.has_attempt()) {
+        Err(RELAY_RECOVERY_GUIDANCE)
+    } else {
+        Ok(())
+    }
+}
+
 pub struct AudienceUi {
     session: RefCell<Option<AudienceSession>>,
     timer: Timer,
@@ -202,6 +215,12 @@ impl AudienceUi {
             {
                 return;
             }
+            if let Err(message) = ensure_relay_replaceable(ui.relay_config.borrow().as_ref()) {
+                if let Some(window) = ui.windows.presenter.upgrade() {
+                    window.set_audience_status(message.into());
+                }
+                return;
+            }
             let Some(path) = rfd::FileDialog::new()
                 .add_filter("TOML configuration", &["toml"])
                 .pick_file()
@@ -230,6 +249,11 @@ impl AudienceUi {
             };
             window.set_audience_import_preview("".into());
             if let Some(endpoint) = endpoint.filter(|_| apply) {
+                if let Err(message) = ensure_relay_replaceable(ui.relay_config.borrow().as_ref()) {
+                    window.set_audience_status(message.into());
+                    window.set_audience_can_start(ui.can_start());
+                    return;
+                }
                 let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
                     .and_then(|destination| {
                         crate::app_config::save_import(&destination, &endpoint)
@@ -260,6 +284,10 @@ impl AudienceUi {
                 || ui.configuring.get()
                 || ui.pending_import.borrow().is_some()
             {
+                return;
+            }
+            if let Err(message) = ensure_relay_replaceable(ui.relay_config.borrow().as_ref()) {
+                window.set_audience_status(message.into());
                 return;
             }
             let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
@@ -679,6 +707,9 @@ impl AudienceUi {
                 self.last_url.borrow_mut().clear();
                 window.set_audience_active(false);
                 window.set_audience_busy(false);
+                window.set_audience_recovery_pending(
+                    ensure_relay_replaceable(self.relay_config.borrow().as_ref()).is_err(),
+                );
                 window.set_audience_status(message.into());
                 window.set_audience_url("".into());
                 window.set_audience_code("".into());
@@ -766,4 +797,35 @@ pub(crate) fn qr_image(url: &str) -> Result<slint::Image, qrcode::types::QrError
         }
     }
     Ok(slint::Image::from_rgba8(buffer))
+}
+
+#[cfg(test)]
+mod configuration_change_tests {
+    use super::*;
+    use crate::{app_config::RelayEndpoint, audience_relay_http::ManagedRelay};
+
+    #[test]
+    fn pending_creation_blocks_configuration_changes_without_losing_retry_identity() {
+        let relay = ManagedRelay::new(RelayEndpoint {
+            origin: url::Url::parse("https://relay.example/").unwrap(),
+            create_token: "A".repeat(43),
+        });
+        assert!(ensure_relay_replaceable(None).is_ok());
+        assert!(ensure_relay_replaceable(Some(&relay)).is_ok());
+        let attempt = relay.attempt().unwrap();
+        // A failed creation can retain only its request identity, without room metadata.
+        assert!(attempt.room.is_none());
+        let shared = relay.clone();
+        for _ in 0..3 {
+            assert_eq!(
+                ensure_relay_replaceable(Some(&relay)),
+                Err(RELAY_RECOVERY_GUIDANCE)
+            );
+            assert!(shared.has_attempt());
+            assert_eq!(shared.attempt().unwrap().key, attempt.key);
+        }
+        // The session lifecycle, not a settings action, releases the retained identity.
+        shared.clear();
+        assert!(ensure_relay_replaceable(Some(&relay)).is_ok());
+    }
 }

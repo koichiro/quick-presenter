@@ -180,6 +180,12 @@ transport. Reset preserves unrelated settings, applies immediately to the next
 start without restarting qp, and never starts a server. Import and Reset are
 disabled during an active session or configuration loading; persistence failures
 retain the current in-memory endpoint. Invalid existing TOML is not overwritten.
+A finished failed relay start may still own a pending creation identity. Import
+and Reset stay disabled until that identity is released by the session lifecycle;
+the file-picker entry, import confirmation and reset callbacks also guard it.
+Settings directs the user to close Settings, retry Audience Live on and stop it.
+These guards never invoke cleanup or discard the relay, so retry and application
+exit retain the existing recovery owner.
 Audience Live on/off and pause are controlled from the presenter
 window. Each function has one primary UI location; menu shortcuts may provide
 another entry point.

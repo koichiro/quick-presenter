@@ -719,6 +719,7 @@ export component PresenterWindow inherits Window {
     callback audience-confirm-import(bool);
     in property <string> audience-import-preview;
     in property <bool> audience-can-import: true;
+    in property <bool> audience-recovery-pending: false;
     in-out property <bool> settings-visible: false;
     callback audience-next-address();
     callback audience-refresh-addresses();
@@ -1727,16 +1728,21 @@ export component PresenterWindow inherits Window {
                     Text { text: "Audience Live"; color: white; font-size: 18px; }
                     Text { text: "Import relay settings, or Reset to use the local server. Changes apply to the next start and preserve other settings."; color: #d9dce0; wrap: word-wrap; }
                     if root.audience-active || root.audience-busy: Text { text: "Stop Audience Live before changing settings."; color: #ffd18a; wrap: word-wrap; }
+                    if root.audience-recovery-pending: Text {
+                        text: "Relay recovery is pending. Close Settings, retry Audience Live on, then stop it before changing settings.";
+                        color: #ffd18a;
+                        wrap: word-wrap;
+                    }
                     Text { text: root.audience-status; color: #d9dce0; wrap: word-wrap; }
                     if root.audience-import-preview == "": HorizontalBox {
                         Button {
                             text: "Import settings...";
-                            enabled: root.audience-can-import && !root.audience-active && !root.audience-busy;
+                            enabled: root.audience-can-import && !root.audience-active && !root.audience-busy && !root.audience-recovery-pending;
                             clicked => { root.audience-import-configuration(); }
                         }
                         Button {
                             text: "Reset";
-                            enabled: root.audience-can-import && !root.audience-active && !root.audience-busy;
+                            enabled: root.audience-can-import && !root.audience-active && !root.audience-busy && !root.audience-recovery-pending;
                             clicked => { root.audience-reset-configuration(); }
                         }
                     }

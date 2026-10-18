@@ -96,6 +96,20 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
   preserve both the file and current relay endpoint. Correct the file/access and
   retry. No normal user credentials should be used in validation.
 
+## Pending relay recovery protection
+
+- With a controlled relay, let room creation commit but lose its response, or
+  interrupt the presenter connection after creation. Wait until the failed
+  session returns to idle while retaining its creation identity.
+- Open Settings: Import and Reset must be disabled and recovery guidance visible.
+  Existing relay settings and the saved configuration must remain unchanged.
+- Close Settings and retry **Audience Live on**. Verify it reuses the same creation
+  identity instead of creating a second room. Stop the recovered session, then
+  verify Import and Reset become available again.
+- Exercise rejected import-confirm/reset callbacks as well as their disabled
+  controls; they must not write configuration, clear the identity or initiate
+  cleanup. Normal application-exit cleanup must still own the previous relay.
+
 ## Connection and event checks
 
 Use a controlled relay and a disposable credential for these checks. Replace only
