@@ -1733,11 +1733,6 @@ export component PresenterWindow inherits Window {
                             enabled: root.audience-can-import && !root.audience-active && !root.audience-busy;
                             clicked => { root.audience-import-configuration(); }
                         }
-                        Button {
-                            text: "Check connection and start";
-                            enabled: root.audience-can-start && !root.audience-active && !root.audience-busy;
-                            clicked => { root.close-settings(); root.audience-toggle-session(); }
-                        }
                     }
                     if root.audience-import-preview != "": VerticalBox {
                         Text { text: "Destination: " + root.audience-import-preview; color: white; wrap: word-wrap; }

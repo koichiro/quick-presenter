@@ -241,7 +241,7 @@ impl AudienceUi {
                         *ui.config_error.borrow_mut() = None;
                         window.set_audience_address(ui.address_label().into());
                         window.set_audience_status(
-                            "Configuration imported. Check connection and start when ready.".into(),
+                            "Configuration imported. Close Settings and turn Audience Live on when ready.".into(),
                         );
                         window.set_audience_alert_title("".into());
                         window.set_audience_alert_guidance("".into());

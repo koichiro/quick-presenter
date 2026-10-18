@@ -174,9 +174,10 @@ state-changing timer command is exposed in this version.
 
 Choose **Settings...** from the application menu to open the Settings dialog.
 On macOS this is the native app-name menu; Windows uses **Application**, and
-Linux uses the inline **Application** menu. Import and connection-check actions
-appear only in Settings. The presentation controls retain the Audience Live
-on/off and pause actions.
+Linux uses the inline **Application** menu. Configuration import appears only in
+Settings. Audience Live on/off and pause are controlled from the presenter
+window. Each function has one primary UI location; menu shortcuts may provide
+another entry point.
 
 **Import settings...** is available in Settings while Audience Live is stopped
 and configuration loading has completed. The native picker validates a bounded TOML configuration and displays the relay origin
@@ -187,8 +188,9 @@ previous settings intact. The atomic writer restricts Unix files to mode 0600 an
 Windows files to a protected owner/SYSTEM DACL before writing secret bytes.
 
 The imported endpoint applies on the next explicit start without an application
-restart. **Check connection and start** uses the normal Audience session lifecycle
-and creates the visible session/QR, rather than a separate hidden room. It retains
+restart. Turning **Audience Live on** in the presenter window creates the room,
+connects and authenticates the presenter, and displays the session/QR. There is no
+separate connection-check or start action in Settings. This lifecycle retains
 existing retry identity, refusal guidance and confirmed stop behavior. Import
 cannot replace an active session or bypass pending startup configuration loading.
 
@@ -197,7 +199,7 @@ isolated Windows/macOS checklist and credential-safe evidence requirements.
 
 Settings traps presentation shortcuts while open. Escape or Close discards a
 pending import preview and restores presenter focus; confirming an import keeps
-Settings open to show the result. Checking the connection closes Settings and
-uses the normal explicit start. The vendored menu adapter places the declared
+Settings open to show the result. Close Settings before using the presenter
+controls to start Audience Live. The vendored menu adapter places the declared
 Application actions in the existing macOS app-name menu during menu construction,
 with the same tracked dispatch as the other menu actions.

@@ -42,7 +42,8 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
 
 ## Import and recovery checks
 
-1. Verify the presenter has no always-visible import or connection-check button.
+1. Verify the presenter has no always-visible import or connection-check button,
+   and Settings has no connection-check, start, stop or pause button.
    Choose **Settings...** from the application menu (the app-name menu on macOS,
    **Application** on Windows/Linux). While stopped, choose **Import settings...**
    in Settings and select `download.toml`. Verify
@@ -50,7 +51,8 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
    Use Cancel import, then repeat with Escape or Close; the destination must remain byte-for-byte unchanged.
 2. Select the same file and confirm **Import**. The application must remain
    responsive after the native file picker closes. Verify the success message and
-   that **Check connection and start** is available in Settings without restarting qp.
+   that no session starts. Close Settings and verify **Audience Live on** is
+   available in the presenter window without restarting qp. Reopen Settings.
    While Settings is open, Space/Return must not change the presentation page.
 3. Inspect the isolated destination locally. The `presentation.keep` value must
    remain `unchanged`; Audience settings must match the fixture. Do not paste
@@ -82,11 +84,11 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
 Use a controlled relay and a disposable credential for these checks. Replace only
 the isolated import fixture. The example-origin fixture above is not suitable.
 
-- **Check connection and start** creates the normal visible Audience session and
-  QR. It is an explicit start, not a separate hidden probe. Confirm audience join,
-  reaction/comment delivery and PDF playback.
+- Close Settings and turn **Audience Live on** in the presenter window. It creates
+  the room, connects/authenticates the presenter and displays the session and QR.
+  Confirm audience join, reaction/comment delivery and PDF playback.
 - Import must not replace an active room. Open Settings while running and verify
-  import and connection-check actions are unavailable; close Settings and verify
+  import is unavailable and no session controls appear; close Settings and verify
   normal PDF controls remain usable.
 - Stop, wait for confirmed termination, then start again and verify the new QR.
   Test interrupted/lost creation and stop responses using the existing controlled
