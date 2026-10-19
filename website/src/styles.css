@@ -1136,11 +1136,12 @@ html:lang(ja) {
   :lang(ja) .hero-subtitle { font-size: 1.06rem; }
 }
 
-/* Keep the longer AI message readable alongside the presenter screenshot. */
-.hero h1.ai-headline {
-  max-width: 18ch;
-  font-size: clamp(2.4rem, 4.2vw, 4.1rem);
-  line-height: 1.12;
+/* Keep the product name prominent, following the v1 homepage. */
+.hero h1.product-headline {
+  max-width: 10ch;
+  font-size: clamp(4.2rem, 8vw, 7rem);
+  line-height: 1.08;
+  letter-spacing: 0;
 }
 
 .demo-choices {
@@ -1189,7 +1190,6 @@ html:lang(ja) {
   }
 }
 
-.hero h1.ai-headline span { display: block; }
 .hero-shot a { color: inherit; }
 .demo-overview { padding-bottom: 40px; }
 .demo-links { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; }
@@ -1209,7 +1209,6 @@ a:focus-visible, summary:focus-visible, video:focus-visible { outline: 3px solid
 .anchor-alias { display: block; scroll-margin-top: 30px; }
 @media (max-width: 760px) {
   .preparation-grid, .download-grid { grid-template-columns: 1fr; }
-  .hero h1.ai-headline span { display: inline; }
   .site-header { flex-wrap: nowrap; gap: 12px; }
   .nav-links { width: auto; flex-wrap: nowrap; gap: 6px; }
   .brand { font-size: .95rem; gap: 8px; }
@@ -1237,4 +1236,10 @@ a:focus-visible, summary:focus-visible, video:focus-visible { outline: 3px solid
 }
 @media (max-width: 360px) {
   .site-header .brand span { display: none; }
+}
+
+@media (max-width: 720px) {
+  .hero h1.product-headline {
+    font-size: clamp(3.2rem, 14vw, 5.4rem);
+  }
 }
