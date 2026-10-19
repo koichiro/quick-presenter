@@ -175,8 +175,9 @@ return request, and restored page remain in their original order.
 `src/assets/agentic-presentation-demo.mp4` and its poster retain the supplied
 formal recording. It is 75.5 seconds, 1920×1080 H.264, approximately 5.3 MB,
 and has no audio. It appears in a collapsed full-demo player; neither player
-autoplays or preloads video data. The hero and Open Graph use the actual
-interactive demo preview instead of a generated UI.
+autoplays or preloads video data. The hero and Open Graph use the actual v2 presenter-window screenshot.
+The hero introduces PDF playback first; the following section introduces AI
+integration and retains both interactive and narration demos.
 
 The localized guides are `/guides/interactive-ai/` and
 `/ja/guides/interactive-ai/`, with the repository guide at

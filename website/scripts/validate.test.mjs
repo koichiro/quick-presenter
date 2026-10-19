@@ -48,7 +48,7 @@ test("generated pages have canonical and Open Graph URLs on the new domain", asy
       assert.equal(tags.find((tag) => tag.property === "og:url")?.content, `${origin}${pathname}`);
       assert.equal(
         tags.find((tag) => tag.property === "og:image")?.content,
-        `${origin}/assets/interactive-ai-poster.jpg`,
+        `${origin}/assets/presenter-window-v2-macos.png`,
       );
     }
     for (const tag of tags.filter((tag) => ["og:url", "og:image"].includes(tag.property))) {
