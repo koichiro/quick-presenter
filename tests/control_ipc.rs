@@ -1,5 +1,7 @@
 #![cfg(unix)]
+#![cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
 use quick_presenter::control::{client, protocol::*, server::ControlServer};
+use std::process::Command as ProcessCommand;
 use std::{
     fs,
     io::Write,
@@ -8,7 +10,6 @@ use std::{
         net::UnixStream,
     },
     path::PathBuf,
-    process::Command as ProcessCommand,
     thread,
     time::Duration,
 };

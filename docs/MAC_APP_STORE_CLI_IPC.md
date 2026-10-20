@@ -2,7 +2,8 @@
 
 Tracks [#431](https://github.com/koichiro/quick-presenter/issues/431) under
 [#422](https://github.com/koichiro/quick-presenter/issues/422). This is the
-proposed transport for a future Store CLI, not a supported product feature.
+architecture for the optional v2.5.0 Store control build, not yet a qualified
+customer Store feature.
 The Developer ID macOS and Linux distributions retain their Unix socket; Windows
 retains its named pipe. The public `qp` commands and Control Protocol v1 remain
 the compatibility contract.
@@ -28,10 +29,18 @@ passed ten rendezvous, identity, and endpoint-lifecycle cases in an installed,
 Apple-re-signed internal TestFlight build of version 2.5.0 (25001) on macOS 27
 arm64. The result includes an independent CLI round-trip and rejection of wrong
 signing identifiers. It proves the diagnostic transport in that environment.
-The product GUI and `qp` do not yet use this route, and Protocol v1 commands
-were not exercised through XPC. See the
-[exact build record](https://github.com/koichiro/quick-presenter/blob/cfb626a1e0a7672c5b395747bd77d66f7316c8c8/docs/validation/ISSUE431_STORE_XPC_25001.md)
-for source and installed hashes, signatures, cases, and remaining limits.
+The #495 diagnostic did not exercise the product GUI or Protocol v1 commands.
+The optional product implementation now does so in a Developer ID-signed
+local fixture; its commands, wrong-identifier rejection, and watch behavior
+are recorded in [the #431 product validation](validation/ISSUE431_STORE_CONTROL_PRODUCT_20261020.md).
+The Apple-re-signed product also passed the supported-command checks in
+[TestFlight build 25003](validation/ISSUE431_STORE_CONTROL_TESTFLIGHT_25003.md)
+and [the updated broker in build 25004](validation/ISSUE431_STORE_CONTROL_TESTFLIGHT_25004.md)
+on macOS 27 arm64. The latter required a manual LaunchAgent bootstrap after
+removing an earlier development broker, so unattended registration on a clean
+account remains open. The
+[exact #495 build record](https://github.com/koichiro/quick-presenter/blob/cfb626a1e0a7672c5b395747bd77d66f7316c8c8/docs/validation/ISSUE431_STORE_XPC_25001.md)
+records the diagnostic's hashes, signatures, cases, and remaining limits.
 
 ## Product boundaries
 
@@ -48,9 +57,9 @@ PDF paths, or document contents. GUI exit invalidates its registration; a new
 GUI registers a new endpoint. A second GUI must not replace a live owner
 silently. CLI lookup without a current GUI returns `NOT_RUNNING`.
 
-The first product increment may control a running Store GUI and a PDF selected
+The first product increment controls a running Store GUI and a PDF selected
 through that GUI: status, notes, slide/context queries, elapsed time, navigation,
-blackout, close, and watch. Timer access stays read-only. CLI-driven GUI startup
+blackout, close, export, and watch. Timer access stays read-only. CLI-driven GUI startup
 and arbitrary-path `presentation.open` require the file-authority design in
 [#432](https://github.com/koichiro/quick-presenter/issues/432). Until then,
 reject Store open/startup explicitly; CLI authentication alone gives no PDF
@@ -76,11 +85,20 @@ bundled CLI, but an unsigned or rebuilt binary is not an authorized raw client.
 Do not fall back to a same-user socket, PID-only check, shared secret, or broad
 sandbox exception if XPC registration or identity verification fails.
 
-The XPC probe uses an App Group shared by independently signed diagnostic
-roles. The production GUI currently has no control App Group and the Store
-package currently omits product `qp`; production entitlements, executable
-layout, and Service Management integration must therefore be reviewed and
-tested as new product changes.
+The optional product package stages a dedicated App Group entitlement, nested
+CLI and broker roles, and a per-user LaunchAgent. Its Developer ID-signed
+development fixture passed local product integration. The group uses the
+macOS Team ID-prefixed form that Apple documents as requiring no separate
+registration.
+
+Run Store-control tests locally; GitHub Actions does not run the XPC feature or
+signed-product checks. The feature tests need no signing assets, while native
+XPC communication must be checked against a signed, installed product:
+
+```sh
+cargo test --no-default-features --features macos-store-control
+python3 scripts/check_macos_store_control.py '/Applications/Quick Presenter.app' --testflight
+```
 
 ## Protocol and failure behavior
 

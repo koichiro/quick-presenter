@@ -3,10 +3,9 @@ use crate::{
     app_state::AppState, control_state, input::PresentationCommand,
     render_scheduler::RenderSessionId, window_controller::AppWindowRefs,
 };
-use quick_presenter::control::{
-    protocol::*,
-    server::{ControlServer, PendingRequest},
-};
+#[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
+use quick_presenter::control::server::ControlServer;
+use quick_presenter::control::{protocol::*, server::PendingRequest};
 use slint::{Timer, TimerMode};
 use std::{
     cell::RefCell,
@@ -17,7 +16,15 @@ use std::{
 
 pub struct ControlRuntime {
     _timer: Timer,
-    _server: ControlServer,
+    _server: ControlBackend,
+}
+enum ControlBackend {
+    #[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
+    Socket { _server: ControlServer },
+    #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+    Store {
+        _server: quick_presenter::control::store_xpc::StoreServer,
+    },
 }
 struct Dispatcher {
     receiver: Receiver<PendingRequest>,
@@ -32,22 +39,45 @@ struct ContentQuery {
 }
 impl ControlRuntime {
     pub fn install(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> std::io::Result<Self> {
-        let (server, receiver) = ControlServer::start()?;
-        Ok(Self::with_server(windows, state, server, receiver))
+        #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+        {
+            let (server, receiver) = quick_presenter::control::store_xpc::StoreServer::start()?;
+            return Ok(Self::with_server(
+                windows,
+                state,
+                ControlBackend::Store { _server: server },
+                receiver,
+            ));
+        }
+        #[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
+        {
+            let (server, receiver) = ControlServer::start()?;
+            Ok(Self::with_server(
+                windows,
+                state,
+                ControlBackend::Socket { _server: server },
+                receiver,
+            ))
+        }
     }
-    #[cfg(unix)]
+    #[cfg(all(unix, not(all(target_os = "macos", feature = "macos-store-control"))))]
     pub(crate) fn install_at(
         windows: AppWindowRefs,
         state: Rc<RefCell<AppState>>,
         path: &std::path::Path,
     ) -> std::io::Result<Self> {
         let (server, receiver) = ControlServer::bind(path)?;
-        Ok(Self::with_server(windows, state, server, receiver))
+        Ok(Self::with_server(
+            windows,
+            state,
+            ControlBackend::Socket { _server: server },
+            receiver,
+        ))
     }
     fn with_server(
         windows: AppWindowRefs,
         state: Rc<RefCell<AppState>>,
-        server: ControlServer,
+        server: ControlBackend,
         receiver: Receiver<PendingRequest>,
     ) -> Self {
         let mut dispatcher = Dispatcher {
@@ -845,7 +875,7 @@ mod tests {
             matches!(notes_reply(&state).unwrap(), Reply::Notes { notes, .. } if notes == "Original source note")
         );
     }
-    #[cfg(unix)]
+    #[cfg(all(unix, not(all(target_os = "macos", feature = "macos-store-control"))))]
     #[test]
     fn ipc_navigation_changes_the_owner_state_without_gui_input() {
         use quick_presenter::control::{client, server::ControlServer};

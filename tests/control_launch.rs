@@ -1,5 +1,6 @@
 //! CLI process tests with a fake companion GUI; no window or PDFium required.
 #![cfg(unix)]
+#![cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
 use serde_json::Value;
 use std::{
     fs,

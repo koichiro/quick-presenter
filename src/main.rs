@@ -10,7 +10,7 @@ pub mod black_screen;
 pub mod cli;
 pub mod clock;
 mod control_app;
-#[cfg(unix)]
+#[cfg(all(unix, not(all(target_os = "macos", feature = "macos-store-control"))))]
 mod control_smoke;
 mod control_state;
 pub mod diagnostics;
