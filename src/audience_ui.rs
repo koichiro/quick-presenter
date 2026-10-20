@@ -478,7 +478,7 @@ impl AudienceUi {
 
     fn address_label(&self) -> String {
         if self.relay_config.borrow().is_some() {
-            return "Relay · draft protocol".into();
+            return "Relay".into();
         }
         self.addresses
             .borrow()
