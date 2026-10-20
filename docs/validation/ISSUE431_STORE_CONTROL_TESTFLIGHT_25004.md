@@ -3,6 +3,9 @@
 Date: 2026-10-20. PR #496 source commit
 `22a1c3d1826a3932ea1a3191cb8f67423ac5ca4d` was packaged as version
 2.5.0, build 25004, for internal TestFlight testing on macOS 27.0.1 arm64.
+This record describes the original main-based source. PR #496 was subsequently
+retargeted to `v2.5.0`; its product code patch is byte-identical, but the
+rebased source tree has not been submitted as a new TestFlight build.
 The signed installer SHA-256 was
 `33e9845015d068cf99abcf0769a957b4aa4b4a8f6092e198cb2a4f2923f455ad`.
 The package passed deep strict signature, installer-signature, and seven-Mach-O
