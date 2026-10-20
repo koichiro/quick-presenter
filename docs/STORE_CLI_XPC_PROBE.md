@@ -29,6 +29,33 @@ backpressure, or production startup/file authority. Its synchronous diagnostic
 calls are bounded by the external runner; a production wrapper needs native
 timeouts and cancellation behavior. Do not reuse the renderer XPC service.
 
+## Comparison with the v2.0.0 control transports
+
+The public `qp` commands, JSON and NDJSON output, error codes, and Control
+Protocol v1 are independent of the transport. The XPC proposal changes how
+the Mac App Store CLI finds and authenticates the GUI; it does not propose a
+new user-facing protocol. The v2.0.0 implementation and its distribution
+limits are described in [the control contract](CONTROL_PROTOCOL.md) and
+[CLI installation guide](CLI.md#installation).
+
+| Route | Connection and trust boundary | Benefit | Cost or limitation |
+| --- | --- | --- | --- |
+| v2.0.0 macOS Developer ID and Linux | Per-user Unix-domain `control.sock`, a 0700 directory, 0600 socket, and a single-owner lock | Simple Rust byte stream; the existing 1 MiB framed JSON, deadlines, watch, and bounded queues work directly | Endpoint discovery depends on a shared runtime path. Owner and mode checks authenticate a user boundary, not the signing identity of each request. It is not a supported Mac App Store endpoint. |
+| v2.0.0 Windows | Local named pipe with the creator-account DACL, remote-client rejection, server-user verification, and identification-level impersonation | No socket path or stale filesystem inode; preserves the same CLI contract | Windows-specific implementation and security policy; XPC does not replace it. |
+| Rejected Store App Group socket probe (#440) | Group container socket with signed, sandboxed roles and a `LOCAL_PEERTOKEN`-based identity check | Both signed roles can reach a shared endpoint after Apple re-signing; it could reuse the Unix byte-stream server | The tested check accepted an already-queued request from a wrong-identifier process after that PID executed the approved Client. Container access and a current-PID check do not establish the sender identity of that request. |
+| Proposed Store XPC route (#495) | A per-user `SMAppService` broker returns a GUI-owned anonymous endpoint. Each XPC leg applies an exact same-team/signing-identifier requirement before activation | Installed TestFlight build 19003 passed independent CLI roundtrips, wrong-identifier rejection, and endpoint-lifecycle checks without a filesystem control socket | Adds signed nested roles, an agent registration/approval and update lifecycle, and macOS-specific XPC bindings. The diagnostic exchanges only `ping`; Protocol v1, cancellation, watch/full-text streaming, startup, and load limits still need product integration. |
+
+The broker holds only the current endpoint; the GUI remains the sole owner of
+presentation state and PDF file authority. The XPC diagnostic establishes a
+viable transport and identity boundary on one macOS 27 arm64 TestFlight
+installation, not a finished Store CLI. The product implementation must keep
+the v2.0.0 CLI contract and its bounds while translating requests and
+responses to XPC messages. The existing Unix socket and Windows named pipe
+remain appropriate for their supported distributions; this proposal changes
+only the Mac App Store route. The Store socket failure and XPC pass are
+recorded in [the exec-transition test](validation/ISSUE431_STORE_IPC_EXEC_20261020.md)
+and [the XPC TestFlight test](validation/ISSUE431_STORE_XPC_20261020.md).
+
 ## Local signed run
 
 Use a fresh absolute destination in `/Applications` and an existing Developer

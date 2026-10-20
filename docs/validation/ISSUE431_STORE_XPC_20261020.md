@@ -1,6 +1,7 @@
 # Issue 431: signed local XPC rendezvous
 
-Date: 2026-10-20. Source branch: `codex/431-store-cli-xpc-probe`, based on
+Date: 2026-10-20. The original diagnostic source on
+`codex/431-store-cli-xpc-probe` followed
 `39555da4a274b2de1b48e3bce79e5681356e7460` from #440. The local package
 was built on macOS 27.0.1 (26A434), arm64, SDK 27.0. The four diagnostic
 roles were independently Developer ID Application-signed by Team
@@ -69,6 +70,12 @@ control commands or a customer Store release. The 19002 failure and 19003
 success together support the inference that reusing the agent label across
 Developer ID and TestFlight signing categories caused the cached constraint
 mismatch; the diagnostics should keep those labels separate.
+
+These installed binaries were built from the 1.9.0 diagnostic candidate before
+PR #495 was rebased onto `main` and its source version was raised to 2.5.0.
+Their recorded hashes identify the exact tested payload; they do not establish
+that a 2.5.0 product build has passed installed TestFlight validation. Repeat
+that check after the diagnostic transport is integrated with the product GUI.
 
 Open gates: macOS 14.4 and Intel, real GUI/Protocol v1 integration, bounded
 watch/full-text delivery, resource limits, user approval/denial on another
