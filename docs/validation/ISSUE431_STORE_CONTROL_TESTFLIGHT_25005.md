@@ -19,7 +19,16 @@ The signed installer SHA-256 is
 `3c37ffb898ab6414f283b6342729ecdb52ef608dfb7c50c1513d4c08f06eb782`.
 Transporter delivered build 25005 to App Store Connect at 2026-10-21 00:51 JST
 and subsequently reported processing complete. The build has not yet been
-assigned to the internal `Release Validation` group or installed through
-TestFlight. At the time of this record, TestFlight still listed builds
-25001–25004. Installed Apple-re-signed signatures and the product XPC runtime
-must be checked on build 25005 before claiming this validation complete.
+installed through TestFlight. In App Store Connect, the same export compliance
+classification used for prior candidates (no non-exempt encryption) was saved,
+the build reached Ready to Submit, and it was assigned only to the existing
+internal `Release Validation` group with one tester. The test notes identify
+this as an XPC broker validation build and exclude it from customer release.
+App Store Connect then showed build 25005 as Testing in that group with one
+invitation. The local TestFlight app still listed builds 25001–25004 after
+refresh and restart, so the Apple-distributed 25005 payload could not yet be
+installed. The manually bootstrapped 25004 broker job was removed and
+`launchctl print` confirmed the label absent, preventing a stale broker from
+masking the eventual 25005 runtime result. Installed Apple-re-signed
+signatures and the product XPC runtime must be checked on build 25005 before
+claiming this validation complete.
