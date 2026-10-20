@@ -39,12 +39,14 @@ as errors for arm64 and x86_64. Socket-only integration tests run only for
 the normal build; Store transport integration is covered by the signed
 fixture above.
 
-The package script staged the feature binaries, found no private CGS imports,
-and correctly stopped before signing because the existing App Store profile
-does not authorize `TEAMID.app.quickpresenter.control`. Obtain an App Store
-distribution profile with that App Group, then package and validate the
-Apple-re-signed product in TestFlight. The earlier #495 TestFlight success
-established the diagnostic XPC route, not this product integration.
+The initial package script staged the feature binaries and found no private
+CGS imports, but stopped before signing because it required the existing App
+Store profile to list `TEAMID.app.quickpresenter.control`. Apple documents
+that this macOS Team ID-prefixed group needs no separate registration. The
+package gate was removed for the subsequent product TestFlight candidate;
+its Apple processing and installed behavior require separate validation. The
+earlier #495 TestFlight success established the diagnostic XPC route, not this
+product integration.
 
 Remaining gates are the processed product TestFlight build; clean-account
 registration, approval/denial and upgrade behavior; foreign-team and unsigned

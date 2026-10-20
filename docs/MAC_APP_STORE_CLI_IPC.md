@@ -82,9 +82,10 @@ sandbox exception if XPC registration or identity verification fails.
 
 The optional product package stages a dedicated App Group entitlement, nested
 CLI and broker roles, and a per-user LaunchAgent. Its Developer ID-signed
-development fixture passed local product integration. The available App Store
-profile does not yet authorize that App Group, so Apple Distribution signing
-and TestFlight installation of this product build remain open.
+development fixture passed local product integration. The group uses the
+macOS Team ID-prefixed form that Apple documents as requiring no separate
+registration. Apple Distribution signing and TestFlight installation of this
+product build remain open.
 
 ## Protocol and failure behavior
 

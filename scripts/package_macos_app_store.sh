@@ -72,8 +72,6 @@ entitlements["com.apple.application-identifier"] = app_id
 entitlements["com.apple.developer.team-identifier"] = team
 if store_control:
     group = f"{team}.app.quickpresenter.control"
-    if group not in profile["Entitlements"].get("com.apple.security.application-groups", []):
-        raise SystemExit("The App Store profile must authorize the Store control App Group")
     entitlements["com.apple.security.application-groups"] = [group]
     contents = app / "Contents"
     cli_bundle = contents / "Helpers/ControlCLI.app"

@@ -42,9 +42,11 @@ defines the sandboxed file-authority handoff.
 
 For a Store control candidate, build all binaries from the same source with
 `cargo build --release --locked --bins --features macos-store-control` and set
-`MACOS_STORE_CONTROL=1` when invoking the package script. The App Store
-provisioning profile must authorize the
-`TEAMID.app.quickpresenter.control` App Group. The packaged CLI is at
+`MACOS_STORE_CONTROL=1` when invoking the package script. The app and control
+roles use the macOS Team ID-prefixed
+`TEAMID.app.quickpresenter.control` App Group. [Apple documents](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.application-groups)
+that this form does not require registration on the Developer website; the Apple-re-signed
+product build still needs TestFlight validation. The packaged CLI is at
 `Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`.
 Check nested signatures, entitlements, and the exact agent label before
 uploading. A local Developer ID-signed product fixture passed the command and
