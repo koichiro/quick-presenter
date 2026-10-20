@@ -92,6 +92,7 @@ static void reply_status(xpc_object_t message, bool accepted) {
 
 static void accept_registration(xpc_connection_t peer) {
     if (set_identity(peer, gui_id) != 0) { xpc_connection_cancel(peer); return; }
+    xpc_connection_set_target_queue(peer, dispatch_get_main_queue());
     xpc_connection_set_event_handler(peer, ^(xpc_object_t message) {
         if (xpc_get_type(message) == XPC_TYPE_ERROR) {
             if (registration_owner == peer) {
@@ -117,6 +118,7 @@ static void accept_registration(xpc_connection_t peer) {
 
 static void accept_lookup(xpc_connection_t peer) {
     if (set_identity(peer, client_id) != 0) { xpc_connection_cancel(peer); return; }
+    xpc_connection_set_target_queue(peer, dispatch_get_main_queue());
     xpc_connection_set_event_handler(peer, ^(xpc_object_t message) {
         if (xpc_get_type(message) == XPC_TYPE_ERROR) { xpc_connection_cancel(peer); return; }
         xpc_object_t reply = xpc_dictionary_create_reply(message);

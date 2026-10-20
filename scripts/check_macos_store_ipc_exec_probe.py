@@ -90,6 +90,8 @@ def run_case(server_binary, fixture, client, mode):
         attacker.stdin.write(b'G')
         attacker.stdin.flush()
         result = wait_json(attacker, 'queued_request_result', 5)
+        if server.poll() is not None:
+            raise AssertionError(f'server exited before queued result: {server.returncode}')
         return result
     finally:
         if not resumed and server.poll() is None:
