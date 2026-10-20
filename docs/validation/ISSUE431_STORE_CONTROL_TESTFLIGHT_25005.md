@@ -43,7 +43,9 @@ leaving an enabled registration without a loaded job; the evidence does not
 establish how a clean installation behaves. Direct `launchctl bootstrap` of
 the bundled plist failed with I/O error. A local test plist with the same label
 and Mach services and an absolute `Program` pointing to the **installed 25005
-broker binary** bootstrapped successfully. The GUI was then restarted.
+broker binary** bootstrapped successfully. The local job is loaded from
+`/private/tmp/qp431-product-testflight-25005/testflight-agent.plist`; it was
+left running for this login session. The GUI was then restarted.
 
 With the 12-page demo PDF opened through the installed GUI's file picker,
 `python3 scripts/check_macos_store_control.py '/Applications/Quick Presenter.app' --testflight`
