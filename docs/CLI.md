@@ -4,6 +4,12 @@
 Control Protocol. It is intended for automation tools and AI agents, and does
 not implement narration, AI models, or presentation business logic.
 
+Mac App Store CLI support is planned for
+[v2.5.0](https://github.com/koichiro/quick-presenter/milestone/4), renamed from
+v2.4.0 and tracked by [#422](https://github.com/koichiro/quick-presenter/issues/422).
+The target change does not establish Store support; signed and installed-build
+validation is still required.
+
 ## Stable automation interface
 
 For v2.0.0, the documented command names/options, `--json` result/error fields,
