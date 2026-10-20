@@ -73,6 +73,12 @@ def main():
             '--sign', args.identity, '--identifier', f'app.quickpresenter.xpc-probe.{suffix}',
             '--entitlements', str(destination / f'{name}.entitlements'), str(app))
     run('codesign', '--verify', '--deep', '--strict', str(root))
+    signed_info = subprocess.run(
+        ('codesign', '-d', '--verbose=4', str(root)),
+        capture_output=True, text=True, check=True).stderr
+    signed_team = re.search(r'^TeamIdentifier=([A-Z0-9]{10})$', signed_info, re.MULTILINE)
+    if not signed_team or signed_team.group(1) != args.team:
+        parser.error('team must match the signed application Team ID')
     print(f'Prepared signed XPC diagnostics in {destination}')
 
 
