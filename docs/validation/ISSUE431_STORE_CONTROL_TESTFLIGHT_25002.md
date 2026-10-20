@@ -67,5 +67,5 @@ unverified. Raw-path `qp open` still needs the authorized file handoff in
 
 The subsequent CodeRabbit fixes to XPC connection cleanup, broker event
 serialization, and absent-broker error mapping were not in build 25002. They
-passed local compilation and tests but require a new distribution build for
-TestFlight runtime validation.
+passed local compilation and tests. Their follow-up distribution validation
+is recorded in `docs/validation/ISSUE431_STORE_CONTROL_TESTFLIGHT_25003.md`.
