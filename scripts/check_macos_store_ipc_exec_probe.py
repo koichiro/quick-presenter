@@ -78,8 +78,7 @@ def run_case(server_binary, fixture, client, mode):
         if mode == 'exec':
             command.append(str(client))
         attacker = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE, text=True, start_new_session=True,
-                                    bufsize=1)
+                                    stderr=subprocess.PIPE, start_new_session=True, bufsize=0)
         queued = wait_json(attacker, 'request_queued', 3)
         assert queued.get('cloexec') is True
         if mode == 'exec':
@@ -88,7 +87,7 @@ def run_case(server_binary, fixture, client, mode):
         os.kill(server.pid, signal.SIGCONT)
         resumed = True
         time.sleep(0.4)
-        attacker.stdin.write('G')
+        attacker.stdin.write(b'G')
         attacker.stdin.flush()
         result = wait_json(attacker, 'queued_request_result', 5)
         return result

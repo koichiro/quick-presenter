@@ -7,11 +7,12 @@ import pathlib
 import plistlib
 import re
 import subprocess
+import sys
 import tempfile
 
 
 def run(*args):
-    return subprocess.run(args, check=True, capture_output=True, text=True)
+    return subprocess.run(args, check=True, capture_output=True, text=True, timeout=30)
 
 
 def main():
@@ -87,7 +88,8 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix='qp-xpc-testflight-') as folder:
         (pathlib.Path(folder) / 'XPCProbe.app').symlink_to(helper)
-        result = subprocess.run(['python3', 'scripts/check_macos_store_xpc_probe.py', folder],
+        runner = pathlib.Path(__file__).resolve().with_name('check_macos_store_xpc_probe.py')
+        result = subprocess.run([sys.executable, str(runner), folder],
                                 capture_output=True, text=True, timeout=60)
         if result.returncode != 0:
             raise AssertionError(f'installed XPC probe failed: {result.stdout} {result.stderr}')
