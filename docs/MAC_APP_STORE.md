@@ -45,15 +45,18 @@ For a Store control candidate, build all binaries from the same source with
 `MACOS_STORE_CONTROL=1` when invoking the package script. The app and control
 roles use the macOS Team ID-prefixed
 `TEAMID.app.quickpresenter.control` App Group. [Apple documents](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.application-groups)
-that this form does not require registration on the Developer website; the Apple-re-signed
-product build still needs TestFlight validation. The packaged CLI is at
+that this form does not require registration on the Developer website. The
+Apple-re-signed product passed internal TestFlight integration in
+[build 25004](validation/ISSUE431_STORE_CONTROL_TESTFLIGHT_25004.md);
+unattended LaunchAgent registration on a clean account remains unqualified.
+The packaged CLI is at
 `Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`.
 Check nested signatures, entitlements, and the exact agent label before
 uploading. A local Developer ID-signed product fixture passed the command and
 identity checks recorded in
 [the #431 validation](validation/ISSUE431_STORE_CONTROL_PRODUCT_20261020.md).
-That fixture does not establish behavior after Apple re-signing; repeat the
-checks on the processed TestFlight build before claiming Store CLI support.
+The installed TestFlight checks establish behavior after Apple re-signing for
+the tested environment, while the remaining release gates below still apply.
 
 ## Release checklist
 

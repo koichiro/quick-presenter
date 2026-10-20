@@ -35,7 +35,10 @@ local fixture; its commands, wrong-identifier rejection, and watch behavior
 are recorded in [the #431 product validation](validation/ISSUE431_STORE_CONTROL_PRODUCT_20261020.md).
 The Apple-re-signed product also passed the supported-command checks in
 [TestFlight build 25003](validation/ISSUE431_STORE_CONTROL_TESTFLIGHT_25003.md)
-on macOS 27 arm64. The
+and [the updated broker in build 25004](validation/ISSUE431_STORE_CONTROL_TESTFLIGHT_25004.md)
+on macOS 27 arm64. The latter required a manual LaunchAgent bootstrap after
+removing an earlier development broker, so unattended registration on a clean
+account remains open. The
 [exact #495 build record](https://github.com/koichiro/quick-presenter/blob/cfb626a1e0a7672c5b395747bd77d66f7316c8c8/docs/validation/ISSUE431_STORE_XPC_25001.md)
 records the diagnostic's hashes, signatures, cases, and remaining limits.
 
