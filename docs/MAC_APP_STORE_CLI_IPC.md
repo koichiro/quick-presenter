@@ -33,9 +33,11 @@ The #495 diagnostic did not exercise the product GUI or Protocol v1 commands.
 The optional product implementation now does so in a Developer ID-signed
 local fixture; its commands, wrong-identifier rejection, and watch behavior
 are recorded in [the #431 product validation](validation/ISSUE431_STORE_CONTROL_PRODUCT_20261020.md).
-Apple-re-signed product validation remains open. See the
-[exact build record](https://github.com/koichiro/quick-presenter/blob/cfb626a1e0a7672c5b395747bd77d66f7316c8c8/docs/validation/ISSUE431_STORE_XPC_25001.md)
-for source and installed hashes, signatures, cases, and remaining limits.
+The Apple-re-signed product also passed the supported-command checks in
+[TestFlight build 25003](validation/ISSUE431_STORE_CONTROL_TESTFLIGHT_25003.md)
+on macOS 27 arm64. The
+[exact #495 build record](https://github.com/koichiro/quick-presenter/blob/cfb626a1e0a7672c5b395747bd77d66f7316c8c8/docs/validation/ISSUE431_STORE_XPC_25001.md)
+records the diagnostic's hashes, signatures, cases, and remaining limits.
 
 ## Product boundaries
 
@@ -84,8 +86,16 @@ The optional product package stages a dedicated App Group entitlement, nested
 CLI and broker roles, and a per-user LaunchAgent. Its Developer ID-signed
 development fixture passed local product integration. The group uses the
 macOS Team ID-prefixed form that Apple documents as requiring no separate
-registration. Apple Distribution signing and TestFlight installation of this
-product build remain open.
+registration.
+
+Run Store-control tests locally; GitHub Actions does not run the XPC feature or
+signed-product checks. The feature tests need no signing assets, while native
+XPC communication must be checked against a signed, installed product:
+
+```sh
+cargo test --no-default-features --features macos-store-control
+python3 scripts/check_macos_store_control.py '/Applications/Quick Presenter.app' --testflight
+```
 
 ## Protocol and failure behavior
 

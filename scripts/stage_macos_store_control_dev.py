@@ -23,8 +23,8 @@ def main():
     if not re.fullmatch(r'[A-Z0-9]{10}', args.team):
         parser.error('team must be a ten-character identifier')
     for binary in (args.gui, args.cli, args.broker):
-        if not binary.is_file():
-            parser.error(f'missing release binary: {binary}')
+        if not binary.is_file() or not os.access(binary, os.X_OK):
+            parser.error(f'missing executable release binary: {binary}')
     args.destination.mkdir(parents=True)
     subprocess.run(['scripts/stage_macos_app_bundle.sh', str(args.destination),
                     str(args.gui), str(args.cli)], check=True)

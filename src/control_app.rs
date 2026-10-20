@@ -3,10 +3,9 @@ use crate::{
     app_state::AppState, control_state, input::PresentationCommand,
     render_scheduler::RenderSessionId, window_controller::AppWindowRefs,
 };
-use quick_presenter::control::{
-    protocol::*,
-    server::{ControlServer, PendingRequest},
-};
+#[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
+use quick_presenter::control::server::ControlServer;
+use quick_presenter::control::{protocol::*, server::PendingRequest};
 use slint::{Timer, TimerMode};
 use std::{
     cell::RefCell,
@@ -20,9 +19,8 @@ pub struct ControlRuntime {
     _server: ControlBackend,
 }
 enum ControlBackend {
-    Socket {
-        _server: ControlServer,
-    },
+    #[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
+    Socket { _server: ControlServer },
     #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
     Store {
         _server: quick_presenter::control::store_xpc::StoreServer,
@@ -62,7 +60,7 @@ impl ControlRuntime {
             ))
         }
     }
-    #[cfg(unix)]
+    #[cfg(all(unix, not(all(target_os = "macos", feature = "macos-store-control"))))]
     pub(crate) fn install_at(
         windows: AppWindowRefs,
         state: Rc<RefCell<AppState>>,

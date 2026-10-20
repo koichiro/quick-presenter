@@ -286,7 +286,7 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         },
     );
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(all(target_os = "macos", feature = "macos-store-control"))))]
     {
         crate::control_smoke::run(&windows, state.clone(), options.pdf_path.clone())?;
         report.pass("local control operates through the GUI and isolated renderer");

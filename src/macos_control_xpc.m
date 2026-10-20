@@ -94,7 +94,8 @@ static void release_wait(ReplyWait *wait) {
     }
 }
 
-static xpc_object_t request_with_deadline(xpc_connection_t peer, xpc_object_t message) {
+static xpc_object_t request_with_deadline(
+    xpc_connection_t peer, xpc_object_t message, int64_t timeout_ns) {
     ReplyWait *wait = calloc(1, sizeof(*wait));
     if (!wait) return NULL;
     atomic_init(&wait->references, 2);
@@ -110,7 +111,7 @@ static xpc_object_t request_with_deadline(xpc_connection_t peer, xpc_object_t me
     });
     xpc_object_t result = NULL;
     if (dispatch_semaphore_wait(wait->semaphore,
-        dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC)) == 0) {
+        dispatch_time(DISPATCH_TIME_NOW, timeout_ns)) == 0) {
         pthread_mutex_lock(&wait->mutex);
         if (wait->result) result = xpc_retain(wait->result);
         pthread_mutex_unlock(&wait->mutex);
@@ -310,7 +311,8 @@ void *qp_control_gui_start(request_callback_t request, cancel_callback_t cancel,
         xpc_object_t message = xpc_dictionary_create(NULL, NULL, 0);
         xpc_dictionary_set_string(message, "kind", "register");
         xpc_dictionary_set_value(message, "endpoint", endpoint);
-        xpc_object_t response = request_with_deadline(handle->broker, message);
+        xpc_object_t response = request_with_deadline(handle->broker, message,
+            3 * NSEC_PER_SEC);
         bool accepted = response && xpc_get_type(response) == XPC_TYPE_DICTIONARY &&
             xpc_dictionary_get_bool(response, "accepted");
         if (response) xpc_release(response);
@@ -349,7 +351,8 @@ int qp_control_peer_send(void *opaque, const void *bytes, size_t length) {
     xpc_object_t message = xpc_dictionary_create(NULL, NULL, 0);
     xpc_dictionary_set_string(message, "kind", "response");
     xpc_dictionary_set_data(message, "data", bytes, length);
-    xpc_object_t acknowledgement = request_with_deadline((xpc_connection_t)opaque, message);
+    xpc_object_t acknowledgement = request_with_deadline((xpc_connection_t)opaque, message,
+        NSEC_PER_SEC);
     bool accepted = acknowledgement && xpc_get_type(acknowledgement) == XPC_TYPE_DICTIONARY &&
         xpc_dictionary_get_bool(acknowledgement, "accepted");
     if (acknowledgement) xpc_release(acknowledgement);
@@ -388,7 +391,7 @@ void *qp_control_client_connect(int *error_out) {
     if (!broker) { if (error_out) *error_out = EACCES; return NULL; }
     xpc_object_t lookup = xpc_dictionary_create(NULL, NULL, 0);
     xpc_dictionary_set_string(lookup, "kind", "lookup");
-    xpc_object_t response = request_with_deadline(broker, lookup);
+    xpc_object_t response = request_with_deadline(broker, lookup, 3 * NSEC_PER_SEC);
     if (!response && error_out) *error_out = ETIMEDOUT;
     if (response && xpc_equal(response, XPC_ERROR_PEER_CODE_SIGNING_REQUIREMENT) && error_out)
         *error_out = EACCES;
@@ -444,7 +447,7 @@ void *qp_control_client_connect(int *error_out) {
     xpc_connection_activate(peer);
     xpc_object_t hello = xpc_dictionary_create(NULL, NULL, 0);
     xpc_dictionary_set_string(hello, "kind", "hello");
-    xpc_object_t answer = request_with_deadline(peer, hello);
+    xpc_object_t answer = request_with_deadline(peer, hello, 3 * NSEC_PER_SEC);
     if (!answer && error_out) *error_out = ETIMEDOUT;
     if (answer && xpc_equal(answer, XPC_ERROR_PEER_CODE_SIGNING_REQUIREMENT) && error_out)
         *error_out = EACCES;

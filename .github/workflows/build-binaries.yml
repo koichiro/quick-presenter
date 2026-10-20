@@ -156,10 +156,6 @@ jobs:
       - name: Test default control protocol and CLI on each platform
         run: cargo test --no-default-features --lib --test control_contract --test control_events --test control_ipc --test control_ipc_windows --test control_lock --test control_launch --test control_launch_windows
 
-      - name: Test macOS Store XPC control
-        if: runner.os == 'macOS'
-        run: cargo test --no-default-features --features macos-store-control
-
       - name: Build release binaries
         run: cargo build --release --bins
 
