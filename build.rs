@@ -1,6 +1,7 @@
 fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         build_xpc_bridge();
+        build_store_ipc_probe();
     }
     let slint_source =
         if std::env::var_os("CARGO_CFG_TARGET_OS").as_deref() == Some("linux".as_ref()) {
@@ -16,6 +17,43 @@ fn main() {
     if std::env::var_os("CARGO_CFG_WINDOWS").is_some() {
         embed_windows_icon();
     }
+}
+
+// Link the diagnostic bridge only into the explicitly requested example.
+fn build_store_ipc_probe() {
+    use std::{path::PathBuf, process::Command};
+    println!("cargo:rerun-if-changed=examples/store_ipc_probe/native.m");
+    let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+    let arch = match std::env::var("CARGO_CFG_TARGET_ARCH").unwrap().as_str() {
+        "aarch64" => "arm64",
+        "x86_64" => "x86_64",
+        _ => panic!("unsupported macOS probe architecture"),
+    };
+    let object = out.join("store-ipc-probe.o");
+    assert!(Command::new("xcrun")
+        .args([
+            "clang",
+            "-arch",
+            arch,
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-c",
+            "examples/store_ipc_probe/native.m",
+            "-o"
+        ])
+        .arg(&object)
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("xcrun")
+        .args(["libtool", "-static", "-o"])
+        .arg(out.join("libstore_ipc_probe.a"))
+        .arg(&object)
+        .status()
+        .unwrap()
+        .success());
+    // The example's #[link] attribute selects this archive, not production targets.
 }
 
 fn build_xpc_bridge() {
