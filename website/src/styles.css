@@ -1137,11 +1137,18 @@ html:lang(ja) {
 }
 
 /* Keep the product name prominent, following the v1 homepage. */
+.hero-copy {
+  container-type: inline-size;
+}
+
 .hero h1.product-headline {
   max-width: 10ch;
-  font-size: clamp(4.2rem, 8vw, 7rem);
+  /* Scale to the text column, which stops growing before the viewport does. */
+  font-size: clamp(2rem, 20cqw, 7rem);
   line-height: 1.08;
   letter-spacing: 0;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .demo-choices {
@@ -1236,10 +1243,4 @@ a:focus-visible, summary:focus-visible, video:focus-visible { outline: 3px solid
 }
 @media (max-width: 360px) {
   .site-header .brand span { display: none; }
-}
-
-@media (max-width: 720px) {
-  .hero h1.product-headline {
-    font-size: clamp(3.2rem, 14vw, 5.4rem);
-  }
 }
