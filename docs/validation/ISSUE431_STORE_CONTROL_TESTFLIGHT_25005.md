@@ -43,9 +43,9 @@ leaving an enabled registration without a loaded job; the evidence does not
 establish how a clean installation behaves. Direct `launchctl bootstrap` of
 the bundled plist failed with I/O error. A local test plist with the same label
 and Mach services and an absolute `Program` pointing to the **installed 25005
-broker binary** bootstrapped successfully. The local job is loaded from
-`/private/tmp/qp431-product-testflight-25005/testflight-agent.plist`; it was
-left running for this login session. The GUI was then restarted.
+broker binary** bootstrapped successfully. For that login session, the local
+job was loaded from `/private/tmp/qp431-product-testflight-25005/testflight-agent.plist`.
+The GUI was then restarted.
 
 With the 12-page demo PDF opened through the installed GUI's file picker,
 `python3 scripts/check_macos_store_control.py '/Applications/Quick Presenter.app' --testflight`
@@ -57,8 +57,25 @@ watch, navigation, blackout, and close commands. After quitting the GUI, the
 CLI returned `NOT_RUNNING` with exit code 3. Reopening from TestFlight produced
 a new session ID and a successful status query.
 
-The result validates product XPC communication and CLI behavior on this
-Apple-distributed arm64 build **after manual broker registration**. It does
-not validate automatic `SMAppService` registration from a clean user session.
-That setup path should be checked without a prior manual `launchctl bootout`
-before claiming unattended first-launch behavior or customer readiness.
+After a full Mac restart on 2026-10-21, the temporary plist and worktree had
+been removed by the OS. Before opening the GUI, `launchctl print` showed the
+broker label submitted by `smd`, managed by `com.apple.xpc.ServiceManagement`,
+with parent bundle version `25005` and `state = not running`. Opening the
+installed app from TestFlight started the same managed job on demand. Its
+`launchctl` record then showed `state = running`, `immediate reason = ipc
+(mach)`, and no path to the earlier temporary plist. The installed CLI's
+`status --json` succeeded without manual bootstrap. With the 12-page demo PDF
+opened through the GUI, CLI status reported page 1 and `render_state = ready`.
+The CLI then moved to page 2, jumped to page 12, enabled and disabled blackout,
+and returned to page 11; status queries confirmed each resulting state and
+render completion. The full `check_macos_store_control.py --testflight` suite
+was then rerun against this automatically registered broker and passed all
+seven groups again, including signature checks, watch events, read-only
+queries, unsupported raw-path rejection, close, and repeated connections.
+
+This validates automatic ServiceManagement broker registration across a normal
+reboot/login and authenticated XPC CLI control on the Apple-distributed arm64
+TestFlight build. A fresh installation in a new user account, other supported
+macOS versions and Intel hardware remain untested. The initial `NOT_RUNNING`
+result followed the earlier out-of-band `launchctl bootout` and was resolved
+by reboot; it does not reproduce in the tested post-reboot session.
