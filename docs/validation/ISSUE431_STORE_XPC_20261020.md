@@ -49,9 +49,28 @@ Build 19003 changes only the TestFlight LaunchAgent label to avoid the local
 Developer ID fixture's cached launch constraint. Its signed installer SHA-256
 is `e1ca28b4567d16ba1b9a3b766790b846ddabe2e8eb21bcd47eef2c4e8f26271f`.
 The native XPC probe input is byte-for-byte identical to build 19002. Apple
-processing and installed runtime validation for 19003 remain pending.
+accepted it, and the same one-person internal beta group installed it through
+TestFlight. The installed build had a receipt, valid deep signature, four
+TestFlight Beta Distribution authorities, the expected team and exact
+identifiers, and sandbox/group entitlements. The verifier passed all ten
+cases listed above on the installed Apple-re-signed payload. The four installed
+helper executable SHA-256 hashes were:
 
-Open gates: Apple-re-signed internal TestFlight runtime, macOS 14.4 and Intel,
-real GUI/Protocol v1 integration, bounded watch/full-text delivery, resource
-limits, user approval/denial on another machine, final Store distribution,
-and #432 file-authority handoff. #431/#422 remain open.
+| Role | SHA-256 |
+| --- | --- |
+| GUI | `bfc5345506f52e9109bd8458db8d275eeaab87b88d91cb6cc9370b9a3400b275` |
+| Broker | `240527136930714bc633edd0866d8065bafbd853f3fa5504ba4f7996f954b744` |
+| Client | `73201d5466de7a69a3e58c64757d4f3636d74991873ce946f17db29588a53ddb` |
+| WrongPeer | `f4ba0dd7d9fa4616b0a2bede2bdce39b442984e1d4bf1fbe94ba1c851758e0f8` |
+
+This closes the Apple-re-signed transport and endpoint-lifecycle gate for
+this macOS 27 arm64 internal diagnostic. It does not validate production
+control commands or a customer Store release. The 19002 failure and 19003
+success together support the inference that reusing the agent label across
+Developer ID and TestFlight signing categories caused the cached constraint
+mismatch; the diagnostics should keep those labels separate.
+
+Open gates: macOS 14.4 and Intel, real GUI/Protocol v1 integration, bounded
+watch/full-text delivery, resource limits, user approval/denial on another
+machine, final Store distribution, and #432 file-authority handoff. #431/#422
+remain open.

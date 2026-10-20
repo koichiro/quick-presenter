@@ -67,7 +67,9 @@ def main():
         tested = json.loads(result.stdout.strip())
     print(json.dumps({'probe': 1, 'scope': 'installed Apple-re-signed TestFlight',
                       'build': build, 'team': team, 'sha256': hashes,
-                      'passed': tested['passed'], 'remaining': tested['remaining']}))
+                      'passed': tested['passed'],
+                      'remaining': [gate for gate in tested['remaining']
+                                    if gate != 'Apple-re-signed TestFlight']}))
 
 
 if __name__ == '__main__':

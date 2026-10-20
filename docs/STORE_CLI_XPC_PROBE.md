@@ -71,3 +71,9 @@ and the expected sandbox/group entitlements before running the local suite
 through a temporary symlink adapter. It does not alter installed bytes. Do
 not claim Store feasibility from a locally Apple Distribution-signed candidate
 without this Apple-re-signed installed check.
+
+Internal build 19003 passed all ten cases after TestFlight installation on
+macOS 27 arm64; the exact evidence and remaining gates are in the validation
+record. The TestFlight LaunchAgent uses a distinct label from the Developer
+ID fixture, avoiding the cached launch constraint mismatch seen in build
+19002.
