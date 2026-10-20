@@ -4,17 +4,21 @@ The [2026-10-15 follow-up](validation/ISSUE431_STORE_IPC_FOLLOWUP_20261015.md)
 records resumed validation after v1.4.0 approval: signed lifecycle/load checks,
 existing TestFlight identity inspection, and a reproducible inherited-FD
 limitation in `LOCAL_PEERTOKEN`. Token equality before/after a read does not
-prove queued-byte origin when the endpoint is shared. The socket adoption gate
-remains open. The [2026-10-16 TestFlight run](validation/ISSUE431_STORE_IPC_TESTFLIGHT_20261016.md)
+prove queued-byte origin when the endpoint is shared. The
+[2026-10-16 TestFlight run](validation/ISSUE431_STORE_IPC_TESTFLIGHT_20261016.md)
 subsequently passed all fifteen diagnostic cases on the installed Apple-re-signed
-1.9.0 (19001) package; production GUI and socket identity adoption remain open.
+1.9.0 (19001) package. The
+[2026-10-20 exec test](validation/ISSUE431_STORE_IPC_EXEC_20261020.md)
+then failed the socket identity adoption gate against that installed server:
+queued data from a rejected signed peer was accepted after the sender PID
+executed the approved Client image. This candidate cannot be used for Store
+control; the separate XPC design must be evaluated.
 
 This development-only experiment makes the initial socket proposal in
 [design PR #434](https://github.com/koichiro/quick-presenter/pull/434) executable
 before that PR is merged. It targets [#431](https://github.com/koichiro/quick-presenter/issues/431)
 on `v2.5.0`. It does not change production GUI/`qp` routing, enable Store
-presentation control, open PDFs, or claim the socket identity adoption gate has
-passed.
+presentation control, or open PDFs.
 
 ## Implemented experiment
 
@@ -197,6 +201,32 @@ the verified Apple-signed artifact; this does not qualify production GUI IPC.
 See the [19001 TestFlight record](validation/ISSUE431_STORE_IPC_TESTFLIGHT_20261016.md)
 for the successful installed-layout run and its remaining gates.
 
+## Exec identity test and transport decision
+
+`package_macos_store_ipc_exec_probe.sh` builds a new independently sandboxed,
+same-team, same-group, wrong-identifier app under `/Applications`. Its request
+uses the existing diagnostic frame. `check_macos_store_ipc_exec_probe.py`
+starts only the installed TestFlight diagnostic server and pauses that process
+to fix the timing of its first authentication check. The wrong-identifier app
+queues one request. The negative control leaves its image unchanged; the server
+rejects it without a response. In the decisive case, the app forks a separate
+descriptor holder, then its original PID executes the unmodified, Apple-signed
+Client executable. The queued socket descriptor has `FD_CLOEXEC`, so the
+approved Client does not inherit it. The holder stays silent until after the
+server resumes and then reads the response on that connection.
+
+The installed server returned the exact diagnostic response for the queued
+wrong-code request in the initial run and five repetitions. The direct negative
+control failed in all six. This is an observed failure of the probe's
+`LOCAL_PEERTOKEN` + dynamic-code-check policy, including its before/after token
+comparison. It does not depend on modifying the Apple-signed Client or sharing
+an approved Client descriptor. See the linked record for signed identities,
+hashes, environment, and reproduction. The fixture uses a diagnostic payload,
+so it does not demonstrate a production presentation mutation or PDF read.
+It is sufficient to reject this proposed identity mechanism for production
+Store IPC. Do not weaken the identity requirement to keep the socket; evaluate
+the separate XPC broker design in #434.
+
 ## Interpretation and remaining gates
 
 A successful roundtrip shows that this signed configuration can resolve the
@@ -205,16 +235,14 @@ It does not prove that a socket token is tied to each received byte or that
 another process cannot substitute itself. Apple's
 [XNU implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/uipc_usrreq.c)
 derives `LOCAL_PEERTOKEN` from a socket PID/task lookup. Rechecking token values
-does not eliminate all PID reuse, exec, FD transfer, or check/use races. Keep
-the socket-versus-XPC decision conditional as specified in #434.
+does not establish a message-bound identity. The exec test demonstrates a
+concrete failure of the selected socket policy; the XPC alternative now needs
+its own independent signed, installed, lifecycle, and protocol qualification.
 
-Before adopting this route, validate the supported OS range, foreign-team peers,
-PID/exec/FD adversarial cases, long container paths, worker/watcher saturation,
-slow readers, resource growth, native-check latency/shutdown, Apple-re-signed
-TestFlight/Store identity, and real GUI/Protocol v1 integration. This experiment
-has no GUI event loop, full-text response assembly, presentation event queue,
-or PDF access handoff; it cannot qualify those behaviors. #432 and #433 retain
-their respective startup/file-authority and distribution gates.
+The socket candidate's remaining load, OS, and GUI gates no longer affect its
+adoption decision because the identity gate failed. This experiment has no GUI
+event loop, full-text response assembly, presentation event queue, or PDF
+access handoff; it cannot qualify the XPC route or #432/#433 responsibilities.
 
 Record exact source revision, binary hash, OS/SDK, signed identifiers and group,
 successful cases, and failures under `docs/validation/`. Keep private signing
