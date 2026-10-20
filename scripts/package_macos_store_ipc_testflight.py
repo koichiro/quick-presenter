@@ -24,6 +24,8 @@ def main():
         parser.add_argument(name)
     parser.add_argument('--helper-profiles', type=pathlib.Path,
                         help='Optional directory containing Server/Client/WrongPeer/MissingGroup.provisionprofile')
+    parser.add_argument('--xpc-probe', type=pathlib.Path,
+                        help='Optional native XPC diagnostic binary; adds a nested broker/GUI/CLI probe')
     args = parser.parse_args()
     dest = pathlib.Path(args.destination)
     if not dest.is_absolute() or dest.exists():
@@ -35,6 +37,9 @@ def main():
     for path in (gui, cli, probe, profile):
         if not path.is_file():
             parser.error(f'Missing input: {path.name}')
+    xpc_probe = args.xpc_probe.resolve() if args.xpc_probe else None
+    if xpc_probe and not xpc_probe.is_file():
+        parser.error('Missing XPC diagnostic binary')
     decoded = run('security', 'cms', '-D', '-i', profile, capture_output=True).stdout
     provisioning = plistlib.loads(decoded)
     entitlement = provisioning['Entitlements']
@@ -111,6 +116,42 @@ def main():
     for bundle, ent_path in reversed(signed):
         run('codesign', '--force', '--timestamp', '--options', 'runtime', '--sign',
             args.app_identity, '--entitlements', ent_path, bundle)
+    if xpc_probe:
+        xpc_root = app / 'Contents/Helpers/StoreXPCProbe.app'
+        xpc_roles = [('GUI', 'gui', xpc_root)]
+        xpc_roles += [(name, identifier, xpc_root / f'Contents/Helpers/{name}.app')
+                      for name, identifier in [('Broker', 'broker'), ('Client', 'client'),
+                                               ('WrongPeer', 'wrong')]]
+        xpc_group = f'{team}.app.quickpresenter.control-xpc-probe'
+        xpc_signed = []
+        for name, identifier, bundle in xpc_roles:
+            contents = bundle / 'Contents'
+            (contents / 'MacOS').mkdir(parents=True)
+            shutil.copy2(xpc_probe, contents / 'MacOS/xpc-probe')
+            bundle_id = f'app.quickpresenter.xpc-probe.{identifier}'
+            info = dict(CFBundleExecutable='xpc-probe', CFBundleIdentifier=bundle_id,
+                        CFBundleName=f'XPC Diagnostic {name}', CFBundlePackageType='APPL',
+                        CFBundleVersion=args.build, CFBundleShortVersionString=version,
+                        LSMinimumSystemVersion='14.4', LSUIElement=True)
+            (contents / 'Info.plist').write_bytes(plistlib.dumps(info))
+            ent = {'com.apple.security.app-sandbox': True,
+                   'com.apple.security.application-groups': [xpc_group]}
+            ent_path = dest / f'XPC{name}.entitlements'
+            ent_path.write_bytes(plistlib.dumps(ent))
+            xpc_signed.append((bundle, ent_path))
+        agents = xpc_root / 'Contents/Library/LaunchAgents'
+        agents.mkdir(parents=True)
+        (agents / 'app.quickpresenter.xpc-probe.agent.plist').write_bytes(plistlib.dumps({
+            # Keep TestFlight's launch constraint distinct from the local Developer ID fixture.
+            'Label': f'{xpc_group}.testflight-agent',
+            'BundleProgram': 'Contents/Helpers/Broker.app/Contents/MacOS/xpc-probe',
+            'ProgramArguments': ['Contents/Helpers/Broker.app/Contents/MacOS/xpc-probe', 'broker'],
+            'MachServices': {f'{xpc_group}.register': True, f'{xpc_group}.lookup': True},
+            'RunAtLoad': False,
+        }))
+        for bundle, ent_path in reversed(xpc_signed):
+            run('codesign', '--force', '--timestamp', '--options', 'runtime', '--sign',
+                args.app_identity, '--entitlements', ent_path, bundle)
     run('codesign', '--force', '--timestamp', '--options', 'runtime', '--sign',
         args.app_identity, '--entitlements', root_ent_path, app)
     run('python3', 'scripts/check_macos_store_private_apis.py', app)
@@ -123,7 +164,8 @@ def main():
                     source=run('git', 'rev-parse', 'HEAD', capture_output=True, text=True).stdout.strip(),
                     version=version, build=args.build, helper_profiles_embedded=bool(args.helper_profiles),
                     inputs={name: hashlib.sha256(path.read_bytes()).hexdigest()
-                            for name, path in [('gui', gui), ('probe', probe)]},
+                            for name, path in ([('gui', gui), ('probe', probe)] +
+                                               ([('xpc_probe', xpc_probe)] if xpc_probe else []))},
                     package_sha256=hashlib.sha256(package.read_bytes()).hexdigest())
     (dest / 'diagnostic-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     print(json.dumps(manifest))
