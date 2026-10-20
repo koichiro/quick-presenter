@@ -546,6 +546,7 @@ mod tests {
         }
     }
     #[test]
+    #[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
     fn endpoint_ownership_recovers_stale_sockets_but_preserves_unexpected_files() {
         let dir = TestDirectory::new();
         let path = dir.0.join("s");

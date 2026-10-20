@@ -10,6 +10,15 @@ v2.4.0 and tracked by [#422](https://github.com/koichiro/quick-presenter/issues/
 The target change does not establish Store support; signed and installed-build
 validation is still required.
 
+The optional v2.5.0 Store control build uses authenticated XPC. Its bundled
+CLI is at `Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`.
+It requires a running GUI; `qp open` and CLI startup are unavailable pending
+[#432](https://github.com/koichiro/quick-presenter/issues/432). The commands
+for status, timer elapsed, notes, slide, context, export, navigation, blackout,
+close, and watch keep Control Protocol v1. This build has passed a local
+Developer ID-signed integration check, but has not yet passed product
+TestFlight validation. See [Mac App Store distribution](MAC_APP_STORE.md#experimental-v250-control-build).
+
 ## Stable automation interface
 
 For v2.0.0, the documented command names/options, `--json` result/error fields,
@@ -33,7 +42,7 @@ Release packages include the CLI and its documentation:
 
 | Distribution | CLI location |
 | --- | --- |
-| Mac App Store | Presentation control is not supported in v2.0.0; use the Developer ID / DMG distribution |
+| Mac App Store | v2.0.0: no CLI control; optional v2.5.0 candidate: `Contents/Helpers/ControlCLI.app/Contents/MacOS/qp` inside the app |
 | macOS Developer ID app/DMG | `/Applications/Quick Presenter.app/Contents/MacOS/qp` |
 | Windows Store/MSIX | `qp.exe` app execution alias (enable it in Windows Settings if disabled) |
 | Windows MSI validation package | `qp.exe` beside `quick-presenter.exe` in the installation directory |
@@ -56,7 +65,7 @@ Mac App Store CLI/control support is explicitly out of scope for v2.0.0.
 For packaged macOS automation, use the Developer ID / DMG distribution for
 presentation control, including `qp open` GUI startup, state/content queries,
 navigation, and `watch`.
-The Store distribution does not provide a supported Control Protocol endpoint;
+The v2.0.0 Store distribution does not provide a supported Control Protocol endpoint;
 using a separate CLI executable does not make the Store GUI controllable.
 Future sandbox-compatible support is tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422).
 
@@ -156,6 +165,10 @@ Help and version queries need no running GUI. `open` can launch the GUI;
 all other commands require it. `status` and `watch` also work with no open PDF.
 
 ## Starting a presentation from the CLI
+
+This section applies to Developer ID/DMG and other non-Store builds. The
+optional Store control build requires the GUI to be opened by the user and
+rejects `qp open` until #432 supplies an authorized file handoff.
 
 ```sh
 qp open "slides with spaces.pdf" --json

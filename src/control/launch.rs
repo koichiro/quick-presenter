@@ -1,5 +1,8 @@
 //! CLI-only application startup. Presentation operations still use the protocol.
-use super::{client, protocol::*, transport};
+#[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
+use super::transport;
+use super::{client, protocol::*};
+#[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
 use std::{
     fs::{File, OpenOptions},
     io,
@@ -8,11 +11,19 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
+#[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+#[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+pub fn send(request: &Request) -> Result<Response, ControlError> {
+    client::send(request)
+}
 
 /// Only an open whose initial connection failed may start the companion GUI.
 /// Never replay an open after sending it to a reachable server.
+#[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
 pub fn send(request: &Request) -> Result<Response, ControlError> {
     match client::send(request) {
         Err(error)
@@ -82,6 +93,7 @@ pub fn send(request: &Request) -> Result<Response, ControlError> {
     }
 }
 
+#[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
 fn companion_gui(cli: &Path) -> Result<PathBuf, ControlError> {
     let file = if cfg!(windows) {
         "quick-presenter.exe"
@@ -109,6 +121,7 @@ fn companion_gui(cli: &Path) -> Result<PathBuf, ControlError> {
     Ok(gui)
 }
 
+#[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
 fn spawn_gui(path: &Path) -> io::Result<Child> {
     let mut command = std::process::Command::new(path);
     // Inherit the endpoint environment. Open the PDF once, through IPC after readiness.
@@ -124,6 +137,7 @@ fn spawn_gui(path: &Path) -> io::Result<Child> {
     command.spawn()
 }
 
+#[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
 fn startup_error(error: io::Error) -> ControlError {
     ControlError::new(
         ErrorCode::IpcFailure,
@@ -131,7 +145,7 @@ fn startup_error(error: io::Error) -> ControlError {
     )
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(all(target_os = "macos", feature = "macos-store-control"))))]
 fn try_startup_lock(endpoint: &Path) -> io::Result<Option<File>> {
     use std::os::{
         fd::AsRawFd,
@@ -204,7 +218,7 @@ fn try_startup_lock(_endpoint: &Path) -> io::Result<Option<File>> {
     ))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(all(target_os = "macos", feature = "macos-store-control"))))]
 mod tests {
     use super::*;
     #[test]

@@ -22,7 +22,7 @@ impl PendingRequest {
 }
 
 // Heartbeats detect disconnected idle clients and keep watches alive beyond request deadlines.
-fn stream_events(
+pub(crate) fn stream_events(
     receiver: &super::events::StreamReceiver,
     stop: &AtomicBool,
     id: u64,

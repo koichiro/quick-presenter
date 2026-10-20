@@ -5,6 +5,10 @@ edition = "2021"
 license = "GPL-3.0-only"
 default-run = "quick-presenter"
 
+[features]
+default = []
+macos-store-control = []
+
 [[bin]]
 name = "quick-presenter"
 path = "src/main.rs"
@@ -12,6 +16,11 @@ path = "src/main.rs"
 [[bin]]
 name = "qp"
 path = "src/bin/qp.rs"
+
+[[bin]]
+name = "qp-control-broker"
+path = "src/bin/qp_control_broker.rs"
+required-features = ["macos-store-control"]
 
 [[example]]
 name = "store_ipc_probe"

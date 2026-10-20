@@ -28,9 +28,30 @@ bookmarks do not grant access to every path supplied by a CLI. Future work and
 a preliminary estimate are tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422). This work is not a
 v2.0.0 Store release gate.
 
-The proposed Store control transport and its remaining product gates are in
-[the Mac App Store CLI control design](MAC_APP_STORE_CLI_IPC.md). An installed
-TestFlight XPC diagnostic has passed, but Store `qp` support is not implemented.
+## Experimental v2.5.0 control build
+
+The optional `macos-store-control` feature builds the product GUI, a bundled
+`ControlCLI.app`, and a per-user `ControlBroker.app` LaunchAgent. The GUI and
+CLI use authenticated XPC for Control Protocol v1; the Developer ID/DMG build
+continues to use its Unix socket. The broker only connects a CLI to the
+currently running GUI. It does not launch the GUI or receive PDF contents.
+The Store CLI supports status, timer elapsed, notes, slide, context, export,
+navigation, blackout, close, and watch. `qp open` and CLI startup of the GUI
+remain unavailable until [#432](https://github.com/koichiro/quick-presenter/issues/432)
+defines the sandboxed file-authority handoff.
+
+For a Store control candidate, build all binaries from the same source with
+`cargo build --release --locked --bins --features macos-store-control` and set
+`MACOS_STORE_CONTROL=1` when invoking the package script. The App Store
+provisioning profile must authorize the
+`TEAMID.app.quickpresenter.control` App Group. The packaged CLI is at
+`Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`.
+Check nested signatures, entitlements, and the exact agent label before
+uploading. A local Developer ID-signed product fixture passed the command and
+identity checks recorded in
+[the #431 validation](validation/ISSUE431_STORE_CONTROL_PRODUCT_20261020.md).
+That fixture does not establish behavior after Apple re-signing; repeat the
+checks on the processed TestFlight build before claiming Store CLI support.
 
 ## Release checklist
 
