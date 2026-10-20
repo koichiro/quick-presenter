@@ -25,7 +25,8 @@ def watch_event(process, predicate, timeout=8):
         if ready:
             line = process.stdout.readline()
             if not line:
-                raise AssertionError(f'watch exited early: {process.stderr.read()}')
+                raise AssertionError('watch exited early: ' +
+                                     process.stderr.read().decode(errors='replace'))
             event = json.loads(line)
             if predicate(event):
                 return event
@@ -56,6 +57,8 @@ def main():
     if status['kind'] != 'status' or status['pages'] < 2:
         raise AssertionError('GUI must have a multi-page PDF selected')
     original = status['page']
+    if original is None or not 1 <= original < status['pages']:
+        raise AssertionError('GUI must start before the last page for navigation')
     passed.append('status_query')
     if command(cli, 'timer', 'elapsed')['kind'] != 'timer_elapsed':
         raise AssertionError('elapsed timer response missing')
@@ -81,7 +84,7 @@ def main():
         raise AssertionError(f'raw path unexpectedly accepted: {open_error}')
     passed.append('raw_open_rejected')
     watch = subprocess.Popen([str(cli), 'watch', '--json'], stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, text=True, bufsize=1)
+                             stderr=subprocess.PIPE, bufsize=0)
     try:
         snapshot = watch_event(watch, lambda event: event.get('event') == 'presentation.snapshot')
         if snapshot['state']['page'] != original:

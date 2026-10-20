@@ -64,3 +64,8 @@ from a customer Store release, foreign-team and unsigned clients against the
 Apple-distributed broker, slow clients, and presentation-length load remain
 unverified. Raw-path `qp open` still needs the authorized file handoff in
 #432. Reassess export compliance if later builds add cryptographic behavior.
+
+The subsequent CodeRabbit fixes to XPC connection cleanup, broker event
+serialization, and absent-broker error mapping were not in build 25002. They
+passed local compilation and tests but require a new distribution build for
+TestFlight runtime validation.

@@ -119,10 +119,21 @@ static xpc_object_t request_with_deadline(xpc_connection_t peer, xpc_object_t me
     return result;
 }
 
+static void cancel_inactive(xpc_connection_t connection) {
+    xpc_connection_set_event_handler(connection, ^(xpc_object_t event) { (void)event; });
+    xpc_connection_activate(connection);
+    xpc_connection_cancel(connection);
+}
+
+static void discard_inactive(xpc_connection_t connection) {
+    cancel_inactive(connection);
+    xpc_release(connection);
+}
+
 static xpc_connection_t named_peer(const char *name, const char *identifier) {
     xpc_connection_t peer = xpc_connection_create_mach_service(name, NULL, 0);
     if (!peer) return NULL;
-    if (!require_peer(peer, identifier)) { xpc_release(peer); return NULL; }
+    if (!require_peer(peer, identifier)) { discard_inactive(peer); return NULL; }
     xpc_connection_set_event_handler(peer, ^(xpc_object_t event) { (void)event; });
     xpc_connection_activate(peer);
     return peer;
@@ -146,8 +157,9 @@ static void free_broker_peer(void *context) { free(context); }
 
 static BrokerPeer *broker_peer(xpc_connection_t peer) {
     BrokerPeer *state = calloc(1, sizeof(*state));
-    if (!state) { xpc_connection_cancel(peer); return NULL; }
+    if (!state) { cancel_inactive(peer); return NULL; }
     state->peer = peer;
+    xpc_connection_set_target_queue(peer, dispatch_get_main_queue());
     xpc_connection_set_context(peer, state);
     xpc_connection_set_finalizer_f(peer, free_broker_peer);
     return state;
@@ -155,7 +167,7 @@ static BrokerPeer *broker_peer(xpc_connection_t peer) {
 
 static void accept_registration(xpc_connection_t peer) {
     if (xpc_connection_get_euid(peer) != geteuid() || !require_peer(peer, gui_id)) {
-        xpc_connection_cancel(peer); return;
+        cancel_inactive(peer); return;
     }
     BrokerPeer *state = broker_peer(peer);
     if (!state) return;
@@ -184,7 +196,7 @@ static void accept_registration(xpc_connection_t peer) {
 
 static void accept_lookup(xpc_connection_t peer) {
     if (xpc_connection_get_euid(peer) != geteuid() || !require_peer(peer, cli_id)) {
-        xpc_connection_cancel(peer); return;
+        cancel_inactive(peer); return;
     }
     BrokerPeer *state = broker_peer(peer);
     if (!state) return;
@@ -207,7 +219,11 @@ int qp_control_broker_main(void) {
             dispatch_get_main_queue(), XPC_CONNECTION_MACH_SERVICE_LISTENER);
         xpc_connection_t lookup = xpc_connection_create_mach_service(lookup_name,
             dispatch_get_main_queue(), XPC_CONNECTION_MACH_SERVICE_LISTENER);
-        if (!registration || !lookup) return 7;
+        if (!registration || !lookup) {
+            if (registration) discard_inactive(registration);
+            if (lookup) discard_inactive(lookup);
+            return 7;
+        }
         xpc_connection_set_event_handler(registration, ^(xpc_object_t peer) {
             if (xpc_get_type(peer) == XPC_TYPE_CONNECTION) accept_registration(peer);
         });
@@ -226,10 +242,10 @@ static void free_server_peer(void *context) { free(context); }
 
 static void accept_client(xpc_connection_t peer) {
     if (xpc_connection_get_euid(peer) != geteuid() || !require_peer(peer, cli_id)) {
-        xpc_connection_cancel(peer); return;
+        cancel_inactive(peer); return;
     }
     ServerPeer *state = calloc(1, sizeof(*state));
-    if (!state) { xpc_connection_cancel(peer); return; }
+    if (!state) { cancel_inactive(peer); return; }
     state->peer = peer;
     xpc_connection_set_context(peer, state);
     xpc_connection_set_finalizer_f(peer, free_server_peer);
@@ -303,7 +319,14 @@ void *qp_control_gui_start(request_callback_t request, cancel_callback_t cancel,
         if (!accepted) goto failure;
         return handle;
     failure:
-        if (handle->listener) { xpc_connection_cancel(handle->listener); xpc_release(handle->listener); }
+        if (handle->listener) {
+            if (handle->broker) {
+                xpc_connection_cancel(handle->listener);
+                xpc_release(handle->listener);
+            } else {
+                discard_inactive(handle->listener);
+            }
+        }
         if (handle->broker) { xpc_connection_cancel(handle->broker); xpc_release(handle->broker); }
         free(handle);
         return NULL;
@@ -369,6 +392,8 @@ void *qp_control_client_connect(int *error_out) {
     if (!response && error_out) *error_out = ETIMEDOUT;
     if (response && xpc_equal(response, XPC_ERROR_PEER_CODE_SIGNING_REQUIREMENT) && error_out)
         *error_out = EACCES;
+    if (response && xpc_equal(response, XPC_ERROR_CONNECTION_INVALID) && error_out)
+        *error_out = ENOENT;
     if (response && xpc_get_type(response) == XPC_TYPE_DICTIONARY &&
         !xpc_dictionary_get_bool(response, "accepted") && error_out)
         *error_out = ENOENT;
@@ -384,10 +409,10 @@ void *qp_control_client_connect(int *error_out) {
     if (!peer) return NULL;
     if (!require_peer(peer, gui_id)) {
         if (error_out) *error_out = EACCES;
-        xpc_release(peer); return NULL;
+        discard_inactive(peer); return NULL;
     }
     ClientHandle *client = calloc(1, sizeof(*client));
-    if (!client) { xpc_release(peer); return NULL; }
+    if (!client) { discard_inactive(peer); return NULL; }
     pthread_mutex_init(&client->mutex, NULL);
     pthread_cond_init(&client->changed, NULL);
     client->peer = peer;
