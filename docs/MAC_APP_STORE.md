@@ -28,6 +28,10 @@ bookmarks do not grant access to every path supplied by a CLI. Future work and
 a preliminary estimate are tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422). This work is not a
 v2.0.0 Store release gate.
 
+The proposed Store control transport and its remaining product gates are in
+[the Mac App Store CLI control design](MAC_APP_STORE_CLI_IPC.md). An installed
+TestFlight XPC diagnostic has passed, but Store `qp` support is not implemented.
+
 ## Release checklist
 
 1. Select a clean checkout of the intended release source, including these Store
