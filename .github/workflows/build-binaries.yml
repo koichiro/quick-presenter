@@ -160,10 +160,6 @@ jobs:
         if: runner.os == 'macOS'
         run: cargo test --no-default-features --features macos-store-control
 
-      - name: Build macOS Store XPC binaries
-        if: runner.os == 'macOS'
-        run: cargo build --bins --no-default-features --features macos-store-control
-
       - name: Build release binaries
         run: cargo build --release --bins
 
