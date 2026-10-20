@@ -43,14 +43,15 @@ The initial package script staged the feature binaries and found no private
 CGS imports, but stopped before signing because it required the existing App
 Store profile to list `TEAMID.app.quickpresenter.control`. Apple documents
 that this macOS Team ID-prefixed group needs no separate registration. The
-package gate was removed for the subsequent product TestFlight candidate;
-its Apple processing and installed behavior require separate validation. The
-earlier #495 TestFlight success established the diagnostic XPC route, not this
-product integration.
+package gate was removed, and the product TestFlight build 25002 passed Apple
+processing and installed runtime validation. See
+`docs/validation/ISSUE431_STORE_CONTROL_TESTFLIGHT_25002.md` for the exact
+distribution result. The earlier #495 TestFlight build 25001 established
+only the diagnostic XPC route.
 
-Remaining gates are the processed product TestFlight build; clean-account
-registration, approval/denial and upgrade behavior; foreign-team and unsigned
-peers; slow-client and presentation-length load; macOS 14.4 and Intel runtime
-checks; final Store package inventory and signing; and the authorized `qp open`
-file handoff tracked in #432. Do not claim customer Store CLI support from
-this local fixture alone.
+Remaining gates are clean-account registration, approval/denial and upgrade
+behavior; foreign-team and unsigned peers against the Apple-distributed
+broker; slow-client and presentation-length load; macOS 14.4 and Intel runtime
+checks; final Store package inventory and signing; App Store review; and the
+authorized `qp open` file handoff tracked in #432. Do not claim customer Store
+CLI support from this internal TestFlight build alone.

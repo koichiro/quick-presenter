@@ -35,12 +35,21 @@ def watch_event(process, predicate, timeout=8):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('app', type=pathlib.Path)
+    parser.add_argument('--testflight', action='store_true',
+                        help='check an Apple-distributed app without the wrong-peer fixture')
     args = parser.parse_args()
     app = args.app.resolve()
     cli = app / 'Contents/Helpers/ControlCLI.app/Contents/MacOS/qp'
     wrong = app / 'Contents/Helpers/ControlWrongPeer.app/Contents/MacOS/qp'
-    if not cli.is_file() or not wrong.is_file():
-        parser.error('missing signed CLI or wrong-identifier fixture')
+    if not cli.is_file():
+        parser.error('missing signed CLI')
+    if args.testflight:
+        if not (app / 'Contents/_MASReceipt/receipt').is_file():
+            parser.error('missing App Store receipt')
+        if wrong.exists():
+            parser.error('development wrong-peer fixture is present in TestFlight app')
+    elif not wrong.is_file():
+        parser.error('missing wrong-identifier fixture')
     subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
     passed = []
     status = command(cli, 'status')
@@ -62,10 +71,11 @@ def main():
     if not isinstance(exported, list) or len(exported) != status['pages']:
         raise AssertionError('full-document export did not include every page')
     passed.append('read_only_queries')
-    rejected = command(wrong, 'status', success=False)
-    if rejected['code'] != 'IPC_FAILURE':
-        raise AssertionError(f'wrong identifier was not rejected as IPC_FAILURE: {rejected}')
-    passed.append('wrong_identifier_rejected')
+    if not args.testflight:
+        rejected = command(wrong, 'status', success=False)
+        if rejected['code'] != 'IPC_FAILURE':
+            raise AssertionError(f'wrong identifier was not rejected as IPC_FAILURE: {rejected}')
+        passed.append('wrong_identifier_rejected')
     open_error = command(cli, 'open', '/tmp/store-control-unsupported.pdf', success=False)
     if open_error['code'] != 'UNSUPPORTED_PLATFORM':
         raise AssertionError(f'raw path unexpectedly accepted: {open_error}')
@@ -102,7 +112,9 @@ def main():
         if command(cli, 'status')['document'] is not None:
             raise AssertionError('repeated connection returned stale document state')
     passed.append('repeated_connections')
-    print(json.dumps({'scope': 'Developer ID-signed product XPC development fixture',
+    scope = ('Apple-distributed TestFlight product XPC' if args.testflight
+             else 'Developer ID-signed product XPC development fixture')
+    print(json.dumps({'scope': scope,
                       'passed': passed, 'version': '2.5.0'}))
 
 
