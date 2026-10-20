@@ -89,12 +89,13 @@ customer release. After Apple processing and installation, run:
 
 ```sh
 python3 scripts/check_macos_store_xpc_testflight.py \
-  '/Applications/Quick Presenter.app' BUILD_NUMBER
+  '/Applications/Quick Presenter.app' BUILD_NUMBER --version VERSION
 ```
 
-The installed verifier requires the exact build, receipt, deep signature,
-Apple distribution authorities, four exact identifiers, one consistent team,
-and the expected sandbox/group entitlements before running the local suite
+The installed verifier requires the exact version/build, receipt, deep
+signature, Apple distribution authorities, product GUI and four helper
+identifiers, one consistent team, and the expected sandbox/group entitlements
+before running the local suite
 through a temporary symlink adapter. It does not alter installed bytes. Do
 not claim Store feasibility from a locally Apple Distribution-signed candidate
 without this Apple-re-signed installed check.
@@ -104,3 +105,8 @@ macOS 27 arm64; the exact evidence and remaining gates are in the validation
 record. The TestFlight LaunchAgent uses a distinct label from the Developer
 ID fixture, avoiding the cached launch constraint mismatch seen in build
 19002.
+
+A separate [2.5.0 distribution-build record](validation/ISSUE431_STORE_XPC_25001.md)
+tracks a release-profile candidate assembled from PR #495 and its installed
+TestFlight result. Keep its evidence separate from the earlier 1.9.0
+diagnostic payload.
