@@ -18,17 +18,45 @@ signature passed `pkgutil --check-signature`.
 The signed installer SHA-256 is
 `3c37ffb898ab6414f283b6342729ecdb52ef608dfb7c50c1513d4c08f06eb782`.
 Transporter delivered build 25005 to App Store Connect at 2026-10-21 00:51 JST
-and subsequently reported processing complete. The build has not yet been
-installed through TestFlight. In App Store Connect, the same export compliance
+and subsequently reported processing complete. In App Store Connect, the same export compliance
 classification used for prior candidates (no non-exempt encryption) was saved,
 the build reached Ready to Submit, and it was assigned only to the existing
 internal `Release Validation` group with one tester. The test notes identify
 this as an XPC broker validation build and exclude it from customer release.
 App Store Connect then showed build 25005 as Testing in that group with one
-invitation. The local TestFlight app still listed builds 25001–25004 after
-refresh and restart, so the Apple-distributed 25005 payload could not yet be
-installed. The manually bootstrapped 25004 broker job was removed and
-`launchctl print` confirmed the label absent, preventing a stale broker from
-masking the eventual 25005 runtime result. Installed Apple-re-signed
-signatures and the product XPC runtime must be checked on build 25005 before
-claiming this validation complete.
+invitation. After propagation, TestFlight offered 25005 as an update to 25004
+and installed it at `/Applications/Quick Presenter.app`. The installed app has
+`CFBundleVersion=25005` and an App Store receipt. Deep strict signature
+verification passed. The GUI, CLI, and broker each have the expected exact
+identifier, Team ID `NP5Q6U6NT5`, sandbox and App Group entitlements, and a
+TestFlight Beta Distribution → Apple Worldwide Developer Relations → Apple
+Root CA certificate chain. The installed control symbols and bundled
+LaunchAgent layout passed `validate_product(app, True)`.
+
+The manually bootstrapped 25004 broker job had been removed before installing
+25005 to prevent a stale process from masking the test. On first launch,
+`launchctl` had no job for its label and the installed CLI returned
+`NOT_RUNNING`; the GUI attempted to connect to the register Mach service but
+launchd reported that service absent. Background Task Management still showed
+the item enabled. This is consistent with the out-of-band `launchctl bootout`
+leaving an enabled registration without a loaded job; the evidence does not
+establish how a clean installation behaves. Direct `launchctl bootstrap` of
+the bundled plist failed with I/O error. A local test plist with the same label
+and Mach services and an absolute `Program` pointing to the **installed 25005
+broker binary** bootstrapped successfully. The GUI was then restarted.
+
+With the 12-page demo PDF opened through the installed GUI's file picker,
+`python3 scripts/check_macos_store_control.py '/Applications/Quick Presenter.app' --testflight`
+passed all seven reported groups: `status_query`, `read_only_queries`,
+`raw_open_rejected`, `watch_and_navigation`, `goto_and_blackout`, `close`, and
+`repeated_connections`. This exercised the Apple-re-signed GUI, CLI, and
+broker, including the actual status, timer, notes, slide, context, export,
+watch, navigation, blackout, and close commands. After quitting the GUI, the
+CLI returned `NOT_RUNNING` with exit code 3. Reopening from TestFlight produced
+a new session ID and a successful status query.
+
+The result validates product XPC communication and CLI behavior on this
+Apple-distributed arm64 build **after manual broker registration**. It does
+not validate automatic `SMAppService` registration from a clean user session.
+That setup path should be checked without a prior manual `launchctl bootout`
+before claiming unattended first-launch behavior or customer readiness.
