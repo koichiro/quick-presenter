@@ -109,10 +109,26 @@ that a native-library vulnerability is fixed.
 - Signed bundled libpdfium SHA-256:
   `5e179ff2a575ec8803d2b1093adc6da9b46e86a58dce2dc2cbb6c67d75ad6a4b`.
   Signing changes Mach-O bytes; these are package-file hashes, not archive digests.
-- Windows x64 candidate validation: delegated to the Windows session handling
-  #479; record its exact report/PR before closing #480.
-- Linux packaged rendering, Wayland font/UI qualification, other supported
-  architectures and release CI: pending.
+- [Build Binaries on PR #505](https://github.com/koichiro/quick-presenter/actions/runs/39552904847):
+  macOS, Ubuntu x64 and Windows x64 packaging jobs passed, along with the
+  dependency audit. Ubuntu installed-package rendering/notes and sandbox
+  file/network/child denial gates passed; packaged GUI smoke under Xvfb passed
+  **70 checks, 0 failures**. Windows extracted-MSIX PDF smoke and AppContainer
+  denial gates passed. macOS hosted CI is layout/ad-hoc validation, supplemented
+  by the local Developer ID signed XPC gate above.
+- Windows x64 development-native validation with an isolated 8111 DLL passed
+  rendering of English/Japanese pages, notes and next preview. The complete
+  serial Cargo suite passed, including all 14 renderer tests. The 8076
+  comparison had one 1-second renderer handshake timeout; an isolated retry
+  passed, so it is not described as a clean full-suite comparison. See
+  [the #503 report](https://github.com/koichiro/quick-presenter/blob/codex/windows-notes-focus-479/docs/validation/ISSUE479_WINDOWS_20261021.md)
+  and [Windows results on #505](https://github.com/koichiro/quick-presenter/pull/505).
+  That native test used #503's source, not #505's changed manifest head. It does
+  not qualify a signed Store distribution or establish CVE coverage.
+- Remaining release gates include final signed/Store native qualification,
+  other distributed architectures as applicable, and Linux Wayland UI/font
+  migration qualification if that separate dependency migration is adopted.
+  The current PDFium pin change does not alter the retained title-font stack.
 - Public CVE-to-fix revision mapping and affected-build analysis: pending.
 
 The manifest update is a candidate for review. Do not publish it or close #480
