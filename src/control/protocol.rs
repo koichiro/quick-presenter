@@ -5,6 +5,8 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 pub const STORE_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+// Allow the GUI to report the picker result after its 120-second deadline.
+pub const STORE_OPEN_RESPONSE_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Request {

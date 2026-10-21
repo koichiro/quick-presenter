@@ -306,7 +306,9 @@ pub fn send(request: &Request) -> Result<Response, ControlError> {
         let mut stream = super::store_xpc::XpcStream::connect().map_err(ipc_error)?;
         if matches!(request.command, Command::Open(_)) {
             stream.set_read_timeout(
-                super::protocol::STORE_OPEN_TIMEOUT + std::time::Duration::from_secs(2),
+                super::protocol::STORE_OPEN_TIMEOUT
+                    + super::protocol::STORE_OPEN_RESPONSE_GRACE
+                    + std::time::Duration::from_secs(2),
             );
         }
         write_frame(&mut stream, request).map_err(ipc_error)?;

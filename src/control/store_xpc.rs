@@ -196,16 +196,22 @@ fn serve(
         .as_ref()
         .map(|subscriber| subscriber.closed.clone())
         .unwrap_or_else(|| session.cancelled.clone());
-    let deadline = Instant::now()
+    let request_deadline = Instant::now()
         + if matches!(request.command, Command::Open(_)) {
             protocol::STORE_OPEN_TIMEOUT
         } else {
             protocol::REQUEST_TIMEOUT
         };
+    let response_deadline = request_deadline
+        + if matches!(request.command, Command::Open(_)) {
+            protocol::STORE_OPEN_RESPONSE_GRACE
+        } else {
+            Duration::ZERO
+        };
     let (response_sender, receiver) = mpsc::sync_channel(1);
     let pending = PendingRequest {
         request,
-        deadline,
+        deadline: request_deadline,
         cancelled: cancelled.clone(),
         response: response_sender,
         watch,
@@ -223,7 +229,7 @@ fn serve(
     loop {
         if state.stop.load(Ordering::Relaxed)
             || session.cancelled.load(Ordering::Relaxed)
-            || Instant::now() >= deadline
+            || Instant::now() >= response_deadline
         {
             cancelled.store(true, Ordering::Relaxed);
             return protocol::write_frame(
