@@ -19,6 +19,14 @@ normal next/previous navigation, so the presenter and slide windows stay
 synchronized. `Ctrl+A` and `Ctrl+E` provide Emacs/readline-style alternatives
 for keyboards where `Home` and `End` are harder to reach.
 
+When the read-only notes have focus, unmodified navigation keys still control
+the presentation. `Shift` plus cursor/navigation keys remains available for
+selecting note text, and `Ctrl+A` selects all text in the focused note paragraph
+instead of jumping to the first page. Use `Home` for the first page in this
+state. The platform's standard copy shortcut copies the selection; notes remain
+read-only. Toolbar buttons retain their standard Tab traversal and Space/Return
+activation.
+
 ## Fullscreen
 
 - Toggle slide fullscreen: `F5`, `F`
