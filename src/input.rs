@@ -90,10 +90,8 @@ mod tests {
             (Key::Home, PresentationCommand::FirstPage),
             (Key::End, PresentationCommand::LastPage),
         ] {
-            let mut event = slint::language::KeyEvent {
-                text: key.into(),
-                ..Default::default()
-            };
+            let mut event = slint::language::KeyEvent::default();
+            event.text = key.into();
             assert_eq!(notes_navigation_command(&event, false), Some(expected));
             event.modifiers.shift = true;
             assert_eq!(notes_navigation_command(&event, false), None);
@@ -103,20 +101,16 @@ mod tests {
     #[test]
     fn notes_preserve_selection_copy_and_modified_cursor_movement() {
         for text in ["a", "c", "x", "v", "\u{f703}"] {
-            let mut event = slint::language::KeyEvent {
-                text: text.into(),
-                ..Default::default()
-            };
+            let mut event = slint::language::KeyEvent::default();
+            event.text = text.into();
             event.modifiers.control = true;
             assert_eq!(notes_navigation_command(&event, false), None);
             event.modifiers.control = false;
             event.modifiers.meta = true;
             assert_eq!(notes_navigation_command(&event, true), None);
         }
-        let mut event = slint::language::KeyEvent {
-            text: "e".into(),
-            ..Default::default()
-        };
+        let mut event = slint::language::KeyEvent::default();
+        event.text = "e".into();
         event.modifiers.control = true;
         assert_eq!(
             notes_navigation_command(&event, false),
