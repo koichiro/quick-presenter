@@ -29,7 +29,9 @@ using the same sandbox, App Group, user-selected read-only file, and bookmark
 entitlements as the Store control product. The fixture used the installed
 Apple-distributed TestFlight 25005 broker of the same team and bundle identity.
 This is a signed development fixture, not an Apple-re-signed build of the new
-source. The existing installed 25005 `qp open` remains unsupported.
+source. The existing 25005 `qp open` remained unsupported; the later
+[Apple-distributed build 25006 validation](ISSUE432_STORE_OPEN_TESTFLIGHT_25006.md)
+qualifies the new source on the tested host.
 
 On macOS 27.0.1 arm64, the signed fixture demonstrated:
 
@@ -62,9 +64,10 @@ unused test-helper warnings are unrelated to this change.
 
 ## Remaining release validation
 
-Build and install this source through TestFlight to repeat the first-time
-picker, cold startup, bookmark persistence, failure handling, and CLI status
-after Apple re-signing. That is the remaining qualification gate for the Store
-distribution. A long interactive timeout and a genuinely revoked macOS
-security-scoped bookmark were not separately exercised; the bounded timeout
-path is implemented, and filesystem read denial was tested.
+The first-time picker, cold startup, bookmark persistence, failure handling,
+and CLI status were repeated after Apple re-signing in internal TestFlight
+build 25006. Other supported macOS versions, Intel hardware, a clean user
+account, and final Store release remain separate qualification gates. A long
+interactive timeout and a genuinely revoked macOS security-scoped bookmark
+were not separately exercised; the bounded timeout path is implemented, and
+filesystem read denial was tested.

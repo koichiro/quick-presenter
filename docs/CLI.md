@@ -20,9 +20,9 @@ use the saved security-scoped bookmark. The commands
 for status, timer elapsed, notes, slide, context, export, navigation, blackout,
 close, and watch keep Control Protocol v1. This build has passed local
 Developer ID-signed and internal TestFlight installed-product integration
-checks for the earlier control commands. Store `qp open` has passed a local
-Developer ID-signed sandbox test; Apple-re-signed TestFlight validation remains
-open. Full Store qualification remains open. See
+checks for the earlier control commands. Store `qp open` passed both a local
+Developer ID-signed sandbox test and Apple-distributed internal TestFlight build
+25006 on macOS 27.0.1 arm64. Full Store qualification remains open. See
 [Mac App Store distribution](MAC_APP_STORE.md#experimental-v250-control-build).
 
 ## Stable automation interface

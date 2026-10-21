@@ -43,8 +43,10 @@ the GUI presents a file picker; the user must select the requested file within
 120 seconds. Cancellation or a different selection leaves the current deck
 intact. The CLI path is only a picker hint and does not grant file access.
 This [#432](https://github.com/koichiro/quick-presenter/issues/432) behavior
-has passed a Developer ID-signed sandbox test; Apple-re-signed TestFlight
-validation is still required.
+passed a Developer ID-signed sandbox test and Apple-distributed internal
+[TestFlight build 25006](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25006.md)
+on macOS 27.0.1 arm64. Other supported systems and final Store release remain
+separate qualification gates.
 
 For a Store control candidate, build all binaries from the same source with
 `cargo build --release --locked --bins --features macos-store-control` and set
