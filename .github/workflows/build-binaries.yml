@@ -159,6 +159,10 @@ jobs:
       - name: Build release binaries
         run: cargo build --release --bins
 
+      - name: Check optional macOS Store control feature
+        if: runner.os == 'macOS'
+        run: cargo check --locked --features macos-store-control --lib --bins
+
       - name: Verify standalone CLI
         shell: bash
         run: |

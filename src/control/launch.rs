@@ -28,7 +28,7 @@ pub fn send(request: &Request) -> Result<Response, ControlError> {
         {
             let cli = std::env::current_exe().map_err(store_startup_error)?;
             let app = store_companion_gui(&cli)?;
-            store_xpc::launch_gui(app).map_err(store_startup_error)?;
+            store_xpc::launch_gui(&app).map_err(store_startup_error)?;
             let deadline = Instant::now() + Duration::from_secs(15);
             let status = Request::new(request.id, Command::Status(Empty {}));
             loop {
@@ -65,15 +65,21 @@ mod store_tests {
     use super::*;
 
     #[test]
-    fn store_startup_only_uses_the_containing_app() {
+    fn store_startup_resolves_symlinks_and_only_uses_the_containing_app() {
         let directory = tempfile::tempdir().unwrap();
         let app = directory.path().join("Quick Presenter.app");
         let cli = app.join("Contents/Helpers/ControlCLI.app/Contents/MacOS/qp");
         std::fs::create_dir_all(cli.parent().unwrap()).unwrap();
-        assert_eq!(store_companion_gui(&cli).unwrap(), app);
+        std::fs::write(&cli, []).unwrap();
+        let expected = app.canonicalize().unwrap();
+        assert_eq!(store_companion_gui(&cli).unwrap(), expected);
+        let link = directory.path().join("qp");
+        std::os::unix::fs::symlink(&cli, &link).unwrap();
+        assert_eq!(store_companion_gui(&link).unwrap(), expected);
         let other = directory.path().join("Other.app");
         let other_cli = other.join("Contents/Helpers/ControlCLI.app/Contents/MacOS/qp");
         std::fs::create_dir_all(other_cli.parent().unwrap()).unwrap();
+        std::fs::write(&other_cli, []).unwrap();
         assert_eq!(
             store_companion_gui(&other_cli).unwrap_err().code,
             ErrorCode::NotRunning
@@ -82,7 +88,8 @@ mod store_tests {
 }
 
 #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
-fn store_companion_gui(executable: &std::path::Path) -> Result<&std::path::Path, ControlError> {
+fn store_companion_gui(executable: &std::path::Path) -> Result<std::path::PathBuf, ControlError> {
+    let executable = std::fs::canonicalize(executable).map_err(store_startup_error)?;
     executable
         .ancestors()
         .nth(6)
@@ -91,6 +98,7 @@ fn store_companion_gui(executable: &std::path::Path) -> Result<&std::path::Path,
                 .is_some_and(|name| name == "Quick Presenter.app")
                 && path.is_dir()
         })
+        .map(std::path::Path::to_owned)
         .ok_or_else(|| {
             ControlError::new(
                 ErrorCode::NotRunning,

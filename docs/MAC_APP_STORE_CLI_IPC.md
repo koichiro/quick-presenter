@@ -57,13 +57,16 @@ PDF paths, or document contents. GUI exit invalidates its registration; a new
 GUI registers a new endpoint. A second GUI must not replace a live owner
 silently. CLI lookup without a current GUI returns `NOT_RUNNING`.
 
-The first product increment controls a running Store GUI and a PDF selected
-through that GUI: status, notes, slide/context queries, elapsed time, navigation,
-blackout, close, export, and watch. Timer access stays read-only. CLI-driven GUI startup
-and arbitrary-path `presentation.open` require the file-authority design in
-[#432](https://github.com/koichiro/quick-presenter/issues/432). Until then,
-reject Store open/startup explicitly; CLI authentication alone gives no PDF
-file authority. [#433](https://github.com/koichiro/quick-presenter/issues/433)
+The Store control build supports status, notes, slide/context queries, elapsed
+time, navigation, blackout, close, export, watch, and `presentation.open`.
+Timer access stays read-only. `qp open` starts its containing GUI if needed.
+The GUI reopens an authorized PDF through its security-scoped bookmark or
+presents a native picker for a new path; the user must select the exact
+requested file within 120 seconds. CLI authentication alone gives no PDF
+file authority. The [#432 implementation
+validation](validation/ISSUE432_STORE_OPEN_IMPLEMENTATION_20261021.md) records
+the authorization, cancellation, and failure behavior.
+[#433](https://github.com/koichiro/quick-presenter/issues/433)
 owns the final CLI package, invocation path, and distribution qualification.
 
 ## Identity and service lifecycle
@@ -91,8 +94,9 @@ development fixture passed local product integration. The group uses the
 macOS Team ID-prefixed form that Apple documents as requiring no separate
 registration.
 
-Run Store-control tests locally; GitHub Actions does not run the XPC feature or
-signed-product checks. The feature tests need no signing assets, while native
+Run Store-control tests locally; GitHub Actions compiles the optional feature
+without signing assets, but does not run its tests or signed-product checks.
+The feature tests need no signing assets, while native
 XPC communication must be checked against a signed, installed product:
 
 ```sh
@@ -128,8 +132,9 @@ redacted failure categories rather than notes, PDF paths, tokens, or profiles.
    wrong-identifier, foreign-team, unsigned, stale-endpoint, GUI-restart, broker-
    restart, and second-GUI cases. Prove the intended user/session boundary.
 3. Exercise the supported Protocol v1 commands, responses, watch, full text,
-   cancellation, error mapping, and output compatibility through XPC. Keep
-   Store open/startup disabled until #432 supplies authorized file access.
+   cancellation, error mapping, and output compatibility through XPC.
+   GUI-mediated Store open/startup authorization, including bookmark reopening
+   and exact-file picker selection, must preserve the current deck on failure.
 4. Test concurrency and response limits, slow clients, shutdown, and
    presentation-length operation without disrupting playback.
 5. Repeat signed-product checks on Apple-re-signed installed builds, including

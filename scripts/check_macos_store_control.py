@@ -208,8 +208,10 @@ def main():
     passed.append('repeated_connections')
     scope = ('Apple-distributed TestFlight product XPC' if args.testflight
              else 'Developer ID-signed product XPC development fixture')
-    print(json.dumps({'scope': scope,
-                      'passed': passed, 'version': '2.5.0'}))
+    info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+    print(json.dumps({'scope': scope, 'passed': passed,
+                      'version': info.get('CFBundleShortVersionString'),
+                      'build': info.get('CFBundleVersion')}))
 
 
 if __name__ == '__main__':
