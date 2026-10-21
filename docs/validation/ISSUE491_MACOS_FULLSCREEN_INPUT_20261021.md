@@ -88,9 +88,23 @@ Preserve these local limitations separately from the passing CI result:
   user's unlock reply failed similarly, and inventory again reported locked.
   These are failures, not a local GUI pass; no production workaround is inferred.
 
-## Remaining acceptance
+## Unlocked signed-app qualification
 
-Repeat the clean signed candidate's GUI smoke on an unlocked, uninterrupted
-macOS desktop. Verify physical rapid keys and final notarized/distributed
-artifacts. Keep #491 open and PR #504 draft until the remaining native
-qualification is resolved; logical-state checks alone do not close the issue.
+After the user unlocked the desktop again, the same clean signed live-loop
+candidate (SHA-256 above) completed **178 checks, zero failures** on
+2026-10-21 at approximately 14:32 UTC. The successful report is preserved in
+[ISSUE491_MACOS_GUI_20261021.txt](ISSUE491_MACOS_GUI_20261021.txt).
+It includes all five real AppKit fullscreen checks above. Command:
+
+```sh
+XDG_RUNTIME_DIR=/private/tmp/qp491-smoke-runtime \
+  '/private/tmp/qp491-live-loop/Quick Presenter.app/Contents/MacOS/quick-presenter' \
+  --gui-smoke docs/samples/quick-presenter-demo.pdf \
+  --gui-smoke-report /private/tmp/qp491-unlocked-final-report.txt \
+  --log-file /private/tmp/qp491-unlocked-final.log
+```
+
+PR #504 is ready for code review. Physical rapid-key checks and final
+notarized/distributed-artifact qualification remain outstanding; keep #491 open
+until those release acceptance checks are satisfied. Earlier locked-desktop
+failures remain documented above rather than being reclassified as passes.
