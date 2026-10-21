@@ -70,6 +70,7 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
     #[cfg(target_os = "macos")]
     {
         use slint::winit_030::WinitWindowAccessor;
+        check_macos_fullscreen_reversal(&windows, report)?;
         settle_notes_layout()?;
         report.check(
             "macOS native slide titlebar is transparent and hidden from creation",
@@ -291,8 +292,6 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         crate::control_smoke::run(&windows, state.clone(), options.pdf_path.clone())?;
         report.pass("local control operates through the GUI and isolated renderer");
     }
-    #[cfg(target_os = "macos")]
-    check_macos_fullscreen_reversal(&windows, report)?;
     check_hidden_slide_recovery(&windows, &state, report)?;
     #[cfg(target_os = "macos")]
     {
@@ -506,49 +505,65 @@ fn check_macos_fullscreen_reversal(
     windows: &AppWindows,
     report: &mut GuiSmokeReport,
 ) -> Result<()> {
-    // Inspect AppKit's real style mask, not winit's queued intent. The latter
-    // can look correct even when AppKit silently ignored a synchronous reversal.
-    for (name, sequence, expected) in [
-        ("reversal baseline", vec![false], false),
-        ("rapid entry cancellation", vec![true, false], false),
-        ("settled entry", vec![true], true),
-        ("rapid exit cancellation", vec![false, true], true),
-        ("reversal cleanup", vec![false], false),
-    ] {
-        let refs = windows.refs();
-        let slide = windows.slide.as_weak();
-        let applied = Rc::new(Cell::new(None::<Instant>));
-        let observed = applied.clone();
-        run_macos_window_action_until(
-            move || {
-                for fullscreen in sequence {
-                    set_slide_fullscreen(&refs, fullscreen);
-                }
-                applied.set(Some(Instant::now()));
-            },
-            move || {
-                observed
-                    .get()
-                    .is_some_and(|at| at.elapsed() >= Duration::from_secs(1))
-                    && slide.upgrade().is_some_and(|slide| {
-                        macos_native_fullscreen(&slide) == Some(expected)
-                            && slide.window().is_fullscreen() == expected
-                    })
-            },
-            Duration::from_secs(5),
-        )
-        .with_context(|| {
-            use slint::winit_030::WinitWindowAccessor;
-            format!(
-                "macOS {name} did not reach fullscreen={expected}: AppKit={:?}, Slint={}, winit intent={:?}",
-                macos_native_fullscreen(&windows.slide),
-                windows.slide.window().is_fullscreen(),
-                windows.slide.window().with_winit_window(|native| native.fullscreen().is_some()),
-            )
-        })?;
+    use slint::winit_030::WinitWindowAccessor;
+    // run_app_on_demand closes native windows when its event loop exits. Test
+    // fresh adapters in their first, uninterrupted loop so delegates stay live.
+    const CASES: &[(&str, &[bool], bool)] = &[
+        ("reversal baseline", &[false], false),
+        ("rapid entry cancellation", &[true, false], false),
+        ("settled entry", &[true], true),
+        ("rapid exit cancellation", &[false, true], true),
+        ("reversal cleanup", &[false], false),
+    ];
+    let refs = windows.refs();
+    let slide = windows.slide.as_weak();
+    let completed = Rc::new(RefCell::new(None));
+    let outcome = completed.clone();
+    let passed = Rc::new(RefCell::new(Vec::new()));
+    let observed = passed.clone();
+    let mut index = 0;
+    let mut applied_at = None;
+    let poll = slint::Timer::default();
+    poll.start(slint::TimerMode::Repeated, Duration::from_millis(10), move || {
+        if outcome.borrow().is_some() { return; }
+        let (name, sequence, expected) = CASES[index];
+        let Some(started) = applied_at else {
+            for &fullscreen in sequence { set_slide_fullscreen(&refs, fullscreen); }
+            applied_at = Some(Instant::now());
+            return;
+        };
+        let elapsed = Instant::now().duration_since(started);
+        let actual = slide.upgrade().map(|slide| (
+            macos_native_fullscreen(&slide),
+            slide.window().is_fullscreen(),
+            slide.window().with_winit_window(|native| native.fullscreen().is_some()),
+        ));
+        let matches = actual == Some((Some(expected), expected, Some(expected)));
+        let result = if elapsed >= Duration::from_secs(1) && matches {
+            observed.borrow_mut().push(name);
+            index += 1;
+            applied_at = None;
+            (index == CASES.len()).then_some(Ok(()))
+        } else if elapsed >= Duration::from_secs(5) {
+            Some(Err(anyhow::anyhow!(
+                "macOS {name} did not reach fullscreen={expected}: (AppKit, Slint, winit intent)={actual:?}"
+            )))
+        } else { None };
+        if let Some(result) = result {
+            *outcome.borrow_mut() = Some(result);
+            slint::quit_event_loop().expect("fullscreen smoke loop should accept quit");
+        }
+    });
+    slint::run_event_loop_until_quit().context("failed to run native fullscreen smoke")?;
+    poll.stop();
+    for name in passed.borrow().iter() {
         report.pass(format!("macOS {name} matches AppKit fullscreen state"));
     }
-    Ok(())
+    let result = completed
+        .borrow_mut()
+        .take()
+        .context("native fullscreen smoke was interrupted")?;
+    result
 }
 
 #[cfg(target_os = "macos")]

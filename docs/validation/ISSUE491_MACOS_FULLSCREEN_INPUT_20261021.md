@@ -115,3 +115,19 @@ native qualification complete.
 The software-renderer buffer mismatch was independently reproduced in the
 14484d4 signed baseline without these follow-up changes, with the same
 737280-byte/1024-pixel buffer and 1200x1000 size diagnostic.
+
+### Correction: native smoke must retain a live event loop
+
+Tracing the failed smoke revealed no AppKit delegate notifications at all.
+Winit's macOS run_app_on_demand closes native windows when the event loop exits;
+windowWillClose clears the delegate. The legacy smoke repeatedly quits/restarts
+that loop and can still inspect retained native handles afterwards. Those
+handles cannot qualify native fullscreen transitions. The "request/notification
+gap" interpretation above was not established; its speculative pre-notification
+transition marking was removed.
+
+The new reversal check now runs on fresh adapters before any earlier loop can
+close them, advances all cases inside one uninterrupted loop, and quits only
+when the complete sequence finishes or fails. It still compares real AppKit
+style-mask state with Slint and winit intent. Existing manual native evidence
+used a continuous application loop and is unaffected by this test-harness issue.

@@ -1426,11 +1426,7 @@ impl WindowDelegate {
 
         self.ivars().fullscreen.replace(fullscreen.clone());
 
-        fn toggle_fullscreen(delegate: &WindowDelegate) {
-            // A second request can arrive before AppKit emits will-enter/exit.
-            // Mark the transition now so that request is queued, not ignored.
-            delegate.ivars().in_fullscreen_transition.set(true);
-            let window = delegate.window();
+        fn toggle_fullscreen(window: &WinitWindow) {
             // Window level must be restored from `CGShieldingWindowLevel()
             // + 1` back to normal in order for `toggleFullScreen` to do
             // anything
@@ -1460,15 +1456,15 @@ impl WindowDelegate {
                     app.setPresentationOptions(presentation_options);
                 }
 
-                toggle_fullscreen(self);
+                toggle_fullscreen(self.window());
             },
             (Some(Fullscreen::Borderless(_)), None) => {
                 // State is restored by `window_did_exit_fullscreen`
-                toggle_fullscreen(self);
+                toggle_fullscreen(self.window());
             },
             (Some(Fullscreen::Exclusive(ref video_mode)), None) => {
                 restore_and_release_display(&video_mode.monitor());
-                toggle_fullscreen(self);
+                toggle_fullscreen(self.window());
             },
             (Some(Fullscreen::Borderless(_)), Some(Fullscreen::Exclusive(_))) => {
                 // If we're already in fullscreen mode, calling
