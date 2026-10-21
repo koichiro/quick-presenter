@@ -68,13 +68,20 @@ The first-time picker, cold startup, bookmark persistence, failure handling,
 and CLI status were repeated after Apple re-signing in internal TestFlight
 build 25006. Other supported macOS versions, Intel hardware, a clean user
 account, and final Store release remain separate qualification gates. A long
-interactive timeout and a genuinely revoked macOS security-scoped bookmark
-were not separately exercised; the bounded timeout path is implemented, and
+interactive timeout was exercised in the signed fixture as described below.
+A genuinely revoked macOS security-scoped bookmark remains untested;
 filesystem read denial was tested.
 
 CodeRabbit identified that a standalone picker might remain visible when the
 app is inactive during cancellation. The cancellation helper now searches all
 application windows as well as attached sheets. The revised source passed the
-Store-feature tests and a fresh Developer ID-signed fixture build. A live
-inactive-window cancellation check remains outstanding because the Mac was
-locked during this follow-up.
+Store-feature tests and a fresh Developer ID-signed fixture build. After the
+Mac was unlocked, the fixture showed the requested PDF in its picker. With
+Finder active, `qp close` dismissed that picker, and the pending `qp open`
+returned `CANCELLED` (exit 10). A second picker left unanswered with Finder
+active disappeared at the 120-second deadline; the CLI returned `TIMEOUT`
+(exit 9), and `qp status` reported `opening = false`. A subsequent `qp open`
+presented a single new picker and could be cancelled normally. These
+inactive-window checks used the signed fixture; TestFlight 25006 predates the
+panel-cancellation follow-up. All PR CI checks on commit `e5b7af7`, including
+macOS, Linux, and Windows package builds, and the CodeRabbit review passed.
