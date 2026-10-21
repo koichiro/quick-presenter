@@ -1,6 +1,6 @@
 # Presenter toolbar shortcut precedence — 2026-10-21
 
-Tracking: #479, macOS toolbar observation. Baseline: main `430cef0`.
+Tracking: #479, macOS toolbar observation. Baseline: main `430cef0`, macOS 27.0.1 arm64.
 The Windows notes-focus fix is handled separately in the Windows session.
 
 The existing presentation KeyBindings run while bubbling from the focused item.
@@ -21,6 +21,10 @@ Validation:
   actions, macOS physical Control mapping, and modified-key rejection.
 - `cargo fmt --check`, `cargo check`, `cargo test`: passed. The existing
   macos_renderer.rs fetch_update deprecation warning remains unrelated.
+- Release build and a Developer ID signed release-layout app with bundled
+  PDFium 156.0.8076.0 passed the XPC PDF render/notes and unrelated-file/network/
+  child denial gate. Local signing used no timestamp; this is not a notarized
+  DMG or a Store installation.
 - Native macOS toolbar reproduction/regression and notes interaction: pending;
   the desktop locked while the signed fullscreen fix was under validation.
 - Physical-key and final distributed-artifact acceptance remain open.
