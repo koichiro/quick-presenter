@@ -71,3 +71,10 @@ account, and final Store release remain separate qualification gates. A long
 interactive timeout and a genuinely revoked macOS security-scoped bookmark
 were not separately exercised; the bounded timeout path is implemented, and
 filesystem read denial was tested.
+
+CodeRabbit identified that a standalone picker might remain visible when the
+app is inactive during cancellation. The cancellation helper now searches all
+application windows as well as attached sheets. The revised source passed the
+Store-feature tests and a fresh Developer ID-signed fixture build. A live
+inactive-window cancellation check remains outstanding because the Mac was
+locked during this follow-up.

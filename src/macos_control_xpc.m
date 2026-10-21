@@ -37,15 +37,16 @@ int qp_control_launch_gui(const char *app_path) {
 
 void qp_control_cancel_cli_open_panel(void) {
     for (NSWindow *window in NSApp.windows) {
+        if ([window isKindOfClass:[NSOpenPanel class]]) {
+            [(NSOpenPanel *)window cancel:nil];
+            return;
+        }
         NSWindow *sheet = window.attachedSheet;
         if ([sheet isKindOfClass:[NSOpenPanel class]]) {
             [(NSOpenPanel *)sheet cancel:nil];
             return;
         }
     }
-    NSWindow *key = NSApp.keyWindow;
-    if ([key isKindOfClass:[NSOpenPanel class]])
-        [(NSOpenPanel *)key cancel:nil];
 }
 static char register_name[160];
 static char lookup_name[160];

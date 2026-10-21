@@ -172,9 +172,11 @@ all other commands require it. `status` and `watch` also work with no open PDF.
 
 ## Starting a presentation from the CLI
 
-This section applies to Developer ID/DMG and other non-Store builds. The
-optional Store control build requires the GUI to be opened by the user and
-rejects `qp open` until #432 supplies an authorized file handoff.
+Both Store and non-Store builds support `qp open`. In Store builds, the CLI
+starts the bundled GUI if needed, and the GUI asks the user to authorize a PDF
+in its file picker when no valid bookmark exists. The startup details below
+describe Developer ID/DMG and other non-Store builds; see the Store-specific
+behavior above for its authorization flow.
 
 ```sh
 qp open "slides with spaces.pdf" --json
