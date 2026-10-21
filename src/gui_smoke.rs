@@ -291,10 +291,11 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         crate::control_smoke::run(&windows, state.clone(), options.pdf_path.clone())?;
         report.pass("local control operates through the GUI and isolated renderer");
     }
+    #[cfg(target_os = "macos")]
+    check_macos_fullscreen_reversal(&windows, report)?;
     check_hidden_slide_recovery(&windows, &state, report)?;
     #[cfg(target_os = "macos")]
     {
-        check_macos_fullscreen_reversal(&windows, report)?;
         check_macos_slide_edges(&windows, report)?;
         check_macos_preserved_pdf_open(&windows, &state, options, report)?;
     }
@@ -508,6 +509,7 @@ fn check_macos_fullscreen_reversal(
     // Inspect AppKit's real style mask, not winit's queued intent. The latter
     // can look correct even when AppKit silently ignored a synchronous reversal.
     for (name, sequence, expected) in [
+        ("reversal baseline", vec![false], false),
         ("rapid entry cancellation", vec![true, false], false),
         ("settled entry", vec![true], true),
         ("rapid exit cancellation", vec![false, true], true),
@@ -535,7 +537,15 @@ fn check_macos_fullscreen_reversal(
             },
             Duration::from_secs(5),
         )
-        .with_context(|| format!("macOS {name} did not reach the requested native state"))?;
+        .with_context(|| {
+            use slint::winit_030::WinitWindowAccessor;
+            format!(
+                "macOS {name} did not reach fullscreen={expected}: AppKit={:?}, Slint={}, winit intent={:?}",
+                macos_native_fullscreen(&windows.slide),
+                windows.slide.window().is_fullscreen(),
+                windows.slide.window().with_winit_window(|native| native.fullscreen().is_some()),
+            )
+        })?;
         report.pass(format!("macOS {name} matches AppKit fullscreen state"));
     }
     Ok(())
