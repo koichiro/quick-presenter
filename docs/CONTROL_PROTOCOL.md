@@ -117,6 +117,12 @@ state outside the owner thread. A timeout or disconnected client after execution
 begins does **not** prove that a mutation did not occur: query status before
 retrying, especially for `next` and `previous`. There is no automatic replay.
 
+The optional v2.5.0 Mac App Store XPC build gives `presentation.open` a
+120-second deadline so a person can authorize a new PDF in the GUI picker.
+Other XPC commands retain the 30-second deadline. The Store GUI accepts only
+the requested selected file; cancelling or choosing another file returns
+`CANCELLED`, and another open during selection returns `BUSY`.
+
 ## Envelopes and versioning
 
 Application and control protocol versions are independent. Every envelope
@@ -475,3 +481,9 @@ It then sends the ordinary `presentation.open` request once. Concurrent CLI
 startup is serialized with an OS lock. This does not add protocol methods or
 move file loading into the CLI. Other commands do not start the GUI. See
 [CLI startup](CLI.md#starting-a-presentation-from-the-cli) for deadlines and errors.
+
+The optional Store XPC build uses `NSWorkspace` to activate the containing GUI
+and waits up to 15 seconds for status before submitting `open` once. macOS
+coalesces activation of the same app. A missing bookmark triggers the GUI file
+picker; the CLI path itself conveys no sandbox authority. The Store CLI does
+not replay an open after submitting it to a reachable GUI.

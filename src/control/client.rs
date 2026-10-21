@@ -55,6 +55,24 @@ Supported: Windows, Linux, macOS Developer ID/DMG and development builds.
 Mac App Store presentation control is not supported in v2.0.0.
 ";
 
+pub fn help() -> String {
+    #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+    {
+        HELP.replace(
+            "open <file>        Open a PDF (starts the GUI if needed; paths relative to CLI)",
+            "open <file>        Open a PDF; first use requires GUI file selection (up to 120s)",
+        )
+        .replace(
+            "Supported: Windows, Linux, macOS Developer ID/DMG and development builds.\nMac App Store presentation control is not supported in v2.0.0.",
+            "This Mac App Store build uses authenticated XPC control.\nFor a new PDF, select the requested file in the GUI; cancellation leaves the deck open.",
+        )
+    }
+    #[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
+    {
+        HELP.into()
+    }
+}
+
 pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliRequest, ControlError> {
     let mut args: Vec<_> = args.into_iter().collect();
     if args == [OsString::from("--help")] || args == [OsString::from("-h")] {
@@ -283,8 +301,24 @@ fn ipc_error(e: io::Error) -> ControlError {
     ControlError::new(code, e.to_string())
 }
 pub fn send(request: &Request) -> Result<Response, ControlError> {
-    let path = super::transport::endpoint().map_err(ipc_error)?;
-    send_to(&path, request)
+    #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+    {
+        let mut stream = super::store_xpc::XpcStream::connect().map_err(ipc_error)?;
+        if matches!(request.command, Command::Open(_)) {
+            stream.set_read_timeout(
+                super::protocol::STORE_OPEN_TIMEOUT
+                    + super::protocol::STORE_OPEN_RESPONSE_GRACE
+                    + std::time::Duration::from_secs(2),
+            );
+        }
+        write_frame(&mut stream, request).map_err(ipc_error)?;
+        return receive_response(&mut stream, request);
+    }
+    #[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
+    {
+        let path = super::transport::endpoint().map_err(ipc_error)?;
+        send_to(&path, request)
+    }
 }
 #[cfg(unix)]
 pub fn send_to(path: &Path, request: &Request) -> Result<Response, ControlError> {
@@ -438,11 +472,25 @@ pub fn watch(
     request: &Request,
     on_event: impl FnMut(EventEnvelope) -> Result<(), ControlError>,
 ) -> Result<(), ControlError> {
-    watch_to(
-        &super::transport::endpoint().map_err(ipc_error)?,
-        request,
-        on_event,
-    )
+    #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+    {
+        if !matches!(request.command, Command::Watch(_)) {
+            return Err(invalid());
+        }
+        let mut stream = super::store_xpc::XpcStream::connect().map_err(ipc_error)?;
+        write_frame(&mut stream, request).map_err(ipc_error)?;
+        return receive_watch(&mut stream, request, on_event, |stream| {
+            stream.set_read_timeout(std::time::Duration::from_secs(5));
+        });
+    }
+    #[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
+    {
+        watch_to(
+            &super::transport::endpoint().map_err(ipc_error)?,
+            request,
+            on_event,
+        )
+    }
 }
 #[cfg(any(unix, windows))]
 pub fn watch_to(

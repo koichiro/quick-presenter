@@ -4,6 +4,29 @@
 Control Protocol. It is intended for automation tools and AI agents, and does
 not implement narration, AI models, or presentation business logic.
 
+Mac App Store CLI support is planned for
+[v2.5.0](https://github.com/koichiro/quick-presenter/milestone/4), renamed from
+v2.4.0 and tracked by [#422](https://github.com/koichiro/quick-presenter/issues/422).
+The optional build has passed signed and internal TestFlight installed-product
+checks; full Store qualification is still required.
+
+The optional v2.5.0 Store control build uses authenticated XPC. Its bundled
+CLI is at `Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`.
+`qp open` starts the GUI if needed. For a PDF the Store GUI has not previously
+authorized, the GUI presents a picker with the requested file suggested.
+Select that exact file within 120 seconds. Cancellation or a different choice
+returns `CANCELLED` and preserves the current presentation. Subsequent opens
+use the saved security-scoped bookmark. The commands
+for status, timer elapsed, notes, slide, context, export, navigation, blackout,
+close, and watch keep Control Protocol v1. This build has passed local
+Developer ID-signed and internal TestFlight installed-product integration
+checks for the earlier control commands. Store `qp open` passed a local
+Developer ID-signed sandbox test and, after the 120-second deadline correction,
+Apple-distributed internal TestFlight build
+[25008](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25008.md) on macOS 27.0.1 arm64.
+Full Store qualification remains open. See
+[Mac App Store distribution](MAC_APP_STORE.md#experimental-v250-control-build).
+
 ## Stable automation interface
 
 For v2.0.0, the documented command names/options, `--json` result/error fields,
@@ -27,7 +50,7 @@ Release packages include the CLI and its documentation:
 
 | Distribution | CLI location |
 | --- | --- |
-| Mac App Store | Presentation control is not supported in v2.0.0; use the Developer ID / DMG distribution |
+| Mac App Store | v2.0.0: no CLI control; optional v2.5.0 candidate: `Contents/Helpers/ControlCLI.app/Contents/MacOS/qp` inside the app |
 | macOS Developer ID app/DMG | `/Applications/Quick Presenter.app/Contents/MacOS/qp` |
 | Windows Store/MSIX | `qp.exe` app execution alias (enable it in Windows Settings if disabled) |
 | Windows MSI validation package | `qp.exe` beside `quick-presenter.exe` in the installation directory |
@@ -50,7 +73,7 @@ Mac App Store CLI/control support is explicitly out of scope for v2.0.0.
 For packaged macOS automation, use the Developer ID / DMG distribution for
 presentation control, including `qp open` GUI startup, state/content queries,
 navigation, and `watch`.
-The Store distribution does not provide a supported Control Protocol endpoint;
+The v2.0.0 Store distribution does not provide a supported Control Protocol endpoint;
 using a separate CLI executable does not make the Store GUI controllable.
 Future sandbox-compatible support is tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422).
 
@@ -150,6 +173,15 @@ Help and version queries need no running GUI. `open` can launch the GUI;
 all other commands require it. `status` and `watch` also work with no open PDF.
 
 ## Starting a presentation from the CLI
+
+Both Store and non-Store builds support `qp open`. In Store builds, the CLI
+starts the bundled GUI if needed, and the GUI asks the user to authorize a PDF
+in its file picker when no valid bookmark exists. Both builds poll GUI readiness
+for up to 15 seconds, submit the open request once, and never replay a request
+sent to a reachable GUI. Store startup uses XPC for readiness checks and
+`NSWorkspace` to activate the containing app. The companion-process launch,
+startup lock, and error details below apply to Developer ID/DMG and other
+non-Store builds.
 
 ```sh
 qp open "slides with spaces.pdf" --json

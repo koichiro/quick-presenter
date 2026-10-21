@@ -1,4 +1,5 @@
 #![cfg(unix)]
+#![cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
 // Keep this fork test in its own binary: a paused child also inherits unrelated
 // sockets when fork runs alongside other IPC tests. The stale-socket fixture
 // also needs isolation from CLI subprocess launches and this fork test.

@@ -103,10 +103,14 @@ fi
 
 signing_args=(
   --force
-  --timestamp
   --options runtime
   --sign "$identity"
 )
+if [[ "${MACOS_SIGNING_TIMESTAMP:-server}" == none ]]; then
+  signing_args+=(--timestamp=none)
+else
+  signing_args+=(--timestamp)
+fi
 
 find "$app_bundle/Contents" -type f -print0 |
   while IFS= read -r -d '' file_path; do
@@ -135,6 +139,19 @@ if [[ "$distribution_mode" == "app-store" ]]; then
   codesign "${signing_args[@]}" --entitlements packaging/macos/Proxy-Inherit.entitlements "$app_bundle/Contents/Helpers/RendererProxy.app"
 else
   codesign "${signing_args[@]}" "$app_bundle/Contents/Helpers/RendererProxy.app"
+fi
+
+if [[ "$distribution_mode" == "app-store" && -d "$app_bundle/Contents/Helpers/ControlCLI.app" ]]; then
+  control_entitlements="${MACOS_STORE_CONTROL_ENTITLEMENTS:-}"
+  if [[ ! -s "$control_entitlements" ]]; then
+    echo "Store control roles require MACOS_STORE_CONTROL_ENTITLEMENTS" >&2
+    exit 2
+  fi
+  codesign "${signing_args[@]}" --entitlements "$control_entitlements" "$app_bundle/Contents/Helpers/ControlCLI.app"
+  codesign "${signing_args[@]}" --entitlements "$control_entitlements" "$app_bundle/Contents/Helpers/ControlBroker.app"
+  if [[ -d "$app_bundle/Contents/Helpers/ControlWrongPeer.app" ]]; then
+    codesign "${signing_args[@]}" --entitlements "$control_entitlements" "$app_bundle/Contents/Helpers/ControlWrongPeer.app"
+  fi
 fi
 
 echo "Signing $app_bundle"
