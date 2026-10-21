@@ -1,6 +1,6 @@
 # macOS fullscreen input investigation — 2026-10-21
 
-Tracking: #491. Baseline: main `430cef0` (application 2.5.0), macOS arm64.
+Tracking: #491. Baseline: main `430cef0` (application 2.5.0), macOS 27.0.1 arm64.
 This work does not alter v2.0.0 or its accepted release limitation.
 
 ## Confirmed boundary
@@ -46,6 +46,11 @@ latest queued target until winit applies it.
   PDF render/notes and unrelated-file/network/child denial gate passed.
   Signing timestamp was disabled for this local validation artifact. This is not
   a notarized DMG or a published v2.5.0 release.
+- Signed candidate GUI binary SHA-256:
+  `8e595e76fb10167a584a3f424e33ee7bc2179ac6a42ba6ee6f19489e3fc14372`.
+- Signed bundled libpdfium SHA-256:
+  `04c27b9d25a8537b977c028f687aafdff840f66d4558ca8da3061cfde872d8f5`.
+- GitHub Actions macOS audience-window regression on PR #504: passed.
 - Forwarding prototype native checks: presenter and slide entry/exit Right
   delivered exactly one page change. Presenter rapid Escape returned logical
   state to windowed. The later slide test found the synchronization defect above;
