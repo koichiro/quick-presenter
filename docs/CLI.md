@@ -174,9 +174,12 @@ all other commands require it. `status` and `watch` also work with no open PDF.
 
 Both Store and non-Store builds support `qp open`. In Store builds, the CLI
 starts the bundled GUI if needed, and the GUI asks the user to authorize a PDF
-in its file picker when no valid bookmark exists. The startup details below
-describe Developer ID/DMG and other non-Store builds; see the Store-specific
-behavior above for its authorization flow.
+in its file picker when no valid bookmark exists. Both builds poll GUI readiness
+for up to 15 seconds, submit the open request once, and never replay a request
+sent to a reachable GUI. Store startup uses XPC for readiness checks and
+`NSWorkspace` to activate the containing app. The companion-process launch,
+startup lock, and error details below apply to Developer ID/DMG and other
+non-Store builds.
 
 ```sh
 qp open "slides with spaces.pdf" --json
