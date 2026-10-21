@@ -2,9 +2,11 @@
 
 ## Scope and observed product behavior
 
-This investigation used the Apple-distributed TestFlight 2.5.0 (25005) app on
+This pre-implementation investigation used the Apple-distributed TestFlight 2.5.0 (25005) app on
 macOS 27.0.1 arm64. It evaluates a file-authority design for issue #432; it
 does not claim that `qp open` is implemented or that cold GUI startup works.
+The subsequent implementation and signed fixture results are recorded in
+[the #432 implementation validation](ISSUE432_STORE_OPEN_IMPLEMENTATION_20261021.md).
 The XPC broker and the other CLI commands passed the signed-product tests in
 [the build 25005 record](ISSUE431_STORE_CONTROL_TESTFLIGHT_25005.md).
 

@@ -12,12 +12,17 @@ checks; full Store qualification is still required.
 
 The optional v2.5.0 Store control build uses authenticated XPC. Its bundled
 CLI is at `Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`.
-It requires a running GUI; `qp open` and CLI startup are unavailable pending
-[#432](https://github.com/koichiro/quick-presenter/issues/432). The commands
+`qp open` starts the GUI if needed. For a PDF the Store GUI has not previously
+authorized, the GUI presents a picker with the requested file suggested.
+Select that exact file within 120 seconds. Cancellation or a different choice
+returns `CANCELLED` and preserves the current presentation. Subsequent opens
+use the saved security-scoped bookmark. The commands
 for status, timer elapsed, notes, slide, context, export, navigation, blackout,
 close, and watch keep Control Protocol v1. This build has passed local
 Developer ID-signed and internal TestFlight installed-product integration
-checks. Full Store qualification remains open. See
+checks for the earlier control commands. Store `qp open` has passed a local
+Developer ID-signed sandbox test; Apple-re-signed TestFlight validation remains
+open. Full Store qualification remains open. See
 [Mac App Store distribution](MAC_APP_STORE.md#experimental-v250-control-build).
 
 ## Stable automation interface

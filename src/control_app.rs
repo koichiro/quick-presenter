@@ -29,7 +29,16 @@ enum ControlBackend {
 struct Dispatcher {
     receiver: Receiver<PendingRequest>,
     opening: Option<(RenderSessionId, u64, PendingRequest)>,
+    #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+    authorization: Option<OpenAuthorization>,
     queries: Vec<ContentQuery>,
+}
+#[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+struct OpenAuthorization {
+    requested: std::path::PathBuf,
+    result: Receiver<Option<std::path::PathBuf>>,
+    revision: u64,
+    pending: PendingRequest,
 }
 struct ContentQuery {
     revision: u64,
@@ -83,6 +92,8 @@ impl ControlRuntime {
         let mut dispatcher = Dispatcher {
             receiver,
             opening: None,
+            #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+            authorization: None,
             queries: Vec::new(),
         };
         let timer = Timer::default();
@@ -97,6 +108,8 @@ impl ControlRuntime {
 }
 impl Dispatcher {
     fn poll(&mut self, windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+        #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+        self.poll_authorization(windows, state);
         if let Some((session, revision, pending)) = self.opening.take() {
             if pending.is_expired() {
                 reply_error(
@@ -217,6 +230,16 @@ impl Dispatcher {
                 }
                 Command::Open(params) => {
                     if self.opening.is_some()
+                        || {
+                            #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+                            {
+                                self.authorization.is_some()
+                            }
+                            #[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
+                            {
+                                false
+                            }
+                        }
                         || state.borrow().pending_open.is_some()
                         || state.borrow().file_dialog.open
                     {
@@ -228,23 +251,33 @@ impl Dispatcher {
                         continue;
                     }
                     let revision = state.borrow().control.document_revision;
-                    crate::begin_open_pdf(windows, state, params.file.into());
-                    let session = state
-                        .borrow()
-                        .pending_open
-                        .as_ref()
-                        .map(|open| open.session_id);
-                    if let Some(session) = session {
-                        self.opening = Some((session, revision, pending));
-                    } else {
-                        reply_error(
-                            &pending,
-                            ErrorCode::Busy,
-                            "Renderer is stopping. Try again shortly.",
-                        );
+                    #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+                    {
+                        let path = std::path::PathBuf::from(&params.file);
+                        match crate::macos_file_access::restore_authorized_for_cli(&path) {
+                            Ok(Some(path)) => {
+                                self.start_open(windows, state, path, revision, pending)
+                            }
+                            Ok(None) => self.start_authorization(state, path, revision, pending),
+                            Err(error) => {
+                                reply_error(&pending, ErrorCode::OpenFailed, &error.to_string())
+                            }
+                        }
                     }
+                    #[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
+                    self.start_open(windows, state, params.file.into(), revision, pending);
                 }
                 Command::Close(_) => {
+                    #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+                    if let Some(authorization) = self.authorization.take() {
+                        state.borrow_mut().file_dialog.open = false;
+                        crate::macos_file_access::cancel_cli_open_panel();
+                        reply_error(
+                            &authorization.pending,
+                            ErrorCode::Cancelled,
+                            "PDF selection was cancelled by close.",
+                        );
+                    }
                     if let Some((_, _, opening)) = self.opening.take() {
                         reply_error(
                             &opening,
@@ -285,6 +318,147 @@ impl Dispatcher {
             }
         }
     }
+
+    fn start_open(
+        &mut self,
+        windows: &AppWindowRefs,
+        state: &Rc<RefCell<AppState>>,
+        path: std::path::PathBuf,
+        revision: u64,
+        pending: PendingRequest,
+    ) {
+        crate::begin_open_pdf(windows, state, path);
+        let session = state
+            .borrow()
+            .pending_open
+            .as_ref()
+            .map(|open| open.session_id);
+        if let Some(session) = session {
+            self.opening = Some((session, revision, pending));
+        } else {
+            #[cfg(target_os = "macos")]
+            crate::macos_file_access::release_candidate();
+            reply_error(
+                &pending,
+                ErrorCode::Busy,
+                "Renderer is stopping. Try again shortly.",
+            );
+        }
+    }
+
+    #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+    fn start_authorization(
+        &mut self,
+        state: &Rc<RefCell<AppState>>,
+        requested: std::path::PathBuf,
+        revision: u64,
+        pending: PendingRequest,
+    ) {
+        let Some(directory) = requested.parent() else {
+            reply_error(&pending, ErrorCode::InvalidRequest, "Invalid PDF path.");
+            return;
+        };
+        let Some(name) = requested.file_name().and_then(|name| name.to_str()) else {
+            reply_error(
+                &pending,
+                ErrorCode::InvalidRequest,
+                "PDF name must be UTF-8.",
+            );
+            return;
+        };
+        let dialog = rfd::AsyncFileDialog::new()
+            .add_filter("PDF", &["pdf"])
+            .set_title("Select the PDF requested by qp open")
+            .set_directory(directory)
+            .set_file_name(name);
+        let future = dialog.pick_file();
+        let (sender, result) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let selected = futures::executor::block_on(future);
+            let _ = sender.send(selected.map(|file| file.path().to_owned()));
+        });
+        state.borrow_mut().file_dialog.open = true;
+        self.authorization = Some(OpenAuthorization {
+            requested,
+            result,
+            revision,
+            pending,
+        });
+    }
+
+    #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+    fn poll_authorization(&mut self, windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+        let Some(authorization) = self.authorization.take() else {
+            return;
+        };
+        if state.borrow().control.document_revision != authorization.revision {
+            state.borrow_mut().file_dialog.open = false;
+            crate::macos_file_access::cancel_cli_open_panel();
+            reply_error(
+                &authorization.pending,
+                ErrorCode::Cancelled,
+                "Presentation changed during PDF selection.",
+            );
+            return;
+        }
+        if authorization.pending.is_expired() {
+            state.borrow_mut().file_dialog.open = false;
+            crate::macos_file_access::cancel_cli_open_panel();
+            reply_error(
+                &authorization.pending,
+                ErrorCode::Timeout,
+                "PDF selection timed out; run qp open again if needed.",
+            );
+            return;
+        }
+        let selected = match authorization.result.try_recv() {
+            Ok(selected) => selected,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                self.authorization = Some(authorization);
+                return;
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => None,
+        };
+        state.borrow_mut().file_dialog.open = false;
+        let Some(selected) = selected else {
+            reply_error(
+                &authorization.pending,
+                ErrorCode::Cancelled,
+                "PDF selection was cancelled.",
+            );
+            return;
+        };
+        if !selected_matches_requested(&authorization.requested, &selected) {
+            reply_error(
+                &authorization.pending,
+                ErrorCode::Cancelled,
+                "Select the PDF requested by qp open.",
+            );
+            return;
+        }
+        if let Err(error) = crate::macos_file_access::remember_selected(&selected) {
+            reply_error(
+                &authorization.pending,
+                ErrorCode::OpenFailed,
+                &error.to_string(),
+            );
+            return;
+        }
+        self.start_open(
+            windows,
+            state,
+            selected,
+            authorization.revision,
+            authorization.pending,
+        );
+    }
+}
+#[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+fn selected_matches_requested(requested: &std::path::Path, selected: &std::path::Path) -> bool {
+    std::fs::canonicalize(requested)
+        .ok()
+        .zip(std::fs::canonicalize(selected).ok())
+        .is_some_and(|(requested, selected)| requested == selected)
 }
 fn content_pages(state: &AppState, command: &Command, page: u32) -> Vec<u32> {
     let mut pages = vec![page - 1];
@@ -523,6 +697,21 @@ fn notes_reply(state: &AppState) -> Result<Reply, ControlError> {
 mod tests {
     use super::*;
     use crate::{presentation::PresentationState, session_controller::apply_session_command};
+    #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+    #[test]
+    fn cli_selection_accepts_only_the_requested_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let requested = dir.path().join("日本語 deck.pdf");
+        let other = dir.path().join("other.pdf");
+        std::fs::write(&requested, b"pdf").unwrap();
+        std::fs::write(&other, b"pdf").unwrap();
+        assert!(selected_matches_requested(&requested, &requested));
+        assert!(!selected_matches_requested(&requested, &other));
+        assert!(!selected_matches_requested(
+            &dir.path().join("missing.pdf"),
+            &other
+        ));
+    }
     #[test]
     fn elapsed_query_only_observes_the_existing_timer() {
         use crate::session_controller::*;

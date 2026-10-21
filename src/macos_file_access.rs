@@ -27,6 +27,8 @@ unsafe extern "C" {
     ) -> *mut c_void;
     fn qp_ui_bookmark_close(handle: *mut c_void);
     fn qp_ui_bookmark_free(bytes: *mut c_void);
+    #[cfg(feature = "macos-store-control")]
+    fn qp_control_cancel_cli_open_panel();
 }
 
 struct Scope(NonNull<c_void>);
@@ -161,11 +163,62 @@ pub fn restore(path: PathBuf) -> Result<PathBuf> {
     }
 }
 
+#[cfg(feature = "macos-store-control")]
+pub fn restore_authorized_for_cli(path: &Path) -> Result<Option<PathBuf>> {
+    if !sandboxed() {
+        return Ok(Some(path.to_owned()));
+    }
+    ACCESS.with(|access| {
+        let mut access = access.borrow_mut();
+        access.load()?;
+        if !access
+            .bookmarks
+            .iter()
+            .any(|bookmark| bookmark.path == path)
+        {
+            return Ok(None);
+        }
+        match access.restore(path) {
+            Ok(resolved) => Ok(Some(resolved)),
+            Err(_) => {
+                let active = access.active.clone();
+                access
+                    .scopes
+                    .retain(|candidate, _| active.as_deref() == Some(candidate));
+                Ok(None)
+            }
+        }
+    })
+}
+
+#[cfg(feature = "macos-store-control")]
+pub fn cancel_cli_open_panel() {
+    unsafe { qp_control_cancel_cli_open_panel() }
+}
+
 pub fn committed(path: &Path) {
     ACCESS.with(|a| {
         let mut a = a.borrow_mut();
         a.active = Some(path.to_owned());
         a.scopes.retain(|p, _| p == path);
+    });
+}
+
+pub fn release_candidate() {
+    ACCESS.with(|access| {
+        let mut access = access.borrow_mut();
+        let active = access.active.clone();
+        access
+            .scopes
+            .retain(|path, _| active.as_deref() == Some(path));
+    });
+}
+
+pub fn closed() {
+    ACCESS.with(|access| {
+        let mut access = access.borrow_mut();
+        access.scopes.clear();
+        access.active = None;
     });
 }
 

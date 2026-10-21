@@ -1,5 +1,6 @@
 // Product Store control transport. XPC authenticates each message; Rust owns
 // protocol parsing, presentation state, and response/watch limits.
+#import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 #import <ServiceManagement/ServiceManagement.h>
 #include <Security/Security.h>
@@ -21,6 +22,31 @@ static const char *const gui_id = "app.quickpresenter.QuickPresenter";
 static const char *const broker_id = "app.quickpresenter.control.broker";
 static const char *const cli_id = "app.quickpresenter.qp";
 static const char *const agent_plist = "app.quickpresenter.control.agent.plist";
+
+int qp_control_launch_gui(const char *app_path) {
+    if (!app_path) return EINVAL;
+    @autoreleasepool {
+        NSURL *url = [NSURL fileURLWithFileSystemRepresentation:app_path isDirectory:YES
+                                                  relativeToURL:nil];
+        [[NSWorkspace sharedWorkspace] openApplicationAtURL:url
+                                               configuration:[NSWorkspaceOpenConfiguration configuration]
+                                           completionHandler:nil];
+        return 0;
+    }
+}
+
+void qp_control_cancel_cli_open_panel(void) {
+    for (NSWindow *window in NSApp.windows) {
+        NSWindow *sheet = window.attachedSheet;
+        if ([sheet isKindOfClass:[NSOpenPanel class]]) {
+            [(NSOpenPanel *)sheet cancel:nil];
+            return;
+        }
+    }
+    NSWindow *key = NSApp.keyWindow;
+    if ([key isKindOfClass:[NSOpenPanel class]])
+        [(NSOpenPanel *)key cancel:nil];
+}
 static char register_name[160];
 static char lookup_name[160];
 

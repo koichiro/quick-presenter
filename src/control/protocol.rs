@@ -4,6 +4,7 @@ use std::io::{self, Read, Write};
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+pub const STORE_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Request {

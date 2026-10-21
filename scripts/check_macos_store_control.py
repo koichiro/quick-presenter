@@ -118,6 +118,8 @@ def main():
     parser.add_argument('app', type=pathlib.Path)
     parser.add_argument('--testflight', action='store_true',
                         help='check an Apple-distributed app without the wrong-peer fixture')
+    parser.add_argument('--legacy-open-rejection', action='store_true',
+                        help='check pre-#432 builds that intentionally reject qp open')
     args = parser.parse_args()
     app = args.app.resolve()
     cli = app / 'Contents/Helpers/ControlCLI.app/Contents/MacOS/qp'
@@ -161,10 +163,11 @@ def main():
         if rejected['code'] != 'IPC_FAILURE':
             raise AssertionError(f'wrong identifier was not rejected as IPC_FAILURE: {rejected}')
         passed.append('wrong_identifier_rejected')
-    open_error = command(cli, 'open', '/tmp/store-control-unsupported.pdf', success=False)
-    if open_error['code'] != 'UNSUPPORTED_PLATFORM':
-        raise AssertionError(f'raw path unexpectedly accepted: {open_error}')
-    passed.append('raw_open_rejected')
+    if args.legacy_open_rejection:
+        open_error = command(cli, 'open', '/tmp/store-control-unsupported.pdf', success=False)
+        if open_error['code'] != 'UNSUPPORTED_PLATFORM':
+            raise AssertionError(f'raw path unexpectedly accepted: {open_error}')
+        passed.append('raw_open_rejected')
     watch = subprocess.Popen([str(cli), 'watch', '--json'], stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE, bufsize=0)
     try:
@@ -193,6 +196,12 @@ def main():
     if command(cli, 'status')['document'] is not None:
         raise AssertionError('close did not clear the document')
     passed.append('close')
+    if not args.legacy_open_rejection:
+        opened = command(cli, 'open', status['document'])
+        if opened['kind'] != 'mutation' or opened['state']['document'] != status['document']:
+            raise AssertionError('authorized PDF did not reopen')
+        command(cli, 'close')
+        passed.append('authorized_open')
     for _ in range(32):
         if command(cli, 'status')['document'] is not None:
             raise AssertionError('repeated connection returned stale document state')
