@@ -85,3 +85,11 @@ presented a single new picker and could be cancelled normally. These
 inactive-window checks used the signed fixture; TestFlight 25006 predates the
 panel-cancellation follow-up. All PR CI checks on commit `e5b7af7`, including
 macOS, Linux, and Windows package builds, and the CodeRabbit review passed.
+
+[TestFlight build 25007](ISSUE432_STORE_OPEN_TESTFLIGHT_25007.md) subsequently
+confirmed inactive-window cancellation and picker dismissal after Apple
+re-signing. Its 120-second check exposed a race between the GUI selection
+deadline and the XPC server response deadline. Commit `e453abc` gives the
+response three extra seconds and the CLI two further seconds to receive it;
+Store and default Cargo checks and tests passed. The corrected response still
+requires a distributed-build check.

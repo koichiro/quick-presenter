@@ -44,9 +44,12 @@ the GUI presents a file picker; the user must select the requested file within
 intact. The CLI path is only a picker hint and does not grant file access.
 This [#432](https://github.com/koichiro/quick-presenter/issues/432) behavior
 passed a Developer ID-signed sandbox test and Apple-distributed internal
-[TestFlight build 25006](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25006.md)
-on macOS 27.0.1 arm64. Other supported systems and final Store release remain
-separate qualification gates.
+[TestFlight builds 25006](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25006.md)
+and [25007](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25007.md) on macOS
+27.0.1 arm64. Build 25007 confirmed inactive-window picker dismissal and
+identified a response-deadline race at the 120-second limit; the correction
+requires a new distributed-build check. Other supported systems and final
+Store release remain separate qualification gates.
 
 For a Store control candidate, build all binaries from the same source with
 `cargo build --release --locked --bins --features macos-store-control` and set
