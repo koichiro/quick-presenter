@@ -91,5 +91,8 @@ confirmed inactive-window cancellation and picker dismissal after Apple
 re-signing. Its 120-second check exposed a race between the GUI selection
 deadline and the XPC server response deadline. Commit `e453abc` gives the
 response three extra seconds and the CLI two further seconds to receive it;
-Store and default Cargo checks and tests passed. The corrected response still
-requires a distributed-build check.
+Store and default Cargo checks and tests passed. The corrected response was
+confirmed on [Apple-distributed TestFlight build
+25008](ISSUE432_STORE_OPEN_TESTFLIGHT_25008.md), together with stopped-GUI
+startup, new-PDF selection, bookmark reopening, and inactive-window
+`qp close` cancellation.

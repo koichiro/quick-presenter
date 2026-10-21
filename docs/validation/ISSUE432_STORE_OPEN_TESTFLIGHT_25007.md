@@ -34,11 +34,13 @@ The unanswered request exposed a response-deadline race: its CLI result was
 the generic `TIMEOUT` message `Control request timed out; query status before
 retrying a mutation.` rather than the GUI's specific picker-timeout response.
 The GUI's 120-second selection deadline and XPC server's 120-second response
-deadline were identical. PR #501 commit `e453abc` now gives the XPC response
+deadline were identical. PR #501 commit `e453abc` gives the XPC response
 an additional three seconds and the CLI an additional two seconds after that.
-The corrected source requires another distributed-build timeout check.
+The corrected response passed on
+[Apple-distributed build 25008](ISSUE432_STORE_OPEN_TESTFLIGHT_25008.md).
 
 This build does not establish clean-account startup, Intel behavior, other
 supported macOS versions, or a final customer Store installation. The 15-second
-cold-start timeout also requires a repeat to determine whether it was a
-one-time post-update delay or a reproducible startup issue.
+cold-start timeout did not recur on a stopped-GUI retry, and the first
+stopped-GUI open after the update to build 25008 also succeeded. The initial
+failure remains an observed startup limit rather than a demonstrated pattern.
