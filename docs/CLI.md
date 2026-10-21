@@ -12,12 +12,17 @@ checks; full Store qualification is still required.
 
 The optional v2.5.0 Store control build uses authenticated XPC. Its bundled
 CLI is at `Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`.
-It requires a running GUI; `qp open` and CLI startup are unavailable pending
-[#432](https://github.com/koichiro/quick-presenter/issues/432). The commands
+`qp open` starts the GUI if needed. For a PDF the Store GUI has not previously
+authorized, the GUI presents a picker with the requested file suggested.
+Select that exact file within 120 seconds. Cancellation or a different choice
+returns `CANCELLED` and preserves the current presentation. Subsequent opens
+use the saved security-scoped bookmark. The commands
 for status, timer elapsed, notes, slide, context, export, navigation, blackout,
 close, and watch keep Control Protocol v1. This build has passed local
 Developer ID-signed and internal TestFlight installed-product integration
-checks. Full Store qualification remains open. See
+checks for the earlier control commands. Store `qp open` passed both a local
+Developer ID-signed sandbox test and Apple-distributed internal TestFlight build
+25006 on macOS 27.0.1 arm64. Full Store qualification remains open. See
 [Mac App Store distribution](MAC_APP_STORE.md#experimental-v250-control-build).
 
 ## Stable automation interface
@@ -167,9 +172,14 @@ all other commands require it. `status` and `watch` also work with no open PDF.
 
 ## Starting a presentation from the CLI
 
-This section applies to Developer ID/DMG and other non-Store builds. The
-optional Store control build requires the GUI to be opened by the user and
-rejects `qp open` until #432 supplies an authorized file handoff.
+Both Store and non-Store builds support `qp open`. In Store builds, the CLI
+starts the bundled GUI if needed, and the GUI asks the user to authorize a PDF
+in its file picker when no valid bookmark exists. Both builds poll GUI readiness
+for up to 15 seconds, submit the open request once, and never replay a request
+sent to a reachable GUI. Store startup uses XPC for readiness checks and
+`NSWorkspace` to activate the containing app. The companion-process launch,
+startup lock, and error details below apply to Developer ID/DMG and other
+non-Store builds.
 
 ```sh
 qp open "slides with spaces.pdf" --json

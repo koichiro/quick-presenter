@@ -964,6 +964,8 @@ fn handle_presentation_command(
 ) {
     if command == PresentationCommand::Close {
         apply_session_command(&mut state.borrow_mut(), command, Instant::now());
+        #[cfg(target_os = "macos")]
+        macos_file_access::closed();
         view_sync::apply_closed_state_to_windows(windows);
         return;
     }
@@ -2362,6 +2364,8 @@ fn handle_render_open_failed(
     if !accepted {
         return;
     }
+    #[cfg(target_os = "macos")]
+    macos_file_access::release_candidate();
     state
         .borrow_mut()
         .hot_reload

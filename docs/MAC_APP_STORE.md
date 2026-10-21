@@ -33,12 +33,25 @@ v2.0.0 Store release gate.
 The optional `macos-store-control` feature builds the product GUI, a bundled
 `ControlCLI.app`, and a per-user `ControlBroker.app` LaunchAgent. The GUI and
 CLI use authenticated XPC for Control Protocol v1; the Developer ID/DMG build
-continues to use its Unix socket. The broker only connects a CLI to the
-currently running GUI. It does not launch the GUI or receive PDF contents.
+continues to use its Unix socket. The broker connects a CLI to the running GUI
+and does not receive PDF contents. For `qp open` only, the bundled CLI can
+launch its containing GUI before submitting the request.
 The Store CLI supports status, timer elapsed, notes, slide, context, export,
-navigation, blackout, close, and watch. `qp open` and CLI startup of the GUI
-remain unavailable until [#432](https://github.com/koichiro/quick-presenter/issues/432)
-defines the sandboxed file-authority handoff.
+navigation, blackout, close, watch, and `qp open`. A PDF already selected in
+the Store GUI opens through its saved security-scoped bookmark. For a new PDF,
+the GUI presents a file picker; the user must select the requested file within
+120 seconds. Cancellation or a different selection leaves the current deck
+intact. The CLI path is only a picker hint and does not grant file access.
+This [#432](https://github.com/koichiro/quick-presenter/issues/432) behavior
+passed a Developer ID-signed sandbox test and Apple-distributed internal
+[TestFlight builds 25006](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25006.md)
+and [25007](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25007.md) on macOS
+27.0.1 arm64. Build 25007 confirmed inactive-window picker dismissal and
+identified a response-deadline race at the 120-second limit. The correction
+passed on Apple-distributed internal
+[TestFlight build 25008](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25008.md).
+Other supported systems and final Store release remain separate qualification
+gates.
 
 For a Store control candidate, build all binaries from the same source with
 `cargo build --release --locked --bins --features macos-store-control` and set

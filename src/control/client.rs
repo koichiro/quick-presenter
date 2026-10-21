@@ -60,15 +60,11 @@ pub fn help() -> String {
     {
         HELP.replace(
             "open <file>        Open a PDF (starts the GUI if needed; paths relative to CLI)",
-            "open <file>        Unavailable until Store file-authority support is implemented",
-        )
-        .replace(
-            "Commands require a running GUI, except open, --version, and --help.",
-            "Commands require a running GUI, except --version and --help.",
+            "open <file>        Open a PDF; first use requires GUI file selection (up to 120s)",
         )
         .replace(
             "Supported: Windows, Linux, macOS Developer ID/DMG and development builds.\nMac App Store presentation control is not supported in v2.0.0.",
-            "This Mac App Store build uses authenticated XPC control.\nStore CLI startup and file opening remain unavailable.",
+            "This Mac App Store build uses authenticated XPC control.\nFor a new PDF, select the requested file in the GUI; cancellation leaves the deck open.",
         )
     }
     #[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
@@ -307,13 +303,14 @@ fn ipc_error(e: io::Error) -> ControlError {
 pub fn send(request: &Request) -> Result<Response, ControlError> {
     #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
     {
-        if matches!(request.command, Command::Open(_)) {
-            return Err(ControlError::new(
-                ErrorCode::UnsupportedPlatform,
-                "Store CLI file opening requires authorized file access.",
-            ));
-        }
         let mut stream = super::store_xpc::XpcStream::connect().map_err(ipc_error)?;
+        if matches!(request.command, Command::Open(_)) {
+            stream.set_read_timeout(
+                super::protocol::STORE_OPEN_TIMEOUT
+                    + super::protocol::STORE_OPEN_RESPONSE_GRACE
+                    + std::time::Duration::from_secs(2),
+            );
+        }
         write_frame(&mut stream, request).map_err(ipc_error)?;
         return receive_response(&mut stream, request);
     }

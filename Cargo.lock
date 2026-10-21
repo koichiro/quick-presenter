@@ -3703,6 +3703,7 @@ version = "2.5.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "futures",
  "libc",
  "notify",
  "objc2 0.6.5",

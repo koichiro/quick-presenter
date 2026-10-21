@@ -1,4 +1,6 @@
 //! CLI-only application startup. Presentation operations still use the protocol.
+#[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+use super::store_xpc;
 #[cfg(not(all(target_os = "macos", feature = "macos-store-control")))]
 use super::transport;
 use super::{client, protocol::*};
@@ -18,7 +20,91 @@ const POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[cfg(all(target_os = "macos", feature = "macos-store-control"))]
 pub fn send(request: &Request) -> Result<Response, ControlError> {
-    client::send(request)
+    use std::time::{Duration, Instant};
+    match client::send(request) {
+        Err(error)
+            if error.code == ErrorCode::NotRunning
+                && matches!(request.command, Command::Open(_)) =>
+        {
+            let cli = std::env::current_exe().map_err(store_startup_error)?;
+            let app = store_companion_gui(&cli)?;
+            store_xpc::launch_gui(app).map_err(store_startup_error)?;
+            let deadline = Instant::now() + Duration::from_secs(15);
+            let status = Request::new(request.id, Command::Status(Empty {}));
+            loop {
+                if Instant::now() >= deadline {
+                    return Err(ControlError::new(
+                        ErrorCode::Timeout,
+                        "Quick Presenter did not become ready within 15 seconds.",
+                    ));
+                }
+                match client::send(&status) {
+                    Ok(response) => {
+                        match response.outcome {
+                            Outcome::Result(Reply::Status(state)) if state.opening => {}
+                            Outcome::Result(Reply::Status(_)) => return client::send(request),
+                            Outcome::Error(error) => return Err(error),
+                            _ => return Err(ControlError::new(
+                                ErrorCode::IpcFailure,
+                                "Unexpected response while waiting for Quick Presenter startup.",
+                            )),
+                        }
+                    }
+                    Err(error) if error.code == ErrorCode::NotRunning => {}
+                    Err(error) => return Err(error),
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+        result => result,
+    }
+}
+
+#[cfg(all(test, target_os = "macos", feature = "macos-store-control"))]
+mod store_tests {
+    use super::*;
+
+    #[test]
+    fn store_startup_only_uses_the_containing_app() {
+        let directory = tempfile::tempdir().unwrap();
+        let app = directory.path().join("Quick Presenter.app");
+        let cli = app.join("Contents/Helpers/ControlCLI.app/Contents/MacOS/qp");
+        std::fs::create_dir_all(cli.parent().unwrap()).unwrap();
+        assert_eq!(store_companion_gui(&cli).unwrap(), app);
+        let other = directory.path().join("Other.app");
+        let other_cli = other.join("Contents/Helpers/ControlCLI.app/Contents/MacOS/qp");
+        std::fs::create_dir_all(other_cli.parent().unwrap()).unwrap();
+        assert_eq!(
+            store_companion_gui(&other_cli).unwrap_err().code,
+            ErrorCode::NotRunning
+        );
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+fn store_companion_gui(executable: &std::path::Path) -> Result<&std::path::Path, ControlError> {
+    executable
+        .ancestors()
+        .nth(6)
+        .filter(|path| {
+            path.file_name()
+                .is_some_and(|name| name == "Quick Presenter.app")
+                && path.is_dir()
+        })
+        .ok_or_else(|| {
+            ControlError::new(
+                ErrorCode::NotRunning,
+                "Cannot locate the containing Quick Presenter app.",
+            )
+        })
+}
+
+#[cfg(all(target_os = "macos", feature = "macos-store-control"))]
+fn store_startup_error(error: std::io::Error) -> ControlError {
+    ControlError::new(
+        ErrorCode::IpcFailure,
+        format!("Could not start Quick Presenter: {error}"),
+    )
 }
 
 /// Only an open whose initial connection failed may start the companion GUI.

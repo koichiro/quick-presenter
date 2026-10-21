@@ -40,6 +40,19 @@ unsafe extern "C" {
         timeout_ms: u32,
     ) -> isize;
     fn qp_control_client_close(handle: *mut c_void);
+    fn qp_control_launch_gui(app_path: *const std::ffi::c_char) -> i32;
+}
+
+pub fn launch_gui(app: &std::path::Path) -> io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+    let path = std::ffi::CString::new(app.as_os_str().as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Invalid app path"))?;
+    let error = unsafe { qp_control_launch_gui(path.as_ptr()) };
+    if error == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::from_raw_os_error(error))
+    }
 }
 
 pub fn broker_main() -> i32 {
@@ -173,16 +186,6 @@ fn serve(
         Err(response) => return protocol::write_frame(&mut writer, &response),
     };
     let id = request.id;
-    if matches!(request.command, Command::Open(_)) {
-        return protocol::write_frame(
-            &mut writer,
-            &Response::error(
-                Some(id),
-                ErrorCode::UnsupportedPlatform,
-                "Store CLI file opening requires authorized file access.",
-            ),
-        );
-    }
     let (watch, event_receiver) = if matches!(request.command, Command::Watch(_)) {
         let (subscriber, receiver) = events::channel();
         (Some(subscriber), Some(receiver))
@@ -193,11 +196,22 @@ fn serve(
         .as_ref()
         .map(|subscriber| subscriber.closed.clone())
         .unwrap_or_else(|| session.cancelled.clone());
-    let deadline = Instant::now() + protocol::REQUEST_TIMEOUT;
+    let request_deadline = Instant::now()
+        + if matches!(request.command, Command::Open(_)) {
+            protocol::STORE_OPEN_TIMEOUT
+        } else {
+            protocol::REQUEST_TIMEOUT
+        };
+    let response_deadline = request_deadline
+        + if matches!(request.command, Command::Open(_)) {
+            protocol::STORE_OPEN_RESPONSE_GRACE
+        } else {
+            Duration::ZERO
+        };
     let (response_sender, receiver) = mpsc::sync_channel(1);
     let pending = PendingRequest {
         request,
-        deadline,
+        deadline: request_deadline,
         cancelled: cancelled.clone(),
         response: response_sender,
         watch,
@@ -215,7 +229,7 @@ fn serve(
     loop {
         if state.stop.load(Ordering::Relaxed)
             || session.cancelled.load(Ordering::Relaxed)
-            || Instant::now() >= deadline
+            || Instant::now() >= response_deadline
         {
             cancelled.store(true, Ordering::Relaxed);
             return protocol::write_frame(
