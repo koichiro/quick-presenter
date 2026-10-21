@@ -759,6 +759,7 @@ export component PresenterWindow inherits Window {
     callback keyboard-next-page();
     callback keyboard-first-page();
     callback keyboard-last-page();
+    callback toolbar-shortcut(KeyEvent) -> bool;
     callback swap-displays();
     callback jump-to-page(int);
     callback request-thumbnail-range(int, int);
@@ -1085,100 +1086,110 @@ export component PresenterWindow inherits Window {
             height: root.height;
             background: #202124;
 
-            HorizontalBox {
+            // Capture only toolbar descendants; notes keep their own text rules.
+            FocusScope {
+                focus-on-tab-navigation: false;
+                focus-on-click: false;
                 x: 12px;
                 y: root.inline-menu-height + 12px;
                 width: parent.width - 24px;
                 height: 36px;
-                spacing: 8px;
-                padding: 0px;
+                capture-key-pressed(event) => {
+                    if root.toolbar-shortcut(event) { accept } else { reject }
+                }
+                HorizontalBox {
+                    width: parent.width;
+                    height: parent.height;
+                    spacing: 8px;
+                    padding: 0px;
 
-                Button {
-                    height: 32px;
-                    text: "Open";
-                    clicked => {
-                        root.open-pdf();
+                    Button {
+                        height: 32px;
+                        text: "Open";
+                        clicked => {
+                            root.open-pdf();
+                        }
                     }
-                }
 
-                NavigationButton {
-                    icon: @image-url("../assets/navigation/first.svg");
-                    action-name: "First Page";
-                    shortcut-label: "Home / Ctrl+A";
-                    clicked => {
-                        root.first-page();
+                    NavigationButton {
+                        icon: @image-url("../assets/navigation/first.svg");
+                        action-name: "First Page";
+                        shortcut-label: "Home / Ctrl+A";
+                        clicked => {
+                            root.first-page();
+                        }
                     }
-                }
 
-                NavigationButton {
-                    icon: @image-url("../assets/navigation/previous.svg");
-                    action-name: "Previous Page";
-                    shortcut-label: "Left / PgUp";
-                    clicked => {
-                        root.previous-page();
+                    NavigationButton {
+                        icon: @image-url("../assets/navigation/previous.svg");
+                        action-name: "Previous Page";
+                        shortcut-label: "Left / PgUp";
+                        clicked => {
+                            root.previous-page();
+                        }
                     }
-                }
 
-                NavigationButton {
-                    icon: @image-url("../assets/navigation/next.svg");
-                    action-name: "Next Page";
-                    shortcut-label: "Space / Right";
-                    clicked => {
-                        root.next-page();
+                    NavigationButton {
+                        icon: @image-url("../assets/navigation/next.svg");
+                        action-name: "Next Page";
+                        shortcut-label: "Space / Right";
+                        clicked => {
+                            root.next-page();
+                        }
                     }
-                }
 
-                NavigationButton {
-                    icon: @image-url("../assets/navigation/last.svg");
-                    action-name: "Last Page";
-                    shortcut-label: "End / Ctrl+E";
-                    clicked => {
-                        root.last-page();
+                    NavigationButton {
+                        icon: @image-url("../assets/navigation/last.svg");
+                        action-name: "Last Page";
+                        shortcut-label: "End / Ctrl+E";
+                        clicked => {
+                            root.last-page();
+                        }
                     }
-                }
 
-                Button {
-                    height: 32px;
-                    text: root.slide-fullscreen ? "Exit Fullscreen" : "Fullscreen";
-                    clicked => {
-                        root.toggle-slide-fullscreen();
+                    Button {
+                        height: 32px;
+                        text: root.slide-fullscreen ? "Exit Fullscreen" : "Fullscreen";
+                        clicked => {
+                            root.toggle-slide-fullscreen();
+                        }
                     }
-                }
 
-                Button {
-                    height: 32px;
-                    text: "Black";
-                    clicked => {
-                        root.toggle-black-screen();
+                    Button {
+                        height: 32px;
+                        text: "Black";
+                        clicked => {
+                            root.toggle-black-screen();
+                        }
                     }
-                }
 
-                Text {
-                    text: root.document-title;
-                    color: white;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                    overflow: elide;
-                }
+                    Text {
+                        text: root.document-title;
+                        color: white;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
 
-                Text {
-                    text: root.elapsed-time-label;
-                    color: #f1f3f4;
-                    font-size: 20px;
-                    font-weight: 700;
-                    vertical-alignment: center;
-                }
+                    Text {
+                        text: root.elapsed-time-label;
+                        color: #f1f3f4;
+                        font-size: 20px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
 
-                Text {
-                    text: root.clock-time-label;
-                    color: #d9dce0;
-                    vertical-alignment: center;
-                }
+                    Text {
+                        text: root.clock-time-label;
+                        color: #d9dce0;
+                        vertical-alignment: center;
+                    }
 
-                Text {
-                    text: root.page-label;
-                    color: #d9dce0;
-                    vertical-alignment: center;
+                    Text {
+                        text: root.page-label;
+                        color: #d9dce0;
+                        vertical-alignment: center;
+                    }
                 }
             }
 

@@ -5,6 +5,18 @@ window has keyboard focus. The Rust input layer maps key callbacks to a shared
 presentation command path, so button navigation and keyboard navigation update
 the presenter and slide windows together.
 
+## Toolbar Focus
+
+Tab and Shift+Tab traverse the toolbar buttons. Space and Return activate the
+focused button. While a toolbar button has focus, the other documented
+presentation keys take precedence over native button key handling: arrows,
+Page Up/Down, Backspace, Home/End, physical Ctrl+A/E, F/F5, Escape, B and X.
+Modified text/OS shortcuts retain their usual handling. On macOS, Ctrl means the
+physical Control key; Command is not substituted for these presentation keys.
+
+This rule is scoped to toolbar descendants. Speaker-note selection and copying
+keep their separate text-input precedence; see #479 for the notes-focus fix.
+
 ## Page Navigation
 
 - Next page: `Space`, `Return`, `Right Arrow`, `Down Arrow`, `Page Down`

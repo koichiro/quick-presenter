@@ -45,6 +45,7 @@ pub mod session_controller;
 pub mod settings_storage;
 pub mod startup_state;
 pub mod timer;
+mod toolbar_input;
 pub mod view_sync;
 pub mod window_controller;
 pub mod window_menu;
@@ -634,6 +635,30 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
             &state_for_black_screen,
             PresentationCommand::ToggleBlackScreen,
         );
+    });
+
+    let toolbar_presenter = app.as_weak();
+    app.on_toolbar_shortcut(move |event| {
+        use toolbar_input::ToolbarShortcut;
+        let Some(presenter) = toolbar_presenter.upgrade() else {
+            return false;
+        };
+        let Some(shortcut) =
+            toolbar_input::toolbar_shortcut(&event, presenter.get_use_physical_control_shortcuts())
+        else {
+            return false;
+        };
+        match shortcut {
+            ToolbarShortcut::Next => presenter.invoke_keyboard_next_page(),
+            ToolbarShortcut::Previous => presenter.invoke_keyboard_previous_page(),
+            ToolbarShortcut::First => presenter.invoke_keyboard_first_page(),
+            ToolbarShortcut::Last => presenter.invoke_keyboard_last_page(),
+            ToolbarShortcut::ExitFullscreen => presenter.invoke_exit_slide_fullscreen(),
+            ToolbarShortcut::ToggleFullscreen => presenter.invoke_toggle_slide_fullscreen(),
+            ToolbarShortcut::Blackout => presenter.invoke_toggle_black_screen(),
+            ToolbarShortcut::SwapDisplays => presenter.invoke_swap_displays(),
+        }
+        true
     });
 
     let window_refs = refs.clone();
