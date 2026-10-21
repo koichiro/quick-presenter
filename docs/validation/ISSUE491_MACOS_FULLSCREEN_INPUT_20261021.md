@@ -98,3 +98,20 @@ reach native settled fullscreen. Preserve these failures; neither run is a clean
 GUI pass. Repeat on an unlocked, uninterrupted desktop and check the PR's macOS
 CI result before removing the remaining qualification gate. Physical-key and
 final notarized/distributed-artifact checks remain outstanding.
+
+### Same-turn request/notification gap found in CI
+
+The isolated CI check on run 39574602040 passed its windowed baseline but failed
+rapid entry cancellation with AppKit=true, Slint=false and winit intent=false.
+This ruled out hidden-window-test contamination as the complete explanation.
+The same-turn true/false sequence can precede AppKit's will-enter notification.
+Mark a native transition before calling toggleFullScreen, rather than only in
+will-enter/will-exit, so the second request is queued across that gap. The
+existing lifecycle guard makes the later notification idempotent and clears on
+completion/failure/destruction. The full Cargo suite and release build passed
+with this additional fix; repeat the actual-style regression before declaring
+native qualification complete.
+
+The software-renderer buffer mismatch was independently reproduced in the
+14484d4 signed baseline without these follow-up changes, with the same
+737280-byte/1024-pixel buffer and 1200x1000 size diagnostic.
