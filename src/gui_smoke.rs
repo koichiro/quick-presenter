@@ -294,6 +294,7 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
     check_hidden_slide_recovery(&windows, &state, report)?;
     #[cfg(target_os = "macos")]
     {
+        check_macos_fullscreen_reversal(&windows, report)?;
         check_macos_slide_edges(&windows, report)?;
         check_macos_preserved_pdf_open(&windows, &state, options, report)?;
     }
@@ -478,6 +479,65 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
             ],
         );
     })?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_native_fullscreen(slide: &crate::SlideWindow) -> Option<bool> {
+    use objc2_app_kit::{NSView, NSWindowStyleMask};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    let handle = slide.window().window_handle();
+    let handle = handle.window_handle().ok()?;
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return None;
+    };
+    // The live Slint adapter owns the view, and GUI smoke runs on the main thread.
+    let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
+    Some(
+        view.window()?
+            .styleMask()
+            .contains(NSWindowStyleMask::FullScreen),
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn check_macos_fullscreen_reversal(
+    windows: &AppWindows,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    // Inspect AppKit's real style mask, not winit's queued intent. The latter
+    // can look correct even when AppKit silently ignored a synchronous reversal.
+    for (name, sequence, expected) in [
+        ("rapid entry cancellation", vec![true, false], false),
+        ("settled entry", vec![true], true),
+        ("rapid exit cancellation", vec![false, true], true),
+        ("reversal cleanup", vec![false], false),
+    ] {
+        let refs = windows.refs();
+        let slide = windows.slide.as_weak();
+        let applied = Rc::new(Cell::new(None::<Instant>));
+        let observed = applied.clone();
+        run_macos_window_action_until(
+            move || {
+                for fullscreen in sequence {
+                    set_slide_fullscreen(&refs, fullscreen);
+                }
+                applied.set(Some(Instant::now()));
+            },
+            move || {
+                observed
+                    .get()
+                    .is_some_and(|at| at.elapsed() >= Duration::from_secs(1))
+                    && slide.upgrade().is_some_and(|slide| {
+                        macos_native_fullscreen(&slide) == Some(expected)
+                            && slide.window().is_fullscreen() == expected
+                    })
+            },
+            Duration::from_secs(5),
+        )
+        .with_context(|| format!("macOS {name} did not reach the requested native state"))?;
+        report.pass(format!("macOS {name} matches AppKit fullscreen state"));
+    }
     Ok(())
 }
 

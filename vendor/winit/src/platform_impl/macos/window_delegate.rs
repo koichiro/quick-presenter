@@ -294,8 +294,14 @@ declare_class!(
             trace_scope!("windowDidEnterFullScreen:");
             self.ivars().initial_fullscreen.set(false);
             self.ivars().in_fullscreen_transition.set(false);
-            if let Some(target_fullscreen) = self.ivars().target_fullscreen.take() {
-                self.set_fullscreen(target_fullscreen);
+            if self.ivars().target_fullscreen.borrow().is_some() {
+                // AppKit is still completing its animation notification here.
+                // A synchronous toggle can be ignored; apply on the next turn.
+                unsafe {
+                    self.performSelector_withObject_afterDelay(
+                        sel!(applyPendingFullscreen:), None, 0.0,
+                    );
+                }
             }
         }
 
@@ -306,8 +312,14 @@ declare_class!(
 
             self.restore_state_from_fullscreen();
             self.ivars().in_fullscreen_transition.set(false);
-            if let Some(target_fullscreen) = self.ivars().target_fullscreen.take() {
-                self.set_fullscreen(target_fullscreen);
+            if self.ivars().target_fullscreen.borrow().is_some() {
+                // AppKit is still completing its animation notification here.
+                // A synchronous toggle can be ignored; apply on the next turn.
+                unsafe {
+                    self.performSelector_withObject_afterDelay(
+                        sel!(applyPendingFullscreen:), None, 0.0,
+                    );
+                }
             }
         }
 
@@ -433,6 +445,13 @@ declare_class!(
 
     // Key-Value Observing
     unsafe impl WindowDelegate {
+        #[method(applyPendingFullscreen:)]
+        fn apply_pending_fullscreen(&self, _: Option<&AnyObject>) {
+            if let Some(target_fullscreen) = self.ivars().target_fullscreen.take() {
+                self.set_fullscreen(target_fullscreen);
+            }
+        }
+
         #[method(observeValueForKeyPath:ofObject:change:context:)]
         fn observe_value(
             &self,
@@ -1300,7 +1319,9 @@ impl WindowDelegate {
         if self.ivars().is_simple_fullscreen.get() {
             return;
         }
-        if self.ivars().in_fullscreen_transition.get() {
+        if self.ivars().in_fullscreen_transition.get()
+            || self.ivars().target_fullscreen.borrow().is_some()
+        {
             // We can't set fullscreen here.
             // Set fullscreen after transition.
             self.ivars().target_fullscreen.replace(Some(fullscreen));

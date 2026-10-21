@@ -59,3 +59,42 @@ latest queued target until winit applies it.
   macOS desktop locked during the final signed-app validation.
 - Physical rapid-key reproduction and final distributed-artifact qualification:
   pending. The issue remains open until its remaining acceptance checks are met.
+
+## Follow-up after unlocking the desktop
+
+The 14484d4 signed candidate still left the real slide window fullscreen after
+rapid F/Escape, despite `qp status` reporting false. The intermediate getter fix
+alone was insufficient. Native instrumentation found that AppKit ignored a
+reverse toggle called synchronously from `windowDidEnterFullScreen:`.
+
+The follow-up records fullscreen intent in winit immediately (before Slint's
+window properties are deferred), and applies a queued reversal on the next
+AppKit run-loop turn after completion. Requests arriving before that deferred
+application replace the queued target. Application state borrows end before
+native calls, which may deliver resize notifications synchronously.
+
+On macOS 27.0.1 arm64, a Developer ID signed instrumented copy using a unique
+UI bundle identifier (same renderer/proxy IDs) verified:
+
+- Presenter F/Right: page 1 → 2, once; Escape/Right: 2 → 3, once.
+- Slide F/Right: 3 → 4; Escape/Right: 4 → 5, once each.
+- Presenter and slide F/Escape: real AppKit did-enter followed by did-exit
+  notifications, logical fullscreen false, and windowed slide controls restored.
+- Slide F/Escape/F: last intent true, no delayed exit and no page change.
+- Normal Escape after settling exited fullscreen and restored window controls.
+
+The final sources remove instrumentation and add GUI smoke checks against
+AppKit's real FullScreen style bit (entry cancellation, settled entry, exit
+cancellation and cleanup), rather than trusting the queued winit getter.
+`cargo fmt --check`, `cargo check`, the complete Cargo suite and release build
+passed. The clean signed release-layout candidate passed the XPC renderer gate.
+
+GUI smoke qualification is still incomplete: a software-backend run aborted on
+a 1024-pixel buffer versus 1200x1000 window-size mismatch; a default-backend run
+reported 65 passes and two failures (logical toggle and rapid cancellation)
+while other native automation was active. An isolated retry after the desktop
+locked reported 67 passes, including rapid entry cancellation, then failed to
+reach native settled fullscreen. Preserve these failures; neither run is a clean
+GUI pass. Repeat on an unlocked, uninterrupted desktop and check the PR's macOS
+CI result before removing the remaining qualification gate. Physical-key and
+final notarized/distributed-artifact checks remain outstanding.

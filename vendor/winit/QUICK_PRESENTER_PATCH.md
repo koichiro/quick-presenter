@@ -34,3 +34,10 @@ A per-thread transition count covers multiple windows, duplicate notifications,
 failed entry, and destruction during an animation. Its lifecycle is tested by
 `tests/macos_fullscreen_transition.rs` without creating AppKit windows. Native
 input and distribution qualification remain separate checks.
+
+AppKit may ignore a reverse toggle invoked inside its did-enter/did-exit
+notification. Apply pending fullscreen intent with a zero-delay selector on the
+next run-loop turn, retaining the latest request until then. Quick Presenter's
+window controller records native intent before updating deferred Slint properties.
+The macOS GUI smoke checks compare actual AppKit style-mask state after rapid
+entry/exit cancellation, so a logically correct but ignored request cannot pass.
