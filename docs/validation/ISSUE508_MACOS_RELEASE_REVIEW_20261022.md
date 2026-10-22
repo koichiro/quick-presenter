@@ -174,6 +174,6 @@ preservation. Removing vendor overrides is not part of this qualification.
   existing October 28 candidate checkpoint retained. This report creates no
   scheduled automation and grants no publication approval.
 
-#422 and #433 are closed with their remaining conditions transferred to #493/#508;
+Issues #422 and #433 are closed with their remaining conditions transferred to #493/#508;
 those closures do not complete this issue. Raw smoke logs and machine/account
 material are kept outside Git; this report records results and artifact identities.
