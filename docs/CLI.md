@@ -57,7 +57,8 @@ Release packages include the CLI and its documentation:
 | Linux Debian package | `/usr/bin/qp` |
 | Raw binary artifact | `qp` or `qp.exe` beside the GUI executable |
 
-On macOS, invoke the bundled executable directly, or add a user-local link:
+On macOS, use the CLI bundled with the installed distribution. For a Developer
+ID/DMG installation, invoke it directly or add a user-local link:
 
 ```sh
 "/Applications/Quick Presenter.app/Contents/MacOS/qp" status --json
@@ -65,6 +66,20 @@ mkdir -p "$HOME/.local/bin"
 ln -s "/Applications/Quick Presenter.app/Contents/MacOS/qp" "$HOME/.local/bin/qp"
 # Add $HOME/.local/bin to PATH in your shell configuration.
 ```
+
+For the v2.5.0 Mac App Store control build, use its nested signed CLI instead:
+
+```sh
+"/Applications/Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp" status --json
+mkdir -p "$HOME/.local/bin"
+ln -s "/Applications/Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp" "$HOME/.local/bin/qp"
+```
+
+Choose the link target for the installed distribution; do not run both link
+commands. If `qp` already exists, inspect it before replacing it. A symlink
+keeps the CLI inside its signed app for Store GUI discovery; copying the
+executable elsewhere does not provide the same workflow. The commands below
+assume the matching CLI is on PATH.
 
 The MSI does not modify PATH. Invoke its installed `qp.exe` by full path, or
 add its directory to your user PATH. Windows Store remains the supported Windows
