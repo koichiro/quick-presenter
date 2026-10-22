@@ -636,6 +636,19 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
         );
     });
 
+    let notes_refs = refs.clone();
+    let notes_state = state.clone();
+    app.on_notes_navigation_key(move |event| {
+        if let Some(command) =
+            input::notes_navigation_command(&event, use_physical_control_shortcuts())
+        {
+            handle_presentation_command(&notes_refs, &notes_state, command);
+            true
+        } else {
+            false
+        }
+    });
+
     let window_refs = refs.clone();
     let state_for_keyboard_previous = state.clone();
     app.on_keyboard_previous_page(move || {

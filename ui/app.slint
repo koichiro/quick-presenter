@@ -103,6 +103,7 @@ export global NotesTypography {
 
 // Keep visible notes and automatic sizing probes on the same typography.
 component NotesText inherits Rectangle {
+    callback navigation-key(KeyEvent) -> bool;
     in property <string> text;
     in property <length> font-size;
     in property <color> text-color: #f1f3f4;
@@ -127,7 +128,10 @@ component NotesText inherits Rectangle {
             line-height-factor: NotesTypography.line-height-factor;
             page-height: root.page-height;
             text-cursor-width: 0px;
-            key-pressed(event) => { reject }
+            // Reject alone still runs TextInput's built-in cursor handling.
+            key-pressed(event) => {
+                if root.navigation-key(event) { accept } else { reject }
+            }
             key-released(event) => { reject }
         }
     }
@@ -138,6 +142,7 @@ component NotesMeasurement inherits NotesText {
 }
 
 component NotesView inherits Rectangle {
+    callback navigation-key(KeyEvent) -> bool;
     in property <bool> has-notes: false;
     in property <string> notes-text: "";
     in property <length> font-size: 12px;
@@ -261,6 +266,7 @@ component NotesView inherits Rectangle {
         changed content-height => { root.clamp-scroll-position(); }
 
         notes-input := NotesText {
+            navigation-key(event) => { root.navigation-key(event) }
             x: 0px;
             y: 0px;
             text: root.has-notes ? root.notes-text : "No notes";
@@ -759,6 +765,7 @@ export component PresenterWindow inherits Window {
     callback keyboard-next-page();
     callback keyboard-first-page();
     callback keyboard-last-page();
+    callback notes-navigation-key(KeyEvent) -> bool;
     callback swap-displays();
     callback jump-to-page(int);
     callback request-thumbnail-range(int, int);
@@ -1233,6 +1240,7 @@ export component PresenterWindow inherits Window {
                         height: max(0px, parent.height - self.y);
 
                         notes-view := NotesView {
+                            navigation-key(event) => { root.notes-navigation-key(event) }
                             x: (parent.width - self.width) / 2;
                             width: current-slide-with-progress.page-surface-width;
                             height: parent.height;
