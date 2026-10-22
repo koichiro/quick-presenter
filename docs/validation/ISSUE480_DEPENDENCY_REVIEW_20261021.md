@@ -1,6 +1,7 @@
 # Dependency maintenance review — 2026-10-21
 
-Tracking: #480. Source baseline: `430cef0` (main, application 2.5.0).
+Tracking: #480. Release validation follow-up: [#508](https://github.com/koichiro/quick-presenter/issues/508).
+Source baseline: `430cef0` (main, application 2.5.0).
 Owner: release maintainer. Next review: **2026-10-23 or before v2.5.0 release,
 whichever comes first**. This is a review record, not an advisory exception.
 `.cargo/audit.toml` remains `ignore = []`; v2.0.0 and its disclosed deferrals
@@ -177,6 +178,10 @@ that a native-library vulnerability is fixed.
   2026-10-22 as recorded above. Exhaustive restricted-report details are not
   available publicly; this is a bounded source/configuration assessment.
 
-The manifest update is a candidate for review. Do not publish it or close #480
-until the applicable package gates and dispositions are recorded. Retained Cargo
-maintenance warnings require release review; this document grants no exception.
+Merging #505 completes the #480 dependency-maintenance review with the chosen
+pin update and explicit Cargo migration deferrals recorded above. The remaining
+CVE impact/fix-inclusion assessment, final distribution qualification and release
+warning review are tracked in [#508](https://github.com/koichiro/quick-presenter/issues/508)
+for v2.5.0. Complete its applicable gates and dispositions before publication;
+merging #505 does not close #508. Retained Cargo maintenance warnings still
+require release review; this document grants no exception.
