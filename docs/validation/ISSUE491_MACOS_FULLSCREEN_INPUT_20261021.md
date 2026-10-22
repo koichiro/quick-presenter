@@ -100,3 +100,23 @@ the review fixes and corrected regression validation are accepted. Physical
 rapid-key checks and final notarized/distributed-artifact checks remain release
 qualification work, not additional code-fix closure conditions. They have not
 been reported as completed.
+
+## Completion-wait review follow-up — 2026-10-22
+
+CodeRabbit identified one further test reliability issue: hidden-window fixture
+transitions used a fixed one-second wait followed by one state check. Slower
+valid transitions could fail before completion. The suite now retains its
+window-scoped observer through all checks, finishes earlier in-flight requests,
+and waits up to five seconds for the requested did-enter/did-exit notification
+and matching AppKit/Slint/winit state. Already-settled no-op requests do not
+require a new notification. The native edge fixtures use the same helper.
+
+Formatting, check, release build, and the complete Cargo suite passed. Local
+Clippy completed with existing warnings and no errors. The updated signed app
+passed XPC render/notes and denial gates. Its GUI executable SHA-256 is
+`9a645cec682032efa9deb20a45ed7cddc980e0764675b04df85ff3c35cc49e69`.
+The local GUI retry passed the windowed baseline but did not complete the first
+entry transition; computer-use inventory confirmed the desktop was locked.
+This is not a final local GUI pass. The earlier 178-check signed result above
+predates this completion-wait follow-up; updated CI results are recorded on
+PR #504. No raw smoke output is committed.

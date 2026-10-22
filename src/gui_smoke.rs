@@ -85,9 +85,11 @@ async fn run_checks(
         .show()
         .context("failed to show slide window")?;
     #[cfg(target_os = "macos")]
+    let transitions = macos_fullscreen::Transitions::new(&windows.slide)?;
+    #[cfg(target_os = "macos")]
     {
         use slint::winit_030::WinitWindowAccessor;
-        check_macos_fullscreen_reversal(&windows, report).await?;
+        check_macos_fullscreen_reversal(&windows, report, &transitions).await?;
         settle_notes_layout().await?;
         report.check(
             "macOS native slide titlebar is transparent and hidden from creation",
@@ -310,10 +312,17 @@ async fn run_checks(
         crate::control_smoke::run(&windows, state.clone(), options.pdf_path.clone()).await?;
         report.pass("local control operates through the GUI and isolated renderer");
     }
-    check_hidden_slide_recovery(&windows, &state, report).await?;
+    check_hidden_slide_recovery(
+        &windows,
+        &state,
+        report,
+        #[cfg(target_os = "macos")]
+        &transitions,
+    )
+    .await?;
     #[cfg(target_os = "macos")]
     {
-        check_macos_slide_edges(&windows, report).await?;
+        check_macos_slide_edges(&windows, report, &transitions).await?;
         check_macos_preserved_pdf_open(&windows, &state, options, report).await?;
     }
 
@@ -321,7 +330,11 @@ async fn run_checks(
 }
 
 #[cfg(target_os = "macos")]
-async fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) -> Result<()> {
+async fn check_macos_slide_edges(
+    windows: &AppWindows,
+    report: &mut GuiSmokeReport,
+    transitions: &macos_fullscreen::Transitions,
+) -> Result<()> {
     use slint::winit_030::WinitWindowAccessor;
     let slide = &windows.slide;
     let original_image = slide.get_page_image();
@@ -380,10 +393,8 @@ async fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeRepo
         let width = width * scale;
         let height = height * scale;
         if name == "after fullscreen" {
-            let action_refs = refs.clone();
-            run_macos_window_action(move || set_slide_fullscreen(&action_refs, true)).await?;
-            let action_refs = refs.clone();
-            run_macos_window_action(move || set_slide_fullscreen(&action_refs, false)).await?;
+            settle_slide_fullscreen(&refs, true, transitions).await?;
+            settle_slide_fullscreen(&refs, false, transitions).await?;
         }
         let action_refs = refs.clone();
         run_macos_window_action(move || {
@@ -541,9 +552,9 @@ fn macos_native_fullscreen(slide: &crate::SlideWindow) -> Option<bool> {
 async fn check_macos_fullscreen_reversal(
     windows: &AppWindows,
     report: &mut GuiSmokeReport,
+    transitions: &macos_fullscreen::Transitions,
 ) -> Result<()> {
     use slint::winit_030::WinitWindowAccessor;
-    let transitions = macos_fullscreen::Transitions::new(&windows.slide)?;
     let refs = windows.refs();
     for (name, sequence, expected) in [
         ("reversal baseline", &[false][..], false),
@@ -779,27 +790,66 @@ async fn run_macos_window_action_until(
 async fn settle_slide_fullscreen(
     refs: &crate::window_controller::AppWindowRefs,
     fullscreen: bool,
+    #[cfg(target_os = "macos")] transitions: &macos_fullscreen::Transitions,
 ) -> Result<()> {
-    set_slide_fullscreen(refs, fullscreen);
     #[cfg(target_os = "macos")]
     {
-        delay(Duration::from_secs(1)).await;
-        anyhow::ensure!(
-            refs.slide
-                .upgrade()
-                .is_some_and(|slide| macos_native_fullscreen(&slide) == Some(fullscreen)),
-            "hidden-window fixture did not reach native fullscreen={fullscreen}"
-        );
+        use slint::winit_030::WinitWindowAccessor;
+        let started = Instant::now();
+        // The suite-long observer also sees requests made by earlier IPC checks.
+        // Finish those before deciding whether this request is a native no-op.
+        loop {
+            let counts = transitions.counts();
+            if counts[0] == counts[1] && counts[2] == counts[3] {
+                break;
+            }
+            if started.elapsed() >= Duration::from_secs(5) {
+                bail!("prior fullscreen transition did not complete: {counts:?}");
+            }
+            delay(Duration::from_millis(10)).await;
+        }
+        let slide = refs
+            .slide
+            .upgrade()
+            .context("hidden-window fixture lost its slide")?;
+        let initial =
+            macos_native_fullscreen(&slide).context("native slide delegate is missing")?;
+        let before = transitions.counts();
+        let did = if fullscreen { 1 } else { 3 };
+        set_slide_fullscreen(refs, fullscreen);
+        loop {
+            let counts = transitions.counts();
+            let completed = counts[0] == counts[1]
+                && counts[2] == counts[3]
+                && (initial == fullscreen || counts[did] > before[did]);
+            let actual = (
+                macos_native_fullscreen(&slide),
+                slide.window().is_fullscreen(),
+                slide
+                    .window()
+                    .with_winit_window(|native| native.fullscreen().is_some()),
+            );
+            if completed && actual == (Some(fullscreen), fullscreen, Some(fullscreen)) {
+                return Ok(());
+            }
+            if started.elapsed() >= Duration::from_secs(5) {
+                bail!("hidden-window fullscreen={fullscreen} did not complete: state={actual:?}, notifications={before:?} -> {counts:?}");
+            }
+            delay(Duration::from_millis(10)).await;
+        }
     }
     #[cfg(not(target_os = "macos"))]
-    settle_notes_layout().await?;
-    Ok(())
+    {
+        set_slide_fullscreen(refs, fullscreen);
+        settle_notes_layout().await
+    }
 }
 
 async fn check_hidden_slide_recovery(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
     report: &mut GuiSmokeReport,
+    #[cfg(target_os = "macos")] transitions: &macos_fullscreen::Transitions,
 ) -> Result<()> {
     let refs = windows.refs();
     let frames = Rc::new(Cell::new(0_u32));
@@ -816,7 +866,13 @@ async fn check_hidden_slide_recovery(
     settle_notes_layout().await?;
 
     for fullscreen in [false, true] {
-        settle_slide_fullscreen(&refs, fullscreen).await?;
+        settle_slide_fullscreen(
+            &refs,
+            fullscreen,
+            #[cfg(target_os = "macos")]
+            transitions,
+        )
+        .await?;
         for (close_request, raise, color) in [
             (true, false, [210, 30, 90, 255]),
             (true, true, [20, 160, 200, 255]),
@@ -897,7 +953,13 @@ async fn check_hidden_slide_recovery(
             );
         }
     }
-    settle_slide_fullscreen(&refs, false).await?;
+    settle_slide_fullscreen(
+        &refs,
+        false,
+        #[cfg(target_os = "macos")]
+        transitions,
+    )
+    .await?;
     if let Some(snapshot) = state.borrow().presentation.snapshot() {
         crate::apply_snapshot_to_windows(&refs, &state.borrow(), &snapshot);
     }
