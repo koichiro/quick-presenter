@@ -1,37 +1,35 @@
-# macOS fullscreen input investigation — 2026-10-21
+# macOS fullscreen input validation — 2026-10-21/22
 
-Tracking: #491. Baseline: main `430cef0` (application 2.5.0), macOS 27.0.1 arm64.
-This does not alter v2.0.0 or its accepted release limitation.
+Tracking: #491, PR #504. Baseline: main `430cef0` (application 2.5.0).
+Native investigation and local qualification: macOS 27.0.1 arm64.
+The published v2.0.0 tag and its accepted release limitation are unchanged.
 
-## Confirmed defects and implementation
+## Confirmed cause and implementation
 
 Native injected F/Right and Escape/Right reached NSApplication during a native
 fullscreen animation, but Right never became a winit KeyboardInput event and
 the page did not advance. This boundary is separate from #479's focused-widget
-handling. Physical keyboard input was not tested.
+handling; physical-key reproduction was not claimed.
 
 The vendored winit sendEvent override forwards non-Command key-down/up once to
 the current WinitWindow during tracked fullscreen transitions, preserving its
-first-responder handling. It returns without invoking the original application
+first-responder handling. It returns without calling the original application
 dispatcher again. No input is queued or replayed. A lifecycle guard restores
 normal delivery after overlapping transitions finish, fail, or are destroyed.
 
-A signed forwarding prototype (`14484d4`) still left the real slide window
-fullscreen after rapid F/Escape while logical state reported false. Native
-instrumentation established that AppKit can ignore a reverse toggle called
-synchronously inside windowDidEnterFullScreen. The final implementation:
+The forwarding prototype (`14484d4`) still left the real slide window fullscreen
+after rapid F/Escape while logical state reported false. Instrumentation found
+that AppKit could ignore a reverse toggle called synchronously inside
+windowDidEnterFullScreen. The final implementation records native intent before
+Slint defers property synchronization, reports the latest pending target through
+intermediate resize notifications, and applies pending reversals on the next
+AppKit run-loop turn after completion. Newer requests replace the pending target.
+AppState RefCell borrows end before native calls that may deliver resize events.
+Temporary instrumentation has been removed.
 
-- Records native fullscreen intent before Slint defers window-property updates.
-- Reports the latest queued target through intermediate resize notifications.
-- Applies pending reversals on the next AppKit run-loop turn after completion;
-  newer requests replace the pending target before it is applied.
-- Releases AppState RefCell borrows before native calls that may synchronously
-  deliver resize notifications.
+## Native input results
 
-## Native evidence
-
-A Developer ID signed instrumented copy, with a unique UI bundle identifier
-and the same renderer/proxy identifiers, ran in a continuous application loop:
+A Developer ID signed instrumented copy ran in a continuous application loop:
 
 - Presenter F/Right: page 1 → 2, once; Escape/Right: 2 → 3, once.
 - Slide F/Right: 3 → 4; Escape/Right: 4 → 5, once each.
@@ -40,82 +38,65 @@ and the same renderer/proxy identifiers, ran in a continuous application loop:
 - Slide F/Escape/F: final intent true, no delayed exit or page movement.
 - Normal Escape after settling restored windowed controls.
 
-The final sources remove temporary instrumentation.
+These are native injected-input results, not physical-key or exact timing claims.
+The instrumented UI used a unique bundle identifier with unchanged renderer/proxy
+identifiers. No shared root cause with #479 is assumed; toolbar/notes validation
+remains separate.
 
-## Automated validation
+## Review corrections
 
-- `cargo fmt --check`, `cargo check`, complete `cargo test`, and release build:
-  passed. Check retains the existing macos_renderer.rs fetch_update deprecation
-  warning. Tests used the documented development PDFium override and normal
-  local IPC permissions after a restricted run could not create its socket.
-- Three pure regression tests cover transition lifecycle, overlapping windows,
-  destruction/failure cleanup, and queued reversal reporting.
-- macOS CI [run 39577626888](https://github.com/koichiro/quick-presenter/actions/runs/39577626888)
-  at PR head `dc24721`: **178 GUI checks passed, zero failed**. New checks compare
-  AppKit's real FullScreen style bit, Slint state, and winit intent for a windowed
-  baseline, rapid entry cancellation, settled entry, rapid exit cancellation,
-  and cleanup. Rust verification and dependency advisory audit also passed.
-- The clean Developer ID signed release-layout candidate, bundled PDFium
-  156.0.8076.0, passed XPC PDF render/notes and unrelated-file/network/child denial
-  gates. The implementation also passed the private-CGS import check.
-  Local signing used timestamp=none; this is not a notarized release artifact.
-- Clean live-loop candidate GUI SHA-256:
-  `3b27bff04f37e2fde791039d969677ccbed9734c71a09674ef3b2b29eb98fcdb`.
-
-### Test-harness correction and unsuccessful local runs
-
-The legacy GUI smoke quits and restarts its event loop between checks. Winit's
-macOS run_app_on_demand closes native windows on exit, and windowWillClose clears
-the delegate. Retained handles can still expose geometry but cannot qualify
-later native transition callbacks. Earlier failures using those handles did
-not establish a request/notification gap; the speculative pre-notification
-transition marking was removed.
-
-The new regression runs on fresh adapters before the first event-loop exit,
-advances all cases in one uninterrupted loop, and quits only on completion or
-failure. The manual evidence above also used a continuous loop.
-
-Preserve these local limitations separately from the passing CI result:
-
-- Software-renderer smoke aborted on a 737280-byte/1024-pixel buffer versus
-  1200x1000 window-size mismatch. The same error reproduced in the `14484d4`
-  baseline without the follow-up implementation.
-- Earlier default-renderer checks were contaminated by closed native handles
-  or concurrent automation and were not clean qualification runs.
-- The clean live-loop signed app passed baseline and entry cancellation, then
-  failed settled entry. Native trace showed windowDidFailToEnterFullScreen.
-  Computer-use inventory confirmed the desktop was locked. A retry after the
-  user's unlock reply failed similarly, and inventory again reported locked.
-  These are failures, not a local GUI pass; no production workaround is inferred.
-
-## Unlocked signed-app qualification
-
-After the user unlocked the desktop again, the same clean signed live-loop
-candidate (SHA-256 above) completed **178 checks, zero failures** on
-2026-10-21 at approximately 14:32 UTC. All five real AppKit fullscreen
-checks passed: windowed baseline, rapid entry cancellation, settled entry,
-rapid exit cancellation, and cleanup.
-
-PR #504 is ready for code review. Physical rapid-key checks and final
-notarized/distributed-artifact qualification remain outstanding; keep #491 open
-until those release acceptance checks are satisfied. Earlier locked-desktop
-failures remain documented above rather than being reclassified as passes.
-
-## Review follow-up — 2026-10-22
-
-CodeRabbit identified two valid limitations in the original 178-check result:
+CodeRabbit correctly identified two gaps in the original 178-check result:
 a dropped initial request could satisfy a reversal's final-state assertion,
 and exiting the reversal loop closed native windows used by later checks.
-The earlier result does not establish those missing properties.
+The original result did not establish those missing properties.
 
-The complete GUI suite now uses one event loop, including asynchronous PDF
+The complete GUI suite now runs in one event loop, including asynchronous PDF
 opening, note-layout settling, native window actions, and the IPC smoke worker.
 Only suite completion exits that loop. Native state helpers reject windows
 without a delegate. Unrelated-timer and deadline checks remain within the loop.
 
 A window-scoped NSNotificationCenter observer leaves Winit's delegate intact.
 Each reversal requires the initial will-enter/will-exit notification before
-sending the opposite request, rejects a reversal sent after completion, and
-requires both native directions' will/did notifications plus the original
-AppKit/Slint/winit final-state assertions. A dropped or failed initial transition
-cannot satisfy the revised test. Updated native qualification is pending below.
+sending the opposite request, rejects a reverse request sent after completion,
+and requires both native directions' will/did notifications plus the original
+AppKit/Slint/winit final-state assertions. A dropped or failed first transition
+cannot satisfy the revised test.
+
+Keeping real native windows also exposed CI fixtures that exceeded its small
+desktop: the first corrected CI run passed the fullscreen cases but failed two
+note-resize and twelve edge checks after native size clamping. Fixtures now use
+actual presenter sizes with constant width, scale edge-test windows within the
+display, and settle fullscreen before hidden-window actions. Assertions remain
+about actual notes growth and slide edge pixels; none were skipped or relaxed.
+
+## Revised qualification results — 2026-10-22
+
+- `cargo fmt --check`, `cargo check --locked`, complete `cargo test --locked`,
+  and release build: passed. Check retains the existing macos_renderer.rs
+  fetch_update deprecation warning. A stale PID-based test directory caused one
+  initial AlreadyExists failure; the complete suite passed with a fresh TMPDIR.
+- Three pure regression tests cover transition lifecycle, overlapping windows,
+  destruction/failure cleanup, and queued reversal reporting.
+- Clean Developer ID signed release-layout app: **178 GUI checks passed, zero
+  failed**, including actual native start/completion notifications for entry
+  cancellation, settled entry, exit cancellation, and cleanup. Later titlebar,
+  geometry, restoration, notes, and IPC checks retained live native windows.
+- Signed XPC PDF render/notes and private-file/network/child denial gate: passed.
+- Revised signed GUI executable SHA-256:
+  `712fc8f24e1020ade42c8fde6cecf1ba4f9413a4d088018e62a80c831f763674`.
+  Bundled PDFium: 156.0.8076.0. Local signing used timestamp=none; this is not
+  a notarized or published artifact. Raw smoke output is not committed.
+
+Earlier local failures are not reclassified as passes: locked-desktop runs
+failed native fullscreen entry, an unbundled debug run started but did not
+complete entry, and a software-renderer buffer/window-size mismatch reproduced
+in the pre-follow-up baseline. The clean signed result above is the revised
+qualification run.
+
+## Issue closure and release qualification
+
+Per the maintainer's 2026-10-22 instruction, PR #504 closes #491 on merge once
+the review fixes and corrected regression validation are accepted. Physical
+rapid-key checks and final notarized/distributed-artifact checks remain release
+qualification work, not additional code-fix closure conditions. They have not
+been reported as completed.
