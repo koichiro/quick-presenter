@@ -56,6 +56,21 @@ Before publishing a release:
 12. Attach the completed manual GUI smoke reports to the GitHub release, or
     document any platform-specific waiver in the release notes before publishing.
 
+### v2.5.0 validation evidence
+
+Before publishing v2.5.0, review the [security and macOS artifact assessment](validation/ISSUE508_MACOS_RELEASE_REVIEW_20261022.md)
+and [internal TestFlight 25009 qualification](validation/ISSUE433_STORE_CLI_TESTFLIGHT_25009.md).
+They identify the tested source and artifacts, CVE evidence, retained maintenance
+warnings and remaining coverage. Complete the outstanding gates and record final
+channel artifacts/dispositions in [#508](https://github.com/koichiro/quick-presenter/issues/508).
+For the remaining macOS coverage, [#493](https://github.com/koichiro/quick-presenter/issues/493)
+owns fresh-account, upgrade/uninstall/reinstall and stale/unregistered-agent
+qualification. [#508](https://github.com/koichiro/quick-presenter/issues/508)
+retains supported-macOS/Intel runtime, foreign-team/cross-user rejection, genuine
+bookmark revocation and customer Store-installed qualification or the applicable
+explicit maintainer release dispositions.
+These reports do not approve publication or qualify a changed final package.
+
 ### Mac App Store submissions
 
 For each Mac App Store submission, also complete the separate
