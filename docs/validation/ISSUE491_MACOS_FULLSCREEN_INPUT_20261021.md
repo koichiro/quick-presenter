@@ -92,17 +92,9 @@ Preserve these local limitations separately from the passing CI result:
 
 After the user unlocked the desktop again, the same clean signed live-loop
 candidate (SHA-256 above) completed **178 checks, zero failures** on
-2026-10-21 at approximately 14:32 UTC. The successful report is preserved in
-[ISSUE491_MACOS_GUI_20261021.txt](ISSUE491_MACOS_GUI_20261021.txt).
-It includes all five real AppKit fullscreen checks above. Command:
-
-```sh
-XDG_RUNTIME_DIR=/private/tmp/qp491-smoke-runtime \
-  '/private/tmp/qp491-live-loop/Quick Presenter.app/Contents/MacOS/quick-presenter' \
-  --gui-smoke docs/samples/quick-presenter-demo.pdf \
-  --gui-smoke-report /private/tmp/qp491-unlocked-final-report.txt \
-  --log-file /private/tmp/qp491-unlocked-final.log
-```
+2026-10-21 at approximately 14:32 UTC. All five real AppKit fullscreen
+checks passed: windowed baseline, rapid entry cancellation, settled entry,
+rapid exit cancellation, and cleanup.
 
 PR #504 is ready for code review. Physical rapid-key checks and final
 notarized/distributed-artifact qualification remain outstanding; keep #491 open
