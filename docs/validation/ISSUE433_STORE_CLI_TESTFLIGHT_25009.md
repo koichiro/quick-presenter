@@ -89,11 +89,20 @@ completed successfully on source `3ad3c03666879b0ee3cff133453fdec7a3fca32c`:
 - Dependency advisory audit passed under the existing policy. Retained warnings
   still require the #508 release disposition.
 
-## Remaining measurements
+## Sustained installed watch
 
-The 15-minute installed watch measurement and Windows-session supplemental
-native results will be recorded here when complete. Do not treat this draft
-section as a completed release gate.
+The installed product watch ran for **905.53 seconds**, receiving **303** valid
+NDJSON events across page changes, document close and document replacement, with
+periodic successful status queries and **zero errors**. The same run verified
+four-watcher admission/fifth-watcher BUSY, slot recovery after disconnection and
+200 status queries from four concurrent callers. The slow-consumer experiment
+above ran during this watch and normal idle periods followed it. This is a
+15-minute workload with both activity and idle periods, not an unattended
+multi-hour presentation or whole-process memory bound.
+
+Supplemental Windows-session native validation remains separate from the fully
+passed current-main Windows package CI above. Its full-suite final result is
+tracked under #508; this report does not assert that pending run passed.
 
 ## Limits and final release disposition
 
@@ -114,3 +123,15 @@ release waiver or customer-release approval is granted by this report.
 
 Raw smoke logs, account details, provisioning material and screenshots remain
 outside Git; this document contains results and necessary artifact identifiers.
+
+## Maintainer disposition
+
+On 2026-10-22, after reviewing these results and confirming that no additional
+validation Mac is available, the maintainer explicitly approved closing #433
+for this package/TestFlight qualification while retaining the unperformed
+acceptance coverage in #493/#508 before customer publication. #493 owns the
+fresh-user, upgrade and uninstall/reinstall environment matrix. #508 retains
+supported-OS/Intel, foreign-team/cross-user, genuine bookmark-revocation and
+customer-Store coverage/disposition, together with final security and artifact
+review. These items remain unperformed, not retroactively accepted as test
+passes. Parent #422 remains open for overall release acceptance.
