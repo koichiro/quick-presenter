@@ -78,14 +78,58 @@ forward without investigation. Change titles do not establish CVE coverage.
 
 ### Security relevance triage
 
-The [2026-10-20 Chrome stable announcement](https://chromereleases.googleblog.com/search/label/Stable%20updates)
+The [2026-10-20 Chrome stable announcement](https://chromereleases.googleblog.com/2026/10/stable-channel-update-for-desktop_02018666648.html)
 includes CVE-2026-113212 (PDF memory corruption) and CVE-2026-113022 (PDFium memory
-corruption). They are relevant triage inputs for this native PDF renderer.
-The public component labels do not establish whether the exact 8076 prebuilt
-is affected or prove that 8111 contains the relevant fixes. Check the linked
-upstream bugs/fix revisions and prebuilt configuration before making either
-claim. The [PDFium security page](https://www.chromium.org/Home/chromium-security/pdfium-security/)
+corruption). The official CVE records identify Chrome before 156.0.8078.47;
+that Chrome version range cannot be applied numerically to standalone PDFium.
+The [PDFium security page](https://www.chromium.org/Home/chromium-security/pdfium-security/)
 is policy/context rather than a complete release-specific CVE inventory.
+
+#### Public revision and configuration check — 2026-10-22
+
+The CVE records link Chromium bug IDs, which also appear in public PDFium commit
+messages. This establishes the following bug-linked changes, not an upstream
+statement that these commits exhaust every aspect of each restricted report.
+
+| CVE and public evidence | PDFium 8076 | PDFium 8111 |
+| --- | --- | --- |
+| [CVE-2026-113212 record](https://github.com/CVEProject/cvelistV5/blob/main/cves/2026/113xxx/CVE-2026-113212.json), bug 572237007. [e764cc088a62](https://pdfium.googlesource.com/pdfium/+/e764cc088a62b5f0510a73bed4e19c88c9af50bc) guards CJS_Runtime against destruction during callbacks; [ac3cf1684db0](https://pdfium.googlesource.com/pdfium/+/ac3cf1684db05bd68338acb84e3823e6feb72b5b) checks form-fill environment teardown during callbacks. | Neither change is present in its ancestry. Do not describe 8076 as containing these fixes. | Both changes are ancestors; the runtime and form-fill teardown checks remain in the source snapshot. |
+| [CVE-2026-113022 record](https://github.com/CVEProject/cvelistV5/blob/main/cves/2026/113xxx/CVE-2026-113022.json), bug 494352583. [48af8b610572](https://pdfium.googlesource.com/pdfium/+/48af8b61057256b50cfdb4eae55b9b050924b48f) removes OnKeyStrokeCommit to prevent on-load JavaScript from bypassing the user-gesture requirement. | This change is already an ancestor; the removed method is absent from the source snapshot. | The same change is an ancestor and the removed method remains absent. |
+
+The matching Chromium autorolls independently link the same bug IDs to the
+PDFium revision ranges: [572237007 roll](https://github.com/chromium/chromium/commit/6b0e7c5fa87f612687603435f09c690b7b962865)
+and [494352583 roll](https://github.com/chromium/chromium/commit/aaeb7a5fc5ef57274a2a73f0df2ea415b9400aac).
+The second change's user-gesture description is narrower than the CVE's memory
+corruption description; retain that distinction rather than inventing a mechanism
+or treating the commit message as the full vulnerability report.
+
+Source snapshots checked:
+
+- `chromium/8076`: `8ca5b735df4263f43c830479b78213854a392c22`.
+- `chromium/8111`: `a50f1a5953264de698f398fe3a2ef6153677fafa`, also the first
+  source revision in the prebuilt release's change list.
+- Each snapshot's Gitiles log was checked as a continuous parent chain, including
+  the September 18 fix. Matching ancestry and current source contents were both
+  checked; version-number ordering alone was not used.
+
+All six manifest-selected archives for **both** 8076 and 8111 were downloaded
+and checked against their pinned SHA-256 digests. Their extracted `args.gn`
+consistently sets `pdf_enable_v8 = false`, `pdf_enable_xfa = false`, and
+`pdf_is_standalone = true`. All six 8111 VERSION files report 158.0.8111.0.
+The [8111 fxjs build definition](https://pdfium.googlesource.com/pdfium/+/a50f1a5953264de698f398fe3a2ef6153677fafa/fxjs/BUILD.gn)
+and its 8076 counterpart compile `cjs_app.cpp` and `cjs_runtime.cpp` only with V8
+enabled. This excludes the identified JavaScript runtime path in these selected
+builds. The form-fill teardown hardening also covers non-JavaScript callbacks,
+so disabling V8 alone is not evidence that every aspect of CVE-2026-113212 is
+unreachable. 8111 includes that hardening as well.
+
+Disposition: the public bug-linked revision/configuration comparison is complete
+for these two reports and these archive selections. Adopt 8111 with the identified
+changes present; do not claim that the old pin contains all fixes, that arbitrary
+PDFium builds are unaffected, or that the two CVEs cover all native-library risks.
+Restricted report details and an exhaustive upstream standalone affected-version
+statement remain unavailable publicly. Recheck if the reports open or upstream
+publishes additional fixes; final distribution qualification remains required.
 
 Initial relevance triage and candidate preparation began 2026-10-21. The
 policy's two-business-day triage checkpoint is 2026-10-23 and the seven-calendar-day
@@ -129,7 +173,9 @@ that a native-library vulnerability is fixed.
   other distributed architectures as applicable, and Linux Wayland UI/font
   migration qualification if that separate dependency migration is adopted.
   The current PDFium pin change does not alter the retained title-font stack.
-- Public CVE-to-fix revision mapping and affected-build analysis: pending.
+- Public CVE-to-bug-linked revision and archive-configuration comparison: completed
+  2026-10-22 as recorded above. Exhaustive restricted-report details are not
+  available publicly; this is a bounded source/configuration assessment.
 
 The manifest update is a candidate for review. Do not publish it or close #480
 until the applicable package gates and dispositions are recorded. Retained Cargo
