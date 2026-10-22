@@ -76,7 +76,9 @@ ln -s "/Applications/Quick Presenter.app/Contents/Helpers/ControlCLI.app/Content
 ```
 
 Choose the link target for the installed distribution; do not run both link
-commands. If `qp` already exists, inspect it before replacing it. A symlink
+commands. If `qp` already exists, inspect it with `ls -l "$HOME/.local/bin/qp"`.
+Only if it is a symlink you intend to replace, run `rm "$HOME/.local/bin/qp"`
+to remove that link, then rerun the selected `ln -s` command. A symlink
 keeps the CLI inside its signed app for Store GUI discovery; copying the
 executable elsewhere does not provide the same workflow. The commands below
 assume the matching CLI is on PATH.
