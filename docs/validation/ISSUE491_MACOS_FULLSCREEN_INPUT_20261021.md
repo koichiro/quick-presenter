@@ -100,3 +100,22 @@ PR #504 is ready for code review. Physical rapid-key checks and final
 notarized/distributed-artifact qualification remain outstanding; keep #491 open
 until those release acceptance checks are satisfied. Earlier locked-desktop
 failures remain documented above rather than being reclassified as passes.
+
+## Review follow-up — 2026-10-22
+
+CodeRabbit identified two valid limitations in the original 178-check result:
+a dropped initial request could satisfy a reversal's final-state assertion,
+and exiting the reversal loop closed native windows used by later checks.
+The earlier result does not establish those missing properties.
+
+The complete GUI suite now uses one event loop, including asynchronous PDF
+opening, note-layout settling, native window actions, and the IPC smoke worker.
+Only suite completion exits that loop. Native state helpers reject windows
+without a delegate. Unrelated-timer and deadline checks remain within the loop.
+
+A window-scoped NSNotificationCenter observer leaves Winit's delegate intact.
+Each reversal requires the initial will-enter/will-exit notification before
+sending the opposite request, rejects a reversal sent after completion, and
+requires both native directions' will/did notifications plus the original
+AppKit/Slint/winit final-state assertions. A dropped or failed initial transition
+cannot satisfy the revised test. Updated native qualification is pending below.
