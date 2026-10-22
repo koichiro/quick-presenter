@@ -358,12 +358,27 @@ async fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeRepo
     slide.set_page_image(slint::Image::from_rgba8(buffer));
     slide.set_page_aspect_ratio(16.0 / 9.0);
     let refs = windows.refs();
+    let display_size = slide
+        .window()
+        .with_winit_window(|native| {
+            native
+                .current_monitor()
+                .or_else(|| native.primary_monitor())
+                .map(|monitor| monitor.size().to_logical::<f64>(monitor.scale_factor()))
+        })
+        .flatten()
+        .context("native edge checks require an available display")?;
     for (name, width, height) in [
         ("windowed", 960.0, 540.0),
         ("resized", 1280.0, 720.0),
         ("restored tall window", 1704.0, 1063.0),
         ("after fullscreen", 960.0, 540.0),
     ] {
+        let scale = (display_size.width * 0.8 / width)
+            .min(display_size.height * 0.8 / height)
+            .min(1.0);
+        let width = width * scale;
+        let height = height * scale;
         if name == "after fullscreen" {
             let action_refs = refs.clone();
             run_macos_window_action(move || set_slide_fullscreen(&action_refs, true)).await?;
@@ -761,6 +776,26 @@ async fn run_macos_window_action_until(
     }
 }
 
+async fn settle_slide_fullscreen(
+    refs: &crate::window_controller::AppWindowRefs,
+    fullscreen: bool,
+) -> Result<()> {
+    set_slide_fullscreen(refs, fullscreen);
+    #[cfg(target_os = "macos")]
+    {
+        delay(Duration::from_secs(1)).await;
+        anyhow::ensure!(
+            refs.slide
+                .upgrade()
+                .is_some_and(|slide| macos_native_fullscreen(&slide) == Some(fullscreen)),
+            "hidden-window fixture did not reach native fullscreen={fullscreen}"
+        );
+    }
+    #[cfg(not(target_os = "macos"))]
+    settle_notes_layout().await?;
+    Ok(())
+}
+
 async fn check_hidden_slide_recovery(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
@@ -781,8 +816,7 @@ async fn check_hidden_slide_recovery(
     settle_notes_layout().await?;
 
     for fullscreen in [false, true] {
-        set_slide_fullscreen(&refs, fullscreen);
-        settle_notes_layout().await?;
+        settle_slide_fullscreen(&refs, fullscreen).await?;
         for (close_request, raise, color) in [
             (true, false, [210, 30, 90, 255]),
             (true, true, [20, 160, 200, 255]),
@@ -863,7 +897,7 @@ async fn check_hidden_slide_recovery(
             );
         }
     }
-    set_slide_fullscreen(&refs, false);
+    settle_slide_fullscreen(&refs, false).await?;
     if let Some(snapshot) = state.borrow().presentation.snapshot() {
         crate::apply_snapshot_to_windows(&refs, &state.borrow(), &snapshot);
     }
@@ -950,9 +984,7 @@ async fn check_notes_font_size(
     let elapsed_before = state.borrow().timer.elapsed_at(now);
     presenter
         .window()
-        .dispatch_event(slint::platform::WindowEvent::Resized {
-            size: slint::LogicalSize::new(800.0, 560.0),
-        });
+        .set_size(slint::LogicalSize::new(800.0, 560.0));
 
     presenter.set_has_notes(false);
     presenter.set_notes_text("".into());
@@ -1083,15 +1115,14 @@ async fn check_notes_font_size(
             presenter.get_notes_visible_height()
         ),
     );
-    // Exercise layout resize events independently of WindowServer size restrictions.
+    // Keep both native sizes inside the small CI desktop. A constant width
+    // isolates extra vertical room instead of enlarging the slide preview too.
     presenter
         .window()
-        .dispatch_event(slint::platform::WindowEvent::Resized {
-            size: slint::LogicalSize::new(1200.0, 1000.0),
-        });
+        .set_size(slint::LogicalSize::new(800.0, 650.0));
     settle_presenter_notes_layout(presenter).await?;
     report.check(
-        format!("logical resize events automatically enlarge notes ({context})"),
+        format!("native resize automatically enlarges notes ({context})"),
         presenter.get_notes_font_size() > small_size,
         "larger viewport enlarged the text",
         format!(
@@ -1103,9 +1134,7 @@ async fn check_notes_font_size(
     );
     presenter
         .window()
-        .dispatch_event(slint::platform::WindowEvent::Resized {
-            size: slint::LogicalSize::new(800.0, 560.0),
-        });
+        .set_size(slint::LogicalSize::new(800.0, 560.0));
     presenter.set_current_page_aspect_ratio(0.6);
     presenter.set_use_native_menu_bar(false);
     settle_presenter_notes_layout(presenter).await?;
@@ -1121,11 +1150,7 @@ async fn check_notes_font_size(
     presenter.set_notes_text(original_text);
     presenter.set_current_page_aspect_ratio(original_aspect);
     presenter.set_use_native_menu_bar(original_menu);
-    presenter
-        .window()
-        .dispatch_event(slint::platform::WindowEvent::Resized {
-            size: original_size.to_logical(presenter.window().scale_factor()),
-        });
+    presenter.window().set_size(original_size);
     settle_presenter_notes_layout(presenter).await?;
     report.check(
         format!("automatic sizing preserves presentation state ({context})"),
