@@ -706,8 +706,10 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let swap_for_toggle = display_swap_active.clone();
     app.on_toggle_slide_fullscreen(move || {
         swap_for_toggle.cancel();
-        let mut state = state_for_toggle.borrow_mut();
-        let fullscreen = state.fullscreen.toggle_slide_fullscreen();
+        let fullscreen = state_for_toggle
+            .borrow_mut()
+            .fullscreen
+            .toggle_slide_fullscreen();
         set_slide_fullscreen(&window_refs, fullscreen);
     });
 
@@ -792,8 +794,10 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let swap_for_slide_toggle = display_swap_active.clone();
     windows.slide.on_toggle_slide_fullscreen(move || {
         swap_for_slide_toggle.cancel();
-        let mut state = state_for_slide_toggle.borrow_mut();
-        let fullscreen = state.fullscreen.toggle_slide_fullscreen();
+        let fullscreen = state_for_slide_toggle
+            .borrow_mut()
+            .fullscreen
+            .toggle_slide_fullscreen();
         set_slide_fullscreen(&window_refs, fullscreen);
     });
 
@@ -982,14 +986,14 @@ fn handle_presentation_command(
         view_sync::apply_closed_state_to_windows(windows);
         return;
     }
+    let outcome = apply_session_command(&mut state.borrow_mut(), command, Instant::now());
+    // AppKit may emit synchronous resize callbacks. Release application state
+    // before applying native fullscreen intent.
+    if let Some(fullscreen) = outcome.slide_fullscreen {
+        set_slide_fullscreen(windows, fullscreen);
+    }
     let preload_snapshot = {
-        let mut state = state.borrow_mut();
-        let outcome = apply_session_command(&mut state, command, Instant::now());
-
-        if let Some(fullscreen) = outcome.slide_fullscreen {
-            set_slide_fullscreen(windows, fullscreen);
-        }
-
+        let state = state.borrow();
         if let Some(snapshot) = outcome.snapshot {
             apply_snapshot_to_windows(windows, &state, &snapshot);
             enqueue_visible_page_renders(&state, &snapshot);
