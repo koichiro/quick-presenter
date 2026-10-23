@@ -80,10 +80,11 @@ in #508 before publication; latest-prebuilt status alone is not approval.
 The [October 23 final source/artifact inventory](validation/V250_FINAL_ARTIFACT_INVENTORY_20261023.md)
 fixes the selected source, retained PDFium 8111 disposition, notarized direct DMG,
 Store submission candidates, Ubuntu DEB, hashes and verified SBOMs. It completes
-the inventory work in #508; the remaining runtime/channel, environment/authority,
-DMG-drop and traceability gates still apply before publication.
+the inventory work in #508; the remaining channel, environment/authority and
+traceability gates still apply before publication. The subsequent macOS
+qualification and DMG limitation disposition are linked below.
 
-The [October 23 final macOS runtime report](validation/V250_FINAL_MACOS_RUNTIME_20261023.md) records the installed final direct app and internal TestFlight **25010**, including exact identity, renderer isolation, GUI/CLI regression, installed direct drop acceptance and same-user lifecycle checks. Customer Store coverage, read-only-DMG icon-drop disposition and the other open #508 gates remain separate.
+The [October 23 final macOS runtime report](validation/V250_FINAL_MACOS_RUNTIME_20261023.md) records the installed final direct app and internal TestFlight **25010**, including exact identity, renderer isolation, GUI/CLI regression, installed direct drop acceptance and same-user lifecycle checks. The [final document-delivery follow-up](validation/V250_MACOS_DOCUMENT_DELIVERY_20261023.md) completes Store Finder/drop checks and records the maintainer-approved read-only-DMG icon-drop limitation. Customer Store coverage and the other open #508 gates remain separate.
 
 ### Mac App Store submissions
 
@@ -225,13 +226,21 @@ the supported package only after Microsoft Store certification and signing.
 
 Download `quick-presenter-macos` and open `QuickPresenter-<version>.dmg`.
 
-1. Drag `Quick Presenter.app` to `Applications`, or run the app from the mounted
-   disk image for a quick check.
+1. Drag `Quick Presenter.app` to `Applications` (or a writable user Applications
+   folder) before using PDF drag and drop. For a quick check from the mounted
+   disk image, use `Open` or `File > Open PDF...`.
 2. Launch `Quick Presenter`.
 3. Choose `Open` or `File > Open PDF...`.
 4. Select a PDF slide deck.
 5. Use the presenter window for controls and the slide window for audience
    output.
+
+For v2.5.0, dropping a PDF onto the application-bundle icon on the mounted
+read-only DMG is a known unsupported route: Finder can display a prohibited
+cursor and refuse the drop. Use the installed app icon, its running Dock icon,
+or the presenter/slide windows. These installed-app routes passed final direct
+and internal TestFlight 25010 qualification on the test Mac; the DMG refusal
+is a documented release limitation, not a passed test or an established OS cause.
 
 The v2.0.0 release disk image must be Developer ID signed, Apple-notarized, and
 stapled. Gatekeeper must accept the final DMG without an unidentified-developer
