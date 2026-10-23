@@ -86,6 +86,8 @@ qualification and DMG limitation disposition are linked below.
 
 The [October 23 final macOS runtime report](validation/V250_FINAL_MACOS_RUNTIME_20261023.md) records the installed final direct app and internal TestFlight **25010**, including exact identity, renderer isolation, GUI/CLI regression, installed direct drop acceptance and same-user lifecycle checks. The [final document-delivery follow-up](validation/V250_MACOS_DOCUMENT_DELIVERY_20261023.md) completes Store Finder/drop checks and records the maintainer-approved read-only-DMG icon-drop limitation. Customer Store coverage and the other open #508 gates remain separate.
 
+The [October 24 final Windows runtime report](validation/V250_FINAL_WINDOWS_RUNTIME_20261024.md) records checks of the exact selected final-source MSVC Store submission payload, fresh SBOM/PDFium validation, rendering/CLI/lifecycle checks, and maintainer-confirmed initial display, physical keyboard and Narrator routes. Final customer Store installation/update/alias and Linux runtime qualification remain separate conditions in #508; the unsigned submission input is not a Store-distributed installation.
+
 ### Mac App Store submissions
 
 For each Mac App Store submission, also complete the separate
