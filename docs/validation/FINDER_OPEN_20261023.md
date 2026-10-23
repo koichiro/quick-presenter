@@ -133,15 +133,19 @@ The current review candidate GUI SHA-256 is
 `575ccefb610765a824f37a5b4b9b30943f10da8e0d2f617b0a462c653ed97555`;
 its read-only DMG SHA-256 is
 `68644ad92a88b39885a91672a0145c2763b02a93a9445bd9405adf5d1c63b5dc`.
-First-use manual results are pending; previous manual results apply only to the
-preceding candidate. See Apple's [file drag guidance](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/DragandDrop/Tasks/DraggingFiles.html)
+The maintainer then reported successful first-use drops of both dedicated
+fixtures into the presenter and audience windows, without opening them through
+a dialog or Dock first. The new container's bookmark store was checked afterward
+and contains both dedicated fixture paths. Thus the first-use authority concern
+has package-level confirmation in addition to the native identity regression.
+Earlier manual results above apply to the preceding candidate. See Apple's [file drag guidance](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/DragandDrop/Tasks/DraggingFiles.html)
 for the sandbox distinction between paths and URL delivery.
 
 ## Remaining acceptance checks
 
-- Presenter-window and Dock drops passed the maintainer's manual verification.
-  A Finder application-bundle icon drop and an audience-window drop have not
-  been separately verified. The earlier temporary-folder icon attempt remains
+- First-use presenter and audience drops passed on the current review candidate;
+  Dock drops passed on the preceding candidate. A Finder application-bundle icon
+  drop has not been separately verified. The earlier temporary-folder icon attempt remains
   inconclusive; subsequent Finder focus automation did not complete.
 - Missing-file native-event error/recovery passed on the follow-up signed package.
   A second native request during a deliberately held renderer open still needs
