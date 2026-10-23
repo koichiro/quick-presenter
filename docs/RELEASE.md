@@ -71,6 +71,12 @@ bookmark revocation and customer Store-installed qualification or the applicable
 explicit maintainer release dispositions.
 These reports do not approve publication or qualify a changed final package.
 
+The [October 23 security review](validation/SECURITY_REVIEW_20261023.md) supersedes
+the earlier current-security assessment. It records the CISA PoC-status change,
+additional public CVE mappings and four enabled-path PDFium fixes after the
+selected pin. Resolve their update/backport or evidence-based release disposition
+in #508 before publication; latest-prebuilt status alone is not approval.
+
 ### Mac App Store submissions
 
 For each Mac App Store submission, also complete the separate
