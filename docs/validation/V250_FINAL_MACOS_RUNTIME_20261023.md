@@ -43,7 +43,7 @@ The maintainer verified all four routes against the installed final production-i
 | PDF → presenter window | `Presenter Drop.pdf`, **1 / 2** |
 | PDF → audience/slide window | `Audience Drop.pdf`, **1 / 2** |
 
-These are installed-app results. The read-only-DMG icon-drop refusal from the paired candidate checks remains unresolved; installed-app success does not settle or waive it. Final Store manual drop coverage is tracked separately and is not inferred from the direct result.
+These are installed-app results. The read-only-DMG icon-drop refusal from the paired candidate checks remains unresolved; installed-app success does not settle or waive it. The maintainer also manually verified **TestFlight build 25010 presenter-window drop**: `Presenter Drop.pdf` opened at **1 / 2**. This is a separate Apple-distributed sandboxed-app result. Store bundle-icon, Dock and audience-window drops were not separately verified in this run.
 
 ## Preservation and remaining release gates
 
