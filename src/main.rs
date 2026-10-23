@@ -2389,7 +2389,7 @@ fn handle_render_open_failed(
             )
         } else {
             errors::presenter_error_message(
-                &anyhow::anyhow!(message),
+                &anyhow::anyhow!(message).context("failed to open PDF"),
                 state.diagnostics_log_path.as_deref(),
             )
         }

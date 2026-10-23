@@ -44,6 +44,16 @@ int main(void) {
         handle = qp_documents_take(path, sizeof(path));
         assert(handle && strcmp(path, "/tmp/drop.pdf") == 0);
         qp_documents_release(handle);
+        // An open event can outlive the file. Forward its exact path so the
+        // renderer can fail the candidate while retaining the active document.
+        NSString *missing = [NSTemporaryDirectory() stringByAppendingPathComponent:
+            [NSString stringWithFormat:@"qp492-missing-%@.pdf", NSUUID.UUID.UUIDString]];
+        assert(![[NSFileManager defaultManager] fileExistsAtPath:missing]);
+        [delegate application:NSApp openURLs:@[[NSURL fileURLWithPath:missing]]];
+        handle = qp_documents_take(path, sizeof(path));
+        assert(handle && strcmp(path, missing.fileSystemRepresentation) == 0);
+        assert(!qp_documents_take_rejected());
+        qp_documents_release(handle);
         NSApp.delegate = nil;
         [delegate release];
     }

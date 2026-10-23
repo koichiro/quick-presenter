@@ -62,15 +62,56 @@ An existing `AtomicUsize::fetch_update` deprecation warning is unrelated.
 - Deep/strict signature verification passed. The initial Developer ID signing
   gate also passed supervised PDF rendering and private-file/network/child denial.
 
+## Missing-file follow-up
+
+A direct Open Documents Apple event (`aevt` / `odoc`, direct-object list with
+one `typeFileURL`) was sent to the actual running signed process for the absent
+`missing-native-request.pdf` fixture. Standard `NSWorkspace.openURLs` rejected
+that absent URL before application delivery with Cocoa 260 / OSStatus -43; that
+preflight rejection was not counted as an application-level pass. The direct
+send used never-interact / do-not-prompt-for-consent options and required no new
+Automation permission.
+
+The original candidate retained the active PDF and recovered on a later valid
+request, but incorrectly displayed an Unexpected error message. The diagnostic
+record confirmed `No such file or directory (os error 2)`. The render-open failure
+UI boundary now supplies the missing operation context, so the existing PDF-open
+classification displays `Could not open PDF. Choose another file.` Specific
+engine, signing, and protected-PDF classifications still take precedence.
+
+The follow-up candidate was rebuilt with this error-context change, signed with
+the same Developer ID team and UI sandbox entitlements, and launched from the
+read-only `QP492Missing` DMG. The GUI SHA-256 is
+`afed677673f808374e18a1c3ad1b966939efaf7e002994bcc9ed49e38652bc86`;
+the DMG SHA-256 is
+`2aec69dae0130c6a81738046dc05c09336f446cd1e973769e7cde9846beb43c4`.
+Earlier manual presenter/Dock results above apply to the preceding candidate;
+this follow-up changes error presentation only.
+
+The follow-up package passed all of these observed steps:
+
+1. Open the first normal fixture through Launch Services: page 1/2, Ready.
+2. Deliver the absent-file Open Documents event: the short PDF-open error appears;
+   the first fixture and page 1/2 remain visible.
+3. Press Right: the first fixture advances to page 2/2 after the error.
+4. Open the second normal fixture through Launch Services: page 1/2, Ready.
+5. Press Right: the second fixture advances to page 2/2.
+
+Deep/strict signature verification, `cargo fmt --check`, `cargo check`,
+`cargo check --features macos-store-control`, all 502 Rust tests, and the seven
+native bridge/packaging Python tests passed after the change. The native bridge
+regression now explicitly asserts that an absent file URL retains its exact path
+for the Rust error-handling path. Raw event replies and smoke logs are not committed.
+
 ## Remaining acceptance checks
 
 - Presenter-window and Dock drops passed the maintainer's manual verification.
   A Finder application-bundle icon drop and an audience-window drop have not
   been separately verified. The earlier temporary-folder icon attempt remains
   inconclusive; subsequent Finder focus automation did not complete.
-- A missing-file native event and a second native request during a deliberately
-  held renderer open need full package-level verification. The deterministic
-  native/Rust boundary tests cover these admission/error paths only in parts.
+- Missing-file native-event error/recovery passed on the follow-up signed package.
+  A second native request during a deliberately held renderer open still needs
+  full package-level verification; deterministic boundary tests cover admission.
 - Repeat Finder Open With on the final mounted sandbox candidate and qualify the
   rebuilt production package under #508 before publication.
 
