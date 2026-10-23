@@ -77,6 +77,12 @@ additional public CVE mappings and four enabled-path PDFium fixes after the
 selected pin. Resolve their update/backport or evidence-based release disposition
 in #508 before publication; latest-prebuilt status alone is not approval.
 
+The [October 23 final source/artifact inventory](validation/V250_FINAL_ARTIFACT_INVENTORY_20261023.md)
+fixes the selected source, retained PDFium 8111 disposition, notarized direct DMG,
+Store submission candidates, Ubuntu DEB, hashes and verified SBOMs. It completes
+the inventory work in #508; the remaining runtime/channel, environment/authority,
+DMG-drop and traceability gates still apply before publication.
+
 ### Mac App Store submissions
 
 For each Mac App Store submission, also complete the separate
