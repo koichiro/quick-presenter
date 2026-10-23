@@ -1279,6 +1279,8 @@ pub fn start_slide_placement(windows: AppWindowRefs) {
         slide.window().on_winit_window_event(move |_, event| {
             use winit::event::WindowEvent;
             match event {
+                #[cfg(target_os = "macos")]
+                WindowEvent::DroppedFile(path) => crate::macos_documents::enqueue_path(path),
                 WindowEvent::Moved(_)
                 | WindowEvent::Resized(_)
                 | WindowEvent::ScaleFactorChanged { .. } => {

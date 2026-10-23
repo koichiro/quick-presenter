@@ -20,6 +20,8 @@ pub mod gui_smoke;
 pub mod hot_reload;
 pub mod input;
 #[cfg(target_os = "macos")]
+mod macos_documents;
+#[cfg(target_os = "macos")]
 mod macos_file_access;
 #[cfg(target_os = "macos")]
 pub mod macos_renderer;
@@ -227,6 +229,8 @@ fn main() -> Result<()> {
             None
         }
     };
+    #[cfg(target_os = "macos")]
+    let _native_document_timer = macos_documents::start(windows.refs(), state.clone());
     wire_callbacks(&windows, windows.refs(), state.clone());
     let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
     let _render_event_timer = start_render_event_updates(windows.refs(), state.clone());
@@ -1072,7 +1076,23 @@ fn request_pdf_file_open(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
 
 #[cfg(not(target_os = "linux"))]
 fn request_pdf_file_open(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
-    if let Some(path) = pick_pdf_file() {
+    #[cfg(target_os = "macos")]
+    {
+        if state.borrow().file_dialog.open {
+            return;
+        }
+        state.borrow_mut().file_dialog.open = true;
+        // AppKit runs a nested event loop in the synchronous panel. Reject Finder
+        // requests there instead of replaying them after the user dismisses it.
+        macos_documents::set_modal_busy(true);
+    }
+    let selected = pick_pdf_file();
+    #[cfg(target_os = "macos")]
+    {
+        macos_documents::set_modal_busy(false);
+        state.borrow_mut().file_dialog.open = false;
+    }
+    if let Some(path) = selected {
         #[cfg(target_os = "macos")]
         if let Err(error) = macos_file_access::remember_selected(&path) {
             warn!(error = ?error, "could not persist selected PDF access");
