@@ -1,5 +1,6 @@
 """Verify CLI payload layout and fail-fast packaging without launching the GUI."""
 import os
+import plistlib
 from pathlib import Path
 import shutil
 import subprocess
@@ -49,6 +50,11 @@ class CliPackagingTests(unittest.TestCase):
         self.assertTrue(os.access(contents / "MacOS/qp", os.X_OK))
         self.assertTrue((contents / "Resources/docs/CONTROL_PROTOCOL.md").is_file())
         self.assertTrue((contents / "Resources/docs/CLI.md").is_file())
+        manifest = plistlib.loads((contents / "Info.plist").read_bytes())
+        self.assertEqual(manifest["CFBundleDocumentTypes"], [{
+            "CFBundleTypeName": "PDF document", "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate", "LSItemContentTypes": ["com.adobe.pdf"],
+        }])
 
     def test_missing_sibling_cli_preserves_existing_macos_bundle(self):
         sentinel = self.root / "out/Quick Presenter.app/sentinel"

@@ -1,5 +1,6 @@
 fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        build_documents_bridge();
         build_xpc_bridge();
         build_store_ipc_probe();
         if std::env::var_os("CARGO_FEATURE_MACOS_STORE_CONTROL").is_some() {
@@ -197,4 +198,43 @@ fn embed_windows_icon() {
         .set_icon("assets/icons/windows/quick-presenter.ico")
         .compile()
         .expect("failed to embed Windows application icon");
+}
+
+fn build_documents_bridge() {
+    use std::{path::PathBuf, process::Command};
+    println!("cargo:rerun-if-changed=src/macos_documents.m");
+    let out = PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+    let arch = match std::env::var("CARGO_CFG_TARGET_ARCH").unwrap().as_str() {
+        "aarch64" => "arm64",
+        "x86_64" => "x86_64",
+        _ => panic!("unsupported macOS architecture"),
+    };
+    let object = out.join("documents.o");
+    assert!(Command::new("xcrun")
+        .args([
+            "clang",
+            "-arch",
+            arch,
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-c",
+            "src/macos_documents.m",
+            "-o"
+        ])
+        .arg(&object)
+        .status()
+        .unwrap()
+        .success());
+    assert!(Command::new("xcrun")
+        .args(["libtool", "-static", "-o"])
+        .arg(out.join("libdocuments.a"))
+        .arg(object)
+        .status()
+        .unwrap()
+        .success());
+    println!("cargo:rustc-link-search=native={}", out.display());
+    println!("cargo:rustc-link-lib=static=documents");
+    println!("cargo:rustc-link-lib=framework=AppKit");
+    println!("cargo:rustc-link-lib=framework=Foundation");
 }
