@@ -2,6 +2,8 @@
 
 Tracking: [#508](https://github.com/koichiro/quick-presenter/issues/508).
 
+Follow-up: the [final macOS runtime report](V250_FINAL_MACOS_RUNTIME_20261023.md) records subsequent authorized build-25010 upload, internal TestFlight installation and final installed-app checks. Statements below describe the inventory checkpoint before that upload.
+
 ## Fixed inputs and scope
 
 - Build source: `ce42e1de7754a02530fa85a4187b04222ec2585d` (main after #511), including #512.

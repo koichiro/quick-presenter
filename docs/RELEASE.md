@@ -83,6 +83,8 @@ Store submission candidates, Ubuntu DEB, hashes and verified SBOMs. It completes
 the inventory work in #508; the remaining runtime/channel, environment/authority,
 DMG-drop and traceability gates still apply before publication.
 
+The [October 23 final macOS runtime report](validation/V250_FINAL_MACOS_RUNTIME_20261023.md) records the installed final direct app and internal TestFlight **25010**, including exact identity, renderer isolation, GUI/CLI regression, installed direct drop acceptance and same-user lifecycle checks. Customer Store coverage, read-only-DMG icon-drop disposition and the other open #508 gates remain separate.
+
 ### Mac App Store submissions
 
 For each Mac App Store submission, also complete the separate
