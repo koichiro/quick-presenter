@@ -4,6 +4,8 @@ Tracking: [#508](https://github.com/koichiro/quick-presenter/issues/508).
 This follows the [final artifact inventory](V250_FINAL_ARTIFACT_INVENTORY_20261023.md).
 Results apply to this Apple Silicon Mac running macOS 27.0.1, not every supported environment.
 
+Follow-up: the [final document-delivery report](V250_MACOS_DOCUMENT_DELIVERY_20261023.md) records subsequent Store Finder and all four manual drop results, plus the maintainer-approved read-only-DMG icon-drop limitation. Pending statements below describe this earlier checkpoint.
+
 ## Exact artifacts and distribution
 
 Build source remains `ce42e1de7754a02530fa85a4187b04222ec2585d`, including #512; later #513 is documentation only. Version **2.5.0**, protocol **1**, PDFium **158.0.8111.0**, V8/XFA disabled. The previously recorded four post-pin risk dispositions remain unchanged.
