@@ -13,7 +13,7 @@ use objc2::{declare_class, msg_send_id, mutability, sel, ClassType, DeclaredClas
 use objc2_app_kit::{
     NSAppKitVersionNumber, NSAppKitVersionNumber10_12, NSAppearance, NSAppearanceCustomization,
     NSAppearanceNameAqua, NSApplication, NSApplicationPresentationOptions, NSBackingStoreType,
-    NSColor, NSDraggingDestination, NSFilenamesPboardType, NSPasteboard,
+    NSColor, NSDraggingDestination, NSFilenamesPboardType, NSPasteboard, NSPasteboardTypeFileURL,
     NSRequestUserAttentionType, NSScreen, NSView, NSWindowButton, NSWindowDelegate,
     NSWindowFullScreenButton, NSWindowLevel, NSWindowOcclusionState, NSWindowOrderingMode,
     NSWindowSharingType, NSWindowStyleMask, NSWindowTabbingMode, NSWindowTitleVisibility,
@@ -386,6 +386,11 @@ declare_class!(
             use std::path::PathBuf;
 
             let pb: Retained<NSPasteboard> = unsafe { msg_send_id![sender, draggingPasteboard] };
+            let delegate = &*self.ivars().app_delegate;
+            if delegate.respondsToSelector(sel!(quickPresenterCanReadDrop:)) {
+                return unsafe { objc2::msg_send![delegate, quickPresenterCanReadDrop: &*pb] };
+            }
+
             let filenames = match pb.propertyListForType(unsafe { NSFilenamesPboardType }) {
                 Some(filenames) => filenames,
                 None => return false.into(),
@@ -415,6 +420,13 @@ declare_class!(
             use std::path::PathBuf;
 
             let pb: Retained<NSPasteboard> = unsafe { msg_send_id![sender, draggingPasteboard] };
+            let delegate = &*self.ivars().app_delegate;
+            if delegate.respondsToSelector(sel!(quickPresenterReadDrop:)) {
+                // The receiver consumes the original pasteboard URLs synchronously.
+                // Do not also emit DroppedFile and open the same request twice.
+                return unsafe { objc2::msg_send![delegate, quickPresenterReadDrop: &*pb] };
+            }
+
             let filenames = match pb.propertyListForType(unsafe { NSFilenamesPboardType }) {
                 Some(filenames) => filenames,
                 None => return false.into(),
@@ -685,7 +697,8 @@ fn new_window(
         // register for drag and drop operations.
         window
             .registerForDraggedTypes(&NSArray::from_id_slice(&[
-                unsafe { NSFilenamesPboardType }.copy()
+                unsafe { NSFilenamesPboardType }.copy(),
+                unsafe { NSPasteboardTypeFileURL }.copy(),
             ]));
 
         Some(window)

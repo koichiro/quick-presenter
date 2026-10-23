@@ -41,3 +41,19 @@ next run-loop turn, retaining the latest request until then. Quick Presenter's
 window controller records native intent before updating deferred Slint properties.
 The macOS GUI smoke checks compare actual AppKit style-mask state after rapid
 entry/exit cancellation, so a logically correct but ignored request cannot pass.
+
+## Sandboxed document drops (#492)
+
+The window delegate checks for application-owned `quickPresenterCanReadDrop:`
+and `quickPresenterReadDrop:` selectors before converting pasteboard data to
+`PathBuf`. Quick Presenter's Objective-C bridge reads file NSURL objects directly
+from that original pasteboard and retains the URL and its access grant through
+the bounded Rust open flow. It consumes the native request once without also
+emitting a duplicate `DroppedFile`. Both windows register for file-URL drops.
+Applications without these opt-in selectors retain the generic winit path.
+
+This hook is maintained locally; it is not claimed as an upstream winit API.
+Preserve equivalent native URL authority and avoid duplicate delivery when
+upgrading the backend. The AppKit bridge test covers URL pasteboard reading,
+modal rejection, and lifetime after clearing the pasteboard. Signed first-use
+presenter/audience drops without saved bookmarks remain distribution checks.

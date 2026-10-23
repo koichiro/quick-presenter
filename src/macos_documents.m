@@ -43,6 +43,27 @@ static void open_urls(id self, SEL command, NSApplication *application, NSArray<
     for (NSURL *url in urls) enqueue(url);
 }
 
+// Winit opts in to these selectors before converting a drag to path strings.
+// Reading NSURL objects from the original pasteboard preserves sandbox authority.
+@interface QPDocumentDropHandler : NSObject
+- (BOOL)quickPresenterCanReadDrop:(NSPasteboard *)pasteboard;
+- (BOOL)quickPresenterReadDrop:(NSPasteboard *)pasteboard;
+@end
+
+@implementation QPDocumentDropHandler
+- (BOOL)quickPresenterCanReadDrop:(NSPasteboard *)pasteboard {
+    return !modal_busy && [pasteboard canReadObjectForClasses:@[[NSURL class]]
+        options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
+}
+- (BOOL)quickPresenterReadDrop:(NSPasteboard *)pasteboard {
+    NSArray<NSURL *> *urls = [pasteboard readObjectsForClasses:@[[NSURL class]]
+        options:@{NSPasteboardURLReadingFileURLsOnlyKey: @YES}];
+    if (!urls.count) return NO;
+    for (NSURL *url in urls) enqueue(url);
+    return YES;
+}
+@end
+
 bool qp_documents_install(void) {
     if (![NSThread isMainThread]) return false;
     id delegate = NSApp.delegate;
@@ -50,17 +71,16 @@ bool qp_documents_install(void) {
     if (!delegate || ![NSStringFromClass([delegate class]) isEqualToString:@"WinitApplicationDelegate"])
         return false;
     Class cls = [delegate class];
-    SEL selector = @selector(application:openURLs:);
-    if (class_getInstanceMethod(cls, selector)) return false;
-    return class_addMethod(cls, selector, (IMP)open_urls, "v@:@@");
-}
-
-void qp_documents_enqueue_path(const char *path) {
-    @autoreleasepool {
-        NSString *name = [[NSFileManager defaultManager] stringWithFileSystemRepresentation:path length:strlen(path)];
-        if (name) enqueue([NSURL fileURLWithPath:name]);
-        else rejected = true;
-    }
+    SEL open = @selector(application:openURLs:);
+    SEL can_drop = @selector(quickPresenterCanReadDrop:);
+    SEL drop = @selector(quickPresenterReadDrop:);
+    if (class_getInstanceMethod(cls, open) || class_getInstanceMethod(cls, can_drop) ||
+        class_getInstanceMethod(cls, drop)) return false;
+    Method can_method = class_getInstanceMethod([QPDocumentDropHandler class], can_drop);
+    Method drop_method = class_getInstanceMethod([QPDocumentDropHandler class], drop);
+    return class_addMethod(cls, open, (IMP)open_urls, "v@:@@") &&
+        class_addMethod(cls, can_drop, method_getImplementation(can_method), method_getTypeEncoding(can_method)) &&
+        class_addMethod(cls, drop, method_getImplementation(drop_method), method_getTypeEncoding(drop_method));
 }
 
 void *qp_documents_take(char *path, size_t capacity) {

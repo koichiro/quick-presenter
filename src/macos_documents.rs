@@ -1,11 +1,11 @@
 //! Finder and Dock document requests. Native callbacks only enqueue; Rust owns opening.
 use crate::{app_state::AppState, window_controller::AppWindowRefs};
-use slint::{winit_030::WinitWindowAccessor, ComponentHandle, Timer, TimerMode};
+use slint::{Timer, TimerMode};
 use std::{
     cell::RefCell,
-    ffi::{c_char, c_void, CStr, CString},
-    os::unix::ffi::{OsStrExt, OsStringExt},
-    path::{Path, PathBuf},
+    ffi::{c_char, c_void, CStr},
+    os::unix::ffi::OsStringExt,
+    path::PathBuf,
     rc::Rc,
     time::Duration,
 };
@@ -13,7 +13,6 @@ use std::{
 unsafe extern "C" {
     fn qp_documents_install() -> bool;
     fn qp_documents_set_modal_busy(value: bool);
-    fn qp_documents_enqueue_path(path: *const c_char);
     fn qp_documents_take(path: *mut c_char, capacity: usize) -> *mut c_void;
     fn qp_documents_release(handle: *mut c_void);
     fn qp_documents_take_rejected() -> bool;
@@ -29,12 +28,6 @@ pub fn install() -> anyhow::Result<()> {
 
 pub fn set_modal_busy(value: bool) {
     unsafe { qp_documents_set_modal_busy(value) };
-}
-
-pub fn enqueue_path(path: &Path) {
-    if let Ok(path) = CString::new(path.as_os_str().as_bytes()) {
-        unsafe { qp_documents_enqueue_path(path.as_ptr()) };
-    }
 }
 
 struct Document {
@@ -70,14 +63,6 @@ fn busy(state: &AppState) -> bool {
 }
 
 pub fn start(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) -> Timer {
-    if let Some(presenter) = windows.presenter.upgrade() {
-        presenter.window().on_winit_window_event(|_, event| {
-            if let slint::winit_030::winit::event::WindowEvent::DroppedFile(path) = event {
-                enqueue_path(path);
-            }
-            slint::winit_030::EventResult::Propagate
-        });
-    }
     let timer = Timer::default();
     let mut documents: Vec<Document> = Vec::new();
     timer.start(TimerMode::Repeated, Duration::from_millis(25), move || {

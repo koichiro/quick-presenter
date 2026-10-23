@@ -114,9 +114,9 @@ XPC startup/connection loss complements rather than replaces these watchdogs.
 
 The main app declares `com.adobe.pdf` as a Viewer with Alternate handler rank;
 packaging does not assign the default PDF application. Before creating windows
-or running AppKit, `macos_documents` adds only `application:openURLs:` to the
-vendored winit delegate. It neither replaces that delegate nor changes its
-launch, termination, or keyboard methods. The bridge checks the delegate class
+or running AppKit, `macos_documents` adds `application:openURLs:` and two opt-in
+pasteboard handlers to the vendored winit application delegate. It neither
+replaces that delegate nor changes its launch, termination, or keyboard methods. The bridge checks the delegate class
 and rejects an existing implementation, so a backend update requires an explicit
 integration review rather than silently replacing new upstream behavior.
 
@@ -125,8 +125,11 @@ routes it through `begin_open_pdf` and the existing supervised renderer. A Finde
 request can supersede automatic restoration; a manual/CLI open in progress or an
 open file dialog rejects it. Additional requests are rejected, not replayed.
 The synchronous macOS file picker also gates callbacks in its nested AppKit loop.
-Window drops use the same queue. Only the active and candidate NSURL grants stay
-alive; successful security-scope starts have matching stops. Read-only bookmarks
+For window drops, a local winit hook forwards the original pasteboard to these
+handlers before any path conversion. The bridge reads file NSURL objects from
+the pasteboard into the same queue; it never reconstructs a dropped URL from a
+path string or emits a duplicate Rust drop event. Only the active and candidate
+NSURL grants stay alive; successful security-scope starts have matching stops. Read-only bookmarks
 use the existing UI-owned persistence path and never cross into PDFium/XPC.
 
 ## Native file dialogs

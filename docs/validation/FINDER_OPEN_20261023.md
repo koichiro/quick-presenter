@@ -8,9 +8,9 @@ The candidate is based on main `477d81a3628bb9a2f90d59f6b7b88c76ae1a093a`
 plus this change, using PDFium `158.0.8111.0`. Validation ran on macOS 27.0.1
 (26A434), arm64. An isolated bundle identifier preserved the installed TestFlight
 2.5.0/25009 application. Developer ID signing used Team `NP5Q6U6NT5`.
-The final GUI SHA-256 is
+The preceding candidate GUI SHA-256 is
 `5ccbb745d255f0677f8f11096a5c9066354587e717af3e5d5e4f0e0579006e91`.
-The read-only candidate DMG SHA-256 is
+The preceding read-only candidate DMG SHA-256 is
 `09aed05080ca45c021f59205e608e24ad6d3038e56b207823f28e53821fd50ff`.
 
 The final candidate uses the Store UI sandbox/read-only selected-file/bookmark
@@ -102,6 +102,40 @@ Deep/strict signature verification, `cargo fmt --check`, `cargo check`,
 native bridge/packaging Python tests passed after the change. The native bridge
 regression now explicitly asserts that an absent file URL retains its exact path
 for the Rust error-handling path. Raw event replies and smoke logs are not committed.
+
+## CodeRabbit follow-up: first-use window-drop authority
+
+The review identified that the original `DroppedFile(PathBuf)` route discarded
+native URL authority before reconstructing a file URL. The earlier manual drop
+success did not establish a clean first-use permission state and is not used to
+dismiss this finding.
+
+The local winit window delegate now forwards the original dragging pasteboard
+to opt-in application handlers before converting paths. The native bridge reads
+file NSURL objects with `readObjectsForClasses:options:` and retains the original
+object in the bounded queue. Both windows register for modern file-URL drags;
+handled native drops do not emit a duplicate path-only event. The application no
+longer has a path-to-URL reconstruction entry point for window drops.
+
+The native test now covers a real URL pasteboard, modal rejection, URL lifetime
+after clearing the pasteboard, and an identity assertion that fails if the bridge
+reconstructs the URL from its path. All 502 Rust and seven bridge/packaging tests,
+default/Store checks, the release build, x86_64 native compilation, and deep/strict
+signature verification passed. Binary CI now includes the two window-integration
+source paths and the vendored winit boundary in its PR filter.
+
+A new, previously unused sandbox identifier,
+`app.quickpresenter.first-drop-review-20261023`, was verified to have no container
+before launch and no bookmark store after launch. Its signed UI started with
+No PDF opened. Two separate Desktop fixtures were prepared for first-use
+presenter and audience drops without a prior dialog, Dock open, or bookmark.
+The current review candidate GUI SHA-256 is
+`575ccefb610765a824f37a5b4b9b30943f10da8e0d2f617b0a462c653ed97555`;
+its read-only DMG SHA-256 is
+`68644ad92a88b39885a91672a0145c2763b02a93a9445bd9405adf5d1c63b5dc`.
+First-use manual results are pending; previous manual results apply only to the
+preceding candidate. See Apple's [file drag guidance](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/DragandDrop/Tasks/DraggingFiles.html)
+for the sandbox distinction between paths and URL delivery.
 
 ## Remaining acceptance checks
 

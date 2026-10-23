@@ -6,6 +6,26 @@
 @implementation WinitApplicationDelegate
 @end
 
+// Return a particular URL object to detect any path-to-URL reconstruction.
+@interface QPOriginalURLPasteboard : NSObject {
+    NSArray<NSURL *> *_urls;
+}
+- (instancetype)initWithURL:(NSURL *)url;
+- (NSArray *)readObjectsForClasses:(NSArray *)classes options:(NSDictionary *)options;
+@end
+@implementation QPOriginalURLPasteboard
+- (instancetype)initWithURL:(NSURL *)url {
+    if ((self = [super init])) _urls = [[NSArray alloc] initWithObjects:url, nil];
+    return self;
+}
+- (NSArray *)readObjectsForClasses:(NSArray *)classes options:(NSDictionary *)options {
+    assert([classes containsObject:[NSURL class]]);
+    assert([options[NSPasteboardURLReadingFileURLsOnlyKey] boolValue]);
+    return _urls;
+}
+- (void)dealloc { [_urls release]; [super dealloc]; }
+@end
+
 int main(void) {
     @autoreleasepool {
         [NSApplication sharedApplication];
@@ -37,10 +57,10 @@ int main(void) {
         [delegate application:NSApp openURLs:@[[NSURL URLWithString:@"https://example.org/file.pdf"]]];
         assert(!qp_documents_take(path, sizeof(path)));
         assert(qp_documents_take_rejected());
-        qp_documents_enqueue_path("/tmp/drop.pdf");
+        [delegate application:NSApp openURLs:@[[NSURL fileURLWithPath:@"/tmp/drop.pdf"]]];
         assert(!qp_documents_take(path, 2));
         assert(qp_documents_take_rejected());
-        qp_documents_enqueue_path("/tmp/drop.pdf");
+        [delegate application:NSApp openURLs:@[[NSURL fileURLWithPath:@"/tmp/drop.pdf"]]];
         handle = qp_documents_take(path, sizeof(path));
         assert(handle && strcmp(path, "/tmp/drop.pdf") == 0);
         qp_documents_release(handle);
@@ -54,6 +74,35 @@ int main(void) {
         assert(handle && strcmp(path, missing.fileSystemRepresentation) == 0);
         assert(!qp_documents_take_rejected());
         qp_documents_release(handle);
+        QPDocumentDropHandler *drop_delegate = (QPDocumentDropHandler *)delegate;
+        NSPasteboard *pasteboard = [NSPasteboard pasteboardWithUniqueName];
+        assert(![drop_delegate quickPresenterCanReadDrop:pasteboard]);
+        assert(![drop_delegate quickPresenterReadDrop:pasteboard]);
+        [pasteboard writeObjects:@[[NSURL fileURLWithPath:@"/tmp/drop-original.pdf"]]];
+        assert([drop_delegate quickPresenterCanReadDrop:pasteboard]);
+        qp_documents_set_modal_busy(true);
+        assert(![drop_delegate quickPresenterCanReadDrop:pasteboard]);
+        assert([drop_delegate quickPresenterReadDrop:pasteboard]);
+        assert(qp_documents_take_rejected());
+        assert(!qp_documents_take(path, sizeof(path)));
+        qp_documents_set_modal_busy(false);
+        assert([drop_delegate quickPresenterReadDrop:pasteboard]);
+        [pasteboard clearContents];
+        handle = qp_documents_take(path, sizeof(path));
+        assert(handle && strcmp(path, "/tmp/drop-original.pdf") == 0);
+        qp_documents_release(handle);
+        [pasteboard releaseGlobally];
+        NSURL *original = [[NSURL alloc] initFileURLWithPath:@"/tmp/drop-granted-original.pdf"];
+        QPOriginalURLPasteboard *original_pasteboard = [[QPOriginalURLPasteboard alloc] initWithURL:original];
+        assert([drop_delegate quickPresenterReadDrop:(NSPasteboard *)original_pasteboard]);
+        [original_pasteboard release];
+        handle = qp_documents_take(path, sizeof(path));
+        assert(handle && ((QPDocument *)handle)->url == original);
+        [original release];
+        assert(strcmp(((QPDocument *)handle)->url.fileSystemRepresentation,
+            "/tmp/drop-granted-original.pdf") == 0);
+        qp_documents_release(handle);
+
         NSApp.delegate = nil;
         [delegate release];
     }
