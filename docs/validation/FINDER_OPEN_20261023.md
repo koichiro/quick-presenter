@@ -55,15 +55,19 @@ An existing `AtomicUsize::fetch_update` deprecation warning is unrelated.
   request was rejected. Cancelling the dialog retained the first PDF, displayed
   the rejection message, and did not replay the second file. The Right key then
   advanced the original PDF to page 2/2.
+- The maintainer manually verified PDF drops onto the presenter window and the
+  running Dock icon using the final signed candidate on 2026-10-23. Both opened
+  the dropped PDF successfully. This is a user-reported end-to-end result,
+  distinct from the earlier unsuccessful automated temporary-folder icon drag.
 - Deep/strict signature verification passed. The initial Developer ID signing
   gate also passed supervised PDF rendering and private-file/network/child denial.
 
 ## Remaining acceptance checks
 
-- Finder drag-to-app/Dock and drops into both application windows need a visible
-  end-to-end result. The attempted temporary-folder icon drop did not demonstrate
-  delivery; it is not a pass or evidence of an application regression. Subsequent
-  Finder keyboard/focus automation stopped producing the requested UI transitions.
+- Presenter-window and Dock drops passed the maintainer's manual verification.
+  A Finder application-bundle icon drop and an audience-window drop have not
+  been separately verified. The earlier temporary-folder icon attempt remains
+  inconclusive; subsequent Finder focus automation did not complete.
 - A missing-file native event and a second native request during a deliberately
   held renderer open need full package-level verification. The deterministic
   native/Rust boundary tests cover these admission/error paths only in parts.
