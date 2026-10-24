@@ -1037,6 +1037,11 @@ struct NotesResizeSnapshot {
     viewport_height: f32,
     content_height: f32,
     measured_heights: Vec<f32>,
+    slide_width: f32,
+    slide_height: f32,
+    notes_outer_width: f32,
+    menu_height: f32,
+    main_y: f32,
 }
 
 impl NotesResizeSnapshot {
@@ -1049,7 +1054,27 @@ impl NotesResizeSnapshot {
             viewport_height: presenter.get_notes_visible_height(),
             content_height: presenter.get_notes_content_height(),
             measured_heights: presenter.get_notes_measured_heights().iter().collect(),
+            slide_width: presenter.get_notes_layout_slide_width(),
+            slide_height: presenter.get_notes_layout_slide_height(),
+            notes_outer_width: presenter.get_notes_layout_outer_width(),
+            menu_height: presenter.get_notes_layout_menu_height(),
+            main_y: presenter.get_notes_layout_main_y(),
         }
+    }
+
+    fn portrait_inline_layout_is_applied(&self) -> bool {
+        // Read actual element bounds, not just the requested aspect/menu flags.
+        // The 0.6 slide surface, 28px inline menu and displaced main area must
+        // agree, and the notes viewport must belong to that new slide width.
+        // This is an applied-layout witness even if native size did not change;
+        // neither an arbitrary quiet period nor a resize event proves it alone.
+        self.slide_width > 0.0
+            && self.slide_height > 0.0
+            && (self.slide_width - self.slide_height * 0.6).abs() <= 1.0
+            && (self.menu_height - 28.0).abs() <= 1.0
+            && (self.main_y - self.menu_height - 54.0).abs() <= 1.0
+            && (self.notes_outer_width - self.slide_width).abs() <= 1.0
+            && self.viewport_width <= self.notes_outer_width - 20.0 + 1.0
     }
 
     fn is_fitted(&self) -> bool {
@@ -1112,9 +1137,13 @@ async fn wait_for_presenter_notes_resize(
         let logical = snapshot
             .window_size
             .to_logical(presenter.window().scale_factor());
-        let size_matches = requested.is_none_or(|size| {
-            (logical.width - size.width).abs() <= 1.0 && (logical.height - size.height).abs() <= 1.0
-        });
+        let size_matches = requested.map_or_else(
+            || snapshot.portrait_inline_layout_is_applied(),
+            |size| {
+                (logical.width - size.width).abs() <= 1.0
+                    && (logical.height - size.height).abs() <= 1.0
+            },
+        );
         // A late Wayland configure can restore the previous native size after
         // set_size returned. Reissue only an unapplied geometry request; never
         // change notes properties or bypass the production fitting callback.
