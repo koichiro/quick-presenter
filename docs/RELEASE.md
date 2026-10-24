@@ -90,6 +90,12 @@ The [October 24 final Windows runtime report](validation/V250_FINAL_WINDOWS_RUNT
 
 The [October 24 final Ubuntu package report](validation/V250_FINAL_LINUX_RUNTIME_20261024.md) completes current-machine qualification of the selected final DEB: installed payload/SBOM and renderer checks, default Wayland/XWayland GUI regression, CLI/cold-start/lifecycle, physical keyboard and launcher/Open With checks. It records unperformed dual-display coverage, the maintainer's explicit Orca gate exclusion, supplemental forced-FemtoVG smoke failures and a new Windows-only yanked dependency warning for release-wide review. These bounded results do not close the other #508 conditions or approve publication.
 
+The [October 24 post-merge integration record](validation/V250_RELEASE_INTEGRATION_20261024.md)
+rechecks preserved macOS/Linux artifacts against their actual build source and
+merged-main normal dependency graphs, tracks the post-merge Windows replacement,
+and lists unresolved release gates. It does not relabel old artifacts or approve
+unperformed checks, customer Store submission or publication.
+
 ### Mac App Store submissions
 
 For each Mac App Store submission, also complete the separate
