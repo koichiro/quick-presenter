@@ -173,6 +173,13 @@ be reviewed before release. Any explicitly accepted advisory must be listed in
 date so release maintainers can tell whether the risk is still accepted.
 Dependabot checks Cargo and GitHub Actions dependencies weekly.
 
+The [October 24 clipboard-win review](validation/V250_CLIPBOARD_WIN_REVIEW_20261024.md)
+updates the yanked Windows transitive dependency from 5.4.1 to 5.4.3, containing
+the upstream HTML-fragment bounds fix. The application clipboard adapter uses
+Unicode text rather than that HTML getter. Final Windows packages/SBOMs must
+be regenerated for the changed dependency; previous ce42e1d artifact hashes
+remain historical and must not be reused as the updated candidate identity.
+
 GitHub Actions should use predictable references. First-party actions may use a
 major version tag when Dependabot covers update review. Third-party actions
 should be added only when the release workflow needs them and should use at
