@@ -67,8 +67,9 @@ For the remaining macOS coverage, [#493](https://github.com/koichiro/quick-prese
 owns fresh-account, upgrade/uninstall/reinstall and stale/unregistered-agent
 qualification. [#508](https://github.com/koichiro/quick-presenter/issues/508)
 retains supported-macOS/Intel runtime, foreign-team/cross-user rejection, genuine
-bookmark revocation and customer Store-installed qualification or the applicable
-explicit maintainer release dispositions.
+bookmark revocation and the applicable explicit maintainer release dispositions.
+Customer Store-installed qualification is tracked separately in #520 under the
+approved limited-distribution/public-release sequence below.
 These reports do not approve publication or qualify a changed final package.
 
 The [October 23 security review](validation/SECURITY_REVIEW_20261023.md) supersedes
@@ -86,9 +87,56 @@ qualification and DMG limitation disposition are linked below.
 
 The [October 23 final macOS runtime report](validation/V250_FINAL_MACOS_RUNTIME_20261023.md) records the installed final direct app and internal TestFlight **25010**, including exact identity, renderer isolation, GUI/CLI regression, installed direct drop acceptance and same-user lifecycle checks. The [final document-delivery follow-up](validation/V250_MACOS_DOCUMENT_DELIVERY_20261023.md) completes Store Finder/drop checks and records the maintainer-approved read-only-DMG icon-drop limitation. Customer Store coverage and the other open #508 gates remain separate.
 
-The [October 24 final Windows runtime report](validation/V250_FINAL_WINDOWS_RUNTIME_20261024.md) records checks of the exact selected final-source MSVC Store submission payload, fresh SBOM/PDFium validation, rendering/CLI/lifecycle checks, and maintainer-confirmed initial display, physical keyboard and Narrator routes. Final customer Store installation/update/alias and other release conditions remain separate in #508; the unsigned submission input is not a Store-distributed installation.
+The [October 24 final Windows runtime report](validation/V250_FINAL_WINDOWS_RUNTIME_20261024.md) records checks of the exact selected final-source MSVC Store submission payload, fresh SBOM/PDFium validation, rendering/CLI/lifecycle checks, and maintainer-confirmed initial display, physical keyboard and Narrator routes. Customer Store installation/update/alias qualification is tracked in [#520](https://github.com/koichiro/quick-presenter/issues/520); the remaining release conditions stay in [#508](https://github.com/koichiro/quick-presenter/issues/508). The unsigned submission input is not a Store-distributed installation.
 
 The [October 24 final Ubuntu package report](validation/V250_FINAL_LINUX_RUNTIME_20261024.md) completes current-machine qualification of the selected final DEB: installed payload/SBOM and renderer checks, default Wayland/XWayland GUI regression, CLI/cold-start/lifecycle, physical keyboard and launcher/Open With checks. It records unperformed dual-display coverage, the maintainer's explicit Orca gate exclusion, supplemental forced-FemtoVG smoke failures and a new Windows-only yanked dependency warning for release-wide review. These bounded results do not close the other #508 conditions or approve publication.
+
+The [October 24 post-merge integration record](validation/V250_RELEASE_INTEGRATION_20261024.md)
+rechecks preserved macOS/Linux artifacts against their actual build source and
+merged-main normal dependency graphs, tracks the post-merge Windows replacement,
+and lists unresolved release gates. It does not relabel old artifacts or approve
+unperformed checks, customer Store submission or publication.
+
+### v2.5.0 customer Store qualification timing
+
+On **2026-10-24 JST**, the maintainer explicitly moved customer Mac App Store
+and Microsoft Store 2.5.0 installation qualification to the post-review /
+post-certification follow-up [#520](https://github.com/koichiro/quick-presenter/issues/520).
+These customer checks remain **UNPERFORMED** until the actual distributed
+products are tested. The timing condition no longer independently blocks
+[#508](https://github.com/koichiro/quick-presenter/issues/508); all other source,
+artifact, runtime, environment/authority, traceability and pre-publication
+security conditions remain there. Do not automatically close #520 when #508 or
+a documentation PR closes.
+
+After certification, bind the actual customer builds to their submitted
+source/package/SBOM identities and verify installation/update, distribution
+trust, installed workflows and the registered Windows `qp.exe` alias as listed
+in #520. Internal TestFlight and unsigned/CI-signed or extracted Windows
+submission payloads retain their supporting scope.
+
+The maintainer subsequently approved this execution sequence in #520:
+
+1. Resolve applicable candidate/source/artifact/security conditions from #508.
+2. Mac: submit for App Review with **manual release**. After approval, use
+   [promo codes](https://developer.apple.com/help/app-store-connect/offer-promo-codes/request-and-manage-promo-codes/)
+   to qualify the intended approved build before general release.
+3. Windows: submit the selected package through
+   [Package flights](https://learn.microsoft.com/en-us/windows/apps/publish/package-flights),
+   certify and distribute it to the designated test-account group, and verify
+   actual Store install/update/identity/trust and registered alias. Keep regular
+   customers on the existing package during this phase. Resolve any flight-only
+   WACK exceptions and obtain required regular-submission certification before
+   general release.
+4. Complete limited-distribution qualification and remaining release conditions,
+   then perform general release as a separately recorded action.
+5. Verify public listings and ordinary acquisition/update paths after release.
+
+Record upload, review submission, approval, limited distribution and general
+release separately, including exact builds/audiences and actual results. Approval
+of the workflow is not evidence that an action or test has occurred. The
+Microsoft Store-only Windows distribution policy and final pre-publication
+package/security checks remain in force.
 
 ### Mac App Store submissions
 
