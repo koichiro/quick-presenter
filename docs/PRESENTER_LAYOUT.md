@@ -78,7 +78,7 @@ icon is a bundled vector so that it does not depend on color emoji font support.
 Audience Live history and its URL row start collapsed, leaving the toolbar visible.
 Starting a session opens them; finishing a normal stop collapses them. The disclosure
 button before the audience count uses a boxed plus when collapsed and a boxed
-minus with the platform's primary-button highlight when expanded. Its tooltip
+minus when expanded, with the same standard button background in both states. Its tooltip
 names the available action. It can open or close the pane independently of session,
 Pause/Resume, or join-screen state. Manual choices survive live event polling until
 the next session transition. In a normal window, collapsing shortens the window by the hidden history/URL
