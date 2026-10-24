@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.5.0 — Unreleased
+## [2.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0) — 2026-10-24
 
 ### Added
 
@@ -38,7 +38,7 @@
   checked HTML-fragment bounds fix
   ([#518](https://github.com/koichiro/quick-presenter/pull/518)).
 
-### Distribution and release status
+### Distribution and known limitations
 
 - Store review, limited-distribution installation checks and general release
   are separate from GitHub publication. Customer Store 2.5.0 acceptance is
@@ -46,9 +46,6 @@
 - Install the macOS app in Applications or a writable user Applications folder
   before PDF drag and drop. Dropping a PDF onto the app icon on the mounted
   read-only DMG is a known unsupported route.
-- This entry is release preparation, not publication approval. Outstanding
-  qualification and public-release decisions remain in
-  [#508](https://github.com/koichiro/quick-presenter/issues/508).
 
 ## [2.0.0](https://github.com/koichiro/quick-presenter/releases/tag/v2.0.0) — 2026-10-15
 

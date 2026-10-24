@@ -57,10 +57,10 @@ Before publishing a release:
 12. Attach results-only manual validation reports to the GitHub release, with
     exact source/package identity and explicit limits. Keep raw command and
     per-assertion smoke transcripts in ignored local artifacts or CI artifacts.
-13. Finalize the 2.5.0 changelog date/status only when publication is authorized.
-    Use the changelog's 2.5.0 section for release notes and link the final
-    package/SBOM/qualification records; do not describe pending Store rollout
-    or unperformed checks as complete.
+13. Confirm the changelog's release version/date match the tagged release.
+    Use its 2.5.0 section for release notes and link the final package/SBOM
+    and qualification records. Record Store rollout and unperformed checks
+    separately from the published version's feature summary.
 
 ### v2.5.0 validation evidence
 

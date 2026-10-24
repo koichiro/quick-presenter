@@ -28,7 +28,7 @@ model or TTS engine.
 
 Version **2.5.0** adds sandbox-compatible Mac App Store CLI control and improves
 PDF opening, keyboard focus, and macOS fullscreen transitions. See the
-[changelog](CHANGELOG.md) for release status and changes. Store updates are
+[changelog](CHANGELOG.md) for the release highlights. Store updates are
 reviewed and distributed separately from GitHub releases; check the installed
 version before using version-specific features.
 
