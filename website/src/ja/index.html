@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <script src="/language.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quick Presenter 2.0 — PDFスライドの発表ツール</title>
+    <title>Quick Presenter 2.5.0 — PDFスライドの発表ツール</title>
     <meta
       name="description"
       content="作成済みのPDFスライドを、迷わず操作して発表するための軽量デスクトップアプリ。スライド、ノート、タイマーを手元で確認できます。"
@@ -71,7 +71,7 @@
 
       <section id="demo" class="demo-section demo-overview" aria-labelledby="demo-title">
         <div class="section-heading">
-          <p class="eyebrow">AI Integration · 2.0の新機能</p>
+          <p class="eyebrow">AI Integration · CLI・AI連携</p>
           <h2 id="demo-title">読み上げから、対話へ。</h2>
           <p>Quick Presenterのインターフェースに外部ツールを組み合わせた、ふたつの活用例です。スライド本文、スピーカーノート、プレゼンテーション操作を、あなたの用途に活かせます。</p>
         </div>
@@ -130,7 +130,7 @@
               <li><span>03</span><div><h3>次のページへ</h3><p>CLIでページを進めると、現在のスライド、ノート、次ページのプレビューも切り替わります。</p></div></li>
             </ol>
             <p class="demo-note">このデモはノートをそのまま読み上げます。<a class="text-link" href="https://github.com/hexgrad/kokoro">Kokoro</a>は任意で導入する外部エンジンです。Quick PresenterはPDFの情報取得と再生操作を担います。</p>
-            <a class="text-link" href="https://github.com/koichiro/quick-presenter/tree/v2.0.0/examples/autopresent">デモを試す<span aria-hidden="true">↗</span></a>
+            <a class="text-link" href="https://github.com/koichiro/quick-presenter/tree/v2.5.0/examples/autopresent">デモを試す<span aria-hidden="true">↗</span></a>
           </div>
         </div>
         <p class="demo-note">外部Pythonランナーは描画とノートの準備を確認し、音声の終了を待ってからページを進めます。生成や再生に失敗すると停止します。</p>
@@ -150,14 +150,14 @@
       </section>
 
       <section id="automation" class="automation-section" aria-labelledby="automation-title">
-        <div class="section-heading"><p class="eyebrow">2.0のAIエージェント向けインターフェース</p><h2 id="automation-title">資料を読み、操作し、変化を捉える。</h2><p>安定したCLIを通じて、外部ツールから資料の情報とプレゼンテーション操作にアクセスできます。対話や読み上げは、活用方法の一例です。</p></div>
+        <div class="section-heading"><p class="eyebrow">AIエージェント向けインターフェース</p><h2 id="automation-title">資料を読み、操作し、変化を捉える。</h2><p>安定したCLIを通じて、外部ツールから資料の情報とプレゼンテーション操作にアクセスできます。対話や読み上げは、活用方法の一例です。</p></div>
         <div class="capability-grid">
           <article><span class="capability-label">Read</span><h3>資料全体を参照</h3><p>資料全体の本文とノートをJSONで取得。表示中のページを変えずに参照できます。現在・次のページは<code>qp context --full --json</code>で取得します。画像・図・OCRの結果は含まれません。</p><code>qp export --json</code></article>
           <article><span class="capability-label">Control</span><h3>必要なページへ</h3><p>PDFを開く、ページを選ぶ、次へ進む。ページ番号は1から始まります。以下の3は構文例で、質問と移動先が固定されているわけではありません。</p><code>qp goto 3 --json<br />qp next --json</code></article>
           <article><span class="capability-label">Observe</span><h3>状態と変化を把握</h3><p>現在ページ、描画やノートの状態を確認し、変更をNDJSONで監視できます。準備完了の確認にはstatusを使います。</p><code>qp status --json<br />qp watch --json</code></article>
         </div>
         <div class="agent-workflow">
-          <div><p class="eyebrow">Bring your own agent</p><h3>あなたのエージェントとつなぐ。</h3><p>必要なCLI連携を構成して、ローカルモデル、ホスト型サービス、スクリプトを活用できます。資料の解釈、回答生成、操作判断はエージェントが担い、Quick PresenterはPDF表示、取得可能な資料情報、状態と操作を担います。</p><a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/CLI.md">CLIリファレンス <span aria-hidden="true">↗</span></a></div>
+          <div><p class="eyebrow">Bring your own agent</p><h3>あなたのエージェントとつなぐ。</h3><p>必要なCLI連携を構成して、ローカルモデル、ホスト型サービス、スクリプトを活用できます。資料の解釈、回答生成、操作判断はエージェントが担い、Quick PresenterはPDF表示、取得可能な資料情報、状態と操作を担います。</p><a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/v2.5.0/docs/CLI.md">CLIリファレンス <span aria-hidden="true">↗</span></a></div>
           <figure class="command-panel"><figcaption><span class="terminal-dots" aria-hidden="true">● ● ●</span> qpでつなぐワークフロー</figcaption>
             <pre><code><span class="code-comment"># PDFを開く</span>
 qp open talk.pdf --json
@@ -221,19 +221,20 @@ qp status --json</code></pre></figure>
           <article><h3>1. 表示用PDFを書き出す</h3><p>Keynote、PowerPoint、Google Slides、Marp、LaTeX Beamerなどで資料を作成します。Quick Presenterが扱うのは、書き出したPDFです。</p></article>
           <article><h3>2. 取得可能なノートを含める</h3><p>PDFを書き出しても、取得できるノートが含まれるとは限りません。MarpではMarkdownのコメントにノートを書き、<code>--pdf-notes</code>を指定して書き出します。発表前にQuick Presenterで取得できるか確認してください。</p><code>marp --no-config --pdf --pdf-notes talk.md --output talk.pdf</code></article>
         </div>
-        <p class="demo-links"><a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/v2.0.0/examples/autopresent/README.md">MarpのノートとAutopilotの準備手順</a><a class="text-link" href="/assets/interactive-ai-sample.pdf">ノート付きサンプルPDF</a><a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/v2.0.0/docs/PDF_COMPATIBILITY.md">PDFの対応条件</a></p>
+        <p class="demo-links"><a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/v2.5.0/examples/autopresent/README.md">MarpのノートとAutopilotの準備手順</a><a class="text-link" href="/assets/interactive-ai-sample.pdf">ノート付きサンプルPDF</a><a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/v2.5.0/docs/PDF_COMPATIBILITY.md">PDFの対応条件</a></p>
       </section>
 
       <section id="download" class="download" aria-labelledby="download-title">
-        <p class="eyebrow">Get Quick Presenter 2.0</p><h2 id="download-title">OSと用途に合う配布先を選ぶ</h2>
-        <p class="release-status">OSに合うQuick Presenter 2.0をインストールしてください。AI連携には、同じv2.0.0パッケージに含まれるGUIとCLIを使います。</p>
+        <p class="eyebrow">Get Quick Presenter 2.5.0</p><h2 id="download-title">OSと用途に合う配布先を選ぶ</h2>
+        <p class="release-status">OSに合うQuick Presenter 2.5.0をインストールしてください。AI連携には、同じv2.5.0パッケージに含まれるGUIとCLIを使います。</p>
+        <p>2.5.0ではMac App Store版のCLI操作に対応し、発表中のキー操作、フルスクリーン切り替え、macOSでのPDFオープンを改善しました。<a href="https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0">リリースノート</a></p>
         <div class="download-grid">
-          <article><h3>Windows</h3><p>Quick Presenter v2.0.0はMicrosoft Storeで配信中です。qp.exeのCLI実行エイリアスを同梱しています。</p><a class="button secondary" href="https://apps.microsoft.com/detail/9N913S9NJ6D1">Microsoft Store <span aria-hidden="true">↗</span></a></article>
-          <article><h3>macOS</h3><p>AI・CLI連携にはDeveloper ID / DMG版が必要です。Mac App Store版はv2.0.0のCLI操作に対応しません。</p><a class="button secondary" href="https://github.com/koichiro/quick-presenter/releases">DMGのリリース一覧 <span aria-hidden="true">↗</span></a></article>
-          <article><h3>Linux</h3><p>GitHub Releasesからv2.0.0のDebianパッケージを入手できます。qp CLIを同梱しています。</p><a class="button secondary" href="https://github.com/koichiro/quick-presenter/releases">Debianのリリース一覧 <span aria-hidden="true">↗</span></a></article>
+          <article><h3>Windows</h3><p>Quick Presenter v2.5.0はMicrosoft Storeで配信中です。qp.exeのCLI実行エイリアスを同梱しています。</p><a class="button secondary" href="https://apps.microsoft.com/detail/9N913S9NJ6D1">Microsoft Store <span aria-hidden="true">↗</span></a></article>
+          <article><h3>macOS</h3><p>Quick Presenter v2.5.0はMac App Storeで配信中です。qp CLIによる操作に対応しました。macOS 14.4以降が必要です。</p><a class="button secondary" href="https://apps.apple.com/jp/app/quick-presenter-pdf-slides/id6820406883">Mac App Store <span aria-hidden="true">↗</span></a></article>
+          <article><h3>Linux</h3><p>GitHub Releasesからv2.5.0のDebianパッケージを入手できます。qp CLIを同梱しています。</p><a class="button secondary" href="https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0">Debianパッケージをダウンロード <span aria-hidden="true">↗</span></a></article>
         </div>
         <p><a class="text-link" href="/ja/guides/interactive-ai/">CLIのセットアップとデモ再現手順</a></p>
-        <p>通常のPDFプレゼンテーションには、<a href="https://apps.apple.com/jp/app/quick-presenter-pdf-slides/id6820406883">Mac App Store版</a>も利用できます。ストアでの購入は開発の支援につながります。AI・CLI連携にはDMG版を使用してください。</p>
+        <p>macOS向けには、CLIを同梱した<a href="https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0">署名・公証済みのv2.5.0 DMG版</a>も用意しています。Apple silicon・macOS 13以降に対応します。PDFをドラッグ＆ドロップする前に、アプリをApplicationsへインストールしてください。ストアでの購入は開発の支援につながります。</p>
       </section>
       <section id="support" class="oss" aria-labelledby="oss-title">
         <div><p class="eyebrow">Open source · Support development</p><h2 id="oss-title">発表を支えるOSSを、一緒に。</h2><p>公開ソース、リリースノート、Issueを通じて開発を進めています。不具合の報告、改善提案、コードへの貢献が、マルチプラットフォームでの安定したPDF再生とCLI連携を支えます。</p></div>
