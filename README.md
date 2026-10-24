@@ -88,7 +88,8 @@ qp status --json
 qp watch --json
 ```
 
-Commands other than `open` require a running GUI; content queries also require
+Presentation commands other than `open` require a running GUI; metadata commands
+such as `--version` and `--help` work without one. Content queries also require
 an open PDF. Navigation acknowledges the logical page, so query status before
 assuming rendering or notes are ready. Check exit codes and JSON errors on
 stderr before retrying a request whose outcome is uncertain.

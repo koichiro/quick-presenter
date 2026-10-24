@@ -24,6 +24,16 @@ start with [README](../../README.md) or [release usage](../RELEASE.md).
   This candidate is **not fully runtime-qualified**. Original failures and
   package identities remain in #508; do not replace them with prior passes.
 
+- The subsequent [shared correction #524](https://github.com/koichiro/quick-presenter/pull/524),
+  source **38279ce**, passed Linux's eight local release-mode conditions
+  (**72/0 each**) and actual CI MSVC Windows Store payload regression
+  (**65/0 in four runs**, short/long notes twice each), plus CLI/render-denial
+  and package/SBOM checks. [Build Binaries 40074121830](https://github.com/koichiro/quick-presenter/actions/runs/40074121830)
+  passed on that source. These correction results preserve the earlier f1b5541
+  failures and remain separate from the combined code/documentation final
+  packages to be generated after merge. Local Windows software-renderer
+  reporting limits are recorded in #524; no exhaustive renderer pass is claimed.
+
 ## Artifact and runtime results
 
 | Record | Exact scope |
