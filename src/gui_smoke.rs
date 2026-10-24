@@ -131,7 +131,26 @@ async fn run_checks(
         "slide window weak handle could not be upgraded",
     );
 
-    check_notes_font_size(&windows, &state, report, "before opening a PDF").await?;
+    let notes_frames = Rc::new(Cell::new(0_u32));
+    let rendered_notes_frames = notes_frames.clone();
+    windows
+        .presenter
+        .window()
+        .set_rendering_notifier(move |phase, _| {
+            if matches!(phase, slint::RenderingState::AfterRendering) {
+                rendered_notes_frames.set(rendered_notes_frames.get() + 1);
+            }
+        })
+        .context("failed to monitor presenter rendering for notes resize")?;
+
+    check_notes_font_size(
+        &windows,
+        &state,
+        report,
+        "before opening a PDF",
+        &notes_frames,
+    )
+    .await?;
 
     crate::begin_open_pdf(&window_refs, &state, options.pdf_path.clone());
     report.check(
@@ -189,7 +208,7 @@ async fn run_checks(
     report_state(report, &state, "speaker notes were checked", |state| {
         state.status_text == "Ready" || state.status_text.contains("notes")
     });
-    check_notes_font_size(&windows, &state, report, "with a PDF open").await?;
+    check_notes_font_size(&windows, &state, report, "with a PDF open", &notes_frames).await?;
     report_presenter_progress(
         report,
         &windows,
@@ -1028,11 +1047,99 @@ async fn settle_presenter_notes_layout(presenter: &crate::PresenterWindow) -> Re
     settle_notes_layout().await
 }
 
+#[derive(Debug, PartialEq)]
+struct NotesResizeSnapshot {
+    window_size: slint::PhysicalSize,
+    has_notes: bool,
+    font_size: f32,
+    viewport_width: f32,
+    viewport_height: f32,
+    content_height: f32,
+    measured_heights: Vec<f32>,
+}
+
+impl NotesResizeSnapshot {
+    fn capture(presenter: &crate::PresenterWindow) -> Self {
+        Self {
+            window_size: presenter.window().size(),
+            has_notes: presenter.get_has_notes(),
+            font_size: presenter.get_notes_font_size(),
+            viewport_width: presenter.get_notes_visible_width(),
+            viewport_height: presenter.get_notes_visible_height(),
+            content_height: presenter.get_notes_content_height(),
+            measured_heights: presenter.get_notes_measured_heights().iter().collect(),
+        }
+    }
+
+    fn is_fitted(&self) -> bool {
+        let expected = crate::notes::fit_notes_font_size(
+            self.has_notes,
+            self.viewport_width,
+            self.viewport_height,
+            &self.measured_heights,
+        );
+        if self.viewport_height <= 0.0 || self.font_size != f32::from(expected) {
+            return false;
+        }
+        if !self.has_notes {
+            return true;
+        }
+        let index = usize::from(expected - crate::notes::MIN_NOTES_FONT_SIZE);
+        self.measured_heights.get(index).is_some_and(|height| {
+            let expected_content = self
+                .viewport_height
+                .max(*height + crate::notes::NOTES_BOTTOM_PADDING);
+            (self.content_height - expected_content).abs() <= 1.0
+        })
+    }
+}
+
+async fn resize_presenter_notes(
+    presenter: &crate::PresenterWindow,
+    size: slint::LogicalSize,
+    frames: &Cell<u32>,
+) -> Result<()> {
+    let started = Instant::now();
+    let first_frame = frames.get();
+    let mut previous = None;
+    presenter.window().set_size(size);
+    loop {
+        // A native resize and deferred fitting callbacks can outlive a timer.
+        // Observe matching layout on two completed frames, without driving input.
+        presenter.window().request_redraw();
+        delay(Duration::from_millis(10)).await;
+        let snapshot = NotesResizeSnapshot::capture(presenter);
+        let logical = snapshot
+            .window_size
+            .to_logical(presenter.window().scale_factor());
+        let frame = frames.get();
+        if frame > first_frame
+            && (logical.width - size.width).abs() <= 1.0
+            && (logical.height - size.height).abs() <= 1.0
+            && snapshot.is_fitted()
+        {
+            if previous
+                .as_ref()
+                .is_some_and(|(last_frame, last)| *last_frame < frame && *last == snapshot)
+            {
+                return Ok(());
+            }
+            previous = Some((frame, snapshot));
+        } else {
+            previous = None;
+        }
+        if started.elapsed() >= Duration::from_secs(5) {
+            bail!("presenter notes did not settle after resize to {size:?}: frames={frame}, layout={:?}", NotesResizeSnapshot::capture(presenter));
+        }
+    }
+}
+
 async fn check_notes_font_size(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
     report: &mut GuiSmokeReport,
     context: &str,
+    frames: &Cell<u32>,
 ) -> Result<()> {
     let presenter = &windows.presenter;
     let original_size = presenter.window().size();
@@ -1044,9 +1151,7 @@ async fn check_notes_font_size(
     let generation_before = state.borrow().render_generation;
     let now = Instant::now();
     let elapsed_before = state.borrow().timer.elapsed_at(now);
-    presenter
-        .window()
-        .set_size(slint::LogicalSize::new(800.0, 560.0));
+    resize_presenter_notes(presenter, slint::LogicalSize::new(800.0, 560.0), frames).await?;
 
     presenter.set_has_notes(false);
     presenter.set_notes_text("".into());
@@ -1179,10 +1284,7 @@ async fn check_notes_font_size(
     );
     // Keep both native sizes inside the small CI desktop. A constant width
     // isolates extra vertical room instead of enlarging the slide preview too.
-    presenter
-        .window()
-        .set_size(slint::LogicalSize::new(800.0, 650.0));
-    settle_presenter_notes_layout(presenter).await?;
+    resize_presenter_notes(presenter, slint::LogicalSize::new(800.0, 650.0), frames).await?;
     report.check(
         format!("native resize automatically enlarges notes ({context})"),
         presenter.get_notes_font_size() > small_size,
@@ -1194,12 +1296,20 @@ async fn check_notes_font_size(
             presenter.window().size()
         ),
     );
-    presenter
-        .window()
-        .set_size(slint::LogicalSize::new(800.0, 560.0));
+    resize_presenter_notes(presenter, slint::LogicalSize::new(800.0, 560.0), frames).await?;
+    report.check(
+        format!("native shrink restores fitted notes ({context})"),
+        presenter.get_notes_font_size() == small_size && presenter.get_notes_scroll_y() == 0.0,
+        "smaller viewport restored its fitting size without an empty scroll offset",
+        format!(
+            "expected={small_size}, actual={}, scroll={}",
+            presenter.get_notes_font_size(),
+            presenter.get_notes_scroll_y()
+        ),
+    );
     presenter.set_current_page_aspect_ratio(0.6);
     presenter.set_use_native_menu_bar(false);
-    settle_presenter_notes_layout(presenter).await?;
+    resize_presenter_notes(presenter, slint::LogicalSize::new(800.0, 560.0), frames).await?;
     report.check(
         format!("portrait slides and inline menus retain bounded notes sizing ({context})"),
         (12.0..=24.0).contains(&presenter.get_notes_font_size())
@@ -1212,8 +1322,12 @@ async fn check_notes_font_size(
     presenter.set_notes_text(original_text);
     presenter.set_current_page_aspect_ratio(original_aspect);
     presenter.set_use_native_menu_bar(original_menu);
-    presenter.window().set_size(original_size);
-    settle_presenter_notes_layout(presenter).await?;
+    resize_presenter_notes(
+        presenter,
+        original_size.to_logical(presenter.window().scale_factor()),
+        frames,
+    )
+    .await?;
     report.check(
         format!("automatic sizing preserves presentation state ({context})"),
         state.borrow().presentation.snapshot() == before

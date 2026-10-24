@@ -146,6 +146,7 @@ component NotesView inherits Rectangle {
     in property <bool> has-notes: false;
     in property <string> notes-text: "";
     in property <length> font-size: 12px;
+    out property <length> visible-width: scroll-view.visible-width;
     out property <length> visible-height: scroll-view.visible-height;
     out property <length> content-height: scroll-view.content-height;
     out property <length> text-y: notes-input.y;
@@ -704,6 +705,7 @@ export component PresenterWindow inherits Window {
     in property <string> page-label: "";
     in property <string> notes-text: "";
     in property <float> notes-font-size: 12;
+    out property <length> notes-visible-width: notes-view.visible-width;
     out property <length> notes-visible-height: notes-view.visible-height;
     out property <length> notes-content-height: notes-view.content-height;
     out property <length> notes-text-y: notes-view.text-y;
