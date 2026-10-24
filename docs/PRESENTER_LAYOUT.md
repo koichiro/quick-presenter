@@ -9,6 +9,8 @@ Refresh in one row. The IP address has a fixed width of 120 logical
 pixels so Next stays in place when cycling addresses; longer addresses elide. Routine server status
 text is omitted; actionable alerts still overlay the history pane. Reactions and
 comment history use the full pane width below the toolbar.
+The Audience Live session button has a fixed width of 160 logical pixels so
+switching between ON and OFF does not move the adjacent controls.
 
 Sizing follows the available window space:
 
