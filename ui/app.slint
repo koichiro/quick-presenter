@@ -761,6 +761,7 @@ export component PresenterWindow inherits Window {
     out property <length> presenter-current-column-width: main-area.left-column-width;
     out property <length> presenter-next-column-width: main-area.next-column-width;
     out property <length> presenter-next-preview-height: next-preview-slot.height;
+    out property <length> presenter-next-slide-width: next-slide.page-surface-width;
     out property <length> presenter-thumbnail-width: thumbnail-column.width;
     out property <length> notes-layout-outer-width: notes-view.width;
     out property <length> notes-layout-menu-height: inline-menu.height;
@@ -1276,8 +1277,8 @@ export component PresenterWindow inherits Window {
                 width: parent.width - 24px;
                 height: root.presenter-main-height;
                 property <length> column-gap: 10px;
-                // Keep the current/next previews near 2:1 without oversized utility panes.
-                property <length> next-column-width: clamp((main-area.width - main-area.thumbnail-column-width - main-area.column-gap * 2) / 3, 260px, 480px);
+                // Share extra width at 2:1, including on 4K and larger displays.
+                property <length> next-column-width: max(260px, (main-area.width - main-area.thumbnail-column-width - main-area.column-gap * 2) / 3);
                 property <length> thumbnail-column-width: clamp(main-area.width * 0.10, 128px, 192px);
                 property <length> left-column-width: max(0px, main-area.width - main-area.next-column-width - main-area.thumbnail-column-width - main-area.column-gap * 2);
                 property <length> current-slide-natural-height: main-area.left-column-width / root.safe-current-page-aspect-ratio + (root.has-slide-progress ? 4px : 0px);
@@ -1341,15 +1342,18 @@ export component PresenterWindow inherits Window {
                     y: 0px;
                     width: main-area.next-column-width;
                     height: parent.height;
-                    property <length> preview-height: min(self.width / root.safe-next-page-aspect-ratio, main-area.top-section-height);
+                    // Size the preview from the rendered current slide, not just its column:
+                    // height-constrained slides can leave substantial horizontal letterboxing.
+                    property <length> preview-width: min(self.width, current-slide-with-progress.page-surface-width / 2);
+                    property <length> preview-height: min(self.preview-width / root.safe-next-page-aspect-ratio, main-area.top-section-height);
 
                     next-preview-slot := Rectangle {
                         x: 0px;
                         y: 0px;
-                        width: parent.width;
+                        width: parent.preview-width;
                         height: parent.preview-height;
 
-                        SlideView {
+                        next-slide := SlideView {
                             x: 0px;
                             y: 0px;
                             page-image: root.next-page-image;
@@ -1393,8 +1397,9 @@ export component PresenterWindow inherits Window {
                     }
 
                     KeyboardBindingsPanel {
+                        x: 0px;
                         y: main-area.lower-section-y + 34px;
-                        width: parent.width;
+                        width: min(480px, parent.width);
                         height: min(200px, max(0px, parent.height - self.y));
                     }
                 }

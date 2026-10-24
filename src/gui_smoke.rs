@@ -1251,16 +1251,14 @@ async fn check_audience_panel_layout(
         report.check(
             format!("Presenter panes stay balanced and notes remain usable ({width}x{height})"),
             current_width >= next_width
-                && (260.0..=480.0).contains(&next_width)
+                && next_width >= 260.0
                 && (128.0..=192.0).contains(&thumbnail_width)
                 && (presenter.get_notes_layout_outer_width() - current_width).abs() <= 1.0
                 && presenter.get_notes_visible_height() >= 180.0
                 && presenter.get_presenter_next_preview_height() > 0.0
                 && presenter.get_presenter_next_preview_height()
                     <= next_width / presenter.get_next_page_aspect_ratio() + 1.0
-                && (next_width <= 260.0
-                    || next_width >= 480.0
-                    || (current_width - next_width * 2.0).abs() <= 1.0),
+                && (next_width <= 260.0 || (current_width - next_width * 2.0).abs() <= 1.0),
             format!("current={current_width}, next={next_width}, thumbnails={thumbnail_width}"),
             format!(
                 "unbalanced panes or unusable notes: {:?}",

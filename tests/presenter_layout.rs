@@ -46,6 +46,8 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
                 (1280, 900),
                 (1920, 1080),
                 (2560, 1440),
+                (3840, 2160),
+                (5120, 2880),
                 (1200, 1240),
             ] {
                 window.set_size(slint::PhysicalSize::new(width, height));
@@ -61,7 +63,7 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
                 let context =
                     format!("{width}x{height}, aspect={aspect}, native_menu={native_menu}");
                 assert!(current >= next, "{context}");
-                assert!((260.0..=480.0).contains(&next), "{context}");
+                assert!(next >= 260.0, "{context}");
                 assert!((128.0..=192.0).contains(&thumbnails), "{context}");
                 assert!(
                     (presenter.get_notes_layout_outer_width() - current).abs() <= 1.0,
@@ -94,7 +96,14 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
                     presenter.get_audience_url_bottom() <= height as f32 - 36.0,
                     "{context}"
                 );
-                if next > 260.0 && next < 480.0 {
+                assert!(
+                    (presenter.get_notes_layout_slide_width()
+                        - presenter.get_presenter_next_slide_width() * 2.0)
+                        .abs()
+                        <= 1.0,
+                    "Rendered slide widths must stay at 2:1: {context}"
+                );
+                if next > 260.0 {
                     assert!((current - next * 2.0).abs() <= 1.0, "{context}");
                 }
                 if let Some(directory) = std::env::var_os("QP_PRESENTER_LAYOUT_SNAPSHOTS") {

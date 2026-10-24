@@ -7,9 +7,13 @@ of its URL row.
 
 Sizing follows the available window space:
 
-- The current and next columns share width at approximately 2:1. The next
-  column is bounded to 260–480 logical pixels so that compact windows retain a
-  usable preview and wide windows do not grow the keyboard reference indefinitely.
+- The current and next columns share width at approximately 2:1, with a minimum
+  next-column width of 260 logical pixels and no upper cap. Both columns continue
+  to grow together on 4K and larger displays.
+- The next slide's rendered width is at most half the current slide's rendered
+  width. Equal-aspect slides retain a visible 2:1 width ratio even when available
+  height constrains the current slide. Mixed-aspect slides also fit within the
+  slide row without stretching.
 - Thumbnails use 10% of the main area width, bounded to 128–192 logical pixels.
 - The slide row uses up to 66% of the main area height, while preserving at least
   200 logical pixels for notes below the heading. A slide that fits at its natural
@@ -17,7 +21,7 @@ Sizing follows the available window space:
 - Notes use the entire current-slide column, including when a portrait slide is
   narrower than its column. Existing Rust note fitting and scrolling still apply.
 - The next preview scales with its column and retains its aspect ratio within the
-  slide row. The keyboard reference remains at most 200 logical pixels high.
+  slide row. The keyboard reference remains at most 480 logical pixels wide and 200 high.
 - The Audience Live footer uses 28% of window height excluding the inline menu,
   bounded to 282–360 logical pixels, including its controls and URL row.
 
@@ -28,9 +32,9 @@ placement.
 ## Validation
 
 `cargo test --test presenter_layout` renders the compiled Slint component with a
-software window. It covers six sizes (800×842 through 2560×1440), three slide
-aspect ratios (16:9, 4:3, portrait), and both menu modes: 36 combinations. Assertions
-protect usable notes space, bounded preview/thumbnail widths, proportional column
+software window. It covers eight sizes (800×842 through 5120×2880), three slide
+aspect ratios (16:9, 4:3, portrait), and both menu modes: 48 combinations. Assertions
+protect usable notes space, rendered slide proportions and bounded thumbnail widths, proportional column
 sizing, and separation of the footer and thumbnails. Unlike a native resize,
 this test can exercise windows larger than the attached display.
 
@@ -46,10 +50,16 @@ rendering or native menu/window chrome. The native GUI smoke also checks the six
 window sizes when it reaches the Audience Live layout checks.
 
 Local validation on 2026-10-24: formatting, compilation, the complete Cargo test
-suite, and the 36 software-rendered layouts passed. The 1920×1080 landscape and
+suite, and the 48 software-rendered layouts passed. The 1920×1080 landscape and
 800×842 portrait/inline-menu images were visually inspected. The signed renderer
 PDF/notes and sandbox denial gate passed during bundle signing. The full macOS
 GUI smoke stopped before layout checks at rapid fullscreen-entry cancellation
 (`will-enter` without completion), both from a direct bundled launch and through
 Launch Services. This does not establish native fullscreen, Windows, or Linux
 runtime qualification for the layout change.
+
+The large-display follow-up removes the next-column maximum width and checks
+the actual rendered current/next slide widths at 2:1 for matching aspect ratios,
+rather than accepting column proportions alone. All 48 software layouts passed;
+a maximized signed local app with a real PDF was also inspected and captured.
+The keyboard reference retains its 480-pixel width cap and left alignment.
