@@ -2,10 +2,18 @@
 
 Tracking: [#508](https://github.com/koichiro/quick-presenter/issues/508),
 publication documentation [#523](https://github.com/koichiro/quick-presenter/pull/523).
-Reviewed source: `80522547ca1e5b2d1a5799f04ab542cc22f13e62`, including merged
-#524. Official inputs retrieved on **2026-10-24 at 10:36 UTC (19:36 JST)**.
+Reviewed source: `80522547ca1e5b2d1a5799f04ab542cc22f13e62`. Official inputs retrieved on **2026-10-24 at 10:36 UTC (19:36 JST)**.
 This supersedes the October 23 current-information checkpoint, while retaining
 its detailed fix mappings and historical findings.
+
+Post-merge source attribution: the reviewed branch did not yet contain #524's
+final smoke/UI correction. The [direct comparison and incremental security review](V250_FINAL_PACKAGES_20261024.md#security-source-comparison)
+bridges this baseline to frozen **f4c018091c6057eb68fc76ac761bc90b10f93cc2**:
+dependencies/vendor/build/packaging and the other Rust files are unchanged;
+the two smoke/UI exceptions are explicitly inspected and dispositioned there.
+That record also completes final package/runtime qualification. The earlier
+claim that this baseline already included merged #524 is superseded by this
+precise comparison, not by relabeling the original audit source.
 
 ## Result and release boundary
 

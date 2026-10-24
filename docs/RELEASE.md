@@ -64,6 +64,15 @@ Before publishing a release:
 
 ### v2.5.0 validation evidence
 
+The [final post-#523 package qualification](validation/V250_FINAL_PACKAGES_20261024.md)
+binds the selected candidates to source **f4c0180**, the final bundled documents
+and [successful all-OS build 40088331020](https://github.com/koichiro/quick-presenter/actions/runs/40088331020).
+It records the notarized/stapled Developer ID DMG, Apple-distributed TestFlight
+**25011**, the final Windows MSVC Store input and final Ubuntu DEB, with exact
+package/SBOM identities and current-machine runtime limits. Read its completion
+boundary and the latest #508 integration state before publishing; earlier
+records below retain their historical source/channel scope.
+
 Before publishing v2.5.0, review the [security and macOS artifact assessment](validation/ISSUE508_MACOS_RELEASE_REVIEW_20261022.md)
 and [internal TestFlight 25009 qualification](validation/ISSUE433_STORE_CLI_TESTFLIGHT_25009.md).
 They identify the tested source and artifacts, CVE evidence, retained maintenance
@@ -80,8 +89,8 @@ The maintainer also excluded Mac foreign-team/cross-user rejection and genuine
 security-scoped bookmark revocation tests from this v2.5.0 release gate. These
 checks remain unperformed; no passing security test is asserted and runtime
 identity, permission and sandbox enforcement are unchanged.
-[#508](https://github.com/koichiro/quick-presenter/issues/508) retains final
-artifact/runtime/evidence integration and the pre-publication security review.
+[#508](https://github.com/koichiro/quick-presenter/issues/508) tracks final
+evidence integration; the fresh security checkpoint is complete as linked below.
 Customer Store-installed qualification is tracked separately in #520 under the
 approved limited-distribution/public-release sequence below.
 These reports do not approve publication or qualify a changed final package.
