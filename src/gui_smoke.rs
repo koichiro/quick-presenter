@@ -1896,7 +1896,10 @@ async fn check_notes_font_size(
 ) -> Result<()> {
     let presenter = &windows.presenter;
     let original_panel_expanded = presenter.get_audience_panel_expanded();
-    if !original_panel_expanded {
+    // Keep typography fixtures within small CI displays. Expanding the footer
+    // raises the 650px content fixture to 932px, which AppKit can constrain.
+    // Disclosure and expanded history are exercised separately below.
+    if original_panel_expanded {
         presenter.invoke_audience_toggle_panel();
         settle_presenter_notes_layout(presenter).await?;
     }
@@ -2144,7 +2147,7 @@ async fn check_notes_font_size(
         "page, render generation, and timer stayed unchanged",
         "automatic sizing unexpectedly changed presentation state",
     );
-    if !original_panel_expanded {
+    if original_panel_expanded {
         presenter.invoke_audience_toggle_panel();
         settle_presenter_notes_layout(presenter).await?;
     }
