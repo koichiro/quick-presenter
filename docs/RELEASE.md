@@ -86,11 +86,14 @@ Customer Store-installed qualification is tracked separately in #520 under the
 approved limited-distribution/public-release sequence below.
 These reports do not approve publication or qualify a changed final package.
 
-The [October 23 security review](validation/SECURITY_REVIEW_20261023.md) supersedes
-the earlier current-security assessment. It records the CISA PoC-status change,
-additional public CVE mappings and four enabled-path PDFium fixes after the
-selected pin. Resolve their update/backport or evidence-based release disposition
-in #508 before publication; latest-prebuilt status alone is not approval.
+The [October 24 pre-publication security review](validation/SECURITY_REVIEW_20261024.md)
+completed the fresh Cargo/PDFium/CVE/exploitation checkpoint on source `8052254`.
+It found no new security blocker: zero Cargo vulnerability advisories, the same
+five maintenance warnings, unchanged accepted PDFium omissions and no new
+production fix in the additional upstream commit. The existing 8111 release
+risk disposition remains applicable; this does not assert absence of vulnerabilities.
+Final combined package/SBOM/runtime and release-evidence qualification remains in
+#508. Refresh on material new information or by October 26 if publication is delayed.
 
 The [October 23 final source/artifact inventory](validation/V250_FINAL_ARTIFACT_INVENTORY_20261023.md)
 fixes the selected source, retained PDFium 8111 disposition, notarized direct DMG,

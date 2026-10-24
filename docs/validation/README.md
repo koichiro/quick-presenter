@@ -72,11 +72,14 @@ with four identified post-pin omissions. That decision is not a claim of no
 vulnerabilities. The existing five dependency-maintenance deferrals remain
 recorded; the yanked clipboard-win version was replaced separately.
 
-Complete the next review on **October 26 or before publication, whichever is
-earlier**, against the intended final source/artifacts. New material
-vulnerability/exploitation/fix information requires triage and an updated
-release decision. An unchanged assessment can retain the existing disposition.
-Use the [PDF processing security policy](../PDF_RENDERING_SECURITY.md) and
+The [October 24 pre-publication review](SECURITY_REVIEW_20261024.md) completes the
+fresh checkpoint on source `8052254`: zero Cargo vulnerability advisories, five
+unchanged maintenance warnings, no new material CVE/exploitation change or
+production PDFium fix. Existing risk dispositions remain applicable. Final
+combined artifacts and evidence still require qualification after #523 merges.
+Refresh on material new information, or by October 26 if publication is delayed;
+retain the October 28 candidate checkpoint. Use the
+[PDF processing security policy](../PDF_RENDERING_SECURITY.md) and
 [SBOM gate](../SBOM.md#release-gate); this index does not waive them.
 
 ## Historical records
