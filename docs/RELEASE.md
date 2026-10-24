@@ -67,8 +67,9 @@ For the remaining macOS coverage, [#493](https://github.com/koichiro/quick-prese
 owns fresh-account, upgrade/uninstall/reinstall and stale/unregistered-agent
 qualification. [#508](https://github.com/koichiro/quick-presenter/issues/508)
 retains supported-macOS/Intel runtime, foreign-team/cross-user rejection, genuine
-bookmark revocation and customer Store-installed qualification or the applicable
-explicit maintainer release dispositions.
+bookmark revocation and the applicable explicit maintainer release dispositions.
+Customer Store-installed qualification is tracked separately in #520 under the
+approved limited-distribution/public-release sequence below.
 These reports do not approve publication or qualify a changed final package.
 
 The [October 23 security review](validation/SECURITY_REVIEW_20261023.md) supersedes
@@ -112,11 +113,30 @@ After certification, bind the actual customer builds to their submitted
 source/package/SBOM identities and verify installation/update, distribution
 trust, installed workflows and the registered Windows `qp.exe` alias as listed
 in #520. Internal TestFlight and unsigned/CI-signed or extracted Windows
-submission payloads retain their supporting scope. Upload, review submission,
-approval and release require separate authorization and event records; this
-timing decision authorizes none of those actions. The Microsoft Store-only
-Windows distribution policy and final pre-publication package/security checks
-remain in force.
+submission payloads retain their supporting scope.
+
+The maintainer subsequently approved this execution sequence in #520:
+
+1. Resolve applicable candidate/source/artifact/security conditions from #508.
+2. Mac: submit for App Review with **manual release**. After approval, use
+   [promo codes](https://developer.apple.com/help/app-store-connect/offer-promo-codes/request-and-manage-promo-codes/)
+   to qualify the intended approved build before general release.
+3. Windows: submit the selected package through
+   [Package flights](https://learn.microsoft.com/en-us/windows/apps/publish/package-flights),
+   certify and distribute it to the designated test-account group, and verify
+   actual Store install/update/identity/trust and registered alias. Keep regular
+   customers on the existing package during this phase. Resolve any flight-only
+   WACK exceptions and obtain required regular-submission certification before
+   general release.
+4. Complete limited-distribution qualification and remaining release conditions,
+   then perform general release as a separately recorded action.
+5. Verify public listings and ordinary acquisition/update paths after release.
+
+Record upload, review submission, approval, limited distribution and general
+release separately, including exact builds/audiences and actual results. Approval
+of the workflow is not evidence that an action or test has occurred. The
+Microsoft Store-only Windows distribution policy and final pre-publication
+package/security checks remain in force.
 
 ### Mac App Store submissions
 
