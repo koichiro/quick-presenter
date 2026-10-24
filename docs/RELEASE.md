@@ -76,9 +76,12 @@ The missing initial automated trace remains a historical evidence limitation;
 it no longer requires an additional pristine-account run. The maintainer also
 excluded unperformed additional Mac environments (Intel, another Mac, other
 macOS/hardware) from the v2.5.0 release gate; no compatibility pass is asserted.
-[#508](https://github.com/koichiro/quick-presenter/issues/508) retains separate
-foreign-team/cross-user rejection, genuine bookmark revocation and the applicable
-explicit maintainer release dispositions.
+The maintainer also excluded Mac foreign-team/cross-user rejection and genuine
+security-scoped bookmark revocation tests from this v2.5.0 release gate. These
+checks remain unperformed; no passing security test is asserted and runtime
+identity, permission and sandbox enforcement are unchanged.
+[#508](https://github.com/koichiro/quick-presenter/issues/508) retains final
+artifact/runtime/evidence integration and the pre-publication security review.
 Customer Store-installed qualification is tracked separately in #520 under the
 approved limited-distribution/public-release sequence below.
 These reports do not approve publication or qualify a changed final package.
@@ -92,8 +95,8 @@ in #508 before publication; latest-prebuilt status alone is not approval.
 The [October 23 final source/artifact inventory](validation/V250_FINAL_ARTIFACT_INVENTORY_20261023.md)
 fixes the selected source, retained PDFium 8111 disposition, notarized direct DMG,
 Store submission candidates, Ubuntu DEB, hashes and verified SBOMs. It completes
-the inventory work in #508; the remaining channel, environment/authority and
-traceability gates still apply before publication. The subsequent macOS
+the original inventory work in #508. Final candidate integration and security
+review remain subject to the latest #508 dispositions; the subsequent macOS
 qualification and DMG limitation disposition are linked below.
 
 The [October 23 final macOS runtime report](validation/V250_FINAL_MACOS_RUNTIME_20261023.md) records the installed final direct app and internal TestFlight **25010**, including exact identity, renderer isolation, GUI/CLI regression, installed direct drop acceptance and same-user lifecycle checks. The [final document-delivery follow-up](validation/V250_MACOS_DOCUMENT_DELIVERY_20261023.md) completes Store Finder/drop checks and records the maintainer-approved read-only-DMG icon-drop limitation. Customer Store coverage and the other open #508 gates remain separate.
@@ -116,8 +119,8 @@ post-certification follow-up [#520](https://github.com/koichiro/quick-presenter/
 These customer checks remain **UNPERFORMED** until the actual distributed
 products are tested. The timing condition no longer independently blocks
 [#508](https://github.com/koichiro/quick-presenter/issues/508); all other source,
-artifact, runtime, environment/authority, traceability and pre-publication
-security conditions remain there. Do not automatically close #520 when #508 or
+artifact, runtime, evidence and pre-publication security conditions remain
+there, subject to the explicit scope dispositions above. Do not automatically close #520 when #508 or
 a documentation PR closes.
 
 After certification, bind the actual customer builds to their submitted

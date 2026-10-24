@@ -15,8 +15,10 @@ start with [README](../../README.md) or [release usage](../RELEASE.md).
 - Additional Intel/other-Mac/other-macOS environments were explicitly excluded
   from the v2.5.0 release gate; those tests remain unperformed. The maintainer
   accepted [#493](https://github.com/koichiro/quick-presenter/issues/493) as
-  manually executed/completed. These decisions do not pass separate
-  foreign-team/cross-user or genuinely revoked-bookmark authority checks.
+  manually executed/completed. The maintainer also excluded Mac foreign-team /
+  cross-user rejection and genuinely revoked-bookmark authority tests from this
+  release gate. These checks remain unperformed, not passed; identity/permission
+  enforcement and sandbox configuration are unchanged.
 - The post-#521 **f1b5541** CI run
   [40069155697](https://github.com/koichiro/quick-presenter/actions/runs/40069155697)
   passed, but current-machine package checks found repeatable Windows GUI
