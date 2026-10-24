@@ -1281,8 +1281,11 @@ async fn check_audience_panel_layout(
             presenter.get_audience_toggle_y() >= presenter.get_notes_area_bottom()
                 && presenter.get_audience_panel_top()
                     >= presenter.get_audience_toggle_bottom() + 4.0
-                && presenter.get_audience_reactions_width()
-                    > presenter.get_audience_controls_width()
+                && (presenter.get_audience_reactions_width()
+                    - presenter.get_audience_panel_width())
+                .abs()
+                    <= 1.0
+                && presenter.get_audience_toolbar_ordered()
                 && presenter.get_audience_url_top() >= presenter.get_audience_panel_bottom() + 4.0
                 && presenter.get_audience_address_controls_inline(),
             "toggle and expanded feed fit",

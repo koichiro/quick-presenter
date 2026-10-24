@@ -754,7 +754,12 @@ export component PresenterWindow inherits Window {
     out property <length> notes-area-bottom: main-area.y + main-area.height;
     out property <length> thumbnails-left: main-area.x + thumbnail-column.x;
     out property <length> thumbnails-bottom: main-area.y + thumbnail-column.y + thumbnail-column.height;
-    out property <length> audience-controls-width: audience-controls.width;
+    out property <length> audience-panel-width: audience-panel.width;
+    out property <string> audience-count-label: "👥" + audience-count-text.text;
+    out property <bool> audience-toolbar-ordered: audience-count.x + audience-count.width <= audience-led.x
+        && audience-led.x + audience-led.width <= audience-live-toggle.x
+        && audience-pause.x + audience-pause.width <= address-text.x
+        && refresh-address.x + refresh-address.width <= audience-toggle-row.width;
     out property <length> audience-reactions-width: audience-reactions.width;
     out property <length> notes-layout-slide-width: current-slide-with-progress.page-surface-width;
     out property <length> notes-layout-slide-height: current-slide-with-progress.page-surface-height;
@@ -1455,7 +1460,31 @@ export component PresenterWindow inherits Window {
                 HorizontalBox {
                     padding: 0px;
                     spacing: 8px;
-                    Rectangle {
+                    audience-count := HorizontalBox {
+                        padding: 0px;
+                        spacing: 2px;
+                        horizontal-stretch: 0;
+                        Rectangle {
+                            width: 20px;
+                            height: 36px;
+                            Image {
+                                source: @image-url("../assets/navigation/audience.svg");
+                                y: (parent.height - self.height) / 2;
+                                width: 20px;
+                                height: 20px;
+                                accessible-role: image;
+                                accessible-label: "Connected audience";
+                            }
+                        }
+                        audience-count-text := Text {
+                            text: "(" + root.audience-count + ")";
+                            accessible-label: "Connected audience: " + root.audience-count;
+                            color: white;
+                            font-size: 14px;
+                            vertical-alignment: center;
+                        }
+                    }
+                    audience-led := Rectangle {
                         width: 16px;
                         height: 36px;
                         Rectangle {
@@ -1473,10 +1502,33 @@ export component PresenterWindow inherits Window {
                         enabled: !root.audience-busy && (root.audience-active || root.audience-can-start);
                         clicked => { root.audience-toggle-session(); }
                     }
-                    Button {
+                    audience-pause := Button {
                         text: root.audience-comments-paused ? "Resume" : "Pause";
                         enabled: root.audience-active && !root.audience-busy;
                         clicked => { root.audience-toggle-comments(); }
+                    }
+                    address-text := Text {
+                        text: root.audience-address;
+                        accessible-label: "Server IP address: " + root.audience-address;
+                        color: #9aa0a6;
+                        font-size: 11px;
+                        min-width: 0px;
+                        max-width: 240px;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                        vertical-alignment: center;
+                    }
+                    next-address := Button {
+                        text: "Next";
+                        accessible-label: "Next server address";
+                        enabled: !root.audience-active;
+                        clicked => { root.audience-next-address(); }
+                    }
+                    refresh-address := Button {
+                        text: "Refresh";
+                        accessible-label: "Refresh server addresses";
+                        enabled: !root.audience-active;
+                        clicked => { root.audience-refresh-addresses(); }
                     }
                     Rectangle { horizontal-stretch: 1; }
                 }
@@ -1491,54 +1543,35 @@ export component PresenterWindow inherits Window {
                 border-color: #3c4043;
                 border-width: 1px;
                 clip: true;
-                HorizontalBox {
-                    padding: 10px;
-                    spacing: 12px;
-                    audience-controls := Rectangle {
-                        width: min(300px, parent.width * 0.4);
-                        VerticalBox {
-                            padding: 0px;
-                            spacing: 6px;
-                            Text { text: "Connected: " + root.audience-count; color: white; font-size: 16px; }
-                            Text { text: root.audience-status; color: #d9dce0; wrap: word-wrap; }
-                            audience-address-row := HorizontalBox {
-                                padding: 0px;
-                                spacing: 4px;
-                                height: 24px;
-                                address-text := Text { text: root.audience-address; color: #9aa0a6; font-size: 11px; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
-                                next-address := Button { text: "Next Address"; height: 22px; enabled: !root.audience-active; clicked => { root.audience-next-address(); } }
-                                refresh-address := Button { text: "Refresh"; height: 22px; enabled: !root.audience-active; clicked => { root.audience-refresh-addresses(); } }
-                            }
-                            Rectangle { vertical-stretch: 1; }
+                audience-reactions := Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    background: #202124;
+                    border-color: #3c4043;
+                    border-width: 1px;
+                    VerticalBox {
+                        padding: 10px;
+                        Text { text: "Reactions: " + root.audience-reaction-count; color: white; font-weight: 700; }
+                        Text {
+                            text: root.audience-recent-reactions;
+                            color: white;
+                            font-size: 22px;
+                            overflow: elide;
                         }
-                    }
-                    audience-reactions := Rectangle {
-                        horizontal-stretch: 1;
-                        background: #202124;
-                        border-color: #3c4043;
-                        border-width: 1px;
-                        VerticalBox {
-                            padding: 10px;
-                            Text { text: "Reactions: " + root.audience-reaction-count; color: white; font-weight: 700; }
-                            Text {
-                                text: root.audience-recent-reactions;
+                        comment-history-scroll := ScrollView {
+                            vertical-stretch: 1;
+                            content-width: self.visible-width;
+                            content-height: comment-history.preferred-height;
+                            content-y: min(0px, self.visible-height - self.content-height);
+                            comment-history := Text {
+                                width: parent.width;
+                                height: self.preferred-height;
+                                text: root.audience-comment-history == "" ? "Waiting for comments…" : root.audience-comment-history;
                                 color: white;
-                                font-size: 22px;
-                                overflow: elide;
-                            }
-                            comment-history-scroll := ScrollView {
-                                vertical-stretch: 1;
-                                content-width: self.visible-width;
-                                content-height: comment-history.preferred-height;
-                                content-y: min(0px, self.visible-height - self.content-height);
-                                comment-history := Text {
-                                    width: parent.width;
-                                    height: self.preferred-height;
-                                    text: root.audience-comment-history == "" ? "Waiting for comments…" : root.audience-comment-history;
-                                    color: white;
-                                    font-size: 14px;
-                                    wrap: word-wrap;
-                                }
+                                font-size: 14px;
+                                wrap: word-wrap;
                             }
                         }
                     }

@@ -21,6 +21,8 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
     let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
     slint::platform::set_platform(Box::new(LayoutPlatform(window.clone()))).unwrap();
     let presenter = PresenterWindow::new().unwrap();
+    presenter.set_audience_address("2001:db8:1234:5678:abcd:ef01:2345:6789".into());
+    presenter.set_audience_count(12345);
     presenter.set_has_notes(true);
     presenter.set_notes_text(
         "Speaker notes remain readable across window sizes.\n次のポイントを説明します。".into(),
@@ -102,6 +104,19 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
                         .abs()
                         <= 1.0,
                     "Rendered slide widths must stay at 2:1: {context}"
+                );
+                assert!(presenter.get_audience_toolbar_ordered(), "{context}");
+                assert!(
+                    presenter.get_audience_address_controls_inline(),
+                    "{context}"
+                );
+                assert_eq!(presenter.get_audience_count_label(), "👥(12345)");
+                assert!(
+                    (presenter.get_audience_reactions_width()
+                        - presenter.get_audience_panel_width())
+                    .abs()
+                        <= 1.0,
+                    "History should fill the Audience Live pane: {context}"
                 );
                 if next > 260.0 {
                     assert!((current - next * 2.0).abs() <= 1.0, "{context}");

@@ -3,7 +3,11 @@
 The presenter window keeps the current slide and notes on the left, the next
 slide and keyboard reference in the middle, and slide thumbnails on the right.
 Audience Live stays below the first two columns; thumbnails extend to the bottom
-of its URL row.
+of its URL row. The Audience Live toolbar orders the connected audience count
+(`👥(0)`), live LED, session toggle, Pause/Resume, server IP address, Next, and
+Refresh in one row. Long addresses elide in compact windows. Routine server status
+text is omitted; actionable alerts still overlay the history pane. Reactions and
+comment history use the full pane width below the toolbar.
 
 Sizing follows the available window space:
 
@@ -63,3 +67,8 @@ the actual rendered current/next slide widths at 2:1 for matching aspect ratios,
 rather than accepting column proportions alone. All 48 software layouts passed;
 a maximized signed local app with a real PDF was also inspected and captured.
 The keyboard reference retains its 480-pixel width cap and left alignment.
+
+The Audience Live toolbar follow-up checks count/LED/address control order and
+full-width history at all 48 sizes/aspect/menu combinations, including a five-digit
+audience count and a long IPv6 address at the minimum window width. The audience
+icon is a bundled vector so that it does not depend on color emoji font support.

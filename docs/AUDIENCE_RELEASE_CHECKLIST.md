@@ -81,7 +81,7 @@ and recovery without requiring users to disable their firewall globally.
 
 ## Network and physical display checks
 
-- With Wi-Fi and Ethernet, verify Next Address switches candidates when off
+- With Wi-Fi and Ethernet, verify Next switches address candidates when off
   and keeps the same selection with only one address. Refresh must update the candidate
   list. During an active session these controls are disabled; stop before
   changing the listener address.
