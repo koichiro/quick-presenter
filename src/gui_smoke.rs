@@ -1082,34 +1082,65 @@ async fn resize_presenter_notes(
     presenter: &crate::PresenterWindow,
     size: slint::LogicalSize,
 ) -> Result<()> {
+    presenter.window().set_size(size);
+    wait_for_presenter_notes_resize(presenter, Some(size)).await
+}
+
+async fn wait_for_presenter_notes_resize(
+    presenter: &crate::PresenterWindow,
+    requested: Option<slint::LogicalSize>,
+) -> Result<()> {
     let started = Instant::now();
     let mut previous = None;
-    presenter.window().set_size(size);
+    let mut unchanged_since = started;
+    let mut last_request = started;
+    let mut retries = 0;
     settle_presenter_notes_layout(presenter).await?;
     loop {
-        // Native size and deferred fitting can outlive the initial layout pass.
-        // Wait for consistent layout across event-loop turns. Occluded Wayland
-        // windows need not receive rendering callbacks while this check runs.
+        // Rendering callbacks can stop for occluded Wayland windows. Keep the
+        // input/layout pass running while native configuration is in flight.
+        presenter
+            .window()
+            .dispatch_event(slint::platform::WindowEvent::PointerExited);
         presenter.window().request_redraw();
         delay(Duration::from_millis(10)).await;
         let snapshot = NotesResizeSnapshot::capture(presenter);
+        let now = Instant::now();
+        if previous.as_ref() != Some(&snapshot) {
+            unchanged_since = now;
+        }
         let logical = snapshot
             .window_size
             .to_logical(presenter.window().scale_factor());
-        if (logical.width - size.width).abs() <= 1.0
-            && (logical.height - size.height).abs() <= 1.0
-            && snapshot.is_fitted()
-        {
-            if previous.as_ref().is_some_and(|last| *last == snapshot) {
-                return Ok(());
+        let size_matches = requested.is_none_or(|size| {
+            (logical.width - size.width).abs() <= 1.0 && (logical.height - size.height).abs() <= 1.0
+        });
+        // A late Wayland configure can restore the previous native size after
+        // set_size returned. Reissue only an unapplied geometry request; never
+        // change notes properties or bypass the production fitting callback.
+        if let Some(size) = requested {
+            if !size_matches && now.duration_since(last_request) >= Duration::from_millis(100) {
+                presenter.window().set_size(size);
+                last_request = now;
+                retries += 1;
+                unchanged_since = now;
             }
-            previous = Some(snapshot);
-        } else {
-            previous = None;
         }
+        if size_matches
+            && snapshot.is_fitted()
+            && now.duration_since(unchanged_since) >= Duration::from_millis(200)
+        {
+            if retries > 0 {
+                eprintln!(
+                    "GUI smoke: notes resize settled after {retries} geometry retries: requested={requested:?}, actual={logical:?}"
+                );
+            }
+            return Ok(());
+        }
+        previous = Some(snapshot);
         if started.elapsed() >= Duration::from_secs(5) {
             bail!(
-                "presenter notes did not settle after resize to {size:?}: layout={:?}",
+                "presenter notes did not settle after resize to {requested:?} ({retries} geometry retries): layout={:?}",
                 NotesResizeSnapshot::capture(presenter)
             );
         }
@@ -1290,13 +1321,28 @@ async fn check_notes_font_size(
     );
     presenter.set_current_page_aspect_ratio(0.6);
     presenter.set_use_native_menu_bar(false);
-    resize_presenter_notes(presenter, slint::LogicalSize::new(800.0, 560.0)).await?;
+    // The new layout can raise the native minimum size (notably with Windows
+    // inline menus). Verify fitting and the usable viewport at the OS-selected
+    // size; exact 800x560 is only required by the controlled grow/shrink checks.
+    presenter
+        .window()
+        .set_size(slint::LogicalSize::new(800.0, 560.0));
+    wait_for_presenter_notes_resize(presenter, None).await?;
     report.check(
         format!("portrait slides and inline menus retain bounded notes sizing ({context})"),
         (12.0..=24.0).contains(&presenter.get_notes_font_size())
             && presenter.get_notes_visible_height() >= 180.0,
-        "minimum window retained a usable notes viewport",
-        "portrait or inline menu layout exceeded the typography bounds",
+        format!(
+            "native size={:?}, viewport={}x{}, font={}",
+            presenter.window().size(),
+            presenter.get_notes_visible_width(),
+            presenter.get_notes_visible_height(),
+            presenter.get_notes_font_size()
+        ),
+        format!(
+            "portrait or inline menu layout exceeded the typography bounds: {:?}",
+            NotesResizeSnapshot::capture(presenter)
+        ),
     );
 
     presenter.set_has_notes(original_has_notes);
