@@ -115,3 +115,18 @@ The unfilled disclosure button was checked in the signed local macOS app: pointe
 activation, Space, Return, and Tab traversal all worked without changing the PDF
 page. Both collapsed and expanded screenshots show only the boxed icon, with no
 button background fill. The complete Cargo suite and 96 layout cases passed.
+
+The URL field leaves 44 logical pixels for a separate unfilled copy button and
+its gap on the right. The overlapping-paper icon copies the complete current
+join URL, including its fragment, without launching a browser. Long URLs elide
+in the field. Copy is unavailable before a session is ready and during stop;
+clipboard success/failure appears in the presenter status line. The clipboard
+owner remains alive until app shutdown so Linux paste requests continue to work.
+
+URL-copy validation: all Cargo checks and 96 layout cases passed, including the
+field/button separation at minimum width. Unit tests cover unavailable/stopping
+sessions and exact query/fragment preservation. In the signed local macOS app,
+verified disabled copy before start, successful copy during a local session, and
+external-editor paste matching the full join URL including its token. The local
+session was stopped afterward. Linux/Windows clipboard runtime checks remain
+outstanding.

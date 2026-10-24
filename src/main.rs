@@ -22,6 +22,7 @@ mod audience_wire;
 pub mod black_screen;
 mod browser;
 pub mod cli;
+mod clipboard;
 pub mod clock;
 mod control_app;
 #[cfg(all(unix, not(all(target_os = "macos", feature = "macos-store-control"))))]

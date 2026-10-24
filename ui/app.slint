@@ -352,8 +352,10 @@ component NavigationButton inherits Button {
 }
 
 // An unfilled icon button with explicit focus and accessibility behavior.
-component AudienceDisclosureButton inherits FocusScope {
-    in property <bool> expanded;
+component AudienceIconButton inherits FocusScope {
+    in property <image> icon;
+    in property <string> action-name;
+    in property <string> tooltip-text;
     callback clicked();
 
     min-width: 36px;
@@ -361,7 +363,7 @@ component AudienceDisclosureButton inherits FocusScope {
     height: 32px;
     accessible-role: button;
     accessible-enabled: root.enabled;
-    accessible-label: root.expanded ? "Collapse Audience Live pane" : "Expand Audience Live pane";
+    accessible-label: root.action-name;
     accessible-action-default => { root.focus(); root.clicked(); }
 
     key-pressed(event) => {
@@ -379,15 +381,15 @@ component AudienceDisclosureButton inherits FocusScope {
         border-width: 1px;
         border-radius: 4px;
         border-color: #8ab4f8;
-        visible: root.has-focus;
+        visible: root.has-focus && root.enabled;
     }
     Image {
-        source: root.expanded ? @image-url("../assets/navigation/collapse.svg") : @image-url("../assets/navigation/expand.svg");
+        source: root.icon;
         width: 20px;
         height: 20px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
-        colorize: #f1f3f4;
+        colorize: root.enabled ? #f1f3f4 : #666b70;
     }
     TouchArea {
         width: parent.width;
@@ -400,7 +402,7 @@ component AudienceDisclosureButton inherits FocusScope {
         }
     }
     Tooltip {
-        text: root.expanded ? @markdown("Hide reactions and comment history") : @markdown("Show reactions and comment history");
+        text: @markdown("\{root.tooltip-text}");
     }
 }
 
@@ -785,6 +787,7 @@ export component PresenterWindow inherits Window {
     callback audience-toggle-comments();
     in property <int> audience-reaction-count;
     callback audience-open-url();
+    callback audience-copy-url();
     callback audience-toggle-session();
     callback audience-import-configuration();
     callback audience-reset-configuration();
@@ -808,6 +811,11 @@ export component PresenterWindow inherits Window {
     out property <length> audience-panel-right: audience-panel.x + audience-panel.width;
     out property <string> audience-toggle-label: audience-live-toggle.text;
     out property <string> audience-url-text: audience-url-link.text;
+    out property <bool> audience-url-copy-enabled: audience-url-copy.enabled;
+    out property <bool> audience-url-copy-fits: audience-url-field.x + audience-url-field.width + 8px <= audience-url-copy.x
+        && audience-url-copy.x + audience-url-copy.width <= audience-url-row.width
+        && audience-url-copy.y >= 0px
+        && audience-url-copy.y + audience-url-copy.height <= audience-url-row.height;
     out property <bool> audience-address-controls-inline: next-address.x >= address-text.x + address-text.width && refresh-address.x >= next-address.x + next-address.width && abs(next-address.y - refresh-address.y) < 1px;
     out property <length> audience-url-bottom: audience-url-row.y + audience-url-row.height;
     out property <length> audience-url-top: audience-url-row.y;
@@ -1525,8 +1533,10 @@ export component PresenterWindow inherits Window {
                 HorizontalBox {
                     padding: 0px;
                     spacing: 8px;
-                    audience-disclosure := AudienceDisclosureButton {
-                        expanded: root.audience-panel-expanded;
+                    audience-disclosure := AudienceIconButton {
+                        icon: root.audience-panel-expanded ? @image-url("../assets/navigation/collapse.svg") : @image-url("../assets/navigation/expand.svg");
+                        action-name: root.audience-panel-expanded ? "Collapse Audience Live pane" : "Expand Audience Live pane";
+                        tooltip-text: root.audience-panel-expanded ? "Hide reactions and comment history" : "Show reactions and comment history";
                         clicked => { root.audience-toggle-panel(); }
                     }
                     audience-count := HorizontalBox {
@@ -1667,24 +1677,41 @@ export component PresenterWindow inherits Window {
                 width: audience-panel.width;
                 height: root.audience-panel-expanded ? 36px : 0px;
                 visible: root.audience-panel-expanded;
-                background: #111315;
-                border-color: #3c4043;
-                border-width: 1px;
-                audience-url-link := Text {
-                    x: 8px;
-                    y: 3px;
-                    width: max(0px, parent.width - 16px);
-                    height: max(0px, parent.height - 6px);
-                    text: root.audience-url;
-                    wrap: word-wrap;
-                    font-size: 12px;
-                    color: #8ab4f8;
-                    vertical-alignment: center;
-                    TouchArea {
-                        enabled: root.audience-url != "";
-                        mouse-cursor: pointer;
-                        clicked => { root.audience-open-url(); }
+                audience-url-field := Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: max(0px, parent.width - 44px);
+                    height: parent.height;
+                    background: #111315;
+                    border-color: #3c4043;
+                    border-width: 1px;
+                    audience-url-link := Text {
+                        x: 8px;
+                        y: 3px;
+                        width: max(0px, parent.width - 16px);
+                        height: max(0px, parent.height - 6px);
+                        text: root.audience-url;
+                        overflow: elide;
+                        font-size: 12px;
+                        color: #8ab4f8;
+                        vertical-alignment: center;
+                        TouchArea {
+                            enabled: root.audience-url != "";
+                            mouse-cursor: pointer;
+                            clicked => { root.audience-open-url(); }
+                        }
                     }
+                }
+                audience-url-copy := AudienceIconButton {
+                    width: 36px;
+                    height: 32px;
+                    x: parent.width - self.width;
+                    y: 2px;
+                    icon: @image-url("../assets/navigation/copy.svg");
+                    action-name: "Copy join URL";
+                    tooltip-text: "Copy join URL";
+                    enabled: root.audience-active && !root.audience-busy && root.audience-url != "";
+                    clicked => { root.audience-copy-url(); }
                 }
             }
 

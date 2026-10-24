@@ -4001,6 +4001,7 @@ name = "quick-presenter"
 version = "3.0.0"
 dependencies = [
  "anyhow",
+ "arboard",
  "axum",
  "base64 0.22.1",
  "chrono",

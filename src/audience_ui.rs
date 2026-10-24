@@ -33,6 +33,13 @@ fn ensure_relay_replaceable(
     }
 }
 
+fn join_url_for_copy(status: Option<SessionStatus>, stopping: bool) -> Option<String> {
+    match (stopping, status) {
+        (false, Some(SessionStatus::Running { url, .. })) if !url.is_empty() => Some(url),
+        _ => None,
+    }
+}
+
 // Manual choices last until the session changes, not merely until its next poll.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct AudiencePanelVisibility {
@@ -57,6 +64,7 @@ pub struct AudienceUi {
     panel_visibility: Cell<AudiencePanelVisibility>,
     panel_geometry: RefCell<crate::audience_panel::AudiencePanelGeometry>,
     session: RefCell<Option<AudienceSession>>,
+    clipboard: RefCell<crate::clipboard::TextClipboard>,
     timer: Timer,
     addresses: RefCell<Vec<Ipv4Addr>>,
     relay_config: RefCell<Option<crate::audience_relay_http::ManagedRelay>>,
@@ -178,6 +186,7 @@ impl AudienceUi {
             panel_visibility: Cell::new(AudiencePanelVisibility::default()),
             panel_geometry: RefCell::new(crate::audience_panel::AudiencePanelGeometry::default()),
             session: RefCell::new(None),
+            clipboard: RefCell::new(crate::clipboard::TextClipboard::default()),
             timer: Timer::default(),
             addresses: RefCell::new(Vec::new()),
             relay_config: RefCell::new(relay_config),
@@ -505,6 +514,31 @@ impl AudienceUi {
                 }
             });
         });
+        let weak = Rc::downgrade(&ui);
+        let window = presenter.as_weak();
+        presenter.on_audience_copy_url(move || {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let status = ui
+                .session
+                .borrow()
+                .as_ref()
+                .map(|session| session.snapshot().status);
+            let Some(url) = join_url_for_copy(status, *ui.stopping.borrow()) else {
+                return;
+            };
+            let message = match ui.clipboard.borrow_mut().copy(&url) {
+                Ok(()) => "Join URL copied.",
+                Err(error) => {
+                    tracing::warn!(%error, "Join URL clipboard copy failed");
+                    "Cannot copy the join URL. Try again."
+                }
+            };
+            if let Some(window) = window.upgrade() {
+                window.set_status_text(message.into());
+            }
+        });
         presenter.invoke_audience_refresh_addresses();
         ui
     }
@@ -780,6 +814,7 @@ impl AudienceUi {
     }
 
     pub fn shutdown(&self) {
+        self.clipboard.borrow_mut().release();
         self.clear_overlay();
         self.comments.borrow_mut().reset();
         self.comment_model.set_vec(Vec::new());
@@ -925,5 +960,40 @@ mod panel_visibility_tests {
         panel.set_active(true);
         panel.set_active(false);
         assert!(!panel.expanded);
+    }
+}
+
+#[cfg(test)]
+mod join_url_copy_tests {
+    use super::{join_url_for_copy, SessionStatus};
+
+    #[test]
+    fn copy_preserves_the_full_join_url_including_its_fragment() {
+        let url = "https://relay.example/join/session?lang=en#k=secret-test-token";
+        let running = SessionStatus::Running {
+            url: url.into(),
+            code: "session".into(),
+        };
+        assert_eq!(
+            join_url_for_copy(Some(running.clone()), false).as_deref(),
+            Some(url)
+        );
+        assert_eq!(join_url_for_copy(Some(running), true), None);
+    }
+
+    #[test]
+    fn copy_is_unavailable_without_a_current_running_url() {
+        for status in [
+            None,
+            Some(SessionStatus::Starting),
+            Some(SessionStatus::Stopped),
+            Some(SessionStatus::Failed("offline".into())),
+            Some(SessionStatus::Running {
+                url: String::new(),
+                code: "session".into(),
+            }),
+        ] {
+            assert_eq!(join_url_for_copy(status, false), None);
+        }
     }
 }

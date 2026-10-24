@@ -163,6 +163,16 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
                             <= 1.0,
                         "History should fill the Audience Live pane: {context}"
                     );
+                    if expanded {
+                        assert!(
+                            presenter.get_audience_url_copy_fits(),
+                            "URL field and copy button must not overlap: {context}"
+                        );
+                        assert!(
+                            !presenter.get_audience_url_copy_enabled(),
+                            "An inactive session must not offer a stale URL: {context}"
+                        );
+                    }
                     if next > 260.0 {
                         assert!((current - next * 2.0).abs() <= 1.0, "{context}");
                     }
