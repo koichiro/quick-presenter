@@ -351,6 +351,59 @@ component NavigationButton inherits Button {
     }
 }
 
+// An unfilled icon button with explicit focus and accessibility behavior.
+component AudienceDisclosureButton inherits FocusScope {
+    in property <bool> expanded;
+    callback clicked();
+
+    min-width: 36px;
+    max-width: 36px;
+    height: 32px;
+    accessible-role: button;
+    accessible-enabled: root.enabled;
+    accessible-label: root.expanded ? "Collapse Audience Live pane" : "Expand Audience Live pane";
+    accessible-action-default => { root.focus(); root.clicked(); }
+
+    key-pressed(event) => {
+        if (event.text == Key.Space || event.text == Key.Return) {
+            root.clicked();
+            return accept;
+        }
+        return reject;
+    }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: transparent;
+        border-width: 1px;
+        border-radius: 4px;
+        border-color: #8ab4f8;
+        visible: root.has-focus;
+    }
+    Image {
+        source: root.expanded ? @image-url("../assets/navigation/collapse.svg") : @image-url("../assets/navigation/expand.svg");
+        width: 20px;
+        height: 20px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: #f1f3f4;
+    }
+    TouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.focus();
+            root.clicked();
+        }
+    }
+    Tooltip {
+        text: root.expanded ? @markdown("Hide reactions and comment history") : @markdown("Show reactions and comment history");
+    }
+}
+
 component KeyboardBindingsPanel inherits Rectangle {
     background: #111315;
     border-color: #3c4043;
@@ -1472,18 +1525,9 @@ export component PresenterWindow inherits Window {
                 HorizontalBox {
                     padding: 0px;
                     spacing: 8px;
-                    audience-disclosure := Button {
-                        icon: root.audience-panel-expanded ? @image-url("../assets/navigation/collapse.svg") : @image-url("../assets/navigation/expand.svg");
-                        icon-size: 20px;
-                        colorize-icon: true;
-                        min-width: 36px;
-                        max-width: 36px;
-                        height: 32px;
-                        accessible-label: root.audience-panel-expanded ? "Collapse Audience Live pane" : "Expand Audience Live pane";
+                    audience-disclosure := AudienceDisclosureButton {
+                        expanded: root.audience-panel-expanded;
                         clicked => { root.audience-toggle-panel(); }
-                        Tooltip {
-                            text: root.audience-panel-expanded ? @markdown("Hide reactions and comment history") : @markdown("Show reactions and comment history");
-                        }
                     }
                     audience-count := HorizontalBox {
                         padding: 0px;

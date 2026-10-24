@@ -78,7 +78,8 @@ icon is a bundled vector so that it does not depend on color emoji font support.
 Audience Live history and its URL row start collapsed, leaving the toolbar visible.
 Starting a session opens them; finishing a normal stop collapses them. The disclosure
 button before the audience count uses a boxed plus when collapsed and a boxed
-minus when expanded, with the same standard button background in both states. Its tooltip
+minus when expanded, with no background fill in either state. A focus outline
+appears during keyboard interaction, and Space/Return activate the button. Its tooltip
 names the available action. It can open or close the pane independently of session,
 Pause/Resume, or join-screen state. Manual choices survive live event polling until
 the next session transition. In a normal window, collapsing shortens the window by the hidden history/URL
@@ -109,3 +110,8 @@ measured 1024×800 collapsed, 1024×1034 expanded, and 1024×800 collapsed again
 (including the native titlebar), with the same slide and notes bounds. Local session
 start and stop produced the same height changes, and the session was stopped after
 validation. Formatting, compilation, and the complete Cargo suite passed.
+
+The unfilled disclosure button was checked in the signed local macOS app: pointer
+activation, Space, Return, and Tab traversal all worked without changing the PDF
+page. Both collapsed and expanded screenshots show only the boxed icon, with no
+button background fill. The complete Cargo suite and 96 layout cases passed.
