@@ -55,6 +55,7 @@ impl AudiencePanelVisibility {
 
 pub struct AudienceUi {
     panel_visibility: Cell<AudiencePanelVisibility>,
+    panel_geometry: RefCell<crate::audience_panel::AudiencePanelGeometry>,
     session: RefCell<Option<AudienceSession>>,
     timer: Timer,
     addresses: RefCell<Vec<Ipv4Addr>>,
@@ -175,6 +176,7 @@ impl AudienceUi {
         let presenter = &windows.presenter;
         let ui = Rc::new(Self {
             panel_visibility: Cell::new(AudiencePanelVisibility::default()),
+            panel_geometry: RefCell::new(crate::audience_panel::AudiencePanelGeometry::default()),
             session: RefCell::new(None),
             timer: Timer::default(),
             addresses: RefCell::new(Vec::new()),
@@ -210,7 +212,9 @@ impl AudienceUi {
                 visibility.toggle();
                 ui.panel_visibility.set(visibility);
                 if let Some(window) = ui.windows.presenter.upgrade() {
-                    window.set_audience_panel_expanded(visibility.expanded);
+                    ui.panel_geometry
+                        .borrow_mut()
+                        .set_expanded(&window, visibility.expanded);
                 }
             }
         });
@@ -510,14 +514,16 @@ impl AudienceUi {
         visibility.set_active(active);
         self.panel_visibility.set(visibility);
         window.set_audience_active(active);
-        window.set_audience_panel_expanded(visibility.expanded);
+        self.panel_geometry
+            .borrow_mut()
+            .set_expanded(window, visibility.expanded);
     }
 
     fn reveal_alert(&self, window: &PresenterWindow) {
         let mut visibility = self.panel_visibility.get();
         visibility.expanded = true;
         self.panel_visibility.set(visibility);
-        window.set_audience_panel_expanded(true);
+        self.panel_geometry.borrow_mut().set_expanded(window, true);
     }
 
     fn can_start(&self) -> bool {

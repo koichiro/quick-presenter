@@ -1253,11 +1253,12 @@ async fn check_audience_panel_layout(
     report: &mut GuiSmokeReport,
 ) -> Result<()> {
     let presenter = &windows.presenter;
-    let size = presenter.window().size();
     let was_expanded = presenter.get_audience_panel_expanded();
     if !was_expanded {
         presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
     }
+    let size = presenter.window().size();
     for (width, height) in [
         (800.0, 842.0),
         (1024.0, 1002.0),

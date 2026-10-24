@@ -79,8 +79,13 @@ Audience Live history and its URL row start collapsed, leaving the toolbar visib
 Starting a session opens them; finishing a normal stop collapses them. The disclosure
 button before the audience count can open or close them independently of session,
 Pause/Resume, or join-screen state. Manual choices survive live event polling until
-the next session transition. Collapsing returns the freed height to slides and notes;
-the thumbnail strip ends alongside the toolbar instead of the hidden URL row.
+the next session transition. In a normal window, collapsing shortens the window by the hidden history/URL
+height, and expanding adds that height back. Slides and notes retain their space.
+The equivalent expanded footer height is inferred while collapsed, including
+when the presenter resizes the collapsed window. The minimum/default client
+heights are 608/768 logical pixels collapsed and 842/1002 expanded. The thumbnail
+strip ends alongside the toolbar instead of the hidden URL row. Maximized and
+fullscreen windows retain their OS-controlled geometry.
 New configuration/start/session failure alerts open the pane once so recovery
 guidance remains visible; the disclosure button can subsequently close it again.
 
@@ -93,3 +98,12 @@ and automatic collapse after stopping. The session was stopped after validation.
 The signed XPC PDF/notes and sandbox denial gate also passed. This focused manual
 check does not replace the outstanding full native fullscreen smoke or runtime
 qualification on other platforms.
+
+The window-height follow-up additionally passed all 96 layouts using the production
+geometry controller, repeated disclosure at 1.0/1.25/1.5/2.0 scaling, and expansion
+after manually resizing while collapsed. Exact device-pixel size pairs prevent
+rounding drift across repeated toggles. In the signed local macOS app, screenshots
+measured 1024×800 collapsed, 1024×1034 expanded, and 1024×800 collapsed again
+(including the native titlebar), with the same slide and notes bounds. Local session
+start and stop produced the same height changes, and the session was stopped after
+validation. Formatting, compilation, and the complete Cargo suite passed.

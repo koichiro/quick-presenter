@@ -714,7 +714,12 @@ export component PresenterWindow inherits Window {
     in property <int> audience-count: 0;
     in property <bool> audience-guide-visible: false;
     out property <length> audience-panel-height: root.audience-panel-expanded ? root.audience-expanded-height : 48px;
-    property <length> audience-expanded-height: clamp((root.height - root.inline-menu-height) * 0.28, 282px, 360px);
+    // Infer the equivalent expanded height while collapsed so resizing the
+    // window by the hidden footer height keeps slides and notes unchanged.
+    out property <length> audience-expanded-height: root.audience-panel-expanded
+        ? clamp(round((root.height - root.inline-menu-height) / 1px * 0.28) * 1px, 282px, 360px)
+        : clamp(round((root.height - root.inline-menu-height - 48px) / 1px * (0.28 / 0.72)) * 1px, 282px, 360px);
+    out property <length> presenter-minimum-height: root.audience-panel-expanded ? 842px : 608px;
     out property <bool> audience-history-visible: audience-panel.visible;
     out property <bool> audience-url-visible: audience-url-row.visible;
     out property <length> audience-footer-bottom: root.audience-panel-expanded ? root.audience-url-bottom : root.audience-toggle-bottom;
@@ -847,9 +852,9 @@ export component PresenterWindow inherits Window {
 
     title: "Quick Presenter";
     preferred-width: 1024px;
-    preferred-height: 1002px;
+    preferred-height: root.audience-panel-expanded ? 1002px : 768px;
     min-width: 800px;
-    min-height: 842px;
+    min-height: root.presenter-minimum-height;
     background: #202124;
     forward-focus: presenter-focus;
 

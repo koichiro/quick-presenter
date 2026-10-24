@@ -6,6 +6,9 @@ use slint::ComponentHandle;
 
 slint::include_modules!();
 
+#[path = "../src/audience_panel.rs"]
+mod audience_panel;
+
 struct LayoutPlatform(Rc<MinimalSoftwareWindow>);
 
 impl Platform for LayoutPlatform {
@@ -21,6 +24,7 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
     let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
     slint::platform::set_platform(Box::new(LayoutPlatform(window.clone()))).unwrap();
     let presenter = PresenterWindow::new().unwrap();
+    let mut panel_geometry = audience_panel::AudiencePanelGeometry::default();
     presenter.set_audience_address("2001:db8:1234:5678:abcd:ef01:2345:6789".into());
     presenter.set_audience_count(12345);
     presenter.set_has_notes(true);
@@ -52,14 +56,18 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
                 (5120, 2880),
                 (1200, 1240),
             ] {
+                presenter.set_audience_panel_expanded(true);
+                window.set_size(slint::PhysicalSize::new(width, height));
                 let mut collapsed_main_bottom = 0.0;
+                let mut collapsed_notes_height = 0.0;
                 for expanded in [false, true] {
-                    presenter.set_audience_panel_expanded(expanded);
-                    window.set_size(slint::PhysicalSize::new(width, height));
-                    let mut pixels = vec![slint::Rgb8Pixel::default(); (width * height) as usize];
+                    panel_geometry.set_expanded(&presenter, expanded);
+                    let actual = presenter.window().size();
+                    let mut pixels =
+                        vec![slint::Rgb8Pixel::default(); (actual.width * actual.height) as usize];
                     window.request_redraw();
                     assert!(window.draw_if_needed(|renderer| {
-                        renderer.render(&mut pixels, width as usize);
+                        renderer.render(&mut pixels, actual.width as usize);
                     }));
 
                     let current = presenter.get_presenter_current_column_width();
@@ -101,7 +109,7 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
                         "{context}"
                     );
                     assert!(
-                        presenter.get_audience_url_bottom() <= height as f32 - 36.0,
+                        presenter.get_audience_footer_bottom() <= actual.height as f32 - 36.0,
                         "{context}"
                     );
                     assert!(
@@ -117,13 +125,29 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
                         "{context}"
                     );
                     assert_eq!(presenter.get_audience_url_visible(), expanded, "{context}");
+                    assert_eq!(actual.width, width, "{context}");
                     if expanded {
                         assert!(
-                            collapsed_main_bottom > presenter.get_notes_area_bottom() + 200.0,
-                            "Collapsing must reclaim space: {context}"
+                            (actual.height as f32 - height as f32).abs() <= 1.0,
+                            "Expansion must restore window height: {context}"
+                        );
+                        assert!(
+                            (collapsed_main_bottom - presenter.get_notes_area_bottom()).abs()
+                                <= 1.0,
+                            "Slides must retain their space: {context}"
+                        );
+                        assert!(
+                            (collapsed_notes_height - presenter.get_notes_visible_height()).abs()
+                                <= 1.0,
+                            "Notes must retain their space: {context}"
                         );
                     } else {
                         collapsed_main_bottom = presenter.get_notes_area_bottom();
+                        collapsed_notes_height = presenter.get_notes_visible_height();
+                        assert!(
+                            actual.height + 200 < height,
+                            "Collapsing must shorten the window: {context}"
+                        );
                         assert_eq!(presenter.get_audience_panel_height(), 48.0, "{context}");
                     }
                     assert!(presenter.get_audience_toolbar_ordered(), "{context}");
@@ -144,7 +168,8 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
                     }
                     if let Some(directory) = std::env::var_os("QP_PRESENTER_LAYOUT_SNAPSHOTS") {
                         std::fs::create_dir_all(&directory).unwrap();
-                        let mut bytes = format!("P6\n{width} {height}\n255\n").into_bytes();
+                        let mut bytes =
+                            format!("P6\n{} {}\n255\n", actual.width, actual.height).into_bytes();
                         for pixel in pixels {
                             bytes.extend_from_slice(&[pixel.r, pixel.g, pixel.b]);
                         }
@@ -157,7 +182,42 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
                         .unwrap();
                     }
                 }
+                let restored_height = presenter.window().size().height;
+                for _ in 0..10 {
+                    panel_geometry.set_expanded(&presenter, false);
+                    panel_geometry.set_expanded(&presenter, true);
+                    assert!(presenter.window().size().height.abs_diff(restored_height) <= 1,
+                        "Repeated disclosure must not drift: {width}x{height}, aspect={aspect}, native_menu={native_menu}");
+                }
             }
         }
+    }
+    for scale_factor in [1.0, 1.25, 1.5, 2.0] {
+        presenter
+            .window()
+            .dispatch_event(slint::platform::WindowEvent::ScaleFactorChanged { scale_factor });
+        presenter.set_audience_panel_expanded(true);
+        window.set_size(slint::LogicalSize::new(1920.0, 1080.0));
+        let initial = presenter.window().size();
+        for _ in 0..20 {
+            panel_geometry.set_expanded(&presenter, false);
+            panel_geometry.set_expanded(&presenter, true);
+            assert!(
+                presenter.window().size().height.abs_diff(initial.height) <= 1,
+                "Disclosure size must not drift at {scale_factor}x scaling"
+            );
+            assert_eq!(presenter.window().size().width, initial.width);
+        }
+        panel_geometry.set_expanded(&presenter, false);
+        let collapsed = presenter.window().size();
+        let resized = slint::PhysicalSize::new(collapsed.width + 40, collapsed.height + 80);
+        window.set_size(resized);
+        let body_bottom = presenter.get_notes_area_bottom();
+        panel_geometry.set_expanded(&presenter, true);
+        assert_eq!(presenter.window().size().width, resized.width);
+        assert!(
+            (presenter.get_notes_area_bottom() - body_bottom).abs() <= 1.5,
+            "Resizing while collapsed must preserve body height on expansion at {scale_factor}x"
+        );
     }
 }
