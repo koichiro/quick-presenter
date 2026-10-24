@@ -13,7 +13,7 @@ use slint::{
     ComponentHandle, Model, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel, Weak,
 };
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::VecDeque,
     net::Ipv4Addr,
     rc::Rc,
@@ -33,7 +33,28 @@ fn ensure_relay_replaceable(
     }
 }
 
+// Manual choices last until the session changes, not merely until its next poll.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct AudiencePanelVisibility {
+    active: bool,
+    expanded: bool,
+}
+
+impl AudiencePanelVisibility {
+    fn set_active(&mut self, active: bool) {
+        if self.active != active {
+            self.active = active;
+            self.expanded = active;
+        }
+    }
+
+    fn toggle(&mut self) {
+        self.expanded = !self.expanded;
+    }
+}
+
 pub struct AudienceUi {
+    panel_visibility: Cell<AudiencePanelVisibility>,
     session: RefCell<Option<AudienceSession>>,
     timer: Timer,
     addresses: RefCell<Vec<Ipv4Addr>>,
@@ -123,6 +144,7 @@ impl AudienceUi {
                             window.set_audience_status(error.into());
                             window.set_audience_alert_title("Audience Live configuration needs attention".into());
                             window.set_audience_alert_guidance("Open Settings to import a valid configuration, or check the file and its access permissions. PDF playback is still available.".into());
+                            ui.reveal_alert(&window);
                         }
                     }
                 }
@@ -152,6 +174,7 @@ impl AudienceUi {
     ) -> Rc<Self> {
         let presenter = &windows.presenter;
         let ui = Rc::new(Self {
+            panel_visibility: Cell::new(AudiencePanelVisibility::default()),
             session: RefCell::new(None),
             timer: Timer::default(),
             addresses: RefCell::new(Vec::new()),
@@ -180,6 +203,17 @@ impl AudienceUi {
         windows
             .slide
             .set_audience_comments(ui.comment_model.clone().into());
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_toggle_panel(move || {
+            if let Some(ui) = weak.upgrade() {
+                let mut visibility = ui.panel_visibility.get();
+                visibility.toggle();
+                ui.panel_visibility.set(visibility);
+                if let Some(window) = ui.windows.presenter.upgrade() {
+                    window.set_audience_panel_expanded(visibility.expanded);
+                }
+            }
+        });
         let weak = Rc::downgrade(&ui);
         presenter.on_audience_toggle_comments(move || {
             if let Some(ui) = weak.upgrade() {
@@ -399,7 +433,7 @@ impl AudienceUi {
                     *ui.session.borrow_mut() = Some(session);
                     state.borrow_mut().audience_join_available = true;
                     if let Some(window) = window.upgrade() {
-                        window.set_audience_active(true);
+                        ui.set_active(&window, true);
                         window.set_audience_busy(true);
                         window.set_audience_status("Starting…".into());
                         window.set_audience_alert_title("".into());
@@ -429,6 +463,7 @@ impl AudienceUi {
                         window.set_audience_status(alert.title.into());
                         window.set_audience_alert_title(alert.title.into());
                         window.set_audience_alert_guidance(alert.guidance.into());
+                        ui.reveal_alert(&window);
                     }
                 }
             }
@@ -468,6 +503,21 @@ impl AudienceUi {
         });
         presenter.invoke_audience_refresh_addresses();
         ui
+    }
+
+    fn set_active(&self, window: &PresenterWindow, active: bool) {
+        let mut visibility = self.panel_visibility.get();
+        visibility.set_active(active);
+        self.panel_visibility.set(visibility);
+        window.set_audience_active(active);
+        window.set_audience_panel_expanded(visibility.expanded);
+    }
+
+    fn reveal_alert(&self, window: &PresenterWindow) {
+        let mut visibility = self.panel_visibility.get();
+        visibility.expanded = true;
+        self.panel_visibility.set(visibility);
+        window.set_audience_panel_expanded(true);
     }
 
     fn can_start(&self) -> bool {
@@ -691,6 +741,7 @@ impl AudienceUi {
                 {
                     return;
                 }
+                let failed = matches!(&snapshot.status, SessionStatus::Failed(_));
                 let message: String = match snapshot.status {
                     SessionStatus::Failed(error) => {
                         let alert = crate::audience_alert::for_failure(&error);
@@ -705,7 +756,10 @@ impl AudienceUi {
                 *self.stopping.borrow_mut() = false;
                 self.timer.stop();
                 self.last_url.borrow_mut().clear();
-                window.set_audience_active(false);
+                self.set_active(&window, false);
+                if failed {
+                    self.reveal_alert(&window);
+                }
                 window.set_audience_busy(false);
                 window.set_audience_recovery_pending(
                     ensure_relay_replaceable(self.relay_config.borrow().as_ref()).is_err(),
@@ -827,5 +881,43 @@ mod configuration_change_tests {
         // The session lifecycle, not a settings action, releases the retained identity.
         shared.clear();
         assert!(ensure_relay_replaceable(Some(&relay)).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod panel_visibility_tests {
+    use super::AudiencePanelVisibility;
+
+    #[test]
+    fn inactive_starts_collapsed_and_supports_manual_open_and_close() {
+        let mut panel = AudiencePanelVisibility::default();
+        assert!(!panel.expanded);
+        panel.toggle();
+        assert!(panel.expanded);
+        panel.set_active(false);
+        assert!(panel.expanded);
+        panel.toggle();
+        assert!(!panel.expanded);
+        assert!(!panel.active);
+    }
+
+    #[test]
+    fn session_transitions_override_manual_choice_but_polls_do_not() {
+        let mut panel = AudiencePanelVisibility::default();
+        panel.set_active(true);
+        assert!(panel.expanded);
+        panel.toggle();
+        assert!(!panel.expanded);
+        panel.set_active(true);
+        assert!(!panel.expanded);
+        assert!(panel.active);
+        panel.toggle();
+        panel.set_active(false);
+        assert!(!panel.expanded);
+        panel.toggle();
+        assert!(panel.expanded);
+        panel.set_active(true);
+        panel.set_active(false);
+        assert!(!panel.expanded);
     }
 }

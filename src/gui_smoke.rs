@@ -1005,10 +1005,20 @@ async fn check_audience_join_screen(
     let presenter = &windows.presenter;
     report.check(
         "Inactive Audience Live offers the ON action",
-        presenter.get_audience_toggle_label() == "Audience Live ON 👍️",
+        presenter.get_audience_toggle_label() == "Audience Live ON 👍️"
+            && !presenter.get_audience_panel_expanded(),
         "start action displayed",
         "incorrect start label",
     );
+    presenter.invoke_audience_toggle_panel();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Inactive Audience Live history can be manually opened",
+        presenter.get_audience_panel_expanded() && !presenter.get_audience_active(),
+        "history opened without starting a session",
+        "disclosure changed session state or did not open history",
+    );
+    presenter.invoke_audience_toggle_panel();
     presenter.invoke_audience_toggle_session();
     let deadline = Instant::now() + Duration::from_secs(5);
     while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
@@ -1018,11 +1028,23 @@ async fn check_audience_join_screen(
     report.check(
         "Audience Live ON starts a local session with a QR code",
         presenter.get_audience_active()
+            && presenter.get_audience_panel_expanded()
             && url.starts_with("http://127.0.0.1:")
             && presenter.get_audience_qr().size().width > 0,
         "real loopback session became ready",
         "session or QR not ready",
     );
+    presenter.invoke_audience_toggle_panel();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Active Audience Live history can collapse without stopping reception",
+        !presenter.get_audience_panel_expanded()
+            && presenter.get_audience_active()
+            && presenter.get_audience_url() == url,
+        "session and join URL remained active",
+        "collapsing history changed the session",
+    );
+    presenter.invoke_audience_toggle_panel();
     report.check(
         "Audience Live ON shows page 0 on the slide window",
         windows.slide.get_audience_guide_visible()
@@ -1188,6 +1210,7 @@ async fn check_audience_join_screen(
     report.check(
         "Stop clears audience QR, URLs, and join screen",
         !presenter.get_audience_active()
+            && !presenter.get_audience_panel_expanded()
             && presenter.get_audience_url().is_empty()
             && windows.slide.get_audience_url().is_empty()
             && windows.slide.get_audience_qr().size().width == 0
@@ -1231,6 +1254,10 @@ async fn check_audience_panel_layout(
 ) -> Result<()> {
     let presenter = &windows.presenter;
     let size = presenter.window().size();
+    let was_expanded = presenter.get_audience_panel_expanded();
+    if !was_expanded {
+        presenter.invoke_audience_toggle_panel();
+    }
     for (width, height) in [
         (800.0, 842.0),
         (1024.0, 1002.0),
@@ -1299,6 +1326,10 @@ async fn check_audience_panel_layout(
             size: size.to_logical(presenter.window().scale_factor()),
         });
     settle_presenter_notes_layout(presenter).await?;
+    if !was_expanded {
+        presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
+    }
     Ok(())
 }
 
@@ -1863,6 +1894,11 @@ async fn check_notes_font_size(
     context: &str,
 ) -> Result<()> {
     let presenter = &windows.presenter;
+    let original_panel_expanded = presenter.get_audience_panel_expanded();
+    if !original_panel_expanded {
+        presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
+    }
     let original_size = presenter.window().size();
     let original_aspect = presenter.get_current_page_aspect_ratio();
     let original_has_notes = presenter.get_has_notes();
@@ -2107,6 +2143,10 @@ async fn check_notes_font_size(
         "page, render generation, and timer stayed unchanged",
         "automatic sizing unexpectedly changed presentation state",
     );
+    if !original_panel_expanded {
+        presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
+    }
     Ok(())
 }
 

@@ -708,10 +708,16 @@ export component PresenterWindow inherits Window {
     in property <string> audience-code;
     in property <image> audience-qr;
     in property <bool> audience-active: false;
+    in property <bool> audience-panel-expanded: false;
+    callback audience-toggle-panel();
     in property <bool> audience-can-start: false;
     in property <int> audience-count: 0;
     in property <bool> audience-guide-visible: false;
-    out property <length> audience-panel-height: clamp((root.height - root.inline-menu-height) * 0.28, 282px, 360px);
+    out property <length> audience-panel-height: root.audience-panel-expanded ? root.audience-expanded-height : 48px;
+    property <length> audience-expanded-height: clamp((root.height - root.inline-menu-height) * 0.28, 282px, 360px);
+    out property <bool> audience-history-visible: audience-panel.visible;
+    out property <bool> audience-url-visible: audience-url-row.visible;
+    out property <length> audience-footer-bottom: root.audience-panel-expanded ? root.audience-url-bottom : root.audience-toggle-bottom;
     in property <bool> audience-busy: false;
     in property <string> audience-recent-reactions;
     in property <string> audience-comment-history;
@@ -756,7 +762,8 @@ export component PresenterWindow inherits Window {
     out property <length> thumbnails-bottom: main-area.y + thumbnail-column.y + thumbnail-column.height;
     out property <length> audience-panel-width: audience-panel.width;
     out property <string> audience-count-label: "👥" + audience-count-text.text;
-    out property <bool> audience-toolbar-ordered: audience-count.x + audience-count.width <= audience-led.x
+    out property <bool> audience-toolbar-ordered: audience-disclosure.x + audience-disclosure.width <= audience-count.x
+        && audience-count.x + audience-count.width <= audience-led.x
         && audience-led.x + audience-led.width <= audience-live-toggle.x
         && audience-pause.x + audience-pause.width <= address-text.x
         && refresh-address.x + refresh-address.width <= audience-toggle-row.width;
@@ -1413,7 +1420,7 @@ export component PresenterWindow inherits Window {
                     x: main-area.left-column-width + main-area.column-gap + main-area.next-column-width + main-area.column-gap;
                     y: 0px;
                     width: main-area.thumbnail-column-width;
-                    height: audience-url-row.y + audience-url-row.height - main-area.y - self.y;
+                    height: root.audience-footer-bottom - main-area.y - self.y;
                     background: #111315;
                     border-color: #3c4043;
                     border-width: 1px;
@@ -1460,6 +1467,14 @@ export component PresenterWindow inherits Window {
                 HorizontalBox {
                     padding: 0px;
                     spacing: 8px;
+                    audience-disclosure := Button {
+                        text: root.audience-panel-expanded ? "▾" : "▸";
+                        min-width: 28px;
+                        max-width: 28px;
+                        height: 32px;
+                        accessible-label: root.audience-panel-expanded ? "Collapse Audience Live pane" : "Expand Audience Live pane";
+                        clicked => { root.audience-toggle-panel(); }
+                    }
                     audience-count := HorizontalBox {
                         padding: 0px;
                         spacing: 2px;
@@ -1538,7 +1553,8 @@ export component PresenterWindow inherits Window {
                 x: main-area.x;
                 y: audience-toggle-row.y + audience-toggle-row.height + 6px;
                 width: audience-toggle-row.width;
-                height: root.audience-panel-height - 90px;
+                height: root.audience-panel-expanded ? root.audience-expanded-height - 90px : 0px;
+                visible: root.audience-panel-expanded;
                 background: #111315;
                 border-color: #3c4043;
                 border-width: 1px;
@@ -1595,7 +1611,8 @@ export component PresenterWindow inherits Window {
                 x: audience-panel.x;
                 y: audience-panel.y + audience-panel.height + 6px;
                 width: audience-panel.width;
-                height: 36px;
+                height: root.audience-panel-expanded ? 36px : 0px;
+                visible: root.audience-panel-expanded;
                 background: #111315;
                 border-color: #3c4043;
                 border-width: 1px;

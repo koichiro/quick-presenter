@@ -3,7 +3,7 @@
 The presenter window keeps the current slide and notes on the left, the next
 slide and keyboard reference in the middle, and slide thumbnails on the right.
 Audience Live stays below the first two columns; thumbnails extend to the bottom
-of its URL row. The Audience Live toolbar orders the connected audience count
+of its URL row. The Audience Live toolbar orders the disclosure button, connected audience count
 (`👥(0)`), live LED, session toggle, Pause/Resume, server IP address, Next, and
 Refresh in one row. The IP address uses its natural text width up to 120 logical
 pixels, keeping Next nearby; longer addresses elide. Routine server status
@@ -40,7 +40,8 @@ placement.
 software window. It covers eight sizes (800×842 through 5120×2880), three slide
 aspect ratios (16:9, 4:3, portrait), and both menu modes: 48 combinations. Assertions
 protect usable notes space, rendered slide proportions and bounded thumbnail widths, proportional column
-sizing, and separation of the footer and thumbnails. Unlike a native resize,
+sizing, and separation of the footer and thumbnails. Both expanded and collapsed
+footer states are covered (96 layouts in total). Unlike a native resize,
 this test can exercise windows larger than the attached display.
 
 To save the rendered layouts for inspection:
@@ -73,3 +74,22 @@ The Audience Live toolbar follow-up checks count/LED/address control order and
 full-width history at all 48 sizes/aspect/menu combinations, including a five-digit
 audience count and a long IPv6 address at the minimum window width. The audience
 icon is a bundled vector so that it does not depend on color emoji font support.
+
+Audience Live history and its URL row start collapsed, leaving the toolbar visible.
+Starting a session opens them; finishing a normal stop collapses them. The disclosure
+button before the audience count can open or close them independently of session,
+Pause/Resume, or join-screen state. Manual choices survive live event polling until
+the next session transition. Collapsing returns the freed height to slides and notes;
+the thumbnail strip ends alongside the toolbar instead of the hidden URL row.
+New configuration/start/session failure alerts open the pane once so recovery
+guidance remains visible; the disclosure button can subsequently close it again.
+
+Local validation on 2026-10-25 for collapsible history: formatting, compilation,
+the complete Cargo suite, two panel-visibility unit tests, and all 96 rendered
+layouts passed. In a signed local macOS app with a real PDF, verified initial
+collapse, manual opening while inactive, automatic opening on a local session
+start, manual collapse/reopen while that session stayed active across polling,
+and automatic collapse after stopping. The session was stopped after validation.
+The signed XPC PDF/notes and sandbox denial gate also passed. This focused manual
+check does not replace the outstanding full native fullscreen smoke or runtime
+qualification on other platforms.
