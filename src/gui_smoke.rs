@@ -2039,9 +2039,10 @@ async fn check_notes_font_size(
     // The new layout can raise the native minimum size (notably with Windows
     // inline menus). Verify fitting and the usable viewport at the OS-selected
     // size; the Audience Live footer can also constrain the native geometry.
-    presenter
-        .window()
-        .set_size(slint::LogicalSize::new(800.0, 560.0));
+    presenter.window().set_size(slint::LogicalSize::new(
+        800.0,
+        560.0 + presenter.get_audience_panel_height(),
+    ));
     wait_for_presenter_notes_resize(presenter, None).await?;
     report.check(
         format!("portrait slides and inline menus retain bounded notes sizing ({context})"),

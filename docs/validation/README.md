@@ -5,6 +5,12 @@ They are maintainer evidence, not installation instructions or a claim that
 all historical experiments qualify the current release. For user instructions,
 start with [README](../../README.md) or [release usage](../RELEASE.md).
 
+## v3.0.0 integration
+
+[Post-merge macOS GUI smoke](V300_MACOS_GUI_SMOKE_20261024.md) records the
+unbundled fullscreen limitation, Audience Live footer-aware notes fixture fix,
+and local signed-app validation after incorporating v2.5.0.
+
 ## v2.5.0 release status
 
 The [final post-#523 package record](V250_FINAL_PACKAGES_20261024.md) selects

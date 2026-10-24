@@ -126,6 +126,28 @@ quick-presenter --gui-smoke docs/samples/quick-presenter-demo.pdf \
   --gui-smoke-report /tmp/quick-presenter-gui-smoke.txt
 ```
 
+On macOS, run the executable inside a Developer ID-signed `.app` bundle on an
+unlocked desktop. An unbundled `target/debug/quick-presenter` can receive
+`will-enter` without completing the native fullscreen transition, producing a
+reversal timeout before PDF or Audience Live checks run. Use the existing
+staging and signing scripts for a local development build:
+
+```sh
+cargo build --bins
+scripts/stage_macos_app_bundle.sh /tmp/quick-presenter-smoke target/debug/quick-presenter target/debug/qp
+MACOS_SIGNING_TIMESTAMP=none scripts/sign_macos_app.sh \
+  "/tmp/quick-presenter-smoke/Quick Presenter.app" "$MACOS_SIGNING_IDENTITY"
+"/tmp/quick-presenter-smoke/Quick Presenter.app/Contents/MacOS/quick-presenter" \
+  --gui-smoke "$PWD/tests/fixtures/marp-speaker-notes.pdf" \
+  --gui-smoke-report /tmp/quick-presenter-gui-smoke.txt
+```
+
+Set `MACOS_SIGNING_IDENTITY` to an available Developer ID Application identity.
+This local signature uses no timestamp and is not a notarized release package.
+An ad-hoc staged bundle can exercise fullscreen, but cannot validate the signed
+XPC PDF renderer. Do not skip native notification assertions to make an
+unbundled run pass.
+
 Unlike `--smoke-open-pdf`, this mode creates the presenter and slide Slint
 windows, opens the PDF in those windows, and drives the same Rust presentation
 commands used by buttons and keyboard callbacks. It verifies app-observable

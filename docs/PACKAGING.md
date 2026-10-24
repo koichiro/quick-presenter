@@ -206,6 +206,10 @@ quick-presenter --gui-smoke tests/fixtures/marp-speaker-notes.pdf \
   --gui-smoke-report /tmp/quick-presenter-gui-smoke.txt
 ```
 
+For macOS, invoke the executable inside the signed `.app` on an unlocked
+desktop. See the [local signed GUI smoke procedure](GUI_SMOKE_CHECKLIST.md#semi-automated-path);
+unbundled debug executables may fail to complete AppKit fullscreen transitions.
+
 This mode creates the Slint presenter and slide windows, opens and renders the
 PDF, drives shared Rust presentation commands, writes a text report, and exits
 non-zero on failed app-observable checks. It still does not replace the manual
