@@ -1231,13 +1231,42 @@ async fn check_audience_panel_layout(
 ) -> Result<()> {
     let presenter = &windows.presenter;
     let size = presenter.window().size();
-    for (width, height) in [(800.0, 800.0), (1020.0, 960.0), (1200.0, 1240.0)] {
+    for (width, height) in [
+        (800.0, 842.0),
+        (1024.0, 1002.0),
+        (1280.0, 900.0),
+        (1920.0, 1080.0),
+        (2560.0, 1440.0),
+        (1200.0, 1240.0),
+    ] {
         presenter
             .window()
             .dispatch_event(slint::platform::WindowEvent::Resized {
                 size: slint::LogicalSize::new(width, height),
             });
         settle_presenter_notes_layout(presenter).await?;
+        let current_width = presenter.get_presenter_current_column_width();
+        let next_width = presenter.get_presenter_next_column_width();
+        let thumbnail_width = presenter.get_presenter_thumbnail_width();
+        report.check(
+            format!("Presenter panes stay balanced and notes remain usable ({width}x{height})"),
+            current_width >= next_width
+                && (260.0..=480.0).contains(&next_width)
+                && (128.0..=192.0).contains(&thumbnail_width)
+                && (presenter.get_notes_layout_outer_width() - current_width).abs() <= 1.0
+                && presenter.get_notes_visible_height() >= 180.0
+                && presenter.get_presenter_next_preview_height() > 0.0
+                && presenter.get_presenter_next_preview_height()
+                    <= next_width / presenter.get_next_page_aspect_ratio() + 1.0
+                && (next_width <= 260.0
+                    || next_width >= 480.0
+                    || (current_width - next_width * 2.0).abs() <= 1.0),
+            format!("current={current_width}, next={next_width}, thumbnails={thumbnail_width}"),
+            format!(
+                "unbalanced panes or unusable notes: {:?}",
+                NotesResizeSnapshot::capture(presenter)
+            ),
+        );
         report.check(
             format!("Audience panel leaves thumbnails unobstructed ({width}x{height})"),
             presenter.get_audience_panel_right() + 8.0 <= presenter.get_thumbnails_left()
@@ -1715,7 +1744,7 @@ impl NotesResizeSnapshot {
     fn portrait_inline_layout_is_applied(&self) -> bool {
         // Read actual element bounds, not just the requested aspect/menu flags.
         // The 0.6 slide surface, 28px inline menu and displaced main area must
-        // agree, and the notes viewport must belong to that new slide width.
+        // agree, and the notes viewport must contain that new slide width.
         // This is an applied-layout witness even if native size did not change;
         // neither an arbitrary quiet period nor a resize event proves it alone.
         self.slide_width > 0.0
@@ -1723,7 +1752,7 @@ impl NotesResizeSnapshot {
             && (self.slide_width - self.slide_height * 0.6).abs() <= 1.0
             && (self.menu_height - 28.0).abs() <= 1.0
             && (self.main_y - self.menu_height - 54.0).abs() <= 1.0
-            && (self.notes_outer_width - self.slide_width).abs() <= 1.0
+            && self.notes_outer_width >= self.slide_width - 1.0
             && self.viewport_width <= self.notes_outer_width - 20.0 + 1.0
     }
 

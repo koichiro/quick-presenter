@@ -711,7 +711,7 @@ export component PresenterWindow inherits Window {
     in property <bool> audience-can-start: false;
     in property <int> audience-count: 0;
     in property <bool> audience-guide-visible: false;
-    out property <length> audience-panel-height: 282px;
+    out property <length> audience-panel-height: clamp((root.height - root.inline-menu-height) * 0.28, 282px, 360px);
     in property <bool> audience-busy: false;
     in property <string> audience-recent-reactions;
     in property <string> audience-comment-history;
@@ -758,6 +758,10 @@ export component PresenterWindow inherits Window {
     out property <length> audience-reactions-width: audience-reactions.width;
     out property <length> notes-layout-slide-width: current-slide-with-progress.page-surface-width;
     out property <length> notes-layout-slide-height: current-slide-with-progress.page-surface-height;
+    out property <length> presenter-current-column-width: main-area.left-column-width;
+    out property <length> presenter-next-column-width: main-area.next-column-width;
+    out property <length> presenter-next-preview-height: next-preview-slot.height;
+    out property <length> presenter-thumbnail-width: thumbnail-column.width;
     out property <length> notes-layout-outer-width: notes-view.width;
     out property <length> notes-layout-menu-height: inline-menu.height;
     out property <length> notes-layout-main-y: main-area.y;
@@ -798,11 +802,10 @@ export component PresenterWindow inherits Window {
     property <int> active-menu-index: -1;
     property <length> inline-menu-height: root.use-native-menu-bar ? 0px : 28px;
     property <length> presenter-main-height: max(0px, root.height - root.inline-menu-height - 96px - root.audience-panel-height);
-    property <length> presenter-bottom-section-height: 200px;
+    // Reserve readable notes space; larger windows share spare height with slides.
+    property <length> presenter-bottom-section-height: max(200px, root.presenter-main-height * 0.34 - 34px);
     property <float> safe-current-page-aspect-ratio: root.current-page-aspect-ratio > 0 ? root.current-page-aspect-ratio : 16.0 / 9.0;
     property <float> safe-next-page-aspect-ratio: root.next-page-aspect-ratio > 0 ? root.next-page-aspect-ratio : 16.0 / 9.0;
-    property <length> next-preview-natural-height: 260px / root.safe-next-page-aspect-ratio;
-    property <length> next-preview-height: root.next-preview-natural-height > 190px ? 190px : root.next-preview-natural-height;
 
     callback open-pdf();
     callback open-recent-file(int);
@@ -1273,8 +1276,9 @@ export component PresenterWindow inherits Window {
                 width: parent.width - 24px;
                 height: root.presenter-main-height;
                 property <length> column-gap: 10px;
-                property <length> next-column-width: 260px;
-                property <length> thumbnail-column-width: 128px;
+                // Keep the current/next previews near 2:1 without oversized utility panes.
+                property <length> next-column-width: clamp((main-area.width - main-area.thumbnail-column-width - main-area.column-gap * 2) / 3, 260px, 480px);
+                property <length> thumbnail-column-width: clamp(main-area.width * 0.10, 128px, 192px);
                 property <length> left-column-width: max(0px, main-area.width - main-area.next-column-width - main-area.thumbnail-column-width - main-area.column-gap * 2);
                 property <length> current-slide-natural-height: main-area.left-column-width / root.safe-current-page-aspect-ratio + (root.has-slide-progress ? 4px : 0px);
                 property <length> top-section-height: min(main-area.current-slide-natural-height, max(0px, main-area.height - root.presenter-bottom-section-height - 34px));
@@ -1304,7 +1308,7 @@ export component PresenterWindow inherits Window {
 
                         Text {
                             x: (parent.width - self.width) / 2;
-                            width: current-slide-with-progress.page-surface-width;
+                            width: parent.width;
                             height: parent.height;
                             text: "Notes";
                             color: #d9dce0;
@@ -1320,7 +1324,7 @@ export component PresenterWindow inherits Window {
                         notes-view := NotesView {
                             navigation-key(event) => { root.notes-navigation-key(event) }
                             x: (parent.width - self.width) / 2;
-                            width: current-slide-with-progress.page-surface-width;
+                            width: parent.width;
                             height: parent.height;
                             has-notes: root.has-notes;
                             notes-text: root.notes-text;
@@ -1337,7 +1341,7 @@ export component PresenterWindow inherits Window {
                     y: 0px;
                     width: main-area.next-column-width;
                     height: parent.height;
-                    property <length> preview-height: min(root.next-preview-height, main-area.top-section-height);
+                    property <length> preview-height: min(self.width / root.safe-next-page-aspect-ratio, main-area.top-section-height);
 
                     next-preview-slot := Rectangle {
                         x: 0px;
@@ -1391,7 +1395,7 @@ export component PresenterWindow inherits Window {
                     KeyboardBindingsPanel {
                         y: main-area.lower-section-y + 34px;
                         width: parent.width;
-                        height: max(0px, parent.height - self.y);
+                        height: min(200px, max(0px, parent.height - self.y));
                     }
                 }
 
