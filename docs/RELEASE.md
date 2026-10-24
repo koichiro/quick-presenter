@@ -63,11 +63,16 @@ and [internal TestFlight 25009 qualification](validation/ISSUE433_STORE_CLI_TEST
 They identify the tested source and artifacts, CVE evidence, retained maintenance
 warnings and remaining coverage. Complete the outstanding gates and record final
 channel artifacts/dispositions in [#508](https://github.com/koichiro/quick-presenter/issues/508).
-For the remaining macOS coverage, [#493](https://github.com/koichiro/quick-presenter/issues/493)
-owns fresh-account, upgrade/uninstall/reinstall and stale/unregistered-agent
-qualification. [#508](https://github.com/koichiro/quick-presenter/issues/508)
-retains supported-macOS/Intel runtime, foreign-team/cross-user rejection, genuine
-bookmark revocation and the applicable explicit maintainer release dispositions.
+On **2026-10-24 JST**, the maintainer confirmed that
+[#493](https://github.com/koichiro/quick-presenter/issues/493) was manually
+executed and accepted its lifecycle qualification as completed for this release.
+The missing initial automated trace remains a historical evidence limitation;
+it no longer requires an additional pristine-account run. The maintainer also
+excluded unperformed additional Mac environments (Intel, another Mac, other
+macOS/hardware) from the v2.5.0 release gate; no compatibility pass is asserted.
+[#508](https://github.com/koichiro/quick-presenter/issues/508) retains separate
+foreign-team/cross-user rejection, genuine bookmark revocation and the applicable
+explicit maintainer release dispositions.
 Customer Store-installed qualification is tracked separately in #520 under the
 approved limited-distribution/public-release sequence below.
 These reports do not approve publication or qualify a changed final package.
