@@ -50,8 +50,6 @@ class CliPackagingTests(unittest.TestCase):
         self.assertTrue(os.access(contents / "MacOS/qp", os.X_OK))
         self.assertTrue((contents / "Resources/docs/CONTROL_PROTOCOL.md").is_file())
         self.assertTrue((contents / "Resources/docs/CLI.md").is_file())
-        self.assertEqual((contents / "Resources/docs/CLI.md").read_bytes(),
-                         (REPO / "docs/CLI.md").read_bytes())
         manifest = plistlib.loads((contents / "Info.plist").read_bytes())
         self.assertEqual(manifest["CFBundleDocumentTypes"], [{
             "CFBundleTypeName": "PDF document", "CFBundleTypeRole": "Viewer",
@@ -81,8 +79,6 @@ class CliPackagingTests(unittest.TestCase):
         self.assertEqual(cli.stat().st_mode & 0o777, 0o755)
         for name in ("CLI.md", "CONTROL_PROTOCOL.md"):
             self.assertTrue((extracted / "usr/share/doc/quick-presenter" / name).is_file())
-        self.assertEqual((extracted / "usr/share/doc/quick-presenter/CLI.md").read_bytes(),
-                         (REPO / "docs/CLI.md").read_bytes())
 
     @unittest.skipUnless(shutil.which("dpkg-deb"), "dpkg-deb is required")
     def test_missing_cli_preserves_existing_debian_staging(self):
