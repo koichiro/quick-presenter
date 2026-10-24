@@ -1,5 +1,90 @@
 # Changelog
 
+## 2.5.0 — Unreleased
+
+### Added
+
+- Add sandbox-compatible `qp` control to the Mac App Store build using
+  authenticated XPC and the CLI bundled inside `ControlCLI.app`. Keep
+  **Control Protocol v1** and the existing command/JSON contracts
+  ([#496](https://github.com/koichiro/quick-presenter/pull/496),
+  [#501](https://github.com/koichiro/quick-presenter/pull/501),
+  [#502](https://github.com/koichiro/quick-presenter/pull/502)).
+- Let Store `qp open` start the GUI and request read-only PDF access through
+  the native picker. Confirm the exact file within 120 seconds; cancellation
+  or a different selection preserves the active presentation. Reuse saved
+  security-scoped bookmarks for previously authorized files.
+
+### Fixed
+
+- Restore presenter navigation when read-only speaker notes have keyboard
+  focus, including Windows notes-focused Return/arrow-key handling
+  ([#503](https://github.com/koichiro/quick-presenter/pull/503)).
+- Preserve macOS input and the latest fullscreen intent during native
+  fullscreen transitions
+  ([#504](https://github.com/koichiro/quick-presenter/pull/504)).
+- Handle macOS Finder Open With, app/Dock PDF delivery and native window drops
+  through authorized file access, with bounded busy/error recovery
+  ([#512](https://github.com/koichiro/quick-presenter/pull/512)).
+
+### Security and dependencies
+
+- Update bundled PDFium from `chromium/8076` to **`chromium/8111`**
+  (158.0.8111.0), with V8/XFA disabled, and update Rust dependencies
+  ([#505](https://github.com/koichiro/quick-presenter/pull/505)). The selected pin
+  does not contain every later upstream fix; retain the reviewed
+  [coverage and residual-risk record](docs/validation/README.md#security-and-release-decisions).
+- Update Windows `clipboard-win` from 5.4.1 to **5.4.3**, including the upstream
+  checked HTML-fragment bounds fix
+  ([#518](https://github.com/koichiro/quick-presenter/pull/518)).
+
+### Distribution and release status
+
+- Store review, limited-distribution installation checks and general release
+  are separate from GitHub publication. Customer Store 2.5.0 acceptance is
+  tracked in [#520](https://github.com/koichiro/quick-presenter/issues/520).
+- Install the macOS app in Applications or a writable user Applications folder
+  before PDF drag and drop. Dropping a PDF onto the app icon on the mounted
+  read-only DMG is a known unsupported route.
+- This entry is release preparation, not publication approval. Outstanding
+  qualification and public-release decisions remain in
+  [#508](https://github.com/koichiro/quick-presenter/issues/508).
+
+## [2.0.0](https://github.com/koichiro/quick-presenter/releases/tag/v2.0.0) — 2026-10-15
+
+### Added
+
+- Introduce the bundled `qp` CLI and stable **Control Protocol v1** for local
+  automation: PDF open/close, navigation, blackout, state and elapsed-time reads,
+  slide text/speaker notes/context, and NDJSON change events.
+- Export every page's full text and notes as one JSON array without changing
+  the displayed page. Omit duplicated next-page content by default; retain
+  `--include-next` for compatibility
+  ([#449](https://github.com/koichiro/quick-presenter/pull/449),
+  [#450](https://github.com/koichiro/quick-presenter/pull/450)).
+- Add external-agent/autopresentation examples, optional narration adapters,
+  and refreshed documentation/screenshots. AI models and TTS remain external.
+
+### Fixed
+
+- Make cold `qp open` wait for saved-PDF restoration before sending the
+  requested Open once; return a bounded timeout without replaying an uncertain
+  mutation ([#474](https://github.com/koichiro/quick-presenter/pull/474)).
+- Improve Linux speaker-note spacing, authenticate Windows control-pipe servers,
+  and bound Windows renderer/MSIX validation
+  ([#425](https://github.com/koichiro/quick-presenter/pull/425),
+  [#456](https://github.com/koichiro/quick-presenter/pull/456),
+  [#426](https://github.com/koichiro/quick-presenter/pull/426),
+  [#428](https://github.com/koichiro/quick-presenter/pull/428)).
+
+### Distribution
+
+- Package the CLI with macOS Developer ID, Windows Store and Ubuntu builds.
+  Mac App Store CLI control was excluded from **2.0.0**; GitHub publication
+  did not establish either Store's installed version. Bundled PDFium remained
+  `chromium/8076`; see the [published release record](https://github.com/koichiro/quick-presenter/releases/tag/v2.0.0)
+  for its qualification limits and security-pin disposition.
+
 ## [1.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v1.5.0) — 2026-10-15
 
 This release marks a distribution milestone: Quick Presenter is now publicly

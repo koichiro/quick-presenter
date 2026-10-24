@@ -14,62 +14,53 @@ and the [SBOM release gate](SBOM.md#release-gate). Signing/upload preparation is
 implemented here; Apple processing, review, and Store-installed runtime support
 still require independent evidence.
 
-## CLI/control limitation in v2.0.0
+## v2.5.0 CLI control
 
-CLI and Presentation Control Protocol support for the Mac App Store distribution
-is explicitly out of scope for v2.0.0. Store users must use the Developer ID / DMG
-distribution when they need local automation, including `qp open` GUI startup,
-state/content queries, navigation, blackout, or event watching. The Store GUI
-does not expose a supported control endpoint, even when a separate CLI is used.
+<a id="experimental-v250-control-build"></a>
 
-The current socket and arbitrary-path PDF opening workflow needs a
-sandbox-compatible IPC and file-access design. Existing GUI-selected PDF
-bookmarks do not grant access to every path supplied by a CLI. Future work and
-a preliminary estimate are tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422). This work is not a
-v2.0.0 Store release gate.
+The `macos-store-control` feature builds the product GUI, a bundled
+`ControlCLI.app`, and a per-user `ControlBroker.app` LaunchAgent. GUI/CLI control
+uses authenticated XPC; the Developer ID/DMG channel retains its Unix socket.
+The broker connects the CLI to the GUI without receiving PDF contents.
 
-## Experimental v2.5.0 control build
-
-The optional `macos-store-control` feature builds the product GUI, a bundled
-`ControlCLI.app`, and a per-user `ControlBroker.app` LaunchAgent. The GUI and
-CLI use authenticated XPC for Control Protocol v1; the Developer ID/DMG build
-continues to use its Unix socket. The broker connects a CLI to the running GUI
-and does not receive PDF contents. For `qp open` only, the bundled CLI can
-launch its containing GUI before submitting the request.
-The Store CLI supports status, timer elapsed, notes, slide, context, export,
-navigation, blackout, close, watch, and `qp open`. A PDF already selected in
-the Store GUI opens through its saved security-scoped bookmark. For a new PDF,
-the GUI presents a file picker; the user must select the requested file within
-120 seconds. Cancellation or a different selection leaves the current deck
-intact. The CLI path is only a picker hint and does not grant file access.
-This [#432](https://github.com/koichiro/quick-presenter/issues/432) behavior
-passed a Developer ID-signed sandbox test and Apple-distributed internal
-[TestFlight builds 25006](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25006.md)
-and [25007](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25007.md) on macOS
-27.0.1 arm64. Build 25007 confirmed inactive-window picker dismissal and
-identified a response-deadline race at the 120-second limit. The correction
-passed on Apple-distributed internal
-[TestFlight build 25008](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25008.md).
-Other supported systems and final Store release remain separate qualification
-gates.
-
-For a Store control candidate, build all binaries from the same source with
-`cargo build --release --locked --bins --features macos-store-control` and set
-`MACOS_STORE_CONTROL=1` when invoking the package script. The app and control
-roles use the macOS Team ID-prefixed
-`TEAMID.app.quickpresenter.control` App Group. [Apple documents](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.application-groups)
-that this form does not require registration on the Developer website. The
-Apple-re-signed product passed internal TestFlight integration in
-[build 25004](validation/ISSUE431_STORE_CONTROL_TESTFLIGHT_25004.md);
-unattended LaunchAgent registration on a clean account remains unqualified.
 The packaged CLI is at
 `Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`.
-Check nested signatures, entitlements, and the exact agent label before
-uploading. A local Developer ID-signed product fixture passed the command and
-identity checks recorded in
-[the #431 validation](validation/ISSUE431_STORE_CONTROL_PRODUCT_20261020.md).
-The installed TestFlight checks establish behavior after Apple re-signing for
-the tested environment, while the remaining release gates below still apply.
+For `qp open` only, it can launch its containing GUI before submitting the
+request. Previously selected PDFs use saved read-only security-scoped bookmarks.
+For a new PDF, select the exact requested file in the native picker within
+120 seconds; cancellation or another selection preserves the active deck.
+The CLI path alone grants no file access. All existing commands retain
+Control Protocol v1; see [CLI installation and usage](CLI.md#installation).
+
+Build all binaries from the same checkout with
+`cargo build --release --locked --bins --features macos-store-control` and set
+`MACOS_STORE_CONTROL=1` when invoking the Store package script. The app/control
+roles use the Team-ID-prefixed `TEAMID.app.quickpresenter.control` App Group.
+[Apple documents](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.security.application-groups)
+this macOS group form. Check nested signatures, entitlements and the exact
+agent label against the selected distribution profile before uploading.
+
+Signed/internal TestFlight results, including build 25010, are indexed in
+[validation records](validation/README.md). Standard-user lifecycle work was
+completed manually in [#493](https://github.com/koichiro/quick-presenter/issues/493).
+These exact-build results do not establish the customer-installed version;
+remaining pre-publication conditions are tracked in
+[#508](https://github.com/koichiro/quick-presenter/issues/508).
+
+For v2.5.0, follow the approved
+[staged Store qualification](RELEASE.md#v250-customer-store-qualification-timing)
+in [#520](https://github.com/koichiro/quick-presenter/issues/520): App Review with
+**manual release**, approved-build promo-code installation before general
+release, then public listing and normal acquisition/update checks. Record
+upload, review, approval, limited installation and general release separately.
+
+<a id="clicontrol-limitation-in-v200"></a>
+
+The older v2.0.0 Store package has no supported CLI endpoint. Use its Developer
+ID / DMG distribution for automation; copying in another CLI does not enable
+control. The historical design/diagnostic records remain under
+[#422](https://github.com/koichiro/quick-presenter/issues/422) and
+[validation](validation/README.md#historical-records).
 
 ## Release checklist
 
