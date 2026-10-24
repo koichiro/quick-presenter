@@ -7,6 +7,12 @@ start with [README](../../README.md) or [release usage](../RELEASE.md).
 
 ## v2.5.0 release status
 
+The [final post-#523 package record](V250_FINAL_PACKAGES_20261024.md) selects
+source **f4c0180** and binds its actual signed/direct, internal TestFlight25011,
+Windows MSVC Store-input and Ubuntu-DEB identities, final bundled documents,
+SBOMs and current-machine results. Its completion boundary and latest #508
+state take precedence over historical candidate investigations below.
+
 - [#508](https://github.com/koichiro/quick-presenter/issues/508) owns remaining
   pre-publication qualification, artifact selection and release decisions.
 - [#520](https://github.com/koichiro/quick-presenter/issues/520) owns customer
@@ -48,6 +54,7 @@ start with [README](../../README.md) or [release usage](../RELEASE.md).
 
 | Record | Exact scope |
 | --- | --- |
+| [Final post-#523 packages](V250_FINAL_PACKAGES_20261024.md) | f4c0180 source/package/SBOM identities, final all-OS CI and current-machine qualification; see its completion boundary. |
 | [Original final inventory](V250_FINAL_ARTIFACT_INVENTORY_20261023.md) | ce42e1d package/source/hash/SBOM identities, macOS notarization and Store submission inputs. |
 | [Mac runtime](V250_FINAL_MACOS_RUNTIME_20261023.md) | Installed direct app and internal TestFlight 25010; not every customer/OS/authority condition. |
 | [Mac document delivery](V250_MACOS_DOCUMENT_DELIVERY_20261023.md) | Installed Finder/drop paths and accepted install-before-DMG-icon-drop limitation. |
