@@ -13,6 +13,7 @@ pub mod audience_comments;
 pub mod audience_events;
 mod audience_log;
 pub mod audience_overlay;
+mod audience_panel;
 pub mod audience_relay;
 mod audience_relay_http;
 mod audience_session;
@@ -21,6 +22,7 @@ mod audience_wire;
 pub mod black_screen;
 mod browser;
 pub mod cli;
+mod clipboard;
 pub mod clock;
 mod control_app;
 #[cfg(all(unix, not(all(target_os = "macos", feature = "macos-store-control"))))]
