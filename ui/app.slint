@@ -1473,12 +1473,18 @@ export component PresenterWindow inherits Window {
                     padding: 0px;
                     spacing: 8px;
                     audience-disclosure := Button {
-                        text: root.audience-panel-expanded ? "▾" : "▸";
-                        min-width: 28px;
-                        max-width: 28px;
+                        icon: root.audience-panel-expanded ? @image-url("../assets/navigation/collapse.svg") : @image-url("../assets/navigation/expand.svg");
+                        icon-size: 20px;
+                        colorize-icon: true;
+                        primary: root.audience-panel-expanded;
+                        min-width: 36px;
+                        max-width: 36px;
                         height: 32px;
                         accessible-label: root.audience-panel-expanded ? "Collapse Audience Live pane" : "Expand Audience Live pane";
                         clicked => { root.audience-toggle-panel(); }
+                        Tooltip {
+                            text: root.audience-panel-expanded ? @markdown("Hide reactions and comment history") : @markdown("Show reactions and comment history");
+                        }
                     }
                     audience-count := HorizontalBox {
                         padding: 0px;
