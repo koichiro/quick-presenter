@@ -1897,7 +1897,7 @@ async fn check_notes_font_size(
     let presenter = &windows.presenter;
     let original_panel_expanded = presenter.get_audience_panel_expanded();
     // Keep typography fixtures within small CI displays. Expanding the footer
-    // raises the 650px content fixture to 932px, which AppKit can constrain.
+    // raises even the minimum fixture above AppKit's available work area.
     // Disclosure and expanded history are exercised separately below.
     if original_panel_expanded {
         presenter.invoke_audience_toggle_panel();
@@ -2049,10 +2049,11 @@ async fn check_notes_font_size(
         ),
     );
     // Keep the width fixed so the slide preview does not consume the extra
-    // vertical room. Include the Audience Live footer in the native request.
+    // vertical room. The collapsed footer makes this a 608 -> 640px resize,
+    // which fits the 656px client work area on macOS CI.
     resize_presenter_notes(
         presenter,
-        slint::LogicalSize::new(800.0, 650.0 + presenter.get_audience_panel_height()),
+        slint::LogicalSize::new(800.0, 592.0 + presenter.get_audience_panel_height()),
     )
     .await?;
     settle_presenter_notes_layout(presenter).await?;
