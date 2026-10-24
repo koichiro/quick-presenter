@@ -86,7 +86,7 @@ qualification and DMG limitation disposition are linked below.
 
 The [October 23 final macOS runtime report](validation/V250_FINAL_MACOS_RUNTIME_20261023.md) records the installed final direct app and internal TestFlight **25010**, including exact identity, renderer isolation, GUI/CLI regression, installed direct drop acceptance and same-user lifecycle checks. The [final document-delivery follow-up](validation/V250_MACOS_DOCUMENT_DELIVERY_20261023.md) completes Store Finder/drop checks and records the maintainer-approved read-only-DMG icon-drop limitation. Customer Store coverage and the other open #508 gates remain separate.
 
-The [October 24 final Ubuntu package report](validation/V250_FINAL_LINUX_RUNTIME_20261024.md) records execution of the selected final DEB on Ubuntu 26.04.1, its installed payload/SBOM and renderer checks, Wayland/XWayland GUI regression, live CLI results and explicitly remaining desktop/lifecycle coverage. It also records a fresh audit and a new Windows-only yanked dependency warning for release-wide review. Follow its final status and #508 before publication.
+The [October 24 final Ubuntu package report](validation/V250_FINAL_LINUX_RUNTIME_20261024.md) completes current-machine qualification of the selected final DEB: installed payload/SBOM and renderer checks, default Wayland/XWayland GUI regression, CLI/cold-start/lifecycle, physical keyboard and launcher/Open With checks. It records unperformed dual-display coverage, the maintainer's explicit Orca gate exclusion, supplemental forced-FemtoVG smoke failures and a new Windows-only yanked dependency warning for release-wide review. These bounded results do not close the other #508 conditions or approve publication.
 
 ### Mac App Store submissions
 

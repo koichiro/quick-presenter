@@ -5,13 +5,25 @@ Companion identity record: [final artifact inventory](V250_FINAL_ARTIFACT_INVENT
 
 ## Status and scope
 
-Wayland and default-selection XWayland final-package automation passed on the
-Ubuntu machine described below. The maintainer confirmed the requested physical
-desktop matrix. Supplemental forced-FemtoVG and remaining desktop/accessibility observations
-remain as described below;
-this checkpoint does not declare the Linux release gate complete. This is a
-results-only report. No application source, dependency pin, advisory ignore,
-package, signing identity, or release publication was changed.
+Current-machine Linux qualification is complete for the selected final Ubuntu
+x64 package. Default-selection Wayland/XWayland GUI, installed CLI/rendering,
+physical desktop/keyboard routes, launcher/Open With and package lifecycle checks
+passed as recorded below. The maintainer instructed this run to proceed with
+physical dual-display coverage **unperformed** and explicitly excluded **Orca**
+from this release gate after inconclusive audible results. Neither is a test pass.
+
+The supplemental forced-FemtoVG failures below remain documented and are not
+cleared by successful default-selection retests. This is bounded current-machine
+evidence, not every renderer/environment or a blanket publication approval.
+Other platform/channel/security/authority conditions remain in #508. No
+application source, dependency pin, advisory ignore, package or signing identity
+was changed. No release was published.
+
+- Tester: maintainer (physical desktop/audio confirmation), Codex (artifact and runtime checks).
+- Test date: **2026-10-24 JST**.
+- Distribution: selected final CI Debian package for the Ubuntu direct channel; not a new publication.
+- Trust: exact package SHA-256 and bundled/source/license/SBOM verification; no separate Debian signing identity is asserted.
+- Manual report filename: `quick-presenter-2.5.0-ubuntu-x64-manual-gui-smoke.md`, preserved locally for the eventual release attachment.
 
 ## Exact subject
 
@@ -154,14 +166,30 @@ fallback deck and successfully opened a replacement. The separate normal
 WM-close lifecycle phase exited **0**. These tests used isolated settings and
 do not imply pristine-account or multi-display coverage.
 
-Launcher/Open With, additional-display and
-assistive-technology routes retain their own result or explicit release
-disposition. The maintainer confirmed that a second physical display cannot be
-connected and instructed this run to proceed with that coverage unperformed.
-Record dual-display swap/disconnect/reconnect/mixed-DPI as **not tested**, not
-as a pass or a broader publication waiver. AT-SPI tree inspection found no registered Quick Presenter nodes
-with toolkit accessibility disabled; this does not pass or diagnose screen-reader
-behavior. No accessibility setting was changed.
+The maintainer separately confirmed the final **OS integration** matrix:
+Ubuntu launcher search/name/icon, Dock/Alt+Tab identity, actual file-manager
+**Open With > Quick Presenter**, successful PDF loading and subsequent Right
+navigation. The existing default remains **org.gnome.Papers.desktop**.
+
+The maintainer observed that Open With starts another GUI process when one
+already exists. This matches the existing
+[documented multi-instance boundary](../CONTROL_PROTOCOL.md): additional
+GUIs can play PDFs, while only one instance per Unix user/runtime directory owns
+the control endpoint. `main.rs` logs control installation failure and continues
+GUI playback. This was not treated as native document-delivery reuse or as a
+new single-instance feature. Use in-app Open or `qp open` to replace the deck
+through the controlling instance. No instance-routing source change was made.
+
+The maintainer confirmed that a second physical display cannot be connected
+and instructed this run to proceed with that coverage **unperformed**. Physical
+dual-display swap/disconnect/reconnect/mixed-DPI remains **not tested**, not a
+pass or a broader publication waiver. The one-display X explanation was part
+of the successful physical keyboard matrix.
+
+After the maintainer closed the remaining presenter, machine inspection found
+**no Quick Presenter GUI/helper process**. Normal desktop startup/recent-file
+settings were restored byte-for-byte from their pre-desktop-test backup. The
+final 2.5.0 package remains installed. Orca settings/stop are recorded below.
 
 ## Dependency review and retained PDFium disposition
 
