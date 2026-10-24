@@ -25,14 +25,19 @@ start with [README](../../README.md) or [release usage](../RELEASE.md).
   package identities remain in #508; do not replace them with prior passes.
 
 - The subsequent [shared correction #524](https://github.com/koichiro/quick-presenter/pull/524),
-  source **38279ce**, passed Linux's eight local release-mode conditions
-  (**72/0 each**) and actual CI MSVC Windows Store payload regression
-  (**65/0 in four runs**, short/long notes twice each), plus CLI/render-denial
-  and package/SBOM checks. [Build Binaries 40074121830](https://github.com/koichiro/quick-presenter/actions/runs/40074121830)
-  passed on that source. These correction results preserve the earlier f1b5541
-  failures and remain separate from the combined code/documentation final
-  packages to be generated after merge. Local Windows software-renderer
-  reporting limits are recorded in #524; no exhaustive renderer pass is claimed.
+  source **f596ef8**, adds an applied portrait/menu-layout witness. Linux's
+  eight local release conditions passed **72/0 each**. Actual CI MSVC Windows
+  Store payload regressions completed **65/0 in four runs** after an initial
+  PDF-readiness timeout; that failed run is retained and its cause remains
+  unconfirmed. CLI/render-denial and package/SBOM checks passed. Windows controls
+  confirmed delayed application is awaited, suppressed application is rejected,
+  and a valid same-size transition needs no additional resize request.
+  [Build Binaries 40077854791](https://github.com/koichiro/quick-presenter/actions/runs/40077854791)
+  and the actual review cover this source. Earlier f1b5541 failures and38279ce
+  successes retain their separate scope. These correction results do not
+  qualify the combined code/documentation final packages still to be generated
+  after merge. Local software-renderer reporting limits remain explicit in
+  #524; no exhaustive renderer pass is claimed.
 
 ## Artifact and runtime results
 
