@@ -74,6 +74,7 @@ component CurrentSlideWithProgress inherits Rectangle {
     in property <bool> has-progress: false;
     in property <float> progress-value: 0.0;
     out property <length> page-surface-width: current-slide.page-surface-width;
+    out property <length> page-surface-height: current-slide.page-surface-height;
 
     background: transparent;
     property <length> progress-height: root.has-progress ? 4px : 0px;
@@ -705,6 +706,11 @@ export component PresenterWindow inherits Window {
     in property <string> page-label: "";
     in property <string> notes-text: "";
     in property <float> notes-font-size: 12;
+    out property <length> notes-layout-slide-width: current-slide-with-progress.page-surface-width;
+    out property <length> notes-layout-slide-height: current-slide-with-progress.page-surface-height;
+    out property <length> notes-layout-outer-width: notes-view.width;
+    out property <length> notes-layout-menu-height: inline-menu.height;
+    out property <length> notes-layout-main-y: main-area.y;
     out property <length> notes-visible-width: notes-view.visible-width;
     out property <length> notes-visible-height: notes-view.visible-height;
     out property <length> notes-content-height: notes-view.content-height;
@@ -1353,7 +1359,7 @@ export component PresenterWindow inherits Window {
                 overflow: elide;
             }
 
-            Rectangle {
+            inline-menu := Rectangle {
                 y: 0px;
                 width: parent.width;
                 height: root.inline-menu-height;
