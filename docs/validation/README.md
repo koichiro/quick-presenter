@@ -28,8 +28,11 @@ start with [README](../../README.md) or [release usage](../RELEASE.md).
   source **f596ef8**, adds an applied portrait/menu-layout witness. Linux's
   eight local release conditions passed **72/0 each**. Actual CI MSVC Windows
   Store payload regressions completed **65/0 in four runs** after an initial
-  PDF-readiness timeout; that failed run is retained and its cause remains
-  unconfirmed. CLI/render-denial and package/SBOM checks passed. Windows controls
+  PDF-readiness timeout. The maintainer confirmed that parallel compilation in
+  another session caused that timeout and accepted it as a non-blocking
+  environment condition. The original timed-out run remains recorded as such;
+  application/test deadlines were unchanged. CLI/render-denial and package/SBOM
+  checks passed. Windows controls
   confirmed delayed application is awaited, suppressed application is rejected,
   and a valid same-size transition needs no additional resize request.
   [Build Binaries 40077854791](https://github.com/koichiro/quick-presenter/actions/runs/40077854791)
