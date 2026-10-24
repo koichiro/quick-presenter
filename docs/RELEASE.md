@@ -14,9 +14,9 @@ Routine pull requests are validated by the lightweight `CI` workflow. The full
 `Build Binaries` workflow is release/package validation and does not run for
 every source-only pull request.
 
-The v2.0.0 CLI and AI-assisted presentation release uses Cargo package version
-`2.0.0` and Control Protocol v1. GitHub publication and Microsoft Store
-submission, certification, and installed-version qualification are separate
+The v2.5.0 release uses Cargo package version `2.5.0` and retains Control
+Protocol v1. GitHub publication and Store submission, certification, and
+installed-version qualification are separate
 events. Record the exact source and package identity for each channel.
 
 Before publishing a release:
@@ -39,22 +39,28 @@ Before publishing a release:
 7. Confirm the Linux and macOS packages use the intended release version and
    their package smoke tests pass. For Linux, verify the Debian file name and
    the `Version` reported by `dpkg-deb --field <package> Version`. Confirm the
-   existing Microsoft Store listing remains publicly reachable; the v2.0.0
-   Store update is verified after the GitHub release as described below.
+   existing Microsoft Store listing remains publicly reachable. Follow the
+   v2.5.0 limited-distribution and general-release sequence below for the update.
 8. Review the uploaded `quick-presenter-ubuntu-x64-gui-smoke` report and the
    macOS/Windows GUI smoke skip-reason reports from `Build Binaries`.
-9. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
-   macOS and Ubuntu Linux artifacts and the existing public Microsoft Store
-   build before publishing. Rerun the Windows checks on v2.0.0 after its Store
-   update is certified.
-10. Complete the platform trust checks in the v2.0.0 policy below.
+9. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the exact
+   final macOS/Ubuntu packages and Windows submission payload. Complete limited
+   Store installation qualification under #520 before general Store release;
+   verify ordinary public acquisition/update paths after release.
+10. Complete applicable signatures/notarization and package identity checks.
+    Resolve or explicitly disposition the remaining #508 gates before publication.
 11. Verify SBOM sidecars against the final DMG and Debian package, review their
     source/target/PDFium metadata, and attach the sidecars to the GitHub release.
     Record package hashes and follow the [SBOM release gate](SBOM.md#release-gate).
-    Generate and publish the Windows Store submission SBOM with its post-release
-    Store update; record submission and certified package identities separately.
-12. Attach the completed manual GUI smoke reports to the GitHub release, or
-    document any platform-specific waiver in the release notes before publishing.
+    Generate and verify the Windows Store submission SBOM before its staged
+    submission; record submission and certified package identities separately.
+12. Attach results-only manual validation reports to the GitHub release, with
+    exact source/package identity and explicit limits. Keep raw command and
+    per-assertion smoke transcripts in ignored local artifacts or CI artifacts.
+13. Confirm the changelog's release version/date match the tagged release.
+    Use its 2.5.0 section for release notes and link the final package/SBOM
+    and qualification records. Record Store rollout and unperformed checks
+    separately from the published version's feature summary.
 
 ### v2.5.0 validation evidence
 
@@ -63,26 +69,37 @@ and [internal TestFlight 25009 qualification](validation/ISSUE433_STORE_CLI_TEST
 They identify the tested source and artifacts, CVE evidence, retained maintenance
 warnings and remaining coverage. Complete the outstanding gates and record final
 channel artifacts/dispositions in [#508](https://github.com/koichiro/quick-presenter/issues/508).
-For the remaining macOS coverage, [#493](https://github.com/koichiro/quick-presenter/issues/493)
-owns fresh-account, upgrade/uninstall/reinstall and stale/unregistered-agent
-qualification. [#508](https://github.com/koichiro/quick-presenter/issues/508)
-retains supported-macOS/Intel runtime, foreign-team/cross-user rejection, genuine
-bookmark revocation and the applicable explicit maintainer release dispositions.
+On **2026-10-24 JST**, the maintainer confirmed that
+[#493](https://github.com/koichiro/quick-presenter/issues/493) was manually
+executed and accepted its lifecycle qualification as completed for this release.
+The missing initial automated trace remains a historical evidence limitation;
+it no longer requires an additional pristine-account run. The maintainer also
+excluded unperformed additional Mac environments (Intel, another Mac, other
+macOS/hardware) from the v2.5.0 release gate; no compatibility pass is asserted.
+The maintainer also excluded Mac foreign-team/cross-user rejection and genuine
+security-scoped bookmark revocation tests from this v2.5.0 release gate. These
+checks remain unperformed; no passing security test is asserted and runtime
+identity, permission and sandbox enforcement are unchanged.
+[#508](https://github.com/koichiro/quick-presenter/issues/508) retains final
+artifact/runtime/evidence integration and the pre-publication security review.
 Customer Store-installed qualification is tracked separately in #520 under the
 approved limited-distribution/public-release sequence below.
 These reports do not approve publication or qualify a changed final package.
 
-The [October 23 security review](validation/SECURITY_REVIEW_20261023.md) supersedes
-the earlier current-security assessment. It records the CISA PoC-status change,
-additional public CVE mappings and four enabled-path PDFium fixes after the
-selected pin. Resolve their update/backport or evidence-based release disposition
-in #508 before publication; latest-prebuilt status alone is not approval.
+The [October 24 pre-publication security review](validation/SECURITY_REVIEW_20261024.md)
+completed the fresh Cargo/PDFium/CVE/exploitation checkpoint on source `8052254`.
+It found no new security blocker: zero Cargo vulnerability advisories, the same
+five maintenance warnings, unchanged accepted PDFium omissions and no new
+production fix in the additional upstream commit. The existing 8111 release
+risk disposition remains applicable; this does not assert absence of vulnerabilities.
+Final combined package/SBOM/runtime and release-evidence qualification remains in
+#508. Refresh on material new information or by October 26 if publication is delayed.
 
 The [October 23 final source/artifact inventory](validation/V250_FINAL_ARTIFACT_INVENTORY_20261023.md)
 fixes the selected source, retained PDFium 8111 disposition, notarized direct DMG,
 Store submission candidates, Ubuntu DEB, hashes and verified SBOMs. It completes
-the inventory work in #508; the remaining channel, environment/authority and
-traceability gates still apply before publication. The subsequent macOS
+the original inventory work in #508. Final candidate integration and security
+review remain subject to the latest #508 dispositions; the subsequent macOS
 qualification and DMG limitation disposition are linked below.
 
 The [October 23 final macOS runtime report](validation/V250_FINAL_MACOS_RUNTIME_20261023.md) records the installed final direct app and internal TestFlight **25010**, including exact identity, renderer isolation, GUI/CLI regression, installed direct drop acceptance and same-user lifecycle checks. The [final document-delivery follow-up](validation/V250_MACOS_DOCUMENT_DELIVERY_20261023.md) completes Store Finder/drop checks and records the maintainer-approved read-only-DMG icon-drop limitation. Customer Store coverage and the other open #508 gates remain separate.
@@ -105,8 +122,8 @@ post-certification follow-up [#520](https://github.com/koichiro/quick-presenter/
 These customer checks remain **UNPERFORMED** until the actual distributed
 products are tested. The timing condition no longer independently blocks
 [#508](https://github.com/koichiro/quick-presenter/issues/508); all other source,
-artifact, runtime, environment/authority, traceability and pre-publication
-security conditions remain there. Do not automatically close #520 when #508 or
+artifact, runtime, evidence and pre-publication security conditions remain
+there, subject to the explicit scope dispositions above. Do not automatically close #520 when #508 or
 a documentation PR closes.
 
 After certification, bind the actual customer builds to their submitted
@@ -154,7 +171,9 @@ by [PACKAGING.md](PACKAGING.md#source-code-for-binary-releases) and
 
 ### v2.0.0 distribution and trust policy
 
-The supported v2.0.0 distribution channels are intentionally narrow:
+This section preserves the historical v2.0.0 policy. For v2.5.0, use the
+customer Store timing and release sequence above. The supported v2.0.0
+distribution channels were intentionally narrow:
 
 | Platform/channel | User package | Trust and identity | v2.0.0 status | Review lead time and fallback |
 | --- | --- | --- | --- | --- |
@@ -277,7 +296,7 @@ it keeps the executable, bundled PDFium files, desktop metadata, and license
 files in the expected layout.
 
 The Windows CI artifact may include MSI, MSIX, and raw executable files for
-layout, packaging, and signing validation. They are not supported v2.0.0
+layout, packaging, and signing validation. They are not supported public
 downloads. The Store-identity MSIX is submitted to Partner Center and becomes
 the supported package only after Microsoft Store certification and signing.
 

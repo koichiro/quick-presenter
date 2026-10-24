@@ -31,3 +31,11 @@ __pycache__/
 
 # Intermediate Cargo metadata used to generate release SBOM sidecars.
 /quick-presenter-cargo.json
+
+# Keep raw validation transcripts local; commit results-only summaries.
+/docs/validation/**/*.stdout
+/docs/validation/**/*.stderr
+/docs/validation/**/*.log
+/docs/validation/**/gui-smoke.md
+/docs/research/speaker-notes/smoke-open.txt
+/docs/research/speaker-notes/pdfium-api.txt

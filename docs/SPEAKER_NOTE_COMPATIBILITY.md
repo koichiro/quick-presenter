@@ -97,15 +97,16 @@ pypdf warnings about zero-offset xref entries. Poppler and PDFium successfully
 process all their pages; these parser
 diagnostics do not provide a semantic slide-to-note association.
 
-[smoke-open.txt](research/speaker-notes/smoke-open.txt) records processing with
-the existing debug Quick Presenter binary: PDFium open, first-page rendering,
-and note requests for every PDF page. It does not assert returned note text.
+The October 7–8 smoke checks with the existing debug Quick Presenter binary
+successfully opened all retained research PDFs, rendered the first page, and
+requested notes for every PDF page. These results do not assert returned note
+text. Raw per-file command output is not included in the tracked tree.
 Application sources and extraction behavior were not changed or rebuilt for
 this research. The bundled PDFium version is 156.0.8076.0.
 
-[pdfium-api.txt](research/speaker-notes/pdfium-api.txt) independently verifies
-the two note strings using `pdfium-render 0.9.1` public APIs. `PdfPageText::all()`
-reads the visible notes from each note-layout export. `contents()` reads only
+An independent public-API check using `pdfium-render 0.9.1` verified the two
+note strings; the semantic results are recorded here instead of a raw transcript.
+`PdfPageText::all()` reads the visible notes from each note-layout export. `contents()` reads only
 the two Beamer text annotations, on pages 1 and 2; page 3 is empty. The probe
 linked an existing local `pdfium-render` build without modifying the app.
 

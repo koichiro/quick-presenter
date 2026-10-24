@@ -89,7 +89,8 @@ The app was then quit, restoring the original not-running state.
 This establishes that this actual different-team/different-identifier process
 was not accepted in the bounded attempt. The generic interruption does not
 identify the rejection reason or isolate the team condition from the identifier
-condition. It does **not** close the foreign-team/cross-user authority gate.
+condition. It does **not** establish a passing foreign-team/cross-user test.
+The later maintainer scope exclusion is recorded below.
 An initial invocation inside the command sandbox could not run the signed CLI;
 the valid comparisons above used the normal host execution context. That
 harness restriction is excluded from application-failure evidence.
@@ -103,9 +104,9 @@ Closing the earlier implementation/lifecycle issues did not waive them.
 | --- | --- |
 | Post-merge Windows replacement — completed for b4910ea | Build, independent package/SBOM inventory and exact-payload Windows runtime passed as recorded above. Preserve its exact source and manual-test limitations; later candidate changes require affected requalification. |
 | Customer Store installations — transferred | On October 24 JST the maintainer explicitly moved actual customer Mac/Windows Store 2.5.0 qualification to [#520](https://github.com/koichiro/quick-presenter/issues/520), after review/certification, with all customer checks **unperformed**. This timing condition no longer independently blocks #508; #520 stays open for actual install/update/signature/identity, registered Windows alias and installed workflows. TestFlight/CI/extracted-payload checks remain separate. This decision authorizes neither customer review submission nor publication and leaves every other #508 gate in force. |
-| Unavailable Mac environments | No additional Intel/other-supported-macOS machine is available. Testing or an explicit bounded release disposition is needed. |
-| Actual product authority | Cross-user rejection and sufficiently attributable foreign-team rejection on the Apple-distributed product remain incomplete. The bounded probe above is supporting evidence only. Genuine OS revocation of persisted security-scoped bookmark authority remains untested; moved files, ACL denial and stopAccessing are not substitutes. |
-| First-attempt trace | #493 has verified continuation/reinstall and manual initial picker/TIMEOUT observations, but the original automated preflight/TIMEOUT trace was lost. A pristine-account rerun or explicit acceptance of this evidence limitation is needed. |
+| Additional Mac environments — excluded | On October 24 JST the maintainer excluded unperformed Intel/other-Mac/other-macOS/hardware coverage from this v2.5.0 release gate. Coverage remains unperformed; no compatibility test pass is asserted. |
+| Mac authority tests — excluded | On October 24 JST the maintainer excluded foreign-team/cross-user rejection and genuinely revoked security-scoped bookmark authority tests from the v2.5.0 release gate. They remain unperformed, not passed. The bounded probe is supporting evidence only; moved files, ACL denial and stopAccessing are not revocation substitutes. Identity/permission enforcement and sandbox configuration are unchanged. |
+| #493 manual lifecycle — completed | On October 24 JST the maintainer confirmed manual execution and accepted #493 as completed for this release gate. No additional pristine-account run is required solely for the missing initial automated trace. The historical automated record remains unavailable and is not counted as an automated pass. |
 | Supplemental Linux renderer failure | Forced winit-femtovg under actual XWayland failed the with-PDF notes-resize assertion on both fixtures (69/1). Default native Wayland and actual XWayland later passed 70/0 each. Investigation captured a stale 16px value naturally reaching 24px about 985ms after the failed check: insufficient smoke synchronization. [#521](https://github.com/koichiro/quick-presenter/pull/521) adds bounded convergence checks and retains strict assertions; final validation passed 72/0 in all eight backend/renderer/fixture combinations, 497 Rust tests and a fault-injection negative control. CI/review passed. Merge and affected final-package qualification remain; the corrected validation bundle is not the original DEB. |
 | Security/disclosure checkpoint | Preserve the accepted PDFium 8111 four-change residual-risk disposition and five maintenance-warning deferrals. Repeat the review on October 26 or immediately before publication, whichever is earlier; the October 28 candidate checkpoint is unchanged. A fresh review is not promised as background monitoring. |
 
@@ -129,9 +130,10 @@ recording the plan.
 The follow-up binds each actual approved/distributed build to its submitted
 source/package/SBOM and records fresh/update installation, trust/identity and
 installed workflows (including the Windows registered alias). It cannot be
-automatically closed by #508 or this documentation PR. Other environment,
-authority/revoked-bookmark, traceability, Linux failure and security/artifact
-conditions remain in #508. No customer submission or publication occurred.
+automatically closed by #508 or this documentation PR. The additional-Mac scope exclusion and completed manual #493 lifecycle
+disposition above, together with the explicit Mac authority-test exclusion,
+supersede their earlier open gate descriptions. Affected final-package,
+runtime/evidence integration and security review remain in #508. No customer submission or publication occurred.
 
 Already recorded bounded maintainer decisions remain in force: install before
 bundle-icon drop on macOS (read-only DMG drop remains unsupported); Linux

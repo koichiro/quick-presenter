@@ -347,7 +347,8 @@ deliberately bypass saved startup state.
 
 On the exact final package, with development PDFium overrides unset:
 
-- Verify `qp --version --json` reports application 2.0.0 / protocol v1.
+- Verify `qp --version --json` reports the intended release version (2.5.0 for
+  this release) / protocol v1.
 - Quit with deck A remembered, then cold `qp open` a different deck B. Repeat
   independently and verify the returned state and final `status.document` name B.
 - Repeat with no saved state and a missing remembered PDF; include first-run
