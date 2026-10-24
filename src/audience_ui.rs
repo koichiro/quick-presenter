@@ -779,6 +779,8 @@ impl AudienceUi {
                     .as_ref()
                     .is_some_and(AudienceSession::is_finished)
                 {
+                    window.set_audience_busy(true);
+                    window.set_audience_url("".into());
                     return;
                 }
                 let failed = matches!(&snapshot.status, SessionStatus::Failed(_));

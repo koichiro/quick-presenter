@@ -1532,7 +1532,7 @@ export component PresenterWindow inherits Window {
                 height: 36px;
                 HorizontalBox {
                     padding: 0px;
-                    spacing: 8px;
+                    spacing: parent.width < 760px ? 4px : 8px;
                     audience-disclosure := AudienceIconButton {
                         icon: root.audience-panel-expanded ? @image-url("../assets/navigation/collapse.svg") : @image-url("../assets/navigation/expand.svg");
                         action-name: root.audience-panel-expanded ? "Collapse Audience Live pane" : "Expand Audience Live pane";
