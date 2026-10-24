@@ -1005,7 +1005,7 @@ async fn check_audience_join_screen(
     let presenter = &windows.presenter;
     report.check(
         "Inactive Audience Live offers the ON action",
-        presenter.get_audience_toggle_label() == "Audience Live ON 👍️"
+        presenter.get_audience_toggle_label() == "Audience Live ON  👍️"
             && !presenter.get_audience_panel_expanded(),
         "start action displayed",
         "incorrect start label",

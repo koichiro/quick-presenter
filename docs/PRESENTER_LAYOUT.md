@@ -5,8 +5,8 @@ slide and keyboard reference in the middle, and slide thumbnails on the right.
 Audience Live stays below the first two columns; thumbnails extend to the bottom
 of its URL row. The Audience Live toolbar orders the disclosure button, connected audience count
 (`👥(0)`), live LED, session toggle, Pause/Resume, server IP address, Next, and
-Refresh in one row. The IP address uses its natural text width up to 120 logical
-pixels, keeping Next nearby; longer addresses elide. Routine server status
+Refresh in one row. The IP address has a fixed width of 120 logical
+pixels so Next stays in place when cycling addresses; longer addresses elide. Routine server status
 text is omitted; actionable alerts still overlay the history pane. Reactions and
 comment history use the full pane width below the toolbar.
 

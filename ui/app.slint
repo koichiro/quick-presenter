@@ -1577,7 +1577,7 @@ export component PresenterWindow inherits Window {
                         }
                     }
                     audience-live-toggle := Button {
-                        text: root.audience-active ? "Audience Live OFF 👍️" : "Audience Live ON 👍️";
+                        text: root.audience-active ? "Audience Live OFF 👍️" : "Audience Live ON  👍️";
                         enabled: !root.audience-busy && (root.audience-active || root.audience-can-start);
                         clicked => { root.audience-toggle-session(); }
                     }
@@ -1591,7 +1591,7 @@ export component PresenterWindow inherits Window {
                         accessible-label: "Server IP address: " + root.audience-address;
                         color: #9aa0a6;
                         font-size: 11px;
-                        min-width: 0px;
+                        min-width: 120px;
                         max-width: 120px;
                         horizontal-stretch: 0;
                         overflow: elide;
