@@ -13,6 +13,47 @@ pub enum PresentationCommand {
     Close,
 }
 
+/// Unmodified navigation takes precedence over the read-only notes cursor.
+/// Keep selection/copy shortcuts and modified cursor movement in TextInput.
+pub fn notes_navigation_command(
+    event: &slint::language::KeyEvent,
+    physical_control_is_meta: bool,
+) -> Option<PresentationCommand> {
+    use slint::platform::Key;
+    let modifiers = event.modifiers;
+    if modifiers.shift || modifiers.alt {
+        return None;
+    }
+    if modifiers.control || modifiers.meta {
+        let control_only = if physical_control_is_meta {
+            modifiers.meta && !modifiers.control
+        } else {
+            modifiers.control && !modifiers.meta
+        };
+        return (control_only && event.text.eq_ignore_ascii_case("e"))
+            .then_some(PresentationCommand::LastPage);
+    }
+    let key = event.text.chars().next()?;
+    match key {
+        ' ' => Some(PresentationCommand::NextPage),
+        key if [Key::Return, Key::RightArrow, Key::DownArrow, Key::PageDown]
+            .into_iter()
+            .any(|candidate| key == char::from(candidate)) =>
+        {
+            Some(PresentationCommand::NextPage)
+        }
+        key if [Key::LeftArrow, Key::UpArrow, Key::PageUp, Key::Backspace]
+            .into_iter()
+            .any(|candidate| key == char::from(candidate)) =>
+        {
+            Some(PresentationCommand::PreviousPage)
+        }
+        key if key == char::from(Key::Home) => Some(PresentationCommand::FirstPage),
+        key if key == char::from(Key::End) => Some(PresentationCommand::LastPage),
+        _ => None,
+    }
+}
+
 pub fn apply_presentation_command(
     presentation: &mut PresentationState,
     command: PresentationCommand,
@@ -33,6 +74,58 @@ pub fn apply_presentation_command(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notes_cursor_keys_route_to_presentation_navigation() {
+        use slint::platform::Key;
+        for (key, expected) in [
+            (Key::Return, PresentationCommand::NextPage),
+            (Key::RightArrow, PresentationCommand::NextPage),
+            (Key::DownArrow, PresentationCommand::NextPage),
+            (Key::PageDown, PresentationCommand::NextPage),
+            (Key::LeftArrow, PresentationCommand::PreviousPage),
+            (Key::UpArrow, PresentationCommand::PreviousPage),
+            (Key::PageUp, PresentationCommand::PreviousPage),
+            (Key::Backspace, PresentationCommand::PreviousPage),
+            (Key::Home, PresentationCommand::FirstPage),
+            (Key::End, PresentationCommand::LastPage),
+        ] {
+            let mut event = slint::language::KeyEvent::default();
+            event.text = key.into();
+            assert_eq!(notes_navigation_command(&event, false), Some(expected));
+            event.modifiers.shift = true;
+            assert_eq!(notes_navigation_command(&event, false), None);
+        }
+    }
+
+    #[test]
+    fn notes_preserve_selection_copy_and_modified_cursor_movement() {
+        for text in ["a", "c", "x", "v", "\u{f703}"] {
+            let mut event = slint::language::KeyEvent::default();
+            event.text = text.into();
+            event.modifiers.control = true;
+            assert_eq!(notes_navigation_command(&event, false), None);
+            event.modifiers.control = false;
+            event.modifiers.meta = true;
+            assert_eq!(notes_navigation_command(&event, true), None);
+        }
+        let mut event = slint::language::KeyEvent::default();
+        event.text = "e".into();
+        event.modifiers.control = true;
+        assert_eq!(
+            notes_navigation_command(&event, false),
+            Some(PresentationCommand::LastPage)
+        );
+        assert_eq!(notes_navigation_command(&event, true), None);
+        event.modifiers.control = false;
+        event.modifiers.meta = true;
+        assert_eq!(
+            notes_navigation_command(&event, true),
+            Some(PresentationCommand::LastPage)
+        );
+        event.modifiers.alt = true;
+        assert_eq!(notes_navigation_command(&event, true), None);
+    }
 
     #[test]
     fn next_page_command_advances_until_last_page() {

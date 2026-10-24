@@ -24,6 +24,7 @@ pub fn create_app_windows() -> anyhow::Result<(crate::PresenterWindow, crate::Sl
             }
         })
         .select()?;
+    crate::macos_documents::install()?;
     let presenter = crate::PresenterWindow::new()?;
     // Materialize the lazy adapters while the matching window role is selected.
     let _ = presenter.window().window_handle();

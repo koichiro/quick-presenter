@@ -175,7 +175,7 @@ Final source validation passed:
 - Final signed GUI smoke: **63 passed, 0 failed**.
 
 The worktree reused the existing PDFium library through
-`PDFIUM_DYNAMIC_LIB_PATH=/Users/koichiro/projects/quick-presenter/pdfium/lib/libpdfium.dylib`.
+`PDFIUM_DYNAMIC_LIB_PATH=<checkout>/pdfium/lib/libpdfium.dylib`.
 Initial test attempts without that library location failed during PDFium
 initialization; the correctly configured full suite passed. The existing
 macOS `fetch_update` deprecation warning remains unchanged.

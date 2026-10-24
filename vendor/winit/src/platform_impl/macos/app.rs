@@ -8,7 +8,7 @@ use std::mem;
 use objc2::runtime::{Imp, Sel};
 use objc2::sel;
 use objc2_app_kit::{NSApplication, NSEvent, NSEventModifierFlags, NSEventType};
-use objc2_foundation::MainThreadMarker;
+use objc2_foundation::{MainThreadMarker, NSObjectProtocol};
 
 use super::app_state::ApplicationDelegate;
 use crate::event::{DeviceEvent, ElementState};
@@ -31,6 +31,21 @@ extern "C" fn send_event(app: &NSApplication, sel: Sel, event: &NSEvent) {
     // but that doesn't really matter here.
     let event_type = unsafe { event.r#type() };
     let modifier_flags = unsafe { event.modifierFlags() };
+
+    // AppKit's application dispatch suppresses keyboard delivery to all windows
+    // during a native fullscreen animation. Deliver to the current key window
+    // directly, once, so presentation input and rapid reversal reach winit.
+    if matches!(event_type, NSEventType::KeyDown | NSEventType::KeyUp)
+        && !modifier_flags.contains(NSEventModifierFlags::NSEventModifierFlagCommand)
+        && super::fullscreen_transition::fullscreen_transition_active()
+    {
+        if let Some(key_window) = app.keyWindow() {
+            if key_window.is_kind_of::<super::window::WinitWindow>() {
+                key_window.sendEvent(event);
+                return;
+            }
+        }
+    }
     if event_type == NSEventType::KeyUp
         && modifier_flags.contains(NSEventModifierFlags::NSEventModifierFlagCommand)
     {

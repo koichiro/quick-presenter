@@ -790,6 +790,13 @@ pub fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
     capture_slide_placement(windows);
     windows.placement.cancel();
     if let Some(slide) = windows.slide.upgrade() {
+        #[cfg(target_os = "macos")]
+        let _ = slide.window().with_winit_window(|native| {
+            // Record intent before a native resize can synchronize the old state
+            // back into Slint's deferred window properties.
+            native
+                .set_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)));
+        });
         slide.window().set_fullscreen(fullscreen);
         slide.set_titlebar_compensation_height(slide_titlebar_compensation_height(fullscreen));
     }

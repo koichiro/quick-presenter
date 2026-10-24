@@ -4,32 +4,32 @@
 Control Protocol. It is intended for automation tools and AI agents, and does
 not implement narration, AI models, or presentation business logic.
 
-Mac App Store CLI support is planned for
-[v2.5.0](https://github.com/koichiro/quick-presenter/milestone/4), renamed from
-v2.4.0 and tracked by [#422](https://github.com/koichiro/quick-presenter/issues/422).
-The optional build has passed signed and internal TestFlight installed-product
-checks; full Store qualification is still required.
+## Mac App Store control in v2.5.0
 
-The optional v2.5.0 Store control build uses authenticated XPC. Its bundled
-CLI is at `Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`.
-`qp open` starts the GUI if needed. For a PDF the Store GUI has not previously
-authorized, the GUI presents a picker with the requested file suggested.
-Select that exact file within 120 seconds. Cancellation or a different choice
-returns `CANCELLED` and preserves the current presentation. Subsequent opens
-use the saved security-scoped bookmark. The commands
-for status, timer elapsed, notes, slide, context, export, navigation, blackout,
-close, and watch keep Control Protocol v1. This build has passed local
-Developer ID-signed and internal TestFlight installed-product integration
-checks for the earlier control commands. Store `qp open` passed a local
-Developer ID-signed sandbox test and, after the 120-second deadline correction,
-Apple-distributed internal TestFlight build
-[25008](validation/ISSUE432_STORE_OPEN_TESTFLIGHT_25008.md) on macOS 27.0.1 arm64.
-Full Store qualification remains open. See
-[Mac App Store distribution](MAC_APP_STORE.md#experimental-v250-control-build).
+The v2.5.0 Mac App Store build includes a signed bundled CLI and authenticated
+XPC control. The CLI stays inside the installed app at
+`Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`.
+Mac App Store versions before 2.5.0 do not provide this control interface.
+
+`qp open` starts the companion GUI if needed. For a PDF the Store GUI has not
+previously authorized, it presents a picker with the requested file suggested.
+Select that exact file within **120 seconds**. Cancellation or a different
+choice returns `CANCELLED` and preserves the active presentation. Later opens
+can use the saved read-only security-scoped bookmark. The supplied CLI path
+is a hint for selection, not permission to read arbitrary files.
+
+Status, elapsed timer, notes, slide/context, export, navigation, blackout, close
+and watch use the same **Control Protocol v1** as the other channels. Signed
+and internal TestFlight integration results are indexed under
+[validation results](https://github.com/koichiro/quick-presenter/blob/main/docs/validation/README.md). Customer Store install/update
+qualification and general rollout are tracked separately in
+[#520](https://github.com/koichiro/quick-presenter/issues/520); do not infer the
+installed Store version from a GitHub release. See the
+[Mac App Store guide](https://github.com/koichiro/quick-presenter/blob/main/docs/MAC_APP_STORE.md#v250-cli-control).
 
 ## Stable automation interface
 
-For v2.0.0, the documented command names/options, `--json` result/error fields,
+Since v2.0.0, the documented command names/options, `--json` result/error fields,
 exit-code mapping, `watch --json` NDJSON stream, and `--version --json` metadata
 are stable public interfaces backed by Control Protocol v1. Application releases
 do not implicitly change the protocol version. See the
@@ -50,14 +50,15 @@ Release packages include the CLI and its documentation:
 
 | Distribution | CLI location |
 | --- | --- |
-| Mac App Store | v2.0.0: no CLI control; optional v2.5.0 candidate: `Contents/Helpers/ControlCLI.app/Contents/MacOS/qp` inside the app |
+| Mac App Store 2.5.0 | `Contents/Helpers/ControlCLI.app/Contents/MacOS/qp` inside the installed app |
 | macOS Developer ID app/DMG | `/Applications/Quick Presenter.app/Contents/MacOS/qp` |
 | Windows Store/MSIX | `qp.exe` app execution alias (enable it in Windows Settings if disabled) |
 | Windows MSI validation package | `qp.exe` beside `quick-presenter.exe` in the installation directory |
 | Linux Debian package | `/usr/bin/qp` |
 | Raw binary artifact | `qp` or `qp.exe` beside the GUI executable |
 
-On macOS, invoke the bundled executable directly, or add a user-local link:
+On macOS, use the CLI bundled with the installed distribution. For a Developer
+ID/DMG installation, invoke it directly or add a user-local link:
 
 ```sh
 "/Applications/Quick Presenter.app/Contents/MacOS/qp" status --json
@@ -66,16 +67,28 @@ ln -s "/Applications/Quick Presenter.app/Contents/MacOS/qp" "$HOME/.local/bin/qp
 # Add $HOME/.local/bin to PATH in your shell configuration.
 ```
 
+For the v2.5.0 Mac App Store control build, use its nested signed CLI instead:
+
+```sh
+"/Applications/Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp" status --json
+mkdir -p "$HOME/.local/bin"
+ln -s "/Applications/Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp" "$HOME/.local/bin/qp"
+```
+
+Choose the link target for the installed distribution; do not run both link
+commands. If `qp` already exists, inspect it with `ls -l "$HOME/.local/bin/qp"`.
+Only if it is a symlink you intend to replace, run `rm "$HOME/.local/bin/qp"`
+to remove that link, then rerun the selected `ln -s` command. A symlink
+keeps the CLI inside its signed app for Store GUI discovery; copying the
+executable elsewhere does not provide the same workflow. The commands below
+assume the matching CLI is on PATH.
+
 The MSI does not modify PATH. Invoke its installed `qp.exe` by full path, or
 add its directory to your user PATH. Windows Store remains the supported Windows
 distribution; MSI and direct MSIX packages are validation artifacts.
-Mac App Store CLI/control support is explicitly out of scope for v2.0.0.
-For packaged macOS automation, use the Developer ID / DMG distribution for
-presentation control, including `qp open` GUI startup, state/content queries,
-navigation, and `watch`.
-The v2.0.0 Store distribution does not provide a supported Control Protocol endpoint;
-using a separate CLI executable does not make the Store GUI controllable.
-Future sandbox-compatible support is tracked in [#422](https://github.com/koichiro/quick-presenter/issues/422).
+For an older Mac App Store version without CLI control, use the matching
+Developer ID / DMG distribution for automation or wait for its Store update.
+A separately copied CLI does not add a control endpoint to an older Store GUI.
 
 Nonsandboxed macOS development builds also support CLI control; Developer ID
 signing is not required for development CLI use. Build both binaries from the

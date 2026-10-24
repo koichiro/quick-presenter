@@ -7,8 +7,10 @@ licenses, and installer or app bundle layouts before uploading artifacts.
 The GUI application executable is `quick-presenter` on Unix-like platforms and
 `quick-presenter.exe` on Windows. The separate `qp` / `qp.exe` automation CLI
 is included in raw binary artifacts
-and platform packages. macOS places it in `Contents/MacOS/qp`; Windows places it
-beside the GUI and MSIX registers a console app execution alias; Debian installs
+and platform packages. macOS Developer ID apps place it in `Contents/MacOS/qp`;
+Mac App Store 2.5.0 uses `Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`.
+Windows places it beside the GUI and MSIX registers a console app execution
+alias; Debian installs
 `/usr/lib/quick-presenter/qp` with a `/usr/bin/qp` link. CLI and protocol docs are
 bundled as well. See [CLI installation](CLI.md#installation) for supported
 distributions and PATH setup. The GUI keeps its existing executable name.
@@ -21,11 +23,12 @@ Signing covers both Windows executables and the macOS CLI inside the app bundle.
 GUI/IPC/PDFium access, including JSON version output and rejection of timer
 mutation commands. Package CI also checks installed/extracted CLI paths.
 
-Mac App Store CLI/control support is explicitly out of scope for v2.0.0.
-Automation on macOS requires the Developer ID / DMG distribution; a bundled or
-separately installed CLI does not establish a supported endpoint in the Store
-GUI. See [Store limitations](MAC_APP_STORE.md#clicontrol-limitation-in-v200)
-and future work in [#422](https://github.com/koichiro/quick-presenter/issues/422).
+Mac App Store 2.5.0 builds use the `macos-store-control` feature and authenticated
+XPC for local control, with native user authorization for new PDF access. See
+[Store packaging and qualification](MAC_APP_STORE.md#v250-cli-control). Earlier
+Store versions have no supported CLI endpoint; copying in another CLI does not
+enable it. Customer Store installation/rollout remains separately tracked in
+[#520](https://github.com/koichiro/quick-presenter/issues/520).
 
 ## Bundled PDFium
 

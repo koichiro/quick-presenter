@@ -14,9 +14,9 @@ Routine pull requests are validated by the lightweight `CI` workflow. The full
 `Build Binaries` workflow is release/package validation and does not run for
 every source-only pull request.
 
-The v2.0.0 CLI and AI-assisted presentation release uses Cargo package version
-`2.0.0` and Control Protocol v1. GitHub publication and Microsoft Store
-submission, certification, and installed-version qualification are separate
+The v2.5.0 release uses Cargo package version `2.5.0` and retains Control
+Protocol v1. GitHub publication and Store submission, certification, and
+installed-version qualification are separate
 events. Record the exact source and package identity for each channel.
 
 Before publishing a release:
@@ -39,22 +39,130 @@ Before publishing a release:
 7. Confirm the Linux and macOS packages use the intended release version and
    their package smoke tests pass. For Linux, verify the Debian file name and
    the `Version` reported by `dpkg-deb --field <package> Version`. Confirm the
-   existing Microsoft Store listing remains publicly reachable; the v2.0.0
-   Store update is verified after the GitHub release as described below.
+   existing Microsoft Store listing remains publicly reachable. Follow the
+   v2.5.0 limited-distribution and general-release sequence below for the update.
 8. Review the uploaded `quick-presenter-ubuntu-x64-gui-smoke` report and the
    macOS/Windows GUI smoke skip-reason reports from `Build Binaries`.
-9. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the final
-   macOS and Ubuntu Linux artifacts and the existing public Microsoft Store
-   build before publishing. Rerun the Windows checks on v2.0.0 after its Store
-   update is certified.
-10. Complete the platform trust checks in the v2.0.0 policy below.
+9. Run the [GUI release smoke checklist](GUI_SMOKE_CHECKLIST.md) on the exact
+   final macOS/Ubuntu packages and Windows submission payload. Complete limited
+   Store installation qualification under #520 before general Store release;
+   verify ordinary public acquisition/update paths after release.
+10. Complete applicable signatures/notarization and package identity checks.
+    Resolve or explicitly disposition the remaining #508 gates before publication.
 11. Verify SBOM sidecars against the final DMG and Debian package, review their
     source/target/PDFium metadata, and attach the sidecars to the GitHub release.
     Record package hashes and follow the [SBOM release gate](SBOM.md#release-gate).
-    Generate and publish the Windows Store submission SBOM with its post-release
-    Store update; record submission and certified package identities separately.
-12. Attach the completed manual GUI smoke reports to the GitHub release, or
-    document any platform-specific waiver in the release notes before publishing.
+    Generate and verify the Windows Store submission SBOM before its staged
+    submission; record submission and certified package identities separately.
+12. Attach results-only manual validation reports to the GitHub release, with
+    exact source/package identity and explicit limits. Keep raw command and
+    per-assertion smoke transcripts in ignored local artifacts or CI artifacts.
+13. Confirm the changelog's release version/date match the tagged release.
+    Use its 2.5.0 section for release notes and link the final package/SBOM
+    and qualification records. Record Store rollout and unperformed checks
+    separately from the published version's feature summary.
+
+### v2.5.0 validation evidence
+
+The [final post-#523 package qualification](validation/V250_FINAL_PACKAGES_20261024.md)
+binds the selected candidates to source **f4c0180**, the final bundled documents
+and [successful all-OS build 40088331020](https://github.com/koichiro/quick-presenter/actions/runs/40088331020).
+It records the notarized/stapled Developer ID DMG, Apple-distributed TestFlight
+**25011**, the final Windows MSVC Store input and final Ubuntu DEB, with exact
+package/SBOM identities and current-machine runtime limits. Read its completion
+boundary and the latest #508 integration state before publishing; earlier
+records below retain their historical source/channel scope.
+
+Before publishing v2.5.0, review the [security and macOS artifact assessment](validation/ISSUE508_MACOS_RELEASE_REVIEW_20261022.md)
+and [internal TestFlight 25009 qualification](validation/ISSUE433_STORE_CLI_TESTFLIGHT_25009.md).
+They identify the tested source and artifacts, CVE evidence, retained maintenance
+warnings and remaining coverage. Complete the outstanding gates and record final
+channel artifacts/dispositions in [#508](https://github.com/koichiro/quick-presenter/issues/508).
+On **2026-10-24 JST**, the maintainer confirmed that
+[#493](https://github.com/koichiro/quick-presenter/issues/493) was manually
+executed and accepted its lifecycle qualification as completed for this release.
+The missing initial automated trace remains a historical evidence limitation;
+it no longer requires an additional pristine-account run. The maintainer also
+excluded unperformed additional Mac environments (Intel, another Mac, other
+macOS/hardware) from the v2.5.0 release gate; no compatibility pass is asserted.
+The maintainer also excluded Mac foreign-team/cross-user rejection and genuine
+security-scoped bookmark revocation tests from this v2.5.0 release gate. These
+checks remain unperformed; no passing security test is asserted and runtime
+identity, permission and sandbox enforcement are unchanged.
+[#508](https://github.com/koichiro/quick-presenter/issues/508) tracks final
+evidence integration; the fresh security checkpoint is complete as linked below.
+Customer Store-installed qualification is tracked separately in #520 under the
+approved limited-distribution/public-release sequence below.
+These reports do not approve publication or qualify a changed final package.
+
+The [October 24 pre-publication security review](validation/SECURITY_REVIEW_20261024.md)
+completed the fresh Cargo/PDFium/CVE/exploitation checkpoint on source `8052254`.
+It found no new security blocker: zero Cargo vulnerability advisories, the same
+five maintenance warnings, unchanged accepted PDFium omissions and no new
+production fix in the additional upstream commit. The existing 8111 release
+risk disposition remains applicable; this does not assert absence of vulnerabilities.
+Final combined package/SBOM/runtime and release-evidence qualification remains in
+#508. Refresh on material new information or by October 26 if publication is delayed.
+
+The [October 23 final source/artifact inventory](validation/V250_FINAL_ARTIFACT_INVENTORY_20261023.md)
+fixes the selected source, retained PDFium 8111 disposition, notarized direct DMG,
+Store submission candidates, Ubuntu DEB, hashes and verified SBOMs. It completes
+the original inventory work in #508. Final candidate integration and security
+review remain subject to the latest #508 dispositions; the subsequent macOS
+qualification and DMG limitation disposition are linked below.
+
+The [October 23 final macOS runtime report](validation/V250_FINAL_MACOS_RUNTIME_20261023.md) records the installed final direct app and internal TestFlight **25010**, including exact identity, renderer isolation, GUI/CLI regression, installed direct drop acceptance and same-user lifecycle checks. The [final document-delivery follow-up](validation/V250_MACOS_DOCUMENT_DELIVERY_20261023.md) completes Store Finder/drop checks and records the maintainer-approved read-only-DMG icon-drop limitation. Customer Store coverage and the other open #508 gates remain separate.
+
+The [October 24 final Windows runtime report](validation/V250_FINAL_WINDOWS_RUNTIME_20261024.md) records checks of the exact selected final-source MSVC Store submission payload, fresh SBOM/PDFium validation, rendering/CLI/lifecycle checks, and maintainer-confirmed initial display, physical keyboard and Narrator routes. Customer Store installation/update/alias qualification is tracked in [#520](https://github.com/koichiro/quick-presenter/issues/520); the remaining release conditions stay in [#508](https://github.com/koichiro/quick-presenter/issues/508). The unsigned submission input is not a Store-distributed installation.
+
+The [October 24 final Ubuntu package report](validation/V250_FINAL_LINUX_RUNTIME_20261024.md) completes current-machine qualification of the selected final DEB: installed payload/SBOM and renderer checks, default Wayland/XWayland GUI regression, CLI/cold-start/lifecycle, physical keyboard and launcher/Open With checks. It records unperformed dual-display coverage, the maintainer's explicit Orca gate exclusion, supplemental forced-FemtoVG smoke failures and a new Windows-only yanked dependency warning for release-wide review. These bounded results do not close the other #508 conditions or approve publication.
+
+The [October 24 post-merge integration record](validation/V250_RELEASE_INTEGRATION_20261024.md)
+rechecks preserved macOS/Linux artifacts against their actual build source and
+merged-main normal dependency graphs, tracks the post-merge Windows replacement,
+and lists unresolved release gates. It does not relabel old artifacts or approve
+unperformed checks, customer Store submission or publication.
+
+### v2.5.0 customer Store qualification timing
+
+On **2026-10-24 JST**, the maintainer explicitly moved customer Mac App Store
+and Microsoft Store 2.5.0 installation qualification to the post-review /
+post-certification follow-up [#520](https://github.com/koichiro/quick-presenter/issues/520).
+These customer checks remain **UNPERFORMED** until the actual distributed
+products are tested. The timing condition no longer independently blocks
+[#508](https://github.com/koichiro/quick-presenter/issues/508); all other source,
+artifact, runtime, evidence and pre-publication security conditions remain
+there, subject to the explicit scope dispositions above. Do not automatically close #520 when #508 or
+a documentation PR closes.
+
+After certification, bind the actual customer builds to their submitted
+source/package/SBOM identities and verify installation/update, distribution
+trust, installed workflows and the registered Windows `qp.exe` alias as listed
+in #520. Internal TestFlight and unsigned/CI-signed or extracted Windows
+submission payloads retain their supporting scope.
+
+The maintainer subsequently approved this execution sequence in #520:
+
+1. Resolve applicable candidate/source/artifact/security conditions from #508.
+2. Mac: submit for App Review with **manual release**. After approval, use
+   [promo codes](https://developer.apple.com/help/app-store-connect/offer-promo-codes/request-and-manage-promo-codes/)
+   to qualify the intended approved build before general release.
+3. Windows: submit the selected package through
+   [Package flights](https://learn.microsoft.com/en-us/windows/apps/publish/package-flights),
+   certify and distribute it to the designated test-account group, and verify
+   actual Store install/update/identity/trust and registered alias. Keep regular
+   customers on the existing package during this phase. Resolve any flight-only
+   WACK exceptions and obtain required regular-submission certification before
+   general release.
+4. Complete limited-distribution qualification and remaining release conditions,
+   then perform general release as a separately recorded action.
+5. Verify public listings and ordinary acquisition/update paths after release.
+
+Record upload, review submission, approval, limited distribution and general
+release separately, including exact builds/audiences and actual results. Approval
+of the workflow is not evidence that an action or test has occurred. The
+Microsoft Store-only Windows distribution policy and final pre-publication
+package/security checks remain in force.
 
 ### Mac App Store submissions
 
@@ -72,7 +180,9 @@ by [PACKAGING.md](PACKAGING.md#source-code-for-binary-releases) and
 
 ### v2.0.0 distribution and trust policy
 
-The supported v2.0.0 distribution channels are intentionally narrow:
+This section preserves the historical v2.0.0 policy. For v2.5.0, use the
+customer Store timing and release sequence above. The supported v2.0.0
+distribution channels were intentionally narrow:
 
 | Platform/channel | User package | Trust and identity | v2.0.0 status | Review lead time and fallback |
 | --- | --- | --- | --- | --- |
@@ -139,6 +249,13 @@ be reviewed before release. Any explicitly accepted advisory must be listed in
 date so release maintainers can tell whether the risk is still accepted.
 Dependabot checks Cargo and GitHub Actions dependencies weekly.
 
+The [October 24 clipboard-win review](validation/V250_CLIPBOARD_WIN_REVIEW_20261024.md)
+updates the yanked Windows transitive dependency from 5.4.1 to 5.4.3, containing
+the upstream HTML-fragment bounds fix. The application clipboard adapter uses
+Unicode text rather than that HTML getter. Final Windows packages/SBOMs must
+be regenerated for the changed dependency; previous ce42e1d artifact hashes
+remain historical and must not be reused as the updated candidate identity.
+
 GitHub Actions should use predictable references. First-party actions may use a
 major version tag when Dependabot covers update review. Third-party actions
 should be added only when the release workflow needs them and should use at
@@ -188,7 +305,7 @@ it keeps the executable, bundled PDFium files, desktop metadata, and license
 files in the expected layout.
 
 The Windows CI artifact may include MSI, MSIX, and raw executable files for
-layout, packaging, and signing validation. They are not supported v2.0.0
+layout, packaging, and signing validation. They are not supported public
 downloads. The Store-identity MSIX is submitted to Partner Center and becomes
 the supported package only after Microsoft Store certification and signing.
 
@@ -196,13 +313,21 @@ the supported package only after Microsoft Store certification and signing.
 
 Download `quick-presenter-macos` and open `QuickPresenter-<version>.dmg`.
 
-1. Drag `Quick Presenter.app` to `Applications`, or run the app from the mounted
-   disk image for a quick check.
+1. Drag `Quick Presenter.app` to `Applications` (or a writable user Applications
+   folder) before using PDF drag and drop. For a quick check from the mounted
+   disk image, use `Open` or `File > Open PDF...`.
 2. Launch `Quick Presenter`.
 3. Choose `Open` or `File > Open PDF...`.
 4. Select a PDF slide deck.
 5. Use the presenter window for controls and the slide window for audience
    output.
+
+For v2.5.0, dropping a PDF onto the application-bundle icon on the mounted
+read-only DMG is a known unsupported route: Finder can display a prohibited
+cursor and refuse the drop. Use the installed app icon, its running Dock icon,
+or the presenter/slide windows. These installed-app routes passed final direct
+and internal TestFlight 25010 qualification on the test Mac; the DMG refusal
+is a documented release limitation, not a passed test or an established OS cause.
 
 The v2.0.0 release disk image must be Developer ID signed, Apple-notarized, and
 stapled. Gatekeeper must accept the final DMG without an unidentified-developer

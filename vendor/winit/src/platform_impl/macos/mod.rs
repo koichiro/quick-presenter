@@ -8,6 +8,7 @@ mod event;
 mod event_handler;
 mod event_loop;
 mod ffi;
+mod fullscreen_transition;
 mod menu;
 mod monitor;
 mod observer;

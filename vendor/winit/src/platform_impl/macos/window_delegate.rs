@@ -13,7 +13,7 @@ use objc2::{declare_class, msg_send_id, mutability, sel, ClassType, DeclaredClas
 use objc2_app_kit::{
     NSAppKitVersionNumber, NSAppKitVersionNumber10_12, NSAppearance, NSAppearanceCustomization,
     NSAppearanceNameAqua, NSApplication, NSApplicationPresentationOptions, NSBackingStoreType,
-    NSColor, NSDraggingDestination, NSFilenamesPboardType, NSPasteboard,
+    NSColor, NSDraggingDestination, NSFilenamesPboardType, NSPasteboard, NSPasteboardTypeFileURL,
     NSRequestUserAttentionType, NSScreen, NSView, NSWindowButton, NSWindowDelegate,
     NSWindowFullScreenButton, NSWindowLevel, NSWindowOcclusionState, NSWindowOrderingMode,
     NSWindowSharingType, NSWindowStyleMask, NSWindowTabbingMode, NSWindowTitleVisibility,
@@ -28,6 +28,7 @@ use tracing::{trace, warn};
 
 use super::app_state::ApplicationDelegate;
 use super::cursor::cursor_from_icon;
+use super::fullscreen_transition::{reported_fullscreen, FullscreenTransition};
 use super::monitor::{self, flip_window_screen_coordinates, get_display_id};
 use super::observer::RunLoop;
 use super::view::WinitView;
@@ -118,7 +119,7 @@ pub(crate) struct State {
     // This is true between windowWillEnterFullScreen and windowDidEnterFullScreen
     // or windowWillExitFullScreen and windowDidExitFullScreen.
     // We must not toggle fullscreen when this is true.
-    in_fullscreen_transition: Cell<bool>,
+    in_fullscreen_transition: FullscreenTransition,
     standard_frame: Cell<Option<NSRect>>,
     is_simple_fullscreen: Cell<bool>,
     saved_style: Cell<Option<NSWindowStyleMask>>,
@@ -293,8 +294,14 @@ declare_class!(
             trace_scope!("windowDidEnterFullScreen:");
             self.ivars().initial_fullscreen.set(false);
             self.ivars().in_fullscreen_transition.set(false);
-            if let Some(target_fullscreen) = self.ivars().target_fullscreen.take() {
-                self.set_fullscreen(target_fullscreen);
+            if self.ivars().target_fullscreen.borrow().is_some() {
+                // AppKit is still completing its animation notification here.
+                // A synchronous toggle can be ignored; apply on the next turn.
+                unsafe {
+                    self.performSelector_withObject_afterDelay(
+                        sel!(applyPendingFullscreen:), None, 0.0,
+                    );
+                }
             }
         }
 
@@ -305,8 +312,14 @@ declare_class!(
 
             self.restore_state_from_fullscreen();
             self.ivars().in_fullscreen_transition.set(false);
-            if let Some(target_fullscreen) = self.ivars().target_fullscreen.take() {
-                self.set_fullscreen(target_fullscreen);
+            if self.ivars().target_fullscreen.borrow().is_some() {
+                // AppKit is still completing its animation notification here.
+                // A synchronous toggle can be ignored; apply on the next turn.
+                unsafe {
+                    self.performSelector_withObject_afterDelay(
+                        sel!(applyPendingFullscreen:), None, 0.0,
+                    );
+                }
             }
         }
 
@@ -373,6 +386,11 @@ declare_class!(
             use std::path::PathBuf;
 
             let pb: Retained<NSPasteboard> = unsafe { msg_send_id![sender, draggingPasteboard] };
+            let delegate = &*self.ivars().app_delegate;
+            if delegate.respondsToSelector(sel!(quickPresenterCanReadDrop:)) {
+                return unsafe { objc2::msg_send![delegate, quickPresenterCanReadDrop: &*pb] };
+            }
+
             let filenames = match pb.propertyListForType(unsafe { NSFilenamesPboardType }) {
                 Some(filenames) => filenames,
                 None => return false.into(),
@@ -402,6 +420,13 @@ declare_class!(
             use std::path::PathBuf;
 
             let pb: Retained<NSPasteboard> = unsafe { msg_send_id![sender, draggingPasteboard] };
+            let delegate = &*self.ivars().app_delegate;
+            if delegate.respondsToSelector(sel!(quickPresenterReadDrop:)) {
+                // The receiver consumes the original pasteboard URLs synchronously.
+                // Do not also emit DroppedFile and open the same request twice.
+                return unsafe { objc2::msg_send![delegate, quickPresenterReadDrop: &*pb] };
+            }
+
             let filenames = match pb.propertyListForType(unsafe { NSFilenamesPboardType }) {
                 Some(filenames) => filenames,
                 None => return false.into(),
@@ -432,6 +457,13 @@ declare_class!(
 
     // Key-Value Observing
     unsafe impl WindowDelegate {
+        #[method(applyPendingFullscreen:)]
+        fn apply_pending_fullscreen(&self, _: Option<&AnyObject>) {
+            if let Some(target_fullscreen) = self.ivars().target_fullscreen.take() {
+                self.set_fullscreen(target_fullscreen);
+            }
+        }
+
         #[method(observeValueForKeyPath:ofObject:change:context:)]
         fn observe_value(
             &self,
@@ -665,7 +697,8 @@ fn new_window(
         // register for drag and drop operations.
         window
             .registerForDraggedTypes(&NSArray::from_id_slice(&[
-                unsafe { NSFilenamesPboardType }.copy()
+                unsafe { NSFilenamesPboardType }.copy(),
+                unsafe { NSPasteboardTypeFileURL }.copy(),
             ]));
 
         Some(window)
@@ -730,7 +763,7 @@ impl WindowDelegate {
             initial_fullscreen: Cell::new(attrs.fullscreen.is_some()),
             fullscreen: RefCell::new(None),
             target_fullscreen: RefCell::new(None),
-            in_fullscreen_transition: Cell::new(false),
+            in_fullscreen_transition: FullscreenTransition::default(),
             standard_frame: Cell::new(None),
             is_simple_fullscreen: Cell::new(false),
             saved_style: Cell::new(None),
@@ -1280,7 +1313,10 @@ impl WindowDelegate {
 
     #[inline]
     pub(crate) fn fullscreen(&self) -> Option<Fullscreen> {
-        self.ivars().fullscreen.borrow().clone()
+        reported_fullscreen(
+            &self.ivars().fullscreen.borrow(),
+            &self.ivars().target_fullscreen.borrow(),
+        )
     }
 
     #[inline]
@@ -1296,7 +1332,9 @@ impl WindowDelegate {
         if self.ivars().is_simple_fullscreen.get() {
             return;
         }
-        if self.ivars().in_fullscreen_transition.get() {
+        if self.ivars().in_fullscreen_transition.get()
+            || self.ivars().target_fullscreen.borrow().is_some()
+        {
             // We can't set fullscreen here.
             // Set fullscreen after transition.
             self.ivars().target_fullscreen.replace(Some(fullscreen));

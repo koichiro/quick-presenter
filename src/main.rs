@@ -33,6 +33,8 @@ pub mod gui_smoke;
 pub mod hot_reload;
 pub mod input;
 #[cfg(target_os = "macos")]
+mod macos_documents;
+#[cfg(target_os = "macos")]
 mod macos_file_access;
 #[cfg(target_os = "macos")]
 pub mod macos_renderer;
@@ -240,6 +242,8 @@ fn main() -> Result<()> {
             None
         }
     };
+    #[cfg(target_os = "macos")]
+    let _native_document_timer = macos_documents::start(windows.refs(), state.clone());
     wire_callbacks(&windows, windows.refs(), state.clone());
     let audience_ui =
         audience_ui::AudienceUi::install(&windows, state.clone(), startup_options.config_path);
@@ -655,6 +659,19 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
         );
     });
 
+    let notes_refs = refs.clone();
+    let notes_state = state.clone();
+    app.on_notes_navigation_key(move |event| {
+        if let Some(command) =
+            input::notes_navigation_command(&event, use_physical_control_shortcuts())
+        {
+            handle_presentation_command(&notes_refs, &notes_state, command);
+            true
+        } else {
+            false
+        }
+    });
+
     let window_refs = refs.clone();
     let state_for_keyboard_previous = state.clone();
     app.on_keyboard_previous_page(move || {
@@ -712,8 +729,10 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let swap_for_toggle = display_swap_active.clone();
     app.on_toggle_slide_fullscreen(move || {
         swap_for_toggle.cancel();
-        let mut state = state_for_toggle.borrow_mut();
-        let fullscreen = state.fullscreen.toggle_slide_fullscreen();
+        let fullscreen = state_for_toggle
+            .borrow_mut()
+            .fullscreen
+            .toggle_slide_fullscreen();
         set_slide_fullscreen(&window_refs, fullscreen);
     });
 
@@ -798,8 +817,10 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let swap_for_slide_toggle = display_swap_active.clone();
     windows.slide.on_toggle_slide_fullscreen(move || {
         swap_for_slide_toggle.cancel();
-        let mut state = state_for_slide_toggle.borrow_mut();
-        let fullscreen = state.fullscreen.toggle_slide_fullscreen();
+        let fullscreen = state_for_slide_toggle
+            .borrow_mut()
+            .fullscreen
+            .toggle_slide_fullscreen();
         set_slide_fullscreen(&window_refs, fullscreen);
     });
 
@@ -1027,14 +1048,14 @@ fn handle_presentation_command(
         view_sync::apply_closed_state_to_windows(windows);
         return;
     }
+    let outcome = apply_session_command(&mut state.borrow_mut(), command, Instant::now());
+    // AppKit may emit synchronous resize callbacks. Release application state
+    // before applying native fullscreen intent.
+    if let Some(fullscreen) = outcome.slide_fullscreen {
+        set_slide_fullscreen(windows, fullscreen);
+    }
     let preload_snapshot = {
-        let mut state = state.borrow_mut();
-        let outcome = apply_session_command(&mut state, command, Instant::now());
-
-        if let Some(fullscreen) = outcome.slide_fullscreen {
-            set_slide_fullscreen(windows, fullscreen);
-        }
-
+        let state = state.borrow();
         if let Some(snapshot) = outcome.snapshot {
             apply_snapshot_to_windows(windows, &state, &snapshot);
             enqueue_visible_page_renders(&state, &snapshot);
@@ -1123,7 +1144,23 @@ fn request_pdf_file_open(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
 
 #[cfg(not(target_os = "linux"))]
 fn request_pdf_file_open(windows: AppWindowRefs, state: Rc<RefCell<AppState>>) {
-    if let Some(path) = pick_pdf_file() {
+    #[cfg(target_os = "macos")]
+    {
+        if state.borrow().file_dialog.open {
+            return;
+        }
+        state.borrow_mut().file_dialog.open = true;
+        // AppKit runs a nested event loop in the synchronous panel. Reject Finder
+        // requests there instead of replaying them after the user dismisses it.
+        macos_documents::set_modal_busy(true);
+    }
+    let selected = pick_pdf_file();
+    #[cfg(target_os = "macos")]
+    {
+        macos_documents::set_modal_busy(false);
+        state.borrow_mut().file_dialog.open = false;
+    }
+    if let Some(path) = selected {
         #[cfg(target_os = "macos")]
         if let Err(error) = macos_file_access::remember_selected(&path) {
             warn!(error = ?error, "could not persist selected PDF access");
@@ -2421,7 +2458,7 @@ fn handle_render_open_failed(
             )
         } else {
             errors::presenter_error_message(
-                &anyhow::anyhow!(message),
+                &anyhow::anyhow!(message).context("failed to open PDF"),
                 state.diagnostics_log_path.as_deref(),
             )
         }

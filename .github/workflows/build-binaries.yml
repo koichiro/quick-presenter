@@ -46,6 +46,12 @@ on:
       - 'src/control/**'
       - 'src/macos_control_xpc.m'
       - 'src/main.rs'
+      - 'src/macos_documents.*'
+      - 'src/macos_window.rs'
+      - 'src/window_controller.rs'
+      - 'vendor/winit/**'
+      - 'tests/macos_document_bridge.m'
+      - 'tests/test_macos_documents.py'
       - 'tests/control*.rs'
       - 'tests/fixtures/control-v1.json'
       - 'tests/fixtures/control-launch-gui.py'
@@ -153,6 +159,10 @@ jobs:
 
       - name: Fetch PDFium
         run: python scripts/fetch_pdfium.py --clean
+
+      - name: Test macOS native document bridge
+        if: runner.os == 'macOS'
+        run: python -m unittest tests/test_macos_documents.py
 
       - name: Test renderer process boundary
         run: cargo test --test renderer_process

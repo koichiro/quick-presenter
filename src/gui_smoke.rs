@@ -1,9 +1,11 @@
+#[cfg(target_os = "macos")]
+mod macos_fullscreen;
+
 use std::{
     cell::{Cell, RefCell},
     fs,
     path::Path,
     rc::Rc,
-    thread,
     time::{Duration, Instant},
 };
 
@@ -23,12 +25,24 @@ const ASYNC_OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 const ASYNC_OPEN_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 pub fn run(options: GuiSmokeOptions) -> Result<()> {
-    let mut report = GuiSmokeReport::new(options.pdf_path.display().to_string());
-    let result = run_checks(&options, &mut report);
-
-    if let Err(err) = result {
-        report.fail("run completed", err.to_string());
-    }
+    let windows = AppWindows::new().context("failed to create Slint windows")?;
+    let completed = Rc::new(RefCell::new(None));
+    let outcome = completed.clone();
+    slint::spawn_local(async move {
+        let mut report = GuiSmokeReport::new(options.pdf_path.display().to_string());
+        if let Err(err) = run_checks(windows, &options, &mut report).await {
+            report.fail("run completed", format!("{err:#}"));
+        }
+        *outcome.borrow_mut() = Some((options, report));
+        slint::quit_event_loop().expect("GUI smoke loop should accept quit");
+    })?;
+    // Exit only after every check finishes. On macOS an exit closes native
+    // windows and clears their delegates, even if Slint retains its adapters.
+    slint::run_event_loop_until_quit().context("failed to run GUI smoke")?;
+    let (options, report) = completed
+        .borrow_mut()
+        .take()
+        .context("GUI smoke interrupted")?;
 
     let output = report.render();
     if let Some(path) = options.report_path.as_ref() {
@@ -53,8 +67,11 @@ pub fn run(options: GuiSmokeOptions) -> Result<()> {
     Ok(())
 }
 
-fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<()> {
-    let windows = AppWindows::new().context("failed to create Slint windows")?;
+async fn run_checks(
+    windows: AppWindows,
+    options: &GuiSmokeOptions,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
     crate::configure_linux_desktop_identity()?;
     crate::configure_shortcut_modifiers(&windows);
     let state: Rc<RefCell<AppState>> = Rc::new(RefCell::new(AppState::default()));
@@ -69,9 +86,12 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         .show()
         .context("failed to show slide window")?;
     #[cfg(target_os = "macos")]
+    let transitions = macos_fullscreen::Transitions::new(&windows.slide)?;
+    #[cfg(target_os = "macos")]
     {
         use slint::winit_030::WinitWindowAccessor;
-        settle_notes_layout()?;
+        check_macos_fullscreen_reversal(&windows, report, &transitions).await?;
+        settle_notes_layout().await?;
         report.check(
             "macOS native slide titlebar is transparent and hidden from creation",
             macos_slide_chrome_is_correct(&windows.slide),
@@ -112,8 +132,8 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         "slide window weak handle could not be upgraded",
     );
 
-    check_notes_font_size(&windows, &state, report, "before opening a PDF")?;
-    check_audience_join_screen(&windows, &state, report)?;
+    check_notes_font_size(&windows, &state, report, "before opening a PDF").await?;
+    check_audience_join_screen(&windows, &state, report).await?;
 
     crate::begin_open_pdf(&window_refs, &state, options.pdf_path.clone());
     report.check(
@@ -124,6 +144,7 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
         "presenter progress indicator was unexpectedly visible",
     );
     wait_for_async_open(&window_refs, &state)
+        .await
         .context("failed to open and render PDF through async render scheduler")?;
 
     report.pass("opened and rendered PDF through async render scheduler");
@@ -170,9 +191,9 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
     report_state(report, &state, "speaker notes were checked", |state| {
         state.status_text == "Ready" || state.status_text.contains("notes")
     });
-    check_notes_font_size(&windows, &state, report, "with a PDF open")?;
-    check_audience_join_screen(&windows, &state, report)?;
-    check_settings_dialog(&windows, &state, report)?;
+    check_notes_font_size(&windows, &state, report, "with a PDF open").await?;
+    check_audience_join_screen(&windows, &state, report).await?;
+    check_settings_dialog(&windows, &state, report).await?;
     report_presenter_progress(
         report,
         &windows,
@@ -292,21 +313,32 @@ fn run_checks(options: &GuiSmokeOptions, report: &mut GuiSmokeReport) -> Result<
 
     #[cfg(all(unix, not(all(target_os = "macos", feature = "macos-store-control"))))]
     {
-        crate::control_smoke::run(&windows, state.clone(), options.pdf_path.clone())?;
+        crate::control_smoke::run(&windows, state.clone(), options.pdf_path.clone()).await?;
         report.pass("local control operates through the GUI and isolated renderer");
     }
-    check_hidden_slide_recovery(&windows, &state, report)?;
+    check_hidden_slide_recovery(
+        &windows,
+        &state,
+        report,
+        #[cfg(target_os = "macos")]
+        &transitions,
+    )
+    .await?;
     #[cfg(target_os = "macos")]
     {
-        check_macos_slide_edges(&windows, report)?;
-        check_macos_preserved_pdf_open(&windows, &state, options, report)?;
+        check_macos_slide_edges(&windows, report, &transitions).await?;
+        check_macos_preserved_pdf_open(&windows, &state, options, report).await?;
     }
 
     Ok(())
 }
 
 #[cfg(target_os = "macos")]
-fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) -> Result<()> {
+async fn check_macos_slide_edges(
+    windows: &AppWindows,
+    report: &mut GuiSmokeReport,
+    transitions: &macos_fullscreen::Transitions,
+) -> Result<()> {
     use slint::winit_030::WinitWindowAccessor;
     let slide = &windows.slide;
     let original_image = slide.get_page_image();
@@ -343,17 +375,30 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
     slide.set_page_image(slint::Image::from_rgba8(buffer));
     slide.set_page_aspect_ratio(16.0 / 9.0);
     let refs = windows.refs();
+    let display_size = slide
+        .window()
+        .with_winit_window(|native| {
+            native
+                .current_monitor()
+                .or_else(|| native.primary_monitor())
+                .map(|monitor| monitor.size().to_logical::<f64>(monitor.scale_factor()))
+        })
+        .flatten()
+        .context("native edge checks require an available display")?;
     for (name, width, height) in [
         ("windowed", 960.0, 540.0),
         ("resized", 1280.0, 720.0),
         ("restored tall window", 1704.0, 1063.0),
         ("after fullscreen", 960.0, 540.0),
     ] {
+        let scale = (display_size.width * 0.8 / width)
+            .min(display_size.height * 0.8 / height)
+            .min(1.0);
+        let width = width * scale;
+        let height = height * scale;
         if name == "after fullscreen" {
-            let action_refs = refs.clone();
-            run_macos_window_action(move || set_slide_fullscreen(&action_refs, true))?;
-            let action_refs = refs.clone();
-            run_macos_window_action(move || set_slide_fullscreen(&action_refs, false))?;
+            settle_slide_fullscreen(&refs, true, transitions).await?;
+            settle_slide_fullscreen(&refs, false, transitions).await?;
         }
         let action_refs = refs.clone();
         run_macos_window_action(move || {
@@ -364,35 +409,39 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
                 action_refs.placement.preserve_size.set(preserve);
             }
             crate::sync_slide_chrome(&action_refs);
-        })?;
+        })
+        .await?;
         check_macos_native_slide_edges(slide, report, name)?;
     }
 
-    let early_quit = slint::Timer::default();
-    early_quit.start(
+    let unrelated_tick = Rc::new(Cell::new(false));
+    let ticked = unrelated_tick.clone();
+    let unrelated_timer = slint::Timer::default();
+    unrelated_timer.start(
         slint::TimerMode::SingleShot,
         Duration::from_millis(20),
-        || {
-            slint::quit_event_loop().expect("early-quit regression should accept quit");
-        },
+        move || ticked.set(true),
     );
     let action_count = Rc::new(Cell::new(0));
     let counted = action_count.clone();
     let started = Instant::now();
-    run_macos_window_action(move || counted.set(counted.get() + 1))?;
-    early_quit.stop();
+    run_macos_window_action(move || counted.set(counted.get() + 1)).await?;
+    unrelated_timer.stop();
     report.check(
-        "macOS window actions survive unrelated early event-loop exits",
-        action_count.get() == 1 && started.elapsed() >= Duration::from_secs(1),
+        "macOS window actions wait for their own condition across unrelated timers",
+        unrelated_tick.get()
+            && action_count.get() == 1
+            && started.elapsed() >= Duration::from_secs(1),
         "action ran once and its own settling condition completed",
         "action was skipped, repeated, or ended before settling",
     );
 
-    let timed_out =
-        run_macos_window_action_until(|| {}, || false, Duration::from_millis(30)).is_err();
+    let timed_out = run_macos_window_action_until(|| {}, || false, Duration::from_millis(30))
+        .await
+        .is_err();
     let next_action_ran = Rc::new(Cell::new(false));
     let ran = next_action_ran.clone();
-    run_macos_window_action_until(move || ran.set(true), || true, Duration::from_secs(5))?;
+    run_macos_window_action_until(move || ran.set(true), || true, Duration::from_secs(5)).await?;
     report.check(
         "macOS window action timeout does not leak into the next check",
         timed_out && next_action_ran.get(),
@@ -447,7 +496,8 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
             move || crate::window_controller::start_slide_placement(action_refs),
             move || verification_refs.placement.restore_verified.get(),
             Duration::from_secs(5),
-        )?;
+        )
+        .await?;
         report.check(
             format!("macOS {name} restoration completes"),
             refs.placement.restore_verified.get(),
@@ -481,7 +531,98 @@ fn check_macos_slide_edges(windows: &AppWindows, report: &mut GuiSmokeReport) ->
                 f64::from(original_size.height),
             ],
         );
-    })?;
+    })
+    .await?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_native_fullscreen(slide: &crate::SlideWindow) -> Option<bool> {
+    use objc2_app_kit::{NSView, NSWindowStyleMask};
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    let handle = slide.window().window_handle();
+    let handle = handle.window_handle().ok()?;
+    let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+        return None;
+    };
+    // The live Slint adapter owns the view, and GUI smoke runs on the main thread.
+    let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
+    let window = view.window()?;
+    window.delegate()?;
+    Some(window.styleMask().contains(NSWindowStyleMask::FullScreen))
+}
+
+#[cfg(target_os = "macos")]
+async fn check_macos_fullscreen_reversal(
+    windows: &AppWindows,
+    report: &mut GuiSmokeReport,
+    transitions: &macos_fullscreen::Transitions,
+) -> Result<()> {
+    use slint::winit_030::WinitWindowAccessor;
+    let refs = windows.refs();
+    for (name, sequence, expected) in [
+        ("reversal baseline", &[false][..], false),
+        ("rapid entry cancellation", &[true, false][..], false),
+        ("settled entry", &[true][..], true),
+        ("rapid exit cancellation", &[false, true][..], true),
+        ("reversal cleanup", &[false][..], false),
+    ] {
+        let before = transitions.counts();
+        let started = Instant::now();
+        set_slide_fullscreen(&refs, sequence[0]);
+        if sequence.len() == 2 {
+            let will = if sequence[0] { 0 } else { 2 };
+            while transitions.counts()[will] == before[will] {
+                if started.elapsed() >= Duration::from_secs(5) {
+                    bail!("macOS {name}: initial transition never started");
+                }
+                delay(Duration::from_millis(10)).await;
+            }
+            anyhow::ensure!(
+                transitions.counts()[will + 1] == before[will + 1],
+                "macOS {name}: initial transition finished before reversal"
+            );
+            set_slide_fullscreen(&refs, sequence[1]);
+        }
+        loop {
+            let actual = (
+                macos_native_fullscreen(&windows.slide),
+                windows.slide.window().is_fullscreen(),
+                windows
+                    .slide
+                    .window()
+                    .with_winit_window(|native| native.fullscreen().is_some()),
+            );
+            let counts = transitions.counts();
+            let notifications_match = if sequence.len() == 2 {
+                // Both actual native transitions must finish; a dropped first
+                // request cannot pass just because the final state is unchanged.
+                counts
+                    .iter()
+                    .zip(before)
+                    .all(|(count, previous)| *count == previous + 1)
+            } else if name == "settled entry" {
+                counts[0] == before[0] + 1 && counts[1] == before[1] + 1
+            } else if name == "reversal cleanup" {
+                counts[2] == before[2] + 1 && counts[3] == before[3] + 1
+            } else {
+                counts == before
+            };
+            if started.elapsed() >= Duration::from_secs(1)
+                && notifications_match
+                && actual == (Some(expected), expected, Some(expected))
+            {
+                report.pass(format!(
+                    "macOS {name} matches AppKit fullscreen state and notifications"
+                ));
+                break;
+            }
+            if started.elapsed() >= Duration::from_secs(5) {
+                bail!("macOS {name} did not settle: state={actual:?}, notifications={before:?} -> {counts:?}");
+            }
+            delay(Duration::from_millis(10)).await;
+        }
+    }
     Ok(())
 }
 
@@ -499,9 +640,10 @@ fn macos_slide_chrome_is_correct(slide: &crate::SlideWindow) -> bool {
     // GUI smoke runs on the main thread; the Slint adapter owns this live view.
     let view = unsafe { handle.ns_view.cast::<NSView>().as_ref() };
     view.window().is_some_and(|window| {
-        window
-            .styleMask()
-            .contains(NSWindowStyleMask::FullSizeContentView)
+        window.delegate().is_some()
+            && window
+                .styleMask()
+                .contains(NSWindowStyleMask::FullSizeContentView)
             && window.titlebarAppearsTransparent()
             && window.titleVisibility() == NSWindowTitleVisibility::Hidden
     })
@@ -577,7 +719,7 @@ fn check_macos_native_slide_edges(
 }
 
 #[cfg(target_os = "macos")]
-fn check_macos_preserved_pdf_open(
+async fn check_macos_preserved_pdf_open(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
     options: &GuiSmokeOptions,
@@ -588,47 +730,11 @@ fn check_macos_preserved_pdf_open(
     let action_refs = refs.clone();
     run_macos_window_action(move || {
         crate::window_controller::set_slide_logical_size(&action_refs, [1704.0, 1063.0]);
-    })?;
+    })
+    .await?;
     crate::begin_open_pdf(&refs, state, options.pdf_path.clone());
-    // Production render events are drained with Winit's event handler active.
-    // Calling the blocking smoke helper here would drop synchronous resizes.
-    let completed = Rc::new(RefCell::new(None));
-    let outcome = completed.clone();
-    let poll_refs = refs.clone();
-    let poll_state = state.clone();
-    let started = Instant::now();
-    let mut notes_loaded = false;
-    let timer = slint::Timer::default();
-    timer.start(
-        slint::TimerMode::Repeated,
-        ASYNC_OPEN_POLL_INTERVAL,
-        move || {
-            let drain = crate::drain_render_events(&poll_refs, &poll_state);
-            notes_loaded |= drain.speaker_notes_loaded;
-            let result = if drain.open_failed || drain.page_failed || drain.worker_failed {
-                Some(Err(anyhow::anyhow!(
-                    "async PDF open failed during macOS regression"
-                )))
-            } else if async_open_is_ready(&poll_state.borrow(), notes_loaded) {
-                Some(Ok(()))
-            } else if started.elapsed() >= ASYNC_OPEN_TIMEOUT {
-                Some(Err(anyhow::anyhow!("macOS async PDF open timed out")))
-            } else {
-                None
-            };
-            if let Some(result) = result {
-                *outcome.borrow_mut() = Some(result);
-                slint::quit_event_loop().expect("async PDF open should accept quit");
-            }
-        },
-    );
-    slint::run_event_loop_until_quit()?;
-    timer.stop();
-    completed
-        .borrow_mut()
-        .take()
-        .context("async PDF open ended without a result")??;
-    run_macos_window_action(|| {})?;
+    wait_for_async_open(&refs, state).await?;
+    run_macos_window_action(|| {}).await?;
     let size = windows
         .slide
         .window()
@@ -646,7 +752,7 @@ fn check_macos_preserved_pdf_open(
 }
 
 #[cfg(target_os = "macos")]
-fn run_macos_window_action(action: impl FnOnce() + 'static) -> Result<()> {
+async fn run_macos_window_action(action: impl FnOnce() + 'static) -> Result<()> {
     let applied_at = Rc::new(Cell::new(None::<Instant>));
     let observed = applied_at.clone();
     run_macos_window_action_until(
@@ -661,69 +767,93 @@ fn run_macos_window_action(action: impl FnOnce() + 'static) -> Result<()> {
         },
         Duration::from_secs(5),
     )
+    .await
 }
 
 #[cfg(target_os = "macos")]
-fn run_macos_window_action_until(
+async fn run_macos_window_action_until(
     action: impl FnOnce() + 'static,
     settled: impl Fn() -> bool + 'static,
     timeout: Duration,
 ) -> Result<()> {
-    // AppKit can emit resize notifications synchronously. Keep Winit's handler
-    // active until this action's own completion, even if another callback quits
-    // a loop turn. Owned timers cannot leak a delayed quit into later checks.
-    let action_ran = Rc::new(Cell::new(false));
-    let ran = action_ran.clone();
-    let action_timer = slint::Timer::default();
-    let mut action = Some(action);
-    action_timer.start(slint::TimerMode::SingleShot, Duration::ZERO, move || {
-        if let Some(action) = action.take() {
-            action();
-            ran.set(true);
-        }
-    });
-    let completed = Rc::new(RefCell::new(None));
-    let outcome = completed.clone();
+    // Yield before the action so native callbacks run with Winit's handler active.
+    delay(Duration::ZERO).await;
+    action();
     let started = Instant::now();
-    let poll = slint::Timer::default();
-    poll.start(
-        slint::TimerMode::Repeated,
-        Duration::from_millis(10),
-        move || {
-            if outcome.borrow().is_some() {
-                return;
-            }
-            let result = if action_ran.get() && settled() {
-                Some(Ok(()))
-            } else if started.elapsed() >= timeout {
-                Some(Err(anyhow::anyhow!(
-                    "macOS window action did not settle before its deadline"
-                )))
-            } else {
-                None
-            };
-            if let Some(result) = result {
-                *outcome.borrow_mut() = Some(result);
-                slint::quit_event_loop().expect("macOS window action should accept quit");
-            }
-        },
-    );
-    while completed.borrow().is_none() {
-        slint::run_event_loop_until_quit().context("failed to settle the macOS window action")?;
+    loop {
+        if settled() {
+            return Ok(());
+        }
+        if started.elapsed() >= timeout {
+            bail!("macOS window action did not settle before its deadline");
+        }
+        delay(Duration::from_millis(10)).await;
     }
-    action_timer.stop();
-    poll.stop();
-    let result = completed
-        .borrow_mut()
-        .take()
-        .context("macOS window action ended without a result")?;
-    result
 }
 
-fn check_hidden_slide_recovery(
+async fn settle_slide_fullscreen(
+    refs: &crate::window_controller::AppWindowRefs,
+    fullscreen: bool,
+    #[cfg(target_os = "macos")] transitions: &macos_fullscreen::Transitions,
+) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use slint::winit_030::WinitWindowAccessor;
+        let started = Instant::now();
+        // The suite-long observer also sees requests made by earlier IPC checks.
+        // Finish those before deciding whether this request is a native no-op.
+        loop {
+            let counts = transitions.counts();
+            if counts[0] == counts[1] && counts[2] == counts[3] {
+                break;
+            }
+            if started.elapsed() >= Duration::from_secs(5) {
+                bail!("prior fullscreen transition did not complete: {counts:?}");
+            }
+            delay(Duration::from_millis(10)).await;
+        }
+        let slide = refs
+            .slide
+            .upgrade()
+            .context("hidden-window fixture lost its slide")?;
+        let initial =
+            macos_native_fullscreen(&slide).context("native slide delegate is missing")?;
+        let before = transitions.counts();
+        let did = if fullscreen { 1 } else { 3 };
+        set_slide_fullscreen(refs, fullscreen);
+        loop {
+            let counts = transitions.counts();
+            let completed = counts[0] == counts[1]
+                && counts[2] == counts[3]
+                && (initial == fullscreen || counts[did] > before[did]);
+            let actual = (
+                macos_native_fullscreen(&slide),
+                slide.window().is_fullscreen(),
+                slide
+                    .window()
+                    .with_winit_window(|native| native.fullscreen().is_some()),
+            );
+            if completed && actual == (Some(fullscreen), fullscreen, Some(fullscreen)) {
+                return Ok(());
+            }
+            if started.elapsed() >= Duration::from_secs(5) {
+                bail!("hidden-window fullscreen={fullscreen} did not complete: state={actual:?}, notifications={before:?} -> {counts:?}");
+            }
+            delay(Duration::from_millis(10)).await;
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        set_slide_fullscreen(refs, fullscreen);
+        settle_notes_layout().await
+    }
+}
+
+async fn check_hidden_slide_recovery(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
     report: &mut GuiSmokeReport,
+    #[cfg(target_os = "macos")] transitions: &macos_fullscreen::Transitions,
 ) -> Result<()> {
     let refs = windows.refs();
     let frames = Rc::new(Cell::new(0_u32));
@@ -737,11 +867,16 @@ fn check_hidden_slide_recovery(
             }
         })
         .context("failed to monitor slide rendering for hidden-window recovery")?;
-    settle_notes_layout()?;
+    settle_notes_layout().await?;
 
     for fullscreen in [false, true] {
-        set_slide_fullscreen(&refs, fullscreen);
-        settle_notes_layout()?;
+        settle_slide_fullscreen(
+            &refs,
+            fullscreen,
+            #[cfg(target_os = "macos")]
+            transitions,
+        )
+        .await?;
         for (close_request, raise, color) in [
             (true, false, [210, 30, 90, 255]),
             (true, true, [20, 160, 200, 255]),
@@ -776,14 +911,14 @@ fn check_hidden_slide_recovery(
             windows
                 .slide
                 .set_page_image(slint::Image::from_rgba8(buffer));
-            settle_notes_layout()?;
+            settle_notes_layout().await?;
             let previous_frames = frames.get();
             if raise {
                 crate::bring_slide_window_to_front(&refs, state);
             } else {
                 crate::show_slide_window_from_menu(&refs, state);
             }
-            settle_notes_layout()?;
+            settle_notes_layout().await?;
             let action = format!(
                 "{} ({})",
                 if raise {
@@ -822,11 +957,17 @@ fn check_hidden_slide_recovery(
             );
         }
     }
-    set_slide_fullscreen(&refs, false);
+    settle_slide_fullscreen(
+        &refs,
+        false,
+        #[cfg(target_os = "macos")]
+        transitions,
+    )
+    .await?;
     if let Some(snapshot) = state.borrow().presentation.snapshot() {
         crate::apply_snapshot_to_windows(&refs, &state.borrow(), &snapshot);
     }
-    settle_notes_layout()?;
+    settle_notes_layout().await?;
     Ok(())
 }
 
@@ -852,7 +993,7 @@ fn report_state(
     report.check(name, verify(&state), "state matched", "state did not match");
 }
 
-fn check_audience_join_screen(
+async fn check_audience_join_screen(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
     report: &mut GuiSmokeReport,
@@ -871,7 +1012,7 @@ fn check_audience_join_screen(
     presenter.invoke_audience_toggle_session();
     let deadline = Instant::now() + Duration::from_secs(5);
     while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     let url = presenter.get_audience_url();
     report.check(
@@ -903,7 +1044,7 @@ fn check_audience_join_screen(
     submit_audience_smoke_reaction(&url)?;
     let deadline = Instant::now() + Duration::from_secs(2);
     while windows.slide.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     let snapshot = windows.slide.window().take_snapshot()?;
     let colored = snapshot
@@ -926,7 +1067,7 @@ fn check_audience_join_screen(
         state,
         PresentationCommand::SetBlackScreen(true),
     );
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     let blank = windows.slide.window().take_snapshot()?;
     let center = ((blank.height() / 2 * blank.width() + blank.width() / 2) * 4) as usize;
     report.check(
@@ -1001,7 +1142,7 @@ fn check_audience_join_screen(
     submit_audience_smoke_reaction(&url)?;
     let deadline = Instant::now() + Duration::from_secs(2);
     while presenter.get_audience_reaction_count() < 2 && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
         "WebSocket reaction reaches Presenter View",
@@ -1010,8 +1151,8 @@ fn check_audience_join_screen(
         "authenticated reaction displayed",
         "reaction did not reach the presenter",
     );
-    check_audience_overlay(windows, state, &url, report)?;
-    check_live_comments(windows, state, &url, report)?;
+    check_audience_overlay(windows, state, &url, report).await?;
+    check_live_comments(windows, state, &url, report).await?;
     report.check(
         "PDF navigation keeps Audience Live running",
         !state.borrow().audience_join_visible
@@ -1025,7 +1166,7 @@ fn check_audience_join_screen(
     submit_audience_smoke_reaction(&url)?;
     let deadline = Instant::now() + Duration::from_secs(2);
     while windows.slide.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
         "Reaction is visible before session stop",
@@ -1042,7 +1183,7 @@ fn check_audience_join_screen(
     );
     let deadline = Instant::now() + Duration::from_secs(5);
     while presenter.get_audience_active() && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
         "Stop clears audience QR, URLs, and join screen",
@@ -1059,13 +1200,13 @@ fn check_audience_join_screen(
     presenter.invoke_audience_toggle_session();
     let deadline = Instant::now() + Duration::from_secs(5);
     while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     let new_url = presenter.get_audience_url();
     submit_audience_smoke_reaction(&new_url)?;
     let deadline = Instant::now() + Duration::from_secs(2);
     while presenter.get_audience_reaction_count() == 0 && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
         "Audience Live can restart with a new URL and automatically receives reactions",
@@ -1078,13 +1219,16 @@ fn check_audience_join_screen(
     presenter.invoke_audience_toggle_session();
     let deadline = Instant::now() + Duration::from_secs(5);
     while presenter.get_audience_active() && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
-    check_audience_panel_layout(windows, report)?;
+    check_audience_panel_layout(windows, report).await?;
     Ok(())
 }
 
-fn check_audience_panel_layout(windows: &AppWindows, report: &mut GuiSmokeReport) -> Result<()> {
+async fn check_audience_panel_layout(
+    windows: &AppWindows,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
     let presenter = &windows.presenter;
     let size = presenter.window().size();
     for (width, height) in [(800.0, 800.0), (1020.0, 960.0), (1200.0, 1240.0)] {
@@ -1093,7 +1237,7 @@ fn check_audience_panel_layout(windows: &AppWindows, report: &mut GuiSmokeReport
             .dispatch_event(slint::platform::WindowEvent::Resized {
                 size: slint::LogicalSize::new(width, height),
             });
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
         report.check(
             format!("Audience panel leaves thumbnails unobstructed ({width}x{height})"),
             presenter.get_audience_panel_right() + 8.0 <= presenter.get_thumbnails_left()
@@ -1124,11 +1268,11 @@ fn check_audience_panel_layout(windows: &AppWindows, report: &mut GuiSmokeReport
         .dispatch_event(slint::platform::WindowEvent::Resized {
             size: size.to_logical(presenter.window().scale_factor()),
         });
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     Ok(())
 }
 
-fn check_audience_overlay(
+async fn check_audience_overlay(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
     url: &str,
@@ -1155,7 +1299,7 @@ fn check_audience_overlay(
     slide
         .window()
         .set_size(slint::LogicalSize::new(800.0, 600.0));
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     let moving = slide.get_audience_overlay().row_data(0);
     report.check(
         "Overlay animates within resized bounds and preserves the presentation session",
@@ -1178,7 +1322,7 @@ fn check_audience_overlay(
         "overlay remained queued",
     );
     submit_audience_smoke_reaction(url)?;
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     let blank = slide.window().take_snapshot()?;
     report.check(
         "Blackout remains black while audience reactions arrive",
@@ -1194,7 +1338,7 @@ fn check_audience_overlay(
         state,
         PresentationCommand::SetBlackScreen(false),
     );
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     report.check(
         "Restoring blackout never replays suppressed reactions",
         slide.get_audience_overlay().row_count() == 0,
@@ -1203,9 +1347,9 @@ fn check_audience_overlay(
     );
     crate::window_controller::hide_slide_window(&windows.refs());
     submit_audience_smoke_reaction(url)?;
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     crate::window_controller::show_slide_window(&windows.refs());
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     report.check(
         "Showing the slide never replays hidden-window reactions",
         slide.get_audience_overlay().row_count() == 0,
@@ -1215,7 +1359,7 @@ fn check_audience_overlay(
     submit_audience_smoke_reaction(url)?;
     let deadline = Instant::now() + Duration::from_secs(2);
     while slide.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
         "New reactions resume after showing the slide",
@@ -1226,7 +1370,7 @@ fn check_audience_overlay(
     let deadline =
         Instant::now() + crate::audience_overlay::GUI_SMOKE_LIFETIME + Duration::from_secs(2);
     while slide.get_audience_overlay().row_count() > 0 && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
         "Reaction overlay expires without further inputs",
@@ -1237,7 +1381,7 @@ fn check_audience_overlay(
     Ok(())
 }
 
-fn check_live_comments(
+async fn check_live_comments(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
     url: &str,
@@ -1254,7 +1398,7 @@ fn check_live_comments(
     submit("Hello 世界")?;
     let deadline = Instant::now() + Duration::from_secs(3);
     while slide.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     let first = slide.get_audience_comments().row_data(0);
     report.check(
@@ -1272,7 +1416,7 @@ fn check_live_comments(
         .window()
         .set_size(slint::LogicalSize::new(800.0, 600.0));
     crate::audience_ui::set_join_visible(&windows.refs(), state, true);
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     let next = slide.get_audience_comments().row_data(0);
     report.check(
         "Resize and page 0 preserve comment lane, width, and elapsed motion",
@@ -1299,7 +1443,7 @@ fn check_live_comments(
         .contains("Paused comment")
         && Instant::now() < deadline
     {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
         "Paused comments reach history without overlay",
@@ -1313,8 +1457,8 @@ fn check_live_comments(
     // Resume before the UI poll: this queued event must retain its old generation.
     submit("Old generation")?;
     presenter.invoke_audience_toggle_comments();
-    settle_presenter_notes_layout(presenter)?;
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
+    settle_presenter_notes_layout(presenter).await?;
     report.check(
         "Resume rejects old-generation UI deliveries",
         !presenter.get_audience_comments_paused() && slide.get_audience_comments().row_count() == 0,
@@ -1324,7 +1468,7 @@ fn check_live_comments(
     submit("After resume")?;
     let deadline = Instant::now() + Duration::from_secs(3);
     while slide.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
         "New comments display after Resume",
@@ -1344,7 +1488,7 @@ fn check_live_comments(
             .join("\n")
             .into(),
     );
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     report.check(
         "Twenty comment history entries remain scrollable below notes",
         presenter.get_audience_history_height() > presenter.get_audience_history_visible_height()
@@ -1444,37 +1588,46 @@ fn submit_audience_smoke_event(url: &str, event: serde_json::Value) -> Result<()
     Ok(())
 }
 
-fn settle_notes_layout() -> Result<()> {
-    // An unrelated quit must not leave our timer active for a later check.
-    let completed = Rc::new(Cell::new(false));
-    let outcome = completed.clone();
+pub(crate) async fn delay(duration: Duration) {
+    use std::task::Poll;
+    let ready = Rc::new(Cell::new(false));
+    let waker = Rc::new(RefCell::new(None::<std::task::Waker>));
+    let completed = ready.clone();
+    let wake = waker.clone();
     let timer = slint::Timer::default();
-    timer.start(
-        slint::TimerMode::SingleShot,
-        Duration::from_millis(50),
-        move || {
-            outcome.set(true);
-            slint::quit_event_loop().expect("GUI smoke event loop should accept quit");
-        },
-    );
-    while !completed.get() {
-        slint::run_event_loop_until_quit().context("failed to process notes layout changes")?;
-    }
-    timer.stop();
+    timer.start(slint::TimerMode::SingleShot, duration, move || {
+        completed.set(true);
+        if let Some(waker) = wake.borrow_mut().take() {
+            waker.wake();
+        }
+    });
+    std::future::poll_fn(|cx| {
+        if ready.get() {
+            Poll::Ready(())
+        } else {
+            *waker.borrow_mut() = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    })
+    .await;
+}
+
+async fn settle_notes_layout() -> Result<()> {
+    delay(Duration::from_millis(50)).await;
     Ok(())
 }
 
-fn settle_presenter_notes_layout(presenter: &crate::PresenterWindow) -> Result<()> {
+async fn settle_presenter_notes_layout(presenter: &crate::PresenterWindow) -> Result<()> {
     // Paragraph models are materialized by Slint's input/rendering passes, not
     // by elapsed time alone. PointerExited runs the normal input pass without
     // clicking controls or changing focus, even when native redraw is deferred.
     presenter
         .window()
         .dispatch_event(slint::platform::WindowEvent::PointerExited);
-    settle_notes_layout()
+    settle_notes_layout().await
 }
 
-fn check_settings_dialog(
+async fn check_settings_dialog(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
     report: &mut GuiSmokeReport,
@@ -1482,7 +1635,7 @@ fn check_settings_dialog(
     let presenter = &windows.presenter;
     let before = state.borrow().presentation.snapshot();
     presenter.invoke_open_settings();
-    settle_notes_layout()?;
+    settle_notes_layout().await?;
     if let Some(path) = std::env::var_os("QP_GUI_SMOKE_SETTINGS_SNAPSHOT") {
         let snapshot = presenter.window().take_snapshot()?;
         let mut bytes =
@@ -1506,7 +1659,7 @@ fn check_settings_dialog(
             .window()
             .dispatch_event(slint::platform::WindowEvent::KeyReleased { text: text.into() });
     }
-    settle_notes_layout()?;
+    settle_notes_layout().await?;
     report.check(
         "Settings isolates presentation keyboard navigation",
         state.borrow().presentation.snapshot() == before,
@@ -1515,7 +1668,7 @@ fn check_settings_dialog(
     );
     presenter.set_audience_import_preview("https://relay.example/".into());
     presenter.invoke_close_settings();
-    settle_notes_layout()?;
+    settle_notes_layout().await?;
     report.check(
         "Closing Settings clears pending import preview",
         !presenter.get_settings_visible() && presenter.get_audience_import_preview().is_empty(),
@@ -1525,7 +1678,155 @@ fn check_settings_dialog(
     Ok(())
 }
 
-fn check_notes_font_size(
+#[derive(Debug, PartialEq)]
+struct NotesResizeSnapshot {
+    window_size: slint::PhysicalSize,
+    has_notes: bool,
+    font_size: f32,
+    viewport_width: f32,
+    viewport_height: f32,
+    content_height: f32,
+    measured_heights: Vec<f32>,
+    slide_width: f32,
+    slide_height: f32,
+    notes_outer_width: f32,
+    menu_height: f32,
+    main_y: f32,
+}
+
+impl NotesResizeSnapshot {
+    fn capture(presenter: &crate::PresenterWindow) -> Self {
+        Self {
+            window_size: presenter.window().size(),
+            has_notes: presenter.get_has_notes(),
+            font_size: presenter.get_notes_font_size(),
+            viewport_width: presenter.get_notes_visible_width(),
+            viewport_height: presenter.get_notes_visible_height(),
+            content_height: presenter.get_notes_content_height(),
+            measured_heights: presenter.get_notes_measured_heights().iter().collect(),
+            slide_width: presenter.get_notes_layout_slide_width(),
+            slide_height: presenter.get_notes_layout_slide_height(),
+            notes_outer_width: presenter.get_notes_layout_outer_width(),
+            menu_height: presenter.get_notes_layout_menu_height(),
+            main_y: presenter.get_notes_layout_main_y(),
+        }
+    }
+
+    fn portrait_inline_layout_is_applied(&self) -> bool {
+        // Read actual element bounds, not just the requested aspect/menu flags.
+        // The 0.6 slide surface, 28px inline menu and displaced main area must
+        // agree, and the notes viewport must belong to that new slide width.
+        // This is an applied-layout witness even if native size did not change;
+        // neither an arbitrary quiet period nor a resize event proves it alone.
+        self.slide_width > 0.0
+            && self.slide_height > 0.0
+            && (self.slide_width - self.slide_height * 0.6).abs() <= 1.0
+            && (self.menu_height - 28.0).abs() <= 1.0
+            && (self.main_y - self.menu_height - 54.0).abs() <= 1.0
+            && (self.notes_outer_width - self.slide_width).abs() <= 1.0
+            && self.viewport_width <= self.notes_outer_width - 20.0 + 1.0
+    }
+
+    fn is_fitted(&self) -> bool {
+        let expected = crate::notes::fit_notes_font_size(
+            self.has_notes,
+            self.viewport_width,
+            self.viewport_height,
+            &self.measured_heights,
+        );
+        if self.viewport_width <= 0.0
+            || self.viewport_height <= 0.0
+            || self.font_size != f32::from(expected)
+        {
+            return false;
+        }
+        if !self.has_notes {
+            return true;
+        }
+        let index = usize::from(expected - crate::notes::MIN_NOTES_FONT_SIZE);
+        self.measured_heights.get(index).is_some_and(|height| {
+            let expected_content = self
+                .viewport_height
+                .max(*height + crate::notes::NOTES_BOTTOM_PADDING);
+            (self.content_height - expected_content).abs() <= 1.0
+        })
+    }
+}
+
+async fn resize_presenter_notes(
+    presenter: &crate::PresenterWindow,
+    size: slint::LogicalSize,
+) -> Result<()> {
+    presenter.window().set_size(size);
+    wait_for_presenter_notes_resize(presenter, Some(size)).await
+}
+
+async fn wait_for_presenter_notes_resize(
+    presenter: &crate::PresenterWindow,
+    requested: Option<slint::LogicalSize>,
+) -> Result<()> {
+    let started = Instant::now();
+    let mut previous = None;
+    let mut unchanged_since = started;
+    let mut last_request = started;
+    let mut retries = 0;
+    settle_presenter_notes_layout(presenter).await?;
+    loop {
+        // Rendering callbacks can stop for occluded Wayland windows. Keep the
+        // input/layout pass running while native configuration is in flight.
+        presenter
+            .window()
+            .dispatch_event(slint::platform::WindowEvent::PointerExited);
+        presenter.window().request_redraw();
+        delay(Duration::from_millis(10)).await;
+        let snapshot = NotesResizeSnapshot::capture(presenter);
+        let now = Instant::now();
+        if previous.as_ref() != Some(&snapshot) {
+            unchanged_since = now;
+        }
+        let logical = snapshot
+            .window_size
+            .to_logical(presenter.window().scale_factor());
+        let size_matches = requested.map_or_else(
+            || snapshot.portrait_inline_layout_is_applied(),
+            |size| {
+                (logical.width - size.width).abs() <= 1.0
+                    && (logical.height - size.height).abs() <= 1.0
+            },
+        );
+        // A late Wayland configure can restore the previous native size after
+        // set_size returned. Reissue only an unapplied geometry request; never
+        // change notes properties or bypass the production fitting callback.
+        if let Some(size) = requested {
+            if !size_matches && now.duration_since(last_request) >= Duration::from_millis(100) {
+                presenter.window().set_size(size);
+                last_request = now;
+                retries += 1;
+                unchanged_since = now;
+            }
+        }
+        if size_matches
+            && snapshot.is_fitted()
+            && now.duration_since(unchanged_since) >= Duration::from_millis(200)
+        {
+            if retries > 0 {
+                eprintln!(
+                    "GUI smoke: notes resize settled after {retries} geometry retries: requested={requested:?}, actual={logical:?}"
+                );
+            }
+            return Ok(());
+        }
+        previous = Some(snapshot);
+        if started.elapsed() >= Duration::from_secs(5) {
+            bail!(
+                "presenter notes did not settle after resize to {requested:?} ({retries} geometry retries): layout={:?}",
+                NotesResizeSnapshot::capture(presenter)
+            );
+        }
+    }
+}
+
+async fn check_notes_font_size(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
     report: &mut GuiSmokeReport,
@@ -1541,15 +1842,15 @@ fn check_notes_font_size(
     let generation_before = state.borrow().render_generation;
     let now = Instant::now();
     let elapsed_before = state.borrow().timer.elapsed_at(now);
-    presenter
-        .window()
-        .dispatch_event(slint::platform::WindowEvent::Resized {
-            size: slint::LogicalSize::new(800.0, 560.0 + presenter.get_audience_panel_height()),
-        });
+    resize_presenter_notes(
+        presenter,
+        slint::LogicalSize::new(800.0, 560.0 + presenter.get_audience_panel_height()),
+    )
+    .await?;
 
     presenter.set_has_notes(false);
     presenter.set_notes_text("".into());
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     report.check(
         format!("no-notes placeholder uses 12px ({context})"),
         presenter.get_notes_font_size() == 12.0,
@@ -1560,7 +1861,7 @@ fn check_notes_font_size(
     // These fixtures isolate vertical font fitting even on small CI displays.
     presenter.set_has_notes(true);
     presenter.set_notes_text("Hi. 日本語。".into());
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     report.check(
         format!("short notes automatically use 24px ({context})"),
         presenter.get_notes_font_size() == 24.0
@@ -1581,7 +1882,7 @@ fn check_notes_font_size(
             .repeat(150)
             .into(),
     );
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     report.check(
         format!("long notes stay readable and scrollable at 12px ({context})"),
         presenter.get_notes_font_size() == 12.0
@@ -1596,11 +1897,11 @@ fn check_notes_font_size(
         let compact_height = presenter.get_notes_content_height();
         let compact_measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
         typography.set_line_height_factor(1.25);
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
         let expanded_height = presenter.get_notes_content_height();
         let expanded_measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
         typography.set_line_height_factor(1.0);
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
         report.check(
             format!("Linux natural line spacing matches visible notes and sizing probes ({context})"),
             expanded_height > compact_height * 1.2
@@ -1612,13 +1913,13 @@ fn check_notes_font_size(
         );
 
         presenter.set_notes_text("English line\n日本語の行".into());
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
         let lines = presenter.get_notes_measured_heights().row_data(0).unwrap();
         presenter.set_notes_text("English line\n\n日本語の行".into());
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
         let one_blank = presenter.get_notes_measured_heights().row_data(0).unwrap();
         presenter.set_notes_text("English line\n\n\n日本語の行".into());
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
         let two_blanks = presenter.get_notes_measured_heights().row_data(0).unwrap();
         report.check(
             format!("Linux blank note lines retain compact paragraph gaps ({context})"),
@@ -1629,7 +1930,7 @@ fn check_notes_font_size(
             format!("unexpected blank-line spacing: {lines}, {one_blank}, {two_blanks}"),
         );
         presenter.set_notes_text("English paragraph\n日本語の段落\n\n".repeat(100).into());
-        settle_presenter_notes_layout(presenter)?;
+        settle_presenter_notes_layout(presenter).await?;
         let measurement = presenter.get_notes_measured_heights().row_data(0).unwrap();
         report.check(
             format!("Linux paragraph notes remain scrollable with matching probes ({context})"),
@@ -1649,7 +1950,7 @@ fn check_notes_font_size(
         presenter.get_notes_visible_height() - presenter.get_notes_content_height(),
     );
     presenter.set_notes_text("語\n".repeat(8).into());
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     let small_size = presenter.get_notes_font_size();
     let heights: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();
     let selected = (small_size as usize).saturating_sub(12);
@@ -1677,14 +1978,14 @@ fn check_notes_font_size(
             presenter.get_notes_visible_height()
         ),
     );
-    // Native configure events can constrain this request. Check the settled
-    // viewport rather than assuming that a larger root window enlarges notes.
-    presenter
-        .window()
-        .dispatch_event(slint::platform::WindowEvent::Resized {
-            size: slint::LogicalSize::new(1200.0, 1000.0 + presenter.get_audience_panel_height()),
-        });
-    settle_presenter_notes_layout(presenter)?;
+    // Keep the width fixed so the slide preview does not consume the extra
+    // vertical room. Include the Audience Live footer in the native request.
+    resize_presenter_notes(
+        presenter,
+        slint::LogicalSize::new(800.0, 650.0 + presenter.get_audience_panel_height()),
+    )
+    .await?;
+    settle_presenter_notes_layout(presenter).await?;
     let resized_size = presenter.get_notes_font_size();
     let resized_height = presenter.get_notes_visible_height();
     let resized_measurements: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();
@@ -1712,12 +2013,12 @@ fn check_notes_font_size(
     // Change only the preview's aspect ratio to release notes space without
     // requesting an oversized native window. Preserve strict growth coverage.
     presenter.set_current_page_aspect_ratio(0.6);
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     let constrained_height = presenter.get_notes_visible_height();
     let constrained_size = presenter.get_notes_font_size();
     let controlled_window = presenter.window().size();
     presenter.set_current_page_aspect_ratio(4.0);
-    settle_presenter_notes_layout(presenter)?;
+    settle_presenter_notes_layout(presenter).await?;
     report.check(
         format!("increasing available notes space automatically enlarges text ({context})"),
         presenter.window().size() == controlled_window
@@ -1728,32 +2029,45 @@ fn check_notes_font_size(
         format!("viewport {constrained_height} -> {}px, font {constrained_size} -> 24px", presenter.get_notes_visible_height()),
         format!("viewport {constrained_height} -> {}px, font {constrained_size} -> {}px, window {controlled_window:?} -> {:?}", presenter.get_notes_visible_height(), presenter.get_notes_font_size(), presenter.window().size()),
     );
-    presenter
-        .window()
-        .dispatch_event(slint::platform::WindowEvent::Resized {
-            size: slint::LogicalSize::new(800.0, 560.0 + presenter.get_audience_panel_height()),
-        });
+    resize_presenter_notes(
+        presenter,
+        slint::LogicalSize::new(800.0, 560.0 + presenter.get_audience_panel_height()),
+    )
+    .await?;
     presenter.set_current_page_aspect_ratio(0.6);
     presenter.set_use_native_menu_bar(false);
-    settle_presenter_notes_layout(presenter)?;
+    // The new layout can raise the native minimum size (notably with Windows
+    // inline menus). Verify fitting and the usable viewport at the OS-selected
+    // size; the Audience Live footer can also constrain the native geometry.
+    presenter
+        .window()
+        .set_size(slint::LogicalSize::new(800.0, 560.0));
+    wait_for_presenter_notes_resize(presenter, None).await?;
     report.check(
         format!("portrait slides and inline menus retain bounded notes sizing ({context})"),
         (12.0..=24.0).contains(&presenter.get_notes_font_size())
             && presenter.get_notes_visible_height() >= 180.0,
-        "minimum window retained a usable notes viewport",
-        "portrait or inline menu layout exceeded the typography bounds",
+        format!(
+            "native size={:?}, viewport={}x{}, font={}",
+            presenter.window().size(),
+            presenter.get_notes_visible_width(),
+            presenter.get_notes_visible_height(),
+            presenter.get_notes_font_size()
+        ),
+        format!(
+            "portrait or inline menu layout exceeded the typography bounds: {:?}",
+            NotesResizeSnapshot::capture(presenter)
+        ),
     );
 
     presenter.set_has_notes(original_has_notes);
     presenter.set_notes_text(original_text);
     presenter.set_current_page_aspect_ratio(original_aspect);
     presenter.set_use_native_menu_bar(original_menu);
-    presenter
-        .window()
-        .dispatch_event(slint::platform::WindowEvent::Resized {
-            size: original_size.to_logical(presenter.window().scale_factor()),
-        });
-    settle_presenter_notes_layout(presenter)?;
+    // The initial size can be a pre-configure hint that the window manager
+    // constrains, rather than an exact size the restored window must attain.
+    presenter.window().set_size(original_size);
+    settle_presenter_notes_layout(presenter).await?;
     report.check(
         format!("automatic sizing preserves presentation state ({context})"),
         state.borrow().presentation.snapshot() == before
@@ -1799,7 +2113,7 @@ fn current_page_index(state: &AppState) -> Option<u32> {
         .map(|snapshot| snapshot.current_index)
 }
 
-fn wait_for_async_open(
+async fn wait_for_async_open(
     windows: &crate::window_controller::AppWindowRefs,
     state: &Rc<RefCell<AppState>>,
 ) -> Result<()> {
@@ -1820,7 +2134,7 @@ fn wait_for_async_open(
         if async_open_is_ready(&state.borrow(), speaker_notes_loaded) {
             return Ok(());
         }
-        thread::sleep(ASYNC_OPEN_POLL_INTERVAL);
+        delay(ASYNC_OPEN_POLL_INTERVAL).await;
     }
 
     bail!("timed out waiting for async render scheduler to open, render, and load speaker notes")

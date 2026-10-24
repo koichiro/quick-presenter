@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub fn run(windows: &AppWindows, state: Rc<RefCell<AppState>>, pdf: PathBuf) -> Result<()> {
+pub async fn run(windows: &AppWindows, state: Rc<RefCell<AppState>>, pdf: PathBuf) -> Result<()> {
     use slint::ComponentHandle;
     let directory = PathBuf::from(format!("/tmp/qp-control-smoke-{}", std::process::id()));
     fs::DirBuilder::new().mode(0o700).create(&directory)?;
@@ -27,35 +27,25 @@ pub fn run(windows: &AppWindows, state: Rc<RefCell<AppState>>, pdf: PathBuf) -> 
         let _ = sender
             .send(check_audience_coexistence(&path, &pdf).map_err(|error| format!("{error:#}")));
     });
-    let result = Rc::new(RefCell::new(None));
-    let result_timer = result.clone();
     let deadline = Instant::now() + Duration::from_secs(20);
-    let timer = slint::Timer::default();
-    timer.start(
-        slint::TimerMode::Repeated,
-        Duration::from_millis(10),
-        move || {
-            if let Ok(outcome) = receiver.try_recv() {
-                *result_timer.borrow_mut() = Some(outcome);
-                let _ = slint::quit_event_loop();
-            } else if Instant::now() >= deadline {
-                *result_timer.borrow_mut() = Some(Err("Control GUI smoke timed out".into()));
-                let _ = slint::quit_event_loop();
+    let result = loop {
+        match receiver.try_recv() {
+            Ok(outcome) => break outcome,
+            Err(mpsc::TryRecvError::Disconnected) => {
+                break Err("Control GUI worker disconnected".into())
             }
-        },
-    );
-    let loop_result = slint::run_event_loop_until_quit();
-    timer.stop();
+            Err(mpsc::TryRecvError::Empty) => {}
+        }
+        if Instant::now() >= deadline {
+            break Err("Control GUI smoke timed out".into());
+        }
+        crate::gui_smoke::delay(Duration::from_millis(10)).await;
+    };
     drop(runtime);
     let _ = worker.join();
     windows.presenter.show()?;
     fs::remove_dir_all(directory)?;
-    loop_result.context("control GUI event loop")?;
-    result
-        .borrow_mut()
-        .take()
-        .unwrap_or_else(|| Err("Control GUI smoke interrupted".into()))
-        .map_err(anyhow::Error::msg)?;
+    result.map_err(anyhow::Error::msg)?;
     Ok(())
 }
 // Smoke-only listener: ordinary GUI startup never enables Audience automatically.
