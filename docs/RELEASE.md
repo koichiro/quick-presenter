@@ -96,6 +96,28 @@ merged-main normal dependency graphs, tracks the post-merge Windows replacement,
 and lists unresolved release gates. It does not relabel old artifacts or approve
 unperformed checks, customer Store submission or publication.
 
+### v2.5.0 customer Store qualification timing
+
+On **2026-10-24 JST**, the maintainer explicitly moved customer Mac App Store
+and Microsoft Store 2.5.0 installation qualification to the post-review /
+post-certification follow-up [#520](https://github.com/koichiro/quick-presenter/issues/520).
+These customer checks remain **UNPERFORMED** until the actual distributed
+products are tested. The timing condition no longer independently blocks
+[#508](https://github.com/koichiro/quick-presenter/issues/508); all other source,
+artifact, runtime, environment/authority, traceability and pre-publication
+security conditions remain there. Do not automatically close #520 when #508 or
+a documentation PR closes.
+
+After certification, bind the actual customer builds to their submitted
+source/package/SBOM identities and verify installation/update, distribution
+trust, installed workflows and the registered Windows `qp.exe` alias as listed
+in #520. Internal TestFlight and unsigned/CI-signed or extracted Windows
+submission payloads retain their supporting scope. Upload, review submission,
+approval and release require separate authorization and event records; this
+timing decision authorizes none of those actions. The Microsoft Store-only
+Windows distribution policy and final pre-publication package/security checks
+remain in force.
+
 ### Mac App Store submissions
 
 For each Mac App Store submission, also complete the separate

@@ -80,12 +80,25 @@ Closing the earlier implementation/lifecycle issues did not waive them.
 | Condition | Current evidence and next action |
 | --- | --- |
 | Post-merge Windows replacement | Finish the b4910ea build, record exact package/sidecar hashes, independently verify them, and execute the exact MSVC payload on Windows. Preserve previous failures and limitations rather than silently replacing them with later passes. |
-| Customer Store installations | Internal Mac TestFlight 25010 and Windows CI/extracted payloads are qualified within their recorded scope. Actual customer Store 2.5.0 install/update/signature/identity and registered Windows alias require certified distribution. Define v2.5.0 channel timing explicitly; the existing v2.0.0 policy is not automatically a v2.5.0 waiver. No customer review submission/publication has been authorized here. |
+| Customer Store installations — transferred | On October 24 JST the maintainer explicitly moved actual customer Mac/Windows Store 2.5.0 qualification to [#520](https://github.com/koichiro/quick-presenter/issues/520), after review/certification, with all customer checks **unperformed**. This timing condition no longer independently blocks #508; #520 stays open for actual install/update/signature/identity, registered Windows alias and installed workflows. TestFlight/CI/extracted-payload checks remain separate. This decision authorizes neither customer review submission nor publication and leaves every other #508 gate in force. |
 | Unavailable Mac environments | No additional Intel/other-supported-macOS machine is available. Testing or an explicit bounded release disposition is needed. |
 | Actual product authority | Cross-user rejection and sufficiently attributable foreign-team rejection on the Apple-distributed product remain incomplete. The bounded probe above is supporting evidence only. Genuine OS revocation of persisted security-scoped bookmark authority remains untested; moved files, ACL denial and stopAccessing are not substitutes. |
 | First-attempt trace | #493 has verified continuation/reinstall and manual initial picker/TIMEOUT observations, but the original automated preflight/TIMEOUT trace was lost. A pristine-account rerun or explicit acceptance of this evidence limitation is needed. |
 | Supplemental Linux renderer failure | Forced winit-femtovg under actual XWayland failed the with-PDF notes-resize assertion on both fixtures (69/1). Default native Wayland and actual XWayland later passed 70/0 each. The maintainer authorized investigation and correction in the existing Linux session on October 24; that work is in progress. Later default passes do not establish its cause. |
 | Security/disclosure checkpoint | Preserve the accepted PDFium 8111 four-change residual-risk disposition and five maintenance-warning deferrals. Repeat the review on October 26 or immediately before publication, whichever is earlier; the October 28 candidate checkpoint is unchanged. A fresh review is not promised as background monitoring. |
+
+## Customer Store follow-up disposition
+
+The maintainer chose on **2026-10-24 JST** to perform customer Store acceptance
+after review/certification and track it separately in [#520](https://github.com/koichiro/quick-presenter/issues/520).
+Customer Mac/Windows checks remain **UNPERFORMED**, not passed. This is an
+explicit v2.5.0 timing decision; it does not silently import the v2.0.0 policy.
+The follow-up binds each actual approved/distributed build to its submitted
+source/package/SBOM and records fresh/update installation, trust/identity and
+installed workflows (including the Windows registered alias). It cannot be
+automatically closed by #508 or this documentation PR. Other environment,
+authority/revoked-bookmark, traceability, Linux failure and security/artifact
+conditions remain in #508. No customer submission or publication occurred.
 
 Already recorded bounded maintainer decisions remain in force: install before
 bundle-icon drop on macOS (read-only DMG drop remains unsupported); Linux
