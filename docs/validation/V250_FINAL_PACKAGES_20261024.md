@@ -138,11 +138,43 @@ probes and encrypted-PDF rejection. Final font/frozen-geometry controls rejected
 the injected faults and a single dropped geometry request recovered; applied
 layout-suppression controls retain their original f596ef8 subject identity.
 
+## Security source comparison
+
+Directly compared security-reviewed source
+**80522547ca1e5b2d1a5799f04ab542cc22f13e62** with frozen package source
+**f4c018091c6057eb68fc76ac761bc90b10f93cc2**. A full tracked-tree comparison
+found exactly five changed paths: `docs/RELEASE.md`, `docs/validation/README.md`,
+`docs/validation/SECURITY_REVIEW_20261024.md`, `src/gui_smoke.rs` and
+`ui/app.slint`. The reviewed branch did not yet contain #524's final smoke/UI
+correction; the earlier description that it already included merged #524 was
+incorrect. This incremental review closes that source-attribution gap.
+
+| Input | Direct comparison and security disposition |
+| --- | --- |
+| Dependencies and audit selection | Cargo.toml, Cargo.lock and the entire .cargo tree are identical Git objects. Lock SHA-256 remains `0918bd018726e361bfd29c3665eae7e850a6348c63064814973bb19d0e180733`; no feature, registry-checksum or advisory-ignore change. |
+| Vendor/native selection | Entire vendor tree and scripts/pdfium_manifest.json are identical; the manifest SHA-256 remains `c9dceacc564ff9a1c22f03de657eaaa3769766d5279ca2c70a369d1266ecc201`. The final-package native-byte/section/license checks above bind the selected 8111 content to this source. |
+| Build and packaging | build.rs and the complete scripts, packaging, assets and .github trees are identical Git objects. Bundled docs/CLI.md and docs/CONTROL_PROTOCOL.md are unchanged between these revisions. |
+| Application Rust | Every src file except gui_smoke.rs is identical, including PDF parsing/brokered rendering, control authentication, native document/file-access bridges and error handling. |
+| src/gui_smoke.rs exception | #524 adds observed geometry, actual portrait/menu-layout checks, a 200ms stability requirement and bounded geometry retries within the existing 5s check. These functions are reached through the explicitly selected GUI smoke path. Review found no new parser/native loader/IPC authority, unbounded wait or permission change. |
+| ui/app.slint exception | Adds read-only bindings exposing existing slide/notes/menu bounds and names the existing inline-menu Rectangle. It adds no input, action/callback, file access or rendering-authorization path and changes no production layout expression. |
+| Three document exceptions | Release/index/security-result records only; none of these three changed documents is bundled by the package scripts. |
+
+The two implementation diffs were inspected directly, rather than treated as
+byte-identical merely because the dependencies match. Their geometry-observation
+scope does not change the assessed native vulnerability reachability or
+identity/permission/renderer enforcement. Final all-OS package execution and
+controls are scoped above. The existing Cargo/native advisory findings and
+accepted residual-risk dispositions therefore remain applicable after this
+incremental source review; this is not a new advisory-feed refresh or an
+exhaustive audit of every execution path. These review fixes change documents
+only and do not mutate the qualified f4c0180 packages or their sidecars.
+
 ## Release decisions and completion boundary
 
 The [fresh pre-publication security checkpoint](SECURITY_REVIEW_20261024.md)
-identified no new blocker; final f4c0180 has the same reviewed security-relevant
-inputs. Retain the accepted PDFium 8111 four-omission disposition and five
+identified no new blocker. The direct comparison and incremental review above
+connect its findings to final f4c0180, including the two smoke/UI exceptions.
+Retain the accepted PDFium 8111 four-omission disposition and five
 maintenance-warning deferrals. A new material disclosure/input change requires
 triage; retain the October 26-if-delayed and October 28 checkpoints.
 
@@ -153,11 +185,12 @@ and Orca excluded; actual customer Store qualification transferred to #520.
 These decisions do not turn missing coverage into passing tests.
 
 Final candidate requalification is complete within the explicit scopes above.
-#508 remains open for review/merge of this results record and its release/index
-links; there is no remaining execution blocker identified by these checks.
+#508 records that completed qualification; this PR supplies the final results
+record and release/index links for review/merge. There is no remaining execution
+blocker identified by these checks.
 Customer Store distribution remains separately unperformed in #520.
-This report and its release/index links do not change bundled documents or executable/build inputs; a later
-results-only merge does not relabel the packages' actual f4c0180 build source.
+This report and its release/index links do not change bundled documents or
+executable/build inputs; a later results-only merge does not relabel the packages' actual f4c0180 build source.
 No release tag/publication or customer Store review submission occurred.
 
 Packages, sidecars, provenance inventories and private original attempts are
