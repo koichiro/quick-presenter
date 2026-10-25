@@ -23,6 +23,27 @@ use std::{
 const RELAY_RECOVERY_GUIDANCE: &str =
     "Close Settings, retry Audience Live on, then stop it before importing or resetting settings.";
 
+struct LoadedAudienceConfiguration {
+    relay: Result<Option<crate::app_config::RelayEndpoint>, &'static str>,
+    display: crate::audience_comments::CommentDisplaySettings,
+    display_error: Option<&'static str>,
+}
+
+impl LoadedAudienceConfiguration {
+    fn load(path: Option<std::path::PathBuf>) -> Self {
+        let relay = crate::app_config::load(path.clone());
+        let (display, display_error) = match crate::app_config::load_comment_display(path) {
+            Ok(settings) => (settings, None),
+            Err(error) => (Default::default(), Some(error)),
+        };
+        Self {
+            relay,
+            display,
+            display_error,
+        }
+    }
+}
+
 fn ensure_relay_replaceable(
     relay: Option<&crate::audience_relay_http::ManagedRelay>,
 ) -> Result<(), &'static str> {
@@ -111,11 +132,7 @@ impl AudienceUi {
         let spawned = std::thread::Builder::new()
             .name("audience-config".into())
             .spawn(move || {
-                let result = crate::app_config::load(config_path.clone()).and_then(|endpoint| {
-                    crate::app_config::load_comment_display(config_path)
-                        .map(|settings| (endpoint, settings))
-                });
-                let _ = sender.send(result);
+                let _ = sender.send(LoadedAudienceConfiguration::load(config_path));
             });
         if spawned.is_err() {
             ui.configuring.set(false);
@@ -136,22 +153,26 @@ impl AudienceUi {
                 let result = match receiver.try_recv() {
                     Ok(result) => result,
                     Err(std::sync::mpsc::TryRecvError::Empty) => return,
-                    Err(_) => Err("Cannot load Audience configuration."),
+                    Err(_) => LoadedAudienceConfiguration {
+                        relay: Err("Cannot load Audience configuration."),
+                        display: Default::default(),
+                        display_error: None,
+                    },
                 };
                 ui.config_timer.stop();
                 ui.configuring.set(false);
                 if let Some(window) = window.upgrade() { window.set_audience_can_import(true); }
-                match result {
-                    Ok((endpoint, settings)) => {
-                        ui.comments.borrow_mut().set_display_settings(settings);
-                        if let Some(window) = window.upgrade() {
-                            window.set_audience_flowing_enabled(settings.flowing);
-                            window.set_audience_bubbles_enabled(settings.bubbles);
-                        }
+                ui.comments.borrow_mut().set_display_settings(result.display);
+                if let Some(window) = window.upgrade() {
+                    window.set_audience_flowing_enabled(result.display.flowing);
+                    window.set_audience_bubbles_enabled(result.display.bubbles);
+                }
+                match result.relay {
+                    Ok(endpoint) => {
                         *ui.relay_config.borrow_mut() =
                             endpoint.map(crate::audience_relay_http::ManagedRelay::new);
                         if let Some(window) = window.upgrade() {
-                            window.set_audience_status("".into());
+                            window.set_audience_status(result.display_error.unwrap_or("").into());
                             window.set_audience_address(ui.address_label().into());
                             window.set_audience_can_start(ui.can_start());
                         }
@@ -959,6 +980,88 @@ pub(crate) fn qr_image(url: &str) -> Result<slint::Image, qrcode::types::QrError
 mod configuration_change_tests {
     use super::*;
     use crate::{app_config::RelayEndpoint, audience_relay_http::ManagedRelay};
+
+    #[test]
+    fn invalid_display_settings_do_not_block_a_valid_local_transport() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[audience]\ntransport='local'\n[comment_display]\nflowing='invalid'\n",
+        )
+        .unwrap();
+        let loaded = LoadedAudienceConfiguration::load(Some(path));
+        assert!(matches!(loaded.relay, Ok(None)));
+        assert_eq!(loaded.display, Default::default());
+        assert_eq!(
+            loaded.display_error,
+            Some("Invalid comment display settings.")
+        );
+    }
+
+    #[test]
+    fn relay_failure_preserves_display_policy_through_toggle_and_recovery() {
+        use crate::audience_comments::CommentDisplaySettings;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[audience]\ntransport='remote'\n[comment_display]\nflowing=false\nbubbles=false\n",
+        )
+        .unwrap();
+        let loaded = LoadedAudienceConfiguration::load(Some(path.clone()));
+        assert!(loaded.relay.is_err());
+        assert!(loaded.display_error.is_none());
+        assert_eq!(
+            loaded.display,
+            CommentDisplaySettings {
+                flowing: false,
+                bubbles: false
+            }
+        );
+        let mut engine = CommentEngine::default();
+        engine.set_display_settings(loaded.display);
+        engine.reset();
+        let now = Instant::now();
+        engine.receive(
+            &crate::audience_events::AcceptedAudienceEvent {
+                sequence: 1,
+                participant_id: 1,
+                received_at: now,
+                overlay_deadline: now + crate::audience_comments::WAIT,
+                display_generation: 0,
+                event: AudienceEvent::Comment {
+                    body: "Hidden after recovery".into(),
+                    handle: "Anonymous".into(),
+                },
+            },
+            100.0,
+            now,
+        );
+        assert!(engine.frames(now).is_empty());
+        assert!(engine.bubble_frames(now).is_empty());
+        assert_eq!(engine.history().len(), 1);
+        // Changing one preference uses the loaded value for the other preference.
+        crate::app_config::save_comment_display(
+            &path,
+            CommentDisplaySettings {
+                bubbles: true,
+                ..loaded.display
+            },
+        )
+        .unwrap();
+        crate::app_config::reset_relay(&path).unwrap();
+        let recovered = LoadedAudienceConfiguration::load(Some(path));
+        assert!(matches!(recovered.relay, Ok(None)));
+        assert_eq!(
+            recovered.display,
+            CommentDisplaySettings {
+                flowing: false,
+                bubbles: true
+            }
+        );
+        assert!(recovered.display_error.is_none());
+    }
 
     #[test]
     fn pending_creation_blocks_configuration_changes_without_losing_retry_identity() {

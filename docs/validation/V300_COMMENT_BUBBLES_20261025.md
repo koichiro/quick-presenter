@@ -120,6 +120,30 @@ values, and the saved TOML matches the final UI state.
 
 ![Both styles OFF](../assets/comment-bubbles/settings-both-off.png)
 
+## CodeRabbit configuration isolation fix
+
+The review identified that chaining relay and display loads coupled independent
+settings errors. A malformed display preference could block Audience Live;
+a relay error could leave saved display choices unapplied and later overwrite
+them during a switch change or recovery.
+
+The startup worker now reads both independently. The UI always applies the
+loaded display preferences, even when relay validation fails. Invalid display
+preferences use defaults and report their error without setting the relay
+startup blocker. Relay errors retain their existing recovery behavior.
+
+Two unit regressions cover invalid display preferences with valid local
+transport, and saved display policy across relay failure, a single-preference
+change, engine reset, and local transport recovery. Formatting, `cargo check`,
+`cargo build --bins`, and complete `cargo test` pass (624 passed, two existing
+ignored tests). The signed renderer/notes and denial gate also passes.
+
+Native manual startup checks confirm that a valid local transport with invalid
+`flowing` settings retains an enabled start button, shows the display error in
+Settings, and uses default ON/OFF values. A broken remote transport with valid
+OFF/OFF preferences loads both switches as OFF; Reset restores the start button
+and leaves both preferences OFF in the UI and saved TOML.
+
 Temporary bundles and raw reports remain under `/tmp/quick-presenter-bubbles*`.
 This is not Windows/Linux runtime, physical mobile-client, Store, notarized
 release, or full cross-platform qualification.
