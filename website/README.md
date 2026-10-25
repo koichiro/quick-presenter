@@ -118,8 +118,9 @@ The homepage introduces the stable `qp` interface alongside PDF playback:
 source context, explicit presentation control, and NDJSON change observation.
 The optional external narration runner is linked from the `v2.5.0` examples.
 It is separate from the player; Quick Presenter does not bundle an AI model or
-Kokoro. macOS automation is available in both the Mac App Store and Developer
-ID / DMG distributions in v2.5.0.
+Kokoro. Under the Store rollout assumption in the release checklist below,
+the website describes macOS automation as available in both the Mac App Store
+and Developer ID / DMG distributions in v2.5.0.
 
 The checked-in `src/assets/kokoro-demo.mp4` is an actual macOS presenter-window
 recording of the four-slide Marp notes demo from #445, with the cursor hidden.
