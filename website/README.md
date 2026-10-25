@@ -1,7 +1,7 @@
 # Website deployment and custom domain
 
 The shared [color theme](COLOR_THEME.md) defines the v1.0.0 brand palette
-and its application to the v2.0.0 website.
+and its application to the v2.5.0 website.
 
 `npm ci` installs the dependency-free Node project. `npm run build` copies the
 HTML, CSS, and selected repository assets into `dist`; `npm test` rebuilds and
@@ -112,13 +112,15 @@ These live checks remain pending until the manual migration is performed.
 
 Do not execute rollback automatically.
 
-## Version 2.0 local release preview
+## Version 2.5.0 local release preview
 
 The homepage introduces the stable `qp` interface alongside PDF playback:
 source context, explicit presentation control, and NDJSON change observation.
-The optional external narration runner is linked from the `v2.0.0` examples.
+The optional external narration runner is linked from the `v2.5.0` examples.
 It is separate from the player; Quick Presenter does not bundle an AI model or
-Kokoro. macOS automation requires the Developer ID / DMG distribution in v2.0.0.
+Kokoro. macOS automation is available in both the Mac App Store and Developer
+ID / DMG distributions in v2.5.0. Public Store delivery was confirmed on
+2026-10-25 JST; see the release checklist below.
 
 The checked-in `src/assets/kokoro-demo.mp4` is an actual macOS presenter-window
 recording of the four-slide Marp notes demo from #445, with the cursor hidden.
@@ -189,29 +191,31 @@ replacing the samples. Keep source notes in Marp comments and export with
 `--pdf-notes`; ordinary PDF export does not guarantee extractable notes.
 
 The site documents `qp export --json`, `goto`, `status`, and `watch` from the
-verified v2.0.0 CLI contract. Export provides text and notes, not images or OCR.
+v2.5.0 CLI contract (Control Protocol v1, introduced in v2.0.0). Export provides
+text and notes, not images or OCR.
 The external agent interprets data and chooses actions; restoration requires
 a user request. The guide prompt checks document and session identity before
 restoring a saved page.
 
 ## Release and local verification checklist
 
-This website is intended for publication after the v2.0.0 release. Public copy
-assumes v2.0.0 packages are available and guides users to matching GUI/CLI
-binaries. Confirm the download destinations and Store package version when
-publishing this prepared site.
-GitHub Releases lists macOS DMG and Linux Debian packages; the Windows link
-retains the existing Microsoft Store product ID. Microsoft Store distribution
-of v2.0.0 was confirmed by the maintainer on 2026-10-18. The
-[release qualification follow-up in #472](https://github.com/koichiro/quick-presenter/issues/472#issuecomment-6247334587)
-records maintainer-confirmed Windows Store completion: the 1.4.0.0 to 2.0.0.0
-Store update, Store signing, GUI smoke (63/63), CLI workflows (47/47), cold
-startup (5/5), renderer isolation, About, and lifecycle checks. It also records
-the maintainer's acceptance of the modal file-picker CLI timeout as a Windows
-limitation. This confirmation does not claim that previously unperformed
-uninstall or mixed-DPI checks passed; their scope remains documented in #472.
-No Mac App Store review status or planned price is asserted. Mac App Store CLI
-control is excluded in the v2.0.0 contract.
+This website targets v2.5.0. Public release and actual Store delivery were
+confirmed for both Mac App Store and Microsoft Store on 2026-10-25 JST.
+The completed [Store qualification tracker #520](https://github.com/koichiro/quick-presenter/issues/520#issuecomment-6391442187)
+records the results and remaining validation limits.
+
+Both localized homepages and interactive guides describe matching v2.5.0
+GUI/CLI packages. Mac App Store now supports CLI control via the bundled
+`Contents/Helpers/ControlCLI.app/Contents/MacOS/qp`; Developer ID / DMG uses
+`Contents/MacOS/qp`. The guide explains the native PDF picker, exact-file
+selection within 120 seconds, cancellation behavior, and saved read-only access.
+Store product IDs are unchanged. Direct macOS and Debian downloads, CLI and
+compatibility references, and examples link to v2.5.0. Existing recordings,
+screenshots, and sample PDFs retain their original provenance above and below.
+
+Run `npm test` before publishing. Review both localized homepages and guides,
+including download cards at desktop and mobile widths. No Store listing,
+release record, or deployment setting is changed by this website update.
 
 The presenter feature uses a static screenshot rather than an unpausable GIF.
 All videos use native controls. Focus outlines, a native details-based compact
