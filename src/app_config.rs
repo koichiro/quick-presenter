@@ -149,6 +149,48 @@ pub fn reset_relay(path: &std::path::Path) -> Result<(), &'static str> {
 }
 
 fn save_audience(path: &std::path::Path, audience: toml::Table) -> Result<(), &'static str> {
+    save_section(path, "audience", audience)
+}
+
+pub fn load_comment_display(
+    explicit: Option<PathBuf>,
+) -> Result<crate::audience_comments::CommentDisplaySettings, &'static str> {
+    let path = import_destination(explicit)?;
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Default::default()),
+        Err(_) => return Err("Cannot open comment display settings."),
+    };
+    let mut text = String::new();
+    file.take(16385)
+        .read_to_string(&mut text)
+        .map_err(|_| "Cannot read comment display settings.")?;
+    if text.len() > 16384 {
+        return Err("Configuration is too large.");
+    }
+    let mut table: toml::Table = toml::from_str(&text).map_err(|_| "Invalid configuration.")?;
+    match table.remove("comment_display") {
+        Some(value) => value
+            .try_into()
+            .map_err(|_| "Invalid comment display settings."),
+        None => Ok(Default::default()),
+    }
+}
+
+pub fn save_comment_display(
+    path: &std::path::Path,
+    settings: crate::audience_comments::CommentDisplaySettings,
+) -> Result<(), &'static str> {
+    let table = toml::Table::try_from(settings)
+        .map_err(|_| "Cannot serialize comment display settings.")?;
+    save_section(path, "comment_display", table)
+}
+
+fn save_section(
+    path: &std::path::Path,
+    section: &str,
+    value: toml::Table,
+) -> Result<(), &'static str> {
     if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
         return Err("Configuration destination must not be a symbolic link.");
     }
@@ -159,7 +201,7 @@ fn save_audience(path: &std::path::Path, audience: toml::Table) -> Result<(), &'
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => toml::Table::new(),
         Err(_) => return Err("Cannot read existing configuration; it was not changed."),
     };
-    current.insert("audience".into(), audience.into());
+    current.insert(section.into(), value.into());
     let text = toml::to_string(&current).map_err(|_| "Cannot serialize configuration.")?;
     if text.len() > 16384 {
         return Err("Merged configuration is too large.");
@@ -179,6 +221,34 @@ mod tests {
             "[audience]\ntransport='remote'\nrelay='{origin}'\ncreate_token='{}'\n",
             "A".repeat(43)
         )
+    }
+
+    #[test]
+    fn comment_display_defaults_round_trips_and_survives_relay_updates() {
+        use crate::audience_comments::CommentDisplaySettings;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        assert_eq!(
+            load_comment_display(Some(path.clone())).unwrap(),
+            CommentDisplaySettings::default()
+        );
+        for flowing in [false, true] {
+            for bubbles in [false, true] {
+                let settings = CommentDisplaySettings { flowing, bubbles };
+                save_comment_display(&path, settings).unwrap();
+                let endpoint = parse(&remote("https://relay.example/")).unwrap().unwrap();
+                save_import(&path, &endpoint).unwrap();
+                assert_eq!(load_comment_display(Some(path.clone())).unwrap(), settings);
+                assert!(load(Some(path.clone())).unwrap().is_some());
+                reset_relay(&path).unwrap();
+                assert_eq!(load_comment_display(Some(path.clone())).unwrap(), settings);
+            }
+        }
+        std::fs::write(&path, "[comment_display]\nflowing='invalid'\n").unwrap();
+        assert!(load_comment_display(Some(path.clone())).is_err());
+        std::fs::write(&path, "invalid toml[").unwrap();
+        assert!(save_comment_display(&path, CommentDisplaySettings::default()).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "invalid toml[");
     }
 
     #[test]

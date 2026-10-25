@@ -1,3 +1,4 @@
+export struct BubbleOverlayItem { name: string, text: string, y: float }
 export struct CommentOverlayItem { text: string, x: float, y: float, width: float }
 export struct ReactionOverlayItem { kind: int, x: float, y: float, opacity: float }
 
@@ -784,6 +785,9 @@ export component PresenterWindow inherits Window {
     out property <length> audience-history-height: comment-history.preferred-height;
     out property <length> audience-history-visible-height: comment-history-scroll.visible-height;
     in property <bool> audience-comments-paused;
+    in property <bool> audience-flowing-enabled: true;
+    in property <bool> audience-bubbles-enabled: false;
+    callback audience-set-comment-display(bool, bool);
     callback audience-toggle-comments();
     in property <int> audience-reaction-count;
     callback audience-open-url();
@@ -1873,7 +1877,7 @@ export component PresenterWindow inherits Window {
             KeyBinding { keys: @keys(Escape); activated => { root.close-settings(); } }
             Rectangle {
                 width: min(parent.width - 48px, 600px);
-                height: min(parent.height - 48px, 440px);
+                height: min(parent.height - 48px, 540px);
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 background: #202124;
@@ -1883,9 +1887,21 @@ export component PresenterWindow inherits Window {
                     padding: 24px;
                     spacing: 12px;
                     Text { text: "Settings"; color: white; font-size: 24px; }
+                    Text { text: "Comment display"; color: white; font-size: 18px; }
+                    HorizontalBox {
+                        Button {
+                            text: root.audience-flowing-enabled ? "Flowing comments: ON" : "Flowing comments: OFF";
+                            clicked => { root.audience-set-comment-display(!root.audience-flowing-enabled, root.audience-bubbles-enabled); }
+                        }
+                        Button {
+                            text: root.audience-bubbles-enabled ? "Bubble comments: ON" : "Bubble comments: OFF";
+                            clicked => { root.audience-set-comment-display(root.audience-flowing-enabled, !root.audience-bubbles-enabled); }
+                        }
+                    }
+                    Text { text: "Both styles can be enabled. Changes apply immediately."; color: #d9dce0; wrap: word-wrap; }
                     Text { text: "Audience Live"; color: white; font-size: 18px; }
                     Text { text: "Import relay settings, or Reset to use the local server. Changes apply to the next start and preserve other settings."; color: #d9dce0; wrap: word-wrap; }
-                    if root.audience-active || root.audience-busy: Text { text: "Stop Audience Live before changing settings."; color: #ffd18a; wrap: word-wrap; }
+                    if root.audience-active || root.audience-busy: Text { text: "Stop Audience Live before changing relay settings."; color: #ffd18a; wrap: word-wrap; }
                     if root.audience-recovery-pending: Text {
                         text: "Relay recovery is pending. Close Settings, retry Audience Live on, then stop it before changing settings.";
                         color: #ffd18a;
@@ -2036,6 +2052,7 @@ export component AudienceWindow inherits Window {
     in property <bool> black-screen-active: false;
     in property <[ReactionOverlayItem]> audience-overlay;
     in property <[CommentOverlayItem]> audience-comments;
+    in property <[BubbleOverlayItem]> audience-bubbles;
     in property <string> comment-measure-text;
     out property <float> comment-measure-width: comment-measure.preferred-width / 1px;
     callback audience-clear-overlay();
@@ -2264,6 +2281,41 @@ export component AudienceWindow inherits Window {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             clip: true;
+            bubble-stack := Rectangle {
+                property <float> canvas-scale: parent.canvas-scale;
+                y: 72px * self.canvas-scale;
+                width: parent.width;
+                height: 648px * self.canvas-scale;
+                clip: true;
+                for bubble in root.audience-bubbles: bubble-card := Rectangle {
+                    x: 24px * bubble-stack.canvas-scale;
+                    y: (bubble.y - 72) * bubble-stack.canvas-scale * 1px;
+                    width: 560px * bubble-stack.canvas-scale;
+                    height: 144px * bubble-stack.canvas-scale;
+                    border-radius: 16px * bubble-stack.canvas-scale;
+                    background: #606060b3;
+                    property <float> scale: bubble-stack.canvas-scale;
+                    VerticalLayout {
+                        padding: 16px * bubble-card.scale;
+                        spacing: 4px * bubble-card.scale;
+                        if bubble.name != "": Text {
+                            text: bubble.name;
+                            color: #eeeeee;
+                            font-size: 16px * bubble-card.scale;
+                            height: 20px * bubble-card.scale;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: bubble.text;
+                            color: white;
+                            font-size: 24px * bubble-card.scale;
+                            wrap: word-wrap;
+                            overflow: elide;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
             for comment in root.audience-comments: Text {
                 x: comment.x * parent.canvas-scale * 1px;
                 y: comment.y * parent.canvas-scale * 1px;

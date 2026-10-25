@@ -7,7 +7,7 @@ use crate::{
     audience_overlay::OverlayEngine,
     audience_session::AudienceSession,
     window_controller::{AppWindowRefs, AppWindows},
-    CommentOverlayItem, PresenterWindow, ReactionOverlayItem,
+    BubbleOverlayItem, CommentOverlayItem, PresenterWindow, ReactionOverlayItem,
 };
 use slint::{
     ComponentHandle, Model, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel, Weak,
@@ -83,6 +83,7 @@ pub struct AudienceUi {
     overlay_model: Rc<VecModel<ReactionOverlayItem>>,
     comments: RefCell<CommentEngine>,
     comment_model: Rc<VecModel<CommentOverlayItem>>,
+    bubble_model: Rc<VecModel<BubbleOverlayItem>>,
     weak_self: RefCell<std::rc::Weak<Self>>,
 }
 
@@ -110,7 +111,11 @@ impl AudienceUi {
         let spawned = std::thread::Builder::new()
             .name("audience-config".into())
             .spawn(move || {
-                let _ = sender.send(crate::app_config::load(config_path));
+                let result = crate::app_config::load(config_path.clone()).and_then(|endpoint| {
+                    crate::app_config::load_comment_display(config_path)
+                        .map(|settings| (endpoint, settings))
+                });
+                let _ = sender.send(result);
             });
         if spawned.is_err() {
             ui.configuring.set(false);
@@ -137,7 +142,12 @@ impl AudienceUi {
                 ui.configuring.set(false);
                 if let Some(window) = window.upgrade() { window.set_audience_can_import(true); }
                 match result {
-                    Ok(endpoint) => {
+                    Ok((endpoint, settings)) => {
+                        ui.comments.borrow_mut().set_display_settings(settings);
+                        if let Some(window) = window.upgrade() {
+                            window.set_audience_flowing_enabled(settings.flowing);
+                            window.set_audience_bubbles_enabled(settings.bubbles);
+                        }
                         *ui.relay_config.borrow_mut() =
                             endpoint.map(crate::audience_relay_http::ManagedRelay::new);
                         if let Some(window) = window.upgrade() {
@@ -164,14 +174,17 @@ impl AudienceUi {
     pub(crate) fn install_for_smoke(
         windows: &AppWindows,
         state: Rc<RefCell<AppState>>,
+        config_path: std::path::PathBuf,
     ) -> Rc<Self> {
-        Self::install_with_address_source(
+        let ui = Self::install_with_address_source(
             windows,
             state,
             || Ok(vec![Ipv4Addr::LOCALHOST]),
             OverlayEngine::for_gui_smoke(),
             None,
-        )
+        );
+        *ui.config_path.borrow_mut() = Some(config_path);
+        ui
     }
 
     fn install_with_address_source(
@@ -205,6 +218,7 @@ impl AudienceUi {
             overlay_model: Rc::new(VecModel::default()),
             comments: RefCell::new(CommentEngine::default()),
             comment_model: Rc::new(VecModel::default()),
+            bubble_model: Rc::new(VecModel::default()),
             weak_self: RefCell::new(std::rc::Weak::new()),
         });
         *ui.weak_self.borrow_mut() = Rc::downgrade(&ui);
@@ -214,6 +228,35 @@ impl AudienceUi {
         windows
             .audience
             .set_audience_comments(ui.comment_model.clone().into());
+        windows
+            .audience
+            .set_audience_bubbles(ui.bubble_model.clone().into());
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_set_comment_display(move |flowing, bubbles| {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let Some(window) = ui.windows.presenter.upgrade() else {
+                return;
+            };
+            if ui.configuring.get() {
+                return;
+            }
+            let settings = crate::audience_comments::CommentDisplaySettings { flowing, bubbles };
+            let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
+                .and_then(|path| crate::app_config::save_comment_display(&path, settings));
+            match result {
+                Ok(()) => {
+                    ui.comments.borrow_mut().set_display_settings(settings);
+                    window.set_audience_flowing_enabled(flowing);
+                    window.set_audience_bubbles_enabled(bubbles);
+                    ui.start_overlay_animation();
+                }
+                Err(error) => {
+                    window.set_audience_status(error.into());
+                }
+            }
+        });
         let weak = Rc::downgrade(&ui);
         presenter.on_audience_toggle_panel(move || {
             if let Some(ui) = weak.upgrade() {
@@ -235,6 +278,7 @@ impl AudienceUi {
                     let generation = session.advance_comment_generation(paused);
                     ui.comments.borrow_mut().set_paused(paused, generation);
                     ui.comment_model.set_vec(Vec::new());
+                    ui.bubble_model.set_vec(Vec::new());
                     if let Some(window) = ui.windows.presenter.upgrade() {
                         window.set_audience_comments_paused(paused);
                     }
@@ -595,6 +639,17 @@ impl AudienceUi {
             self.overlay_model.set_vec(Vec::new());
         }
         let now = Instant::now();
+        let bubble_frames = self.comments.borrow_mut().bubble_frames(now);
+        self.bubble_model.set_vec(
+            bubble_frames
+                .into_iter()
+                .map(|f| BubbleOverlayItem {
+                    name: f.name.into(),
+                    text: f.text.into(),
+                    y: f.y,
+                })
+                .collect::<Vec<_>>(),
+        );
         let comment_frames = self.comments.borrow_mut().frames(now);
         self.comment_model.set_vec(
             comment_frames
@@ -653,6 +708,7 @@ impl AudienceUi {
         self.clear_overlay();
         self.comments.borrow_mut().reset();
         self.comment_model.set_vec(Vec::new());
+        self.bubble_model.set_vec(Vec::new());
         window.set_audience_comments_paused(false);
         window.set_audience_comment_history("".into());
         self.recent.borrow_mut().clear();
@@ -820,6 +876,7 @@ impl AudienceUi {
         self.clear_overlay();
         self.comments.borrow_mut().reset();
         self.comment_model.set_vec(Vec::new());
+        self.bubble_model.set_vec(Vec::new());
         self.overlay_timer.stop();
         self.timer.stop();
         self.config_timer.stop();

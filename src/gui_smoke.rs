@@ -78,7 +78,12 @@ async fn run_checks(
 
     crate::wire_callbacks(&windows, windows.refs(), state.clone());
     crate::apply_app_metadata(&windows.presenter);
-    let _audience_ui = crate::audience_ui::AudienceUi::install_for_smoke(&windows, state.clone());
+    let audience_config = tempfile::tempdir()?;
+    let _audience_ui = crate::audience_ui::AudienceUi::install_for_smoke(
+        &windows,
+        state.clone(),
+        audience_config.path().join("config.toml"),
+    );
 
     windows.apply_initial_positions();
     windows
@@ -1545,6 +1550,98 @@ async fn check_live_comments(
         "new comment displayed",
         "new comment missing or old comment replayed",
     );
+    presenter.invoke_audience_set_comment_display(true, true);
+    submit("Bubble one")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while audience.get_audience_bubbles().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Both comment styles display the same live event",
+        audience
+            .get_audience_bubbles()
+            .row_data(0)
+            .is_some_and(|b| b.name.is_empty() && b.text == "Bubble one")
+            && audience
+                .get_audience_comments()
+                .iter()
+                .any(|c| c.text == "Bubble one"),
+        "anonymous bubble and flowing comment are visible together",
+        "one of the enabled styles is missing",
+    );
+    presenter.invoke_audience_set_comment_display(false, true);
+    submit_audience_smoke_event(
+        url,
+        serde_json::json!({"protocol":"qp.audience","version":"1","type":"comment","request_id":"named-bubble","body":"Bubble two 日本語のコメント","handle":"Alice"}),
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while audience.get_audience_bubbles().row_count() < 2 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    settle_presenter_notes_layout(presenter).await?;
+    let bubbles = audience.get_audience_bubbles();
+    report.check(
+        "Bubble-only mode keeps the newest comment below the previous one",
+        audience.get_audience_comments().row_count() == 0
+            && bubbles
+                .row_data(0)
+                .zip(bubbles.row_data(1))
+                .is_some_and(|(old, new)| {
+                    old.y < new.y
+                        && new.name == "Alice"
+                        && new.text == "Bubble two 日本語のコメント"
+                }),
+        "ordered bubbles retain the author separately",
+        format!("bubbles={:?}", bubbles.iter().collect::<Vec<_>>()),
+    );
+    crate::audience_ui::set_join_visible(&windows.refs(), state, true);
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Page 0 transitions preserve the bubble stack",
+        audience.get_audience_bubbles().row_count() == 2,
+        "bubbles retained",
+        "page transition cleared bubbles",
+    );
+    if let Some(path) = std::env::var_os("QP_GUI_SMOKE_BUBBLES_SNAPSHOT") {
+        let snapshot = audience.window().take_snapshot()?;
+        let mut bytes =
+            format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+        for pixel in snapshot.as_bytes().chunks_exact(4) {
+            bytes.extend_from_slice(&pixel[..3]);
+        }
+        fs::write(path, bytes).context("failed to save bubble comment smoke snapshot")?;
+    }
+    presenter.invoke_audience_toggle_comments();
+    report.check(
+        "Pause clears bubble comments immediately",
+        audience.get_audience_bubbles().row_count() == 0,
+        "bubbles cleared",
+        "bubbles survived pause",
+    );
+    presenter.invoke_audience_toggle_comments();
+    presenter.invoke_audience_set_comment_display(false, false);
+    submit("Hidden styles")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !presenter
+        .get_audience_comment_history()
+        .contains("Hidden styles")
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    report.check(
+        "Both disabled styles preserve history without displaying comments",
+        presenter
+            .get_audience_comment_history()
+            .contains("Hidden styles")
+            && audience.get_audience_bubbles().row_count() == 0
+            && audience.get_audience_comments().row_count() == 0,
+        "history updated without overlays",
+        "disabled style displayed or history missing",
+    );
+    presenter.invoke_audience_set_comment_display(true, false);
     let history = presenter.get_audience_comment_history();
     presenter.set_audience_comment_history(
         (1..=20)
