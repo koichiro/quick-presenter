@@ -185,14 +185,19 @@ against packaged artifacts after `Build Binaries`, not as normal unit tests.
 
 ## Shared Checks
 
-Run these checks on every platform.
+Run these checks on every platform. Apply version-specific naming checks only
+to the tested artifact version: the v2.0.0 release and Store retest instructions
+above use the legacy Slide Window labels; the Audience Window rename starts
+with v3.0.0. Record the artifact version in each report.
 
 | Check | Expected result |
 | --- | --- |
 | Launch the packaged app from the normal platform entry point. | Quick Presenter starts without requiring a terminal or PDFium path. |
 | Open the known-good PDF from the app UI. | The PDF opens without a presenter-visible error. |
-| Open the Window and View menus (native and in-window variants). | Window actions read Show Audience Window, Hide Audience Window, and Bring Audience Window to Front; the fullscreen action reads Toggle Audience Fullscreen. |
-| Inspect the audience window title where the platform exposes it. | The title is Quick Presenter - Audience; macOS retains its hidden-title chrome policy. |
+| v3.0.0 and later: open the Window and View menus (native and in-window variants). | Window actions read Show Audience Window, Hide Audience Window, and Bring Audience Window to Front; the fullscreen action reads Toggle Audience Fullscreen. |
+| v2.0.0 artifacts, including the Store-installed retest: open the Window and View menus (native and in-window variants). | Window actions read Show Slide Window, Hide Slide Window, and Bring Slide Window to Front; the fullscreen action reads Toggle Slide Fullscreen. |
+| v3.0.0 and later: inspect the audience window title where the platform exposes it. | The title is Quick Presenter - Audience; macOS retains its hidden-title chrome policy. |
+| v2.0.0 artifacts, including the Store-installed retest: inspect the audience window title where the platform exposes it. | The title is Quick Presenter - Slide; macOS retains its hidden-title chrome policy. |
 | Confirm both windows are visible. | The presenter window and audience window appear. |
 | Press next-page controls until the end of the deck. | The current slide, next preview, page label, timer, clock, and notes stay readable. |
 | Open `tests/fixtures/long-speaker-notes.pdf` at the minimum presenter window size. | The notes area scrolls so the full speaker note can be read without resizing the app, while the current slide, next preview, and thumbnails remain usable. |
