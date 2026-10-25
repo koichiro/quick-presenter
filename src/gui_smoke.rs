@@ -1874,6 +1874,37 @@ async fn check_settings_dialog(
         "settings opened without starting an audience session",
         "settings did not open independently",
     );
+    for (flowing, bubbles, stage) in [
+        (true, true, "both-on"),
+        (false, true, "bubbles-only"),
+        (false, false, "both-off"),
+        (true, false, "flow-only"),
+    ] {
+        presenter.invoke_audience_set_comment_display(flowing, bubbles);
+        delay(Duration::from_millis(180)).await;
+        report.check(
+            format!("Settings switches reflect {stage}"),
+            presenter.get_audience_flowing_enabled() == flowing
+                && presenter.get_audience_bubbles_enabled() == bubbles,
+            "independent display preferences applied",
+            "display preferences did not match the requested combination",
+        );
+        if let Some(path) = std::env::var_os("QP_GUI_SMOKE_SETTINGS_SNAPSHOT") {
+            let path = std::path::PathBuf::from(path);
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("settings");
+            let snapshot = presenter.window().take_snapshot()?;
+            let mut bytes =
+                format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+            for pixel in snapshot.as_bytes().chunks_exact(4) {
+                bytes.extend_from_slice(&pixel[..3]);
+            }
+            fs::write(path.with_file_name(format!("{stem}-{stage}.ppm")), bytes)
+                .context("failed to save switch state snapshot")?;
+        }
+    }
     for text in [" ", "\n"] {
         presenter
             .window()

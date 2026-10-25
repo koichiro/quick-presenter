@@ -92,6 +92,34 @@ run, without compositing or modifying their content:
 
 ![Settings](../assets/comment-bubbles/settings.png)
 
+## Independent toggle switch revision
+
+The two ordinary buttons are replaced with macOS-style independent switches.
+ON uses a blue track and a right-positioned white thumb; OFF uses a gray track
+and a left-positioned thumb. Explicit ON/OFF text complements the visual state.
+Each control exposes the switch role, checked state, accessible label, and a
+visible keyboard focus ring. Rust remains the source of truth, including when
+saving settings fails.
+
+The signed app passes **121 focused GUI checks, zero failures**, including all
+four preference combinations. Formatting, `cargo check`, `cargo build --bins`,
+and complete `cargo test` pass (622 passed, two existing ignored tests).
+Native manual checks confirm mouse clicks, accessibility activation, Space,
+and Return toggle the focused switch without navigating the PDF. The
+accessibility tree reports both controls as switches with matching ON/OFF
+values, and the saved TOML matches the final UI state.
+
+| Flowing | Bubbles | Actual Settings snapshot |
+| --- | --- | --- |
+| ON | ON | [Both ON](../assets/comment-bubbles/settings-both-on.png) |
+| OFF | ON | [Bubbles only](../assets/comment-bubbles/settings-bubbles-only.png) |
+| OFF | OFF | [Both OFF](../assets/comment-bubbles/settings-both-off.png) |
+| ON | OFF | [Flowing only](../assets/comment-bubbles/settings.png) |
+
+![Both styles ON](../assets/comment-bubbles/settings-both-on.png)
+
+![Both styles OFF](../assets/comment-bubbles/settings-both-off.png)
+
 Temporary bundles and raw reports remain under `/tmp/quick-presenter-bubbles*`.
 This is not Windows/Linux runtime, physical mobile-client, Store, notarized
 release, or full cross-platform qualification.

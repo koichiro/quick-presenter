@@ -16,7 +16,8 @@ retaining rotated log files. Display preferences survive session restarts.
 ## Comment display settings (v3.0.0)
 
 Open **Settings > Comment display** to toggle **Flowing comments** and
-**Bubble comments** independently. Both may be ON together, or OFF together;
+**Bubble comments** independently. Each uses a switch with a blue/right ON state,
+a gray/left OFF state, and an explicit ON/OFF label. Both may be ON together, or OFF together;
 reception, presenter history, and logs continue with both OFF. Settings apply
 immediately and persist in the existing configuration file:
 

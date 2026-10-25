@@ -352,6 +352,77 @@ component NavigationButton inherits Button {
     }
 }
 
+// Controlled by Rust so failed preference saves cannot leave a misleading state.
+component CommentDisplaySwitch inherits FocusScope {
+    in property <string> text;
+    in property <bool> checked;
+    callback toggled();
+    height: 40px;
+    accessible-role: switch;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-checkable: true;
+    accessible-checked: root.checked;
+    accessible-action-default => { if root.enabled { root.focus(); root.toggled(); } }
+    key-pressed(event) => {
+        if (event.text == Key.Space || event.text == Key.Return) {
+            root.toggled();
+            return accept;
+        }
+        return reject;
+    }
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        border-radius: 6px;
+        border-width: root.has-focus ? 2px : 0px;
+        border-color: #8ab4f8;
+        background: transparent;
+    }
+    Text {
+        x: 8px;
+        height: parent.height;
+        width: max(0px, parent.width - 110px);
+        text: root.text;
+        color: #f1f3f4;
+        font-size: 14px;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    Text {
+        x: parent.width - 100px;
+        width: 40px;
+        height: parent.height;
+        text: root.checked ? "ON" : "OFF";
+        color: #d9dce0;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    Rectangle {
+        x: parent.width - self.width - 8px;
+        y: (parent.height - self.height) / 2;
+        width: 44px;
+        height: 26px;
+        border-radius: 13px;
+        background: root.checked ? #0a84ff : #62666c;
+        animate background { duration: 150ms; }
+        Rectangle {
+            x: root.checked ? parent.width - self.width - 2px : 2px;
+            y: 2px;
+            width: 22px;
+            height: 22px;
+            border-radius: 11px;
+            background: white;
+            animate x { duration: 150ms; easing: ease-out; }
+        }
+    }
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.focus(); root.toggled(); }
+    }
+}
+
 // An unfilled icon button with explicit focus and accessibility behavior.
 component AudienceIconButton inherits FocusScope {
     in property <image> icon;
@@ -1888,14 +1959,18 @@ export component PresenterWindow inherits Window {
                     spacing: 12px;
                     Text { text: "Settings"; color: white; font-size: 24px; }
                     Text { text: "Comment display"; color: white; font-size: 18px; }
-                    HorizontalBox {
-                        Button {
-                            text: root.audience-flowing-enabled ? "Flowing comments: ON" : "Flowing comments: OFF";
-                            clicked => { root.audience-set-comment-display(!root.audience-flowing-enabled, root.audience-bubbles-enabled); }
+                    VerticalBox {
+                        spacing: 4px;
+                        padding: 0px;
+                        CommentDisplaySwitch {
+                            text: "Flowing comments";
+                            checked: root.audience-flowing-enabled;
+                            toggled => { root.audience-set-comment-display(!root.audience-flowing-enabled, root.audience-bubbles-enabled); }
                         }
-                        Button {
-                            text: root.audience-bubbles-enabled ? "Bubble comments: ON" : "Bubble comments: OFF";
-                            clicked => { root.audience-set-comment-display(root.audience-flowing-enabled, !root.audience-bubbles-enabled); }
+                        CommentDisplaySwitch {
+                            text: "Bubble comments";
+                            checked: root.audience-bubbles-enabled;
+                            toggled => { root.audience-set-comment-display(root.audience-flowing-enabled, !root.audience-bubbles-enabled); }
                         }
                     }
                     Text { text: "Both styles can be enabled. Changes apply immediately."; color: #d9dce0; wrap: word-wrap; }
