@@ -156,7 +156,7 @@ the mobile page and presenter feed still use native emoji. Overlay updates do
 not submit PDF render requests or modify pages, notes, or the timer.
 
 At most 24 reactions are visible for 1.8 seconds from their server receive time.
-Positions are normalized to the current slide window and recomputed by Slint on
+Positions are normalized to the current audience window and recomputed by Slint on
 resize, fullscreen, or display changes. Excess events are omitted, never queued
 for later overlay replay. A 16 ms animation timer runs only while items remain;
 the existing session poll remains 100 ms. Audience Live OFF, blackout, and

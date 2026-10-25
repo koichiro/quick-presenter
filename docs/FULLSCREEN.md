@@ -1,7 +1,7 @@
-# Slide Fullscreen
+# Audience Fullscreen
 
 Quick Presenter fullscreen playback currently targets the audience-facing
-`SlideWindow` only. The presenter window remains a normal control window.
+`AudienceWindow` only. The presenter window remains a normal control window.
 
 The first implementation uses Slint's window API:
 
@@ -13,27 +13,27 @@ With the current Slint winit backend, the normal fullscreen toggle maps to
 borderless fullscreen on the current display. The `X` display-swap command uses
 a narrow Winit boundary to retarget borderless fullscreen without changing the
 existing fullscreen intent; see
-[Presenter and Slide Display Swap](DISPLAY_SWAP.md).
+[Presenter and Audience Display Swap](DISPLAY_SWAP.md).
 
 Platform notes:
 
 - macOS, Windows, and Linux window managers can differ in focus handling,
   animation, and how fullscreen windows are assigned to displays.
-- The Escape key path is handled by the slide window UI. It requires the slide
-  window to have keyboard focus.
+- The Escape key paths in both windows exit audience fullscreen. The window
+  receiving the shortcut must have keyboard focus.
 - Presenter controls also provide a fullscreen toggle so the presenter can leave
-  fullscreen without relying on slide-window focus.
+  fullscreen without relying on audience-window focus.
 - Monitor-aware fullscreen and window placement must stay behind a Rust window
   management boundary instead of embedding platform-specific logic in Slint UI
   code.
 
-## macOS Slide Chrome
+## macOS Audience Window Chrome
 
-The slide window keeps native window buttons but hides its title and draws its
+The audience window keeps native window buttons but hides its title and draws its
 content behind a transparent title bar. The macOS window factory configures
 Winit's full-size content view, transparent title bar, and hidden title before
 the native window and renderer surface are created. The presenter retains its
-standard title bar. Runtime chrome synchronization still restores the slide
+standard title bar. Runtime chrome synchronization still restores the audience-window
 style after fullscreen transitions.
 
 Do not restore the old negative 28-point Slint offset or subtract that height
@@ -71,16 +71,16 @@ notifications reach Winit, and fullscreen animations settle before inspection.
 The tests assert dimensions and pixels rather than platform-dependent screenshot
 baselines. A missing native display is an error, not a skipped success.
 
-## Windows Slide Chrome
+## Windows Audience Window Chrome
 
-On Windows, Quick Presenter keeps the audience-facing slide window as a standard
-decorated native window. The slide window title, window buttons, resizing,
+On Windows, Quick Presenter keeps the audience window as a standard
+decorated native window. The audience window title, window buttons, resizing,
 moving, snapping, task switching, and native fullscreen behavior remain owned by
 Windows.
 
 Windows 11 Build 22000 and newer can reduce title bar contrast through DWM
 window attributes. The Windows-specific boundary in `src/windows_window.rs`
-uses Slint's raw window handle to obtain the slide window `HWND`, then applies
+uses Slint's raw window handle to obtain the audience window `HWND`, then applies
 `DWMWA_CAPTION_COLOR`, `DWMWA_BORDER_COLOR`, and `DWMWA_TEXT_COLOR` with
 `DwmSetWindowAttribute`.
 
@@ -90,9 +90,9 @@ visible errors.
 
 ## Placement Between Runs
 
-Normal startup restores the slide's windowed size and placement and reopens the
+Normal startup restores the Audience Window's windowed size and placement and reopens the
 last active PDF at its first page. Fullscreen intent is not saved. Quitting in
 fullscreen preserves the last captured windowed dimensions. A verified `X` swap
 in fullscreen updates the remembered destination without saving fullscreen
 bounds as the windowed size. If displays changed, startup falls back to an
-available display. See [startup restoration](SLIDE_WINDOW_PLACEMENT.md).
+available display. See [startup restoration](AUDIENCE_WINDOW_PLACEMENT.md).

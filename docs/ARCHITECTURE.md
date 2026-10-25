@@ -16,13 +16,16 @@ are defined in [PDF Rendering Security and Isolation Policy](PDF_RENDERING_SECUR
 The app should keep PDF rendering, page caching, file IO, and presentation state in Rust. Slint should stay focused on UI layout, events, and display.
 
 Display discovery and native window placement follow the same boundary. The
-proposed `X` shortcut for exchanging the presenter and slide displays is defined
-in [Presenter and Slide Display Swap](DISPLAY_SWAP.md). Slint forwards the key
+proposed `X` shortcut for exchanging the presenter and audience displays is defined
+in [Presenter and Audience Display Swap](DISPLAY_SWAP.md). Slint forwards the key
 event; Rust owns monitor snapshots, the two-window swap transaction, focus
 recovery, and platform limitations.
 
+The audience-facing native window is `AudienceWindow`; its role and naming are
+defined in the [Audience Window contract](AUDIENCE_WINDOW.md).
+
 Restoration of audience window placement and the last active PDF
-is defined in [Slide Window and PDF Startup Restoration](SLIDE_WINDOW_PLACEMENT.md).
+is defined in [Audience Window and PDF Startup Restoration](AUDIENCE_WINDOW_PLACEMENT.md).
 Rust owns settings validation, safe placement, capture after verified display
 swaps, and startup PDF selection through the existing asynchronous open pipeline.
 The saved PDF path is separate from page, timer, black-screen, and fullscreen

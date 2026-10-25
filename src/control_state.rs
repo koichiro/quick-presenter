@@ -64,7 +64,7 @@ pub fn snapshot(state: &AppState, now: Instant) -> Status {
             .map(|path| path.to_string_lossy().into_owned()),
         page: page.as_ref().map(|page| page.current_number),
         pages: page.map(|page| page.total_pages).unwrap_or(0),
-        fullscreen: state.fullscreen.is_slide_fullscreen(),
+        fullscreen: state.fullscreen.is_audience_fullscreen(),
         blackout: state.black_screen.is_active(),
         timer: TimerStatus {
             running: state.timer.is_running(),

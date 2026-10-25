@@ -8,28 +8,29 @@ use slint::{ComponentHandle, LogicalPosition, LogicalSize, Timer, Weak};
 use tracing::{info, warn};
 
 use crate::window_placement::{
-    plan_restore, DisplayRect, PlacementRecord, RestorePlan, SlidePlacementController,
+    plan_restore, AudiencePlacementController, DisplayRect, PlacementRecord, RestorePlan,
 };
-use crate::{NotesTypography, PresenterWindow, SlideWindow};
+use crate::{AudienceWindow, NotesTypography, PresenterWindow};
 
 const PRESENTER_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(80.0, 80.0);
 
 /// Slint already returns physical client pixels. Do not apply scale a second time.
-pub fn slide_surface_width(windows: &AppWindowRefs) -> Option<u32> {
-    let slide = windows.slide.upgrade()?;
-    let window = slide.window();
+pub fn audience_surface_width(windows: &AppWindowRefs) -> Option<u32> {
+    let audience = windows.audience.upgrade()?;
+    let window = audience.window();
     let size = window.size();
     let scale = window.scale_factor();
     (window.is_visible() && size.width > 0 && size.height > 0 && scale.is_finite() && scale > 0.0)
         .then_some(size.width)
 }
-const SLIDE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
+const AUDIENCE_WINDOW_POSITION: LogicalPosition = LogicalPosition::new(180.0, 140.0);
 const DISPLAY_SWAP_VERIFY_DELAYS: [Duration; 3] = [
     Duration::from_millis(150),
     Duration::from_millis(500),
     Duration::from_millis(1000),
 ];
-const DISPLAY_SWAP_FAILURE_MESSAGE: &str = "Displays changed; check presenter and slide placement.";
+const DISPLAY_SWAP_FAILURE_MESSAGE: &str =
+    "Displays changed; check presenter and audience placement.";
 #[cfg(any(target_os = "linux", test))]
 const LINUX_PRESENTER_INPUT_RECOVERY_DELAYS: [Duration; 3] = [
     Duration::from_millis(0),
@@ -37,22 +38,22 @@ const LINUX_PRESENTER_INPUT_RECOVERY_DELAYS: [Duration; 3] = [
     Duration::from_millis(200),
 ];
 #[cfg(any(target_os = "macos", test))]
-const SLIDE_TITLEBAR_COMPENSATION_HEIGHT: f32 = 28.0;
+const AUDIENCE_TITLEBAR_COMPENSATION_HEIGHT: f32 = 28.0;
 #[cfg(target_os = "macos")]
-const SLIDE_WINDOW_TITLE: &str = "Quick Presenter - Slide";
+const AUDIENCE_WINDOW_TITLE: &str = "Quick Presenter - Audience";
 #[cfg(target_os = "macos")]
 const PRESENTER_WINDOW_TITLE: &str = "Quick Presenter";
 
 pub struct AppWindows {
     pub presenter: PresenterWindow,
-    pub slide: SlideWindow,
-    pub placement: Rc<SlidePlacementController>,
+    pub audience: AudienceWindow,
+    pub placement: Rc<AudiencePlacementController>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WindowRole {
     Presenter,
-    Slide,
+    Audience,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -123,7 +124,7 @@ struct WindowPlacement {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct DisplaySwapPlan {
     presenter: WindowPlacement,
-    slide: WindowPlacement,
+    audience: WindowPlacement,
 }
 
 #[derive(Clone)]
@@ -138,9 +139,9 @@ struct NativeWindowSnapshot {
 struct NativeSwapPlan {
     presenter_target: winit::monitor::MonitorHandle,
     presenter_position: PixelPoint,
-    slide_target: winit::monitor::MonitorHandle,
-    slide_position: PixelPoint,
-    slide_fullscreen: bool,
+    audience_target: winit::monitor::MonitorHandle,
+    audience_position: PixelPoint,
+    audience_fullscreen: bool,
 }
 
 pub fn request_display_swap(
@@ -157,7 +158,7 @@ pub fn request_display_swap(
         Err(outcome) => return outcome,
     };
 
-    capture_slide_placement(windows);
+    capture_audience_placement(windows);
     windows.placement.suspend();
     let generation = active.begin();
     if !target_monitors_are_available(windows, &plan) || !apply_native_swap(windows, &plan) {
@@ -176,17 +177,17 @@ fn build_native_swap_plan(windows: &AppWindowRefs) -> Result<NativeSwapPlan, Dis
         .presenter
         .upgrade()
         .ok_or(DisplaySwapOutcome::Unavailable)?;
-    let slide = windows
-        .slide
+    let audience = windows
+        .audience
         .upgrade()
         .ok_or(DisplaySwapOutcome::Unavailable)?;
 
     let presenter_snapshot =
         native_window_snapshot(presenter.window()).ok_or(DisplaySwapOutcome::Unavailable)?;
-    let slide_snapshot =
-        native_window_snapshot(slide.window()).ok_or(DisplaySwapOutcome::Unavailable)?;
+    let audience_snapshot =
+        native_window_snapshot(audience.window()).ok_or(DisplaySwapOutcome::Unavailable)?;
 
-    if presenter_snapshot.monitor == slide_snapshot.monitor {
+    if presenter_snapshot.monitor == audience_snapshot.monitor {
         return Err(DisplaySwapOutcome::SameDisplay);
     }
 
@@ -202,9 +203,9 @@ fn build_native_swap_plan(windows: &AppWindowRefs) -> Result<NativeSwapPlan, Dis
         .iter()
         .position(|monitor| *monitor == presenter_snapshot.monitor)
         .ok_or(DisplaySwapOutcome::Unavailable)?;
-    let slide_display_id = monitors
+    let audience_display_id = monitors
         .iter()
-        .position(|monitor| *monitor == slide_snapshot.monitor)
+        .position(|monitor| *monitor == audience_snapshot.monitor)
         .ok_or(DisplaySwapOutcome::Unavailable)?;
     let displays = monitors
         .iter()
@@ -220,9 +221,9 @@ fn build_native_swap_plan(windows: &AppWindowRefs) -> Result<NativeSwapPlan, Dis
             outer_size: presenter_snapshot.outer_size,
         },
         WindowGeometry {
-            display_id: slide_display_id,
-            outer_position: slide_snapshot.outer_position,
-            outer_size: slide_snapshot.outer_size,
+            display_id: audience_display_id,
+            outer_position: audience_snapshot.outer_position,
+            outer_size: audience_snapshot.outer_size,
         },
         &displays,
     )
@@ -231,9 +232,9 @@ fn build_native_swap_plan(windows: &AppWindowRefs) -> Result<NativeSwapPlan, Dis
     Ok(NativeSwapPlan {
         presenter_target: monitors[plan.presenter.display_id].clone(),
         presenter_position: plan.presenter.outer_position,
-        slide_target: monitors[plan.slide.display_id].clone(),
-        slide_position: plan.slide.outer_position,
-        slide_fullscreen: slide_snapshot.fullscreen,
+        audience_target: monitors[plan.audience.display_id].clone(),
+        audience_position: plan.audience.outer_position,
+        audience_fullscreen: audience_snapshot.fullscreen,
     })
 }
 
@@ -326,24 +327,24 @@ fn set_desktop_position(window: &winit::window::Window, position: PixelPoint) {
 
 fn plan_display_swap(
     presenter: WindowGeometry,
-    slide: WindowGeometry,
+    audience: WindowGeometry,
     displays: &[DisplayGeometry],
 ) -> Option<DisplaySwapPlan> {
-    if presenter.display_id == slide.display_id || displays.len() < 2 {
+    if presenter.display_id == audience.display_id || displays.len() < 2 {
         return None;
     }
 
     let presenter_source = find_display(displays, presenter.display_id)?;
-    let slide_source = find_display(displays, slide.display_id)?;
+    let audience_source = find_display(displays, audience.display_id)?;
 
     Some(DisplaySwapPlan {
         presenter: WindowPlacement {
-            display_id: slide_source.id,
-            outer_position: map_window_position(presenter, presenter_source, slide_source)?,
+            display_id: audience_source.id,
+            outer_position: map_window_position(presenter, presenter_source, audience_source)?,
         },
-        slide: WindowPlacement {
+        audience: WindowPlacement {
             display_id: presenter_source.id,
-            outer_position: map_window_position(slide, slide_source, presenter_source)?,
+            outer_position: map_window_position(audience, audience_source, presenter_source)?,
         },
     })
 }
@@ -415,10 +416,10 @@ fn apply_native_swap(windows: &AppWindowRefs, plan: &NativeSwapPlan) -> bool {
     let Some(presenter) = windows.presenter.upgrade() else {
         return false;
     };
-    let Some(slide) = windows.slide.upgrade() else {
+    let Some(audience) = windows.audience.upgrade() else {
         return false;
     };
-    if !presenter.window().has_winit_window() || !slide.window().has_winit_window() {
+    if !presenter.window().has_winit_window() || !audience.window().has_winit_window() {
         return false;
     }
 
@@ -428,20 +429,20 @@ fn apply_native_swap(windows: &AppWindowRefs, plan: &NativeSwapPlan) -> bool {
             set_desktop_position(window, plan.presenter_position);
         })
         .is_some();
-    let slide_applied = slide
+    let audience_applied = audience
         .window()
         .with_winit_window(|window| {
-            if plan.slide_fullscreen {
+            if plan.audience_fullscreen {
                 window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(
-                    plan.slide_target.clone(),
+                    plan.audience_target.clone(),
                 ))));
             } else {
-                set_desktop_position(window, plan.slide_position);
+                set_desktop_position(window, plan.audience_position);
             }
         })
         .is_some();
 
-    presenter_applied && slide_applied
+    presenter_applied && audience_applied
 }
 
 fn schedule_display_swap_verification(
@@ -462,9 +463,9 @@ fn schedule_display_swap_verification(
         if display_swap_matches(&windows, &plan) {
             finish_placement_swap(&windows, &plan);
             active.cancel();
-            sync_slide_chrome(&windows);
+            sync_audience_chrome(&windows);
             restore_window_focus(&windows, initiated_by);
-            info!("presenter and slide displays switched");
+            info!("presenter and audience displays switched");
             return;
         }
 
@@ -485,8 +486,8 @@ fn schedule_display_swap_verification(
         }
 
         warn!("display swap did not settle before the verification deadline");
-        recover_windows_to_available_displays(&windows, plan.slide_fullscreen);
-        sync_slide_chrome(&windows);
+        recover_windows_to_available_displays(&windows, plan.audience_fullscreen);
+        sync_audience_chrome(&windows);
         restore_window_focus(&windows, initiated_by);
         if let Some(presenter) = windows.presenter.upgrade() {
             presenter.set_status_text(DISPLAY_SWAP_FAILURE_MESSAGE.into());
@@ -499,7 +500,7 @@ fn schedule_display_swap_verification(
 
 fn display_swap_matches(windows: &AppWindowRefs, plan: &NativeSwapPlan) -> bool {
     window_is_on_monitor(&windows.presenter, &plan.presenter_target)
-        && window_is_on_monitor(&windows.slide, &plan.slide_target)
+        && window_is_on_monitor(&windows.audience, &plan.audience_target)
 }
 
 fn window_is_on_monitor<T: ComponentHandle>(
@@ -529,12 +530,12 @@ fn target_monitors_are_available(windows: &AppWindowRefs, plan: &NativeSwapPlan)
         .window()
         .with_winit_window(|window| {
             let available = window.available_monitors().collect::<Vec<_>>();
-            available.contains(&plan.presenter_target) && available.contains(&plan.slide_target)
+            available.contains(&plan.presenter_target) && available.contains(&plan.audience_target)
         })
         .unwrap_or(false)
 }
 
-fn recover_windows_to_available_displays(windows: &AppWindowRefs, slide_fullscreen: bool) {
+fn recover_windows_to_available_displays(windows: &AppWindowRefs, audience_fullscreen: bool) {
     let Some(presenter) = windows.presenter.upgrade() else {
         return;
     };
@@ -558,17 +559,17 @@ fn recover_windows_to_available_displays(windows: &AppWindowRefs, slide_fullscre
         });
     }
 
-    let Some(slide) = windows.slide.upgrade() else {
+    let Some(audience) = windows.audience.upgrade() else {
         return;
     };
-    if !window_has_available_monitor(slide.window()) {
+    if !window_has_available_monitor(audience.window()) {
         let origin = desktop_point(
             fallback.position(),
             fallback.scale_factor(),
             cfg!(target_os = "macos"),
         );
-        let _ = slide.window().with_winit_window(|window| {
-            if slide_fullscreen {
+        let _ = audience.window().with_winit_window(|window| {
+            if audience_fullscreen {
                 window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(
                     fallback.clone(),
                 ))));
@@ -636,12 +637,12 @@ fn restore_window_focus(windows: &AppWindowRefs, role: WindowRole) {
                 presenter.invoke_focus();
             }
         }
-        WindowRole::Slide => {
-            if let Some(slide) = windows.slide.upgrade() {
-                let _ = slide
+        WindowRole::Audience => {
+            if let Some(audience) = windows.audience.upgrade() {
+                let _ = audience
                     .window()
                     .with_winit_window(|window| window.focus_window());
-                slide.invoke_focus();
+                audience.invoke_focus();
             }
         }
     }
@@ -650,9 +651,9 @@ fn restore_window_focus(windows: &AppWindowRefs, role: WindowRole) {
 impl AppWindows {
     pub fn new() -> Result<Self> {
         #[cfg(target_os = "macos")]
-        let (presenter, slide) = crate::macos_window::create_app_windows()?;
+        let (presenter, audience) = crate::macos_window::create_app_windows()?;
         #[cfg(not(target_os = "macos"))]
-        let (presenter, slide) = (PresenterWindow::new()?, SlideWindow::new()?);
+        let (presenter, audience) = (PresenterWindow::new()?, AudienceWindow::new()?);
         // Linux fallback fonts already have generous natural line metrics.
         presenter
             .global::<NotesTypography>()
@@ -676,15 +677,15 @@ impl AppWindows {
         });
         Ok(Self {
             presenter,
-            slide,
-            placement: Rc::new(SlidePlacementController::default()),
+            audience,
+            placement: Rc::new(AudiencePlacementController::default()),
         })
     }
 
     pub fn refs(&self) -> AppWindowRefs {
         AppWindowRefs {
             presenter: self.presenter.as_weak(),
-            slide: self.slide.as_weak(),
+            audience: self.audience.as_weak(),
             placement: self.placement.clone(),
         }
     }
@@ -693,49 +694,51 @@ impl AppWindows {
         self.presenter
             .window()
             .set_position(PRESENTER_WINDOW_POSITION);
-        self.slide.window().set_position(SLIDE_WINDOW_POSITION);
+        self.audience
+            .window()
+            .set_position(AUDIENCE_WINDOW_POSITION);
     }
 }
 
 #[derive(Clone)]
 pub struct AppWindowRefs {
     pub presenter: Weak<PresenterWindow>,
-    pub slide: Weak<SlideWindow>,
-    pub placement: Rc<SlidePlacementController>,
+    pub audience: Weak<AudienceWindow>,
+    pub placement: Rc<AudiencePlacementController>,
 }
 
 #[cfg(target_os = "macos")]
-pub fn apply_macos_slide_window_chrome(windows: &AppWindowRefs) {
-    let Some(slide) = windows.slide.upgrade() else {
+pub fn apply_macos_audience_window_chrome(windows: &AppWindowRefs) {
+    let Some(audience) = windows.audience.upgrade() else {
         return;
     };
 
-    if should_apply_slide_chrome(slide.window().is_fullscreen()) {
-        crate::macos_window::apply_slide_chrome(slide.window(), SLIDE_WINDOW_TITLE);
+    if should_apply_audience_chrome(audience.window().is_fullscreen()) {
+        crate::macos_window::apply_audience_chrome(audience.window(), AUDIENCE_WINDOW_TITLE);
     }
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn apply_macos_slide_window_chrome(_windows: &AppWindowRefs) {}
+pub fn apply_macos_audience_window_chrome(_windows: &AppWindowRefs) {}
 
 #[cfg(target_os = "windows")]
-pub fn apply_windows_slide_window_chrome(windows: &AppWindowRefs) {
-    let Some(slide) = windows.slide.upgrade() else {
+pub fn apply_windows_audience_window_chrome(windows: &AppWindowRefs) {
+    let Some(audience) = windows.audience.upgrade() else {
         return;
     };
 
-    crate::windows_window::apply_slide_chrome(slide.window());
+    crate::windows_window::apply_audience_chrome(audience.window());
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn apply_windows_slide_window_chrome(_windows: &AppWindowRefs) {}
+pub fn apply_windows_audience_window_chrome(_windows: &AppWindowRefs) {}
 
-pub fn start_slide_chrome_sync(windows: AppWindowRefs) -> Timer {
+pub fn start_audience_chrome_sync(windows: AppWindowRefs) -> Timer {
     let timer = Timer::default();
     #[cfg(target_os = "macos")]
     {
         timer.start(TimerMode::Repeated, Duration::from_millis(250), move || {
-            sync_slide_chrome(&windows);
+            sync_audience_chrome(&windows);
         });
     }
     #[cfg(target_os = "windows")]
@@ -743,13 +746,13 @@ pub fn start_slide_chrome_sync(windows: AppWindowRefs) -> Timer {
         let first_retry = windows.clone();
         let second_retry = windows.clone();
         Timer::single_shot(Duration::from_millis(0), move || {
-            sync_slide_chrome(&first_retry);
+            sync_audience_chrome(&first_retry);
         });
         Timer::single_shot(Duration::from_millis(250), move || {
-            sync_slide_chrome(&second_retry);
+            sync_audience_chrome(&second_retry);
         });
         Timer::single_shot(Duration::from_millis(1000), move || {
-            sync_slide_chrome(&windows);
+            sync_audience_chrome(&windows);
         });
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -758,51 +761,52 @@ pub fn start_slide_chrome_sync(windows: AppWindowRefs) -> Timer {
     timer
 }
 
-pub fn sync_slide_chrome(windows: &AppWindowRefs) {
+pub fn sync_audience_chrome(windows: &AppWindowRefs) {
     #[cfg(target_os = "macos")]
-    apply_macos_slide_window_chrome(windows);
+    apply_macos_audience_window_chrome(windows);
     #[cfg(target_os = "windows")]
-    apply_windows_slide_window_chrome(windows);
+    apply_windows_audience_window_chrome(windows);
 
-    if let Some(slide) = windows.slide.upgrade() {
+    if let Some(audience) = windows.audience.upgrade() {
         let compensation_height =
-            slide_titlebar_compensation_height(slide.window().is_fullscreen());
-        slide.set_titlebar_compensation_height(compensation_height);
+            audience_titlebar_compensation_height(audience.window().is_fullscreen());
+        audience.set_titlebar_compensation_height(compensation_height);
     }
 }
 
-pub fn slide_titlebar_compensation_height(fullscreen: bool) -> f32 {
+pub fn audience_titlebar_compensation_height(fullscreen: bool) -> f32 {
     if cfg!(target_os = "macos") && !fullscreen {
         #[cfg(target_os = "macos")]
         {
-            return SLIDE_TITLEBAR_COMPENSATION_HEIGHT;
+            return AUDIENCE_TITLEBAR_COMPENSATION_HEIGHT;
         }
     }
 
     0.0
 }
 
-pub fn should_apply_slide_chrome(fullscreen: bool) -> bool {
+pub fn should_apply_audience_chrome(fullscreen: bool) -> bool {
     cfg!(target_os = "macos") && !fullscreen
 }
 
-pub fn set_slide_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
-    capture_slide_placement(windows);
+pub fn set_audience_fullscreen(windows: &AppWindowRefs, fullscreen: bool) {
+    capture_audience_placement(windows);
     windows.placement.cancel();
-    if let Some(slide) = windows.slide.upgrade() {
+    if let Some(audience) = windows.audience.upgrade() {
         #[cfg(target_os = "macos")]
-        let _ = slide.window().with_winit_window(|native| {
+        let _ = audience.window().with_winit_window(|native| {
             // Record intent before a native resize can synchronize the old state
             // back into Slint's deferred window properties.
             native
                 .set_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)));
         });
-        slide.window().set_fullscreen(fullscreen);
-        slide.set_titlebar_compensation_height(slide_titlebar_compensation_height(fullscreen));
+        audience.window().set_fullscreen(fullscreen);
+        audience
+            .set_titlebar_compensation_height(audience_titlebar_compensation_height(fullscreen));
     }
 
     if let Some(presenter) = windows.presenter.upgrade() {
-        presenter.set_slide_fullscreen(fullscreen);
+        presenter.set_audience_fullscreen(fullscreen);
     }
 }
 
@@ -842,22 +846,22 @@ fn presenter_input_recovery_delays() -> [Duration; 3] {
     LINUX_PRESENTER_INPUT_RECOVERY_DELAYS
 }
 
-pub fn show_slide_window(windows: &AppWindowRefs) {
-    if let Some(slide) = windows.slide.upgrade() {
+pub fn show_audience_window(windows: &AppWindowRefs) {
+    if let Some(audience) = windows.audience.upgrade() {
         // Restore Slint's rendering lifecycle before raising the native window.
         // A close request hides through Slint, so native ordering alone leaves
         // the adapter hidden and exposes the previous backing image.
-        slide.invoke_audience_clear_overlay();
-        if let Err(err) = slide.show() {
-            warn!(error = ?err, "failed to show slide window");
+        audience.invoke_audience_clear_overlay();
+        if let Err(err) = audience.show() {
+            warn!(error = ?err, "failed to show audience window");
             return;
         }
         windows.placement.visible.set(true);
         schedule_show_recovery(windows.clone());
-        sync_slide_chrome(windows);
+        sync_audience_chrome(windows);
         #[cfg(target_os = "macos")]
-        crate::macos_window::show_window(slide.window(), SLIDE_WINDOW_TITLE);
-        slide.window().request_redraw();
+        crate::macos_window::show_window(audience.window(), AUDIENCE_WINDOW_TITLE);
+        audience.window().request_redraw();
     }
 }
 
@@ -869,20 +873,20 @@ pub fn hide_presenter_window(windows: &AppWindowRefs) {
     }
 }
 
-pub fn hide_slide_window(windows: &AppWindowRefs) {
-    capture_slide_placement(windows);
+pub fn hide_audience_window(windows: &AppWindowRefs) {
+    capture_audience_placement(windows);
     windows.placement.cancel();
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.invoke_audience_clear_overlay();
-        if let Err(err) = slide.hide() {
-            warn!(error = ?err, "failed to hide slide window");
+    if let Some(audience) = windows.audience.upgrade() {
+        audience.invoke_audience_clear_overlay();
+        if let Err(err) = audience.hide() {
+            warn!(error = ?err, "failed to hide audience window");
         } else {
             windows.placement.visible.set(false);
         }
     }
 }
 
-pub fn fitted_slide_window_size(
+pub fn fitted_audience_window_size(
     max_width: f32,
     max_height: f32,
     aspect_ratio: f32,
@@ -932,10 +936,10 @@ mod tests {
             outer_position: desktop_point(PhysicalPosition::new(-1500, 800), 2.0, true),
             outer_size: desktop_size(PhysicalSize::new(1000, 800), 2.0, true),
         };
-        let slide = window(1, 250, 400, 500, 400);
-        let plan = plan_display_swap(presenter, slide, &[left, right]).unwrap();
+        let audience = window(1, 250, 400, 500, 400);
+        let plan = plan_display_swap(presenter, audience, &[left, right]).unwrap();
         assert_eq!(plan.presenter.outer_position, PixelPoint { x: 250, y: 400 });
-        assert_eq!(plan.slide.outer_position, PixelPoint { x: -750, y: 400 });
+        assert_eq!(plan.audience.outer_position, PixelPoint { x: -750, y: 400 });
         let back = plan_display_swap(
             window(1, 250, 400, 500, 400),
             window(0, -750, 400, 500, 400),
@@ -943,7 +947,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(back.presenter.outer_position, presenter.outer_position);
-        assert_eq!(back.slide.outer_position, slide.outer_position);
+        assert_eq!(back.audience.outer_position, audience.outer_position);
         // Physical-coordinate platforms must not divide global coordinates.
         assert_eq!(
             desktop_point(PhysicalPosition::new(-1500, 800), 2.0, false),
@@ -1020,22 +1024,25 @@ mod tests {
     }
 
     #[test]
-    fn slide_chrome_is_applied_only_while_windowed() {
-        assert_eq!(should_apply_slide_chrome(false), cfg!(target_os = "macos"));
-        assert!(!should_apply_slide_chrome(true));
+    fn audience_chrome_is_applied_only_while_windowed() {
+        assert_eq!(
+            should_apply_audience_chrome(false),
+            cfg!(target_os = "macos")
+        );
+        assert!(!should_apply_audience_chrome(true));
     }
 
     #[test]
-    fn titlebar_compensation_matches_slide_chrome_state() {
+    fn titlebar_compensation_matches_audience_chrome_state() {
         assert_eq!(
-            slide_titlebar_compensation_height(false),
+            audience_titlebar_compensation_height(false),
             if cfg!(target_os = "macos") {
-                SLIDE_TITLEBAR_COMPENSATION_HEIGHT
+                AUDIENCE_TITLEBAR_COMPENSATION_HEIGHT
             } else {
                 0.0
             }
         );
-        assert_eq!(slide_titlebar_compensation_height(true), 0.0);
+        assert_eq!(audience_titlebar_compensation_height(true), 0.0);
     }
 
     #[test]
@@ -1070,8 +1077,8 @@ mod tests {
             plan.presenter.outer_position,
             PixelPoint { x: 3250, y: 250 }
         );
-        assert_eq!(plan.slide.display_id, 0);
-        assert_eq!(plan.slide.outer_position, PixelPoint { x: 250, y: 250 });
+        assert_eq!(plan.audience.display_id, 0);
+        assert_eq!(plan.audience.outer_position, PixelPoint { x: 250, y: 250 });
     }
 
     #[test]
@@ -1092,7 +1099,7 @@ mod tests {
             plan.presenter.outer_position,
             PixelPoint { x: 1750, y: 250 }
         );
-        assert_eq!(plan.slide.outer_position, PixelPoint { x: 0, y: 250 });
+        assert_eq!(plan.audience.outer_position, PixelPoint { x: 0, y: 250 });
     }
 
     #[test]
@@ -1113,7 +1120,7 @@ mod tests {
             plan.presenter.outer_position,
             PixelPoint { x: 1500, y: 500 }
         );
-        assert_eq!(plan.slide.outer_position, PixelPoint { x: 250, y: 250 });
+        assert_eq!(plan.audience.outer_position, PixelPoint { x: 250, y: 250 });
     }
 
     #[test]
@@ -1131,7 +1138,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(plan.presenter.outer_position, PixelPoint { x: 1000, y: 0 });
-        assert_eq!(plan.slide.outer_position, PixelPoint { x: 800, y: 900 });
+        assert_eq!(plan.audience.outer_position, PixelPoint { x: 800, y: 900 });
     }
 
     #[test]
@@ -1190,28 +1197,28 @@ fn placement_display(monitor: &winit::monitor::MonitorHandle) -> Option<DisplayR
     })
 }
 
-pub fn set_slide_logical_size(windows: &AppWindowRefs, size: [f64; 2]) {
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.set_slide_window_width(size[0] as f32);
-        slide.set_slide_window_height(size[1] as f32);
-        slide
+pub fn set_audience_logical_size(windows: &AppWindowRefs, size: [f64; 2]) {
+    if let Some(audience) = windows.audience.upgrade() {
+        audience.set_audience_window_width(size[0] as f32);
+        audience.set_audience_window_height(size[1] as f32);
+        audience
             .window()
             .set_size(LogicalSize::new(size[0] as f32, size[1] as f32));
     }
 }
 
-pub fn capture_slide_placement(windows: &AppWindowRefs) {
+pub fn capture_audience_placement(windows: &AppWindowRefs) {
     let controller = &windows.placement;
     if !controller.enabled.get() || controller.busy.get() || !controller.visible.get() {
         return;
     }
-    let Some(slide) = windows.slide.upgrade() else {
+    let Some(audience) = windows.audience.upgrade() else {
         return;
     };
-    if !window_has_available_monitor(slide.window()) {
+    if !window_has_available_monitor(audience.window()) {
         return;
     }
-    let record = slide
+    let record = audience
         .window()
         .with_winit_window(|native| {
             if native_window_placement_is_unsupported(native)
@@ -1267,18 +1274,18 @@ fn schedule_placement_capture(windows: AppWindowRefs) {
     windows.placement.capture_generation.set(generation);
     Timer::single_shot(Duration::from_millis(250), move || {
         if windows.placement.capture_generation.get() == generation {
-            capture_slide_placement(&windows);
+            capture_audience_placement(&windows);
         }
     });
 }
 
-pub fn start_slide_placement(windows: AppWindowRefs) {
+pub fn start_audience_placement(windows: AppWindowRefs) {
     if !windows.placement.enabled.get() {
         return;
     }
-    if let Some(slide) = windows.slide.upgrade() {
+    if let Some(audience) = windows.audience.upgrade() {
         let event_windows = windows.clone();
-        slide.window().on_winit_window_event(move |_, event| {
+        audience.window().on_winit_window_event(move |_, event| {
             use winit::event::WindowEvent;
             match event {
                 WindowEvent::Moved(_)
@@ -1297,7 +1304,7 @@ pub fn start_slide_placement(windows: AppWindowRefs) {
                     schedule_placement_capture(event_windows.clone());
                 }
                 WindowEvent::CloseRequested => {
-                    capture_slide_placement(&event_windows);
+                    capture_audience_placement(&event_windows);
                     event_windows.placement.cancel();
                     event_windows.placement.visible.set(false);
                 }
@@ -1324,14 +1331,14 @@ fn build_restore_plan(
     windows: &AppWindowRefs,
     saved: Option<&PlacementRecord>,
 ) -> Option<NativeRestorePlan> {
-    let slide = windows.slide.upgrade()?;
+    let audience = windows.audience.upgrade()?;
     let presenter_monitor = windows.presenter.upgrade().and_then(|presenter| {
         presenter
             .window()
             .with_winit_window(|native| native.current_monitor())
             .flatten()
     });
-    slide
+    audience
         .window()
         .with_winit_window(|native| {
             if native_window_placement_is_unsupported(native) {
@@ -1361,7 +1368,7 @@ fn build_restore_plan(
                 let fitted = crate::aspect::fit_slide_surface(
                     record.logical_inner_size[0] as f32,
                     record.logical_inner_size[1] as f32,
-                    slide.get_page_aspect_ratio(),
+                    audience.get_page_aspect_ratio(),
                 );
                 record.logical_inner_size = [f64::from(fitted.width), f64::from(fitted.height)];
                 record
@@ -1388,10 +1395,10 @@ fn build_restore_plan(
 }
 
 fn apply_restore_plan(windows: &AppWindowRefs, plan: &NativeRestorePlan) -> bool {
-    let Some(slide) = windows.slide.upgrade() else {
+    let Some(audience) = windows.audience.upgrade() else {
         return false;
     };
-    let available = slide
+    let available = audience
         .window()
         .with_winit_window(|native| {
             !native_window_placement_is_unsupported(native)
@@ -1401,7 +1408,7 @@ fn apply_restore_plan(windows: &AppWindowRefs, plan: &NativeRestorePlan) -> bool
     if !available {
         return false;
     }
-    let size_settled = slide
+    let size_settled = audience
         .window()
         .with_winit_window(|native| {
             let inner = native.inner_size().to_logical::<f64>(native.scale_factor());
@@ -1411,9 +1418,9 @@ fn apply_restore_plan(windows: &AppWindowRefs, plan: &NativeRestorePlan) -> bool
         .unwrap_or(false);
     // A position-only retry must not restart native content/frame resizing.
     if !size_settled {
-        set_slide_logical_size(windows, plan.planned.logical_inner_size);
+        set_audience_logical_size(windows, plan.planned.logical_inner_size);
     }
-    slide
+    audience
         .window()
         .with_winit_window(|native| {
             set_desktop_position(
@@ -1446,10 +1453,10 @@ fn prepare_startup_placement(windows: AppWindowRefs, generation: u64, attempt: u
     };
     // A first launch keeps the existing position when it is already usable.
     if windows.placement.remembered.borrow().is_none() {
-        if let Some(slide) = windows.slide.upgrade() {
-            if window_has_available_monitor(slide.window()) {
+        if let Some(audience) = windows.audience.upgrade() {
+            if window_has_available_monitor(audience.window()) {
                 windows.placement.cancel();
-                capture_slide_placement(&windows);
+                capture_audience_placement(&windows);
                 return;
             }
         }
@@ -1471,11 +1478,11 @@ fn verify_startup_placement(
         if !windows.placement.current(generation) {
             return;
         }
-        let Some(slide) = windows.slide.upgrade() else {
+        let Some(audience) = windows.audience.upgrade() else {
             windows.placement.cancel();
             return;
         };
-        let available = slide
+        let available = audience
             .window()
             .with_winit_window(|native| native.available_monitors().any(|m| m == plan.target))
             .unwrap_or(false);
@@ -1483,7 +1490,7 @@ fn verify_startup_placement(
             finish_restore_fallback(windows, generation);
             return;
         }
-        let settled = slide
+        let settled = audience
             .window()
             .with_winit_window(|native| {
                 let position = native.outer_position().ok()?;
@@ -1498,7 +1505,7 @@ fn verify_startup_placement(
                 ))
             })
             .flatten();
-        if window_has_available_monitor(slide.window()) {
+        if window_has_available_monitor(audience.window()) {
             if let Some((position, size, outer)) = settled {
                 let moved_elsewhere =
                     (i64::from(position.x) - i64::from(plan.planned.position[0])).abs() > 32
@@ -1514,8 +1521,8 @@ fn verify_startup_placement(
                     } else {
                         windows.placement.cancel();
                     }
-                    sync_slide_chrome(&windows);
-                    capture_slide_placement(&windows);
+                    sync_audience_chrome(&windows);
+                    capture_audience_placement(&windows);
                     return;
                 }
             }
@@ -1538,8 +1545,8 @@ fn finish_restore_fallback(windows: AppWindowRefs, generation: u64) {
     if !windows.placement.current(generation) {
         return;
     }
-    if let Some(slide) = windows.slide.upgrade() {
-        if !window_has_available_monitor(slide.window()) {
+    if let Some(audience) = windows.audience.upgrade() {
+        if !window_has_available_monitor(audience.window()) {
             if let Some(plan) = build_restore_plan(&windows, None) {
                 apply_restore_plan(&windows, &plan);
             }
@@ -1554,8 +1561,8 @@ fn finish_placement_swap(windows: &AppWindowRefs, plan: &NativeSwapPlan) {
     if !windows.placement.enabled.get() {
         return;
     }
-    if plan.slide_fullscreen {
-        if let Some(target) = placement_display(&plan.slide_target) {
+    if plan.audience_fullscreen {
+        if let Some(target) = placement_display(&plan.audience_target) {
             let mut record =
                 windows
                     .placement
@@ -1574,7 +1581,7 @@ fn finish_placement_swap(windows: &AppWindowRefs, plan: &NativeSwapPlan) {
             }
         }
     } else {
-        capture_slide_placement(windows);
+        capture_audience_placement(windows);
     }
 }
 
@@ -1583,13 +1590,13 @@ fn schedule_show_recovery(windows: AppWindowRefs) {
         return;
     }
     Timer::single_shot(Duration::ZERO, move || {
-        let Some(slide) = windows.slide.upgrade() else {
+        let Some(audience) = windows.audience.upgrade() else {
             return;
         };
-        if !window_has_available_monitor(slide.window()) && !windows.placement.busy.get() {
-            if slide.window().is_fullscreen() {
+        if !window_has_available_monitor(audience.window()) && !windows.placement.busy.get() {
+            if audience.window().is_fullscreen() {
                 if let Some(plan) = build_restore_plan(&windows, None) {
-                    let _ = slide.window().with_winit_window(|native| {
+                    let _ = audience.window().with_winit_window(|native| {
                         native.set_fullscreen(Some(winit::window::Fullscreen::Borderless(Some(
                             plan.target,
                         ))))

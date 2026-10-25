@@ -134,7 +134,7 @@ pub fn plan_restore(
 }
 
 #[derive(Default)]
-pub struct SlidePlacementController {
+pub struct AudiencePlacementController {
     pub enabled: Cell<bool>,
     pub busy: Cell<bool>,
     pub restoring: Cell<bool>,
@@ -146,7 +146,7 @@ pub struct SlidePlacementController {
     pub capture_generation: Cell<u64>,
     pub remembered: RefCell<Option<PlacementRecord>>,
 }
-impl SlidePlacementController {
+impl AudiencePlacementController {
     pub fn initialize(&self, record: Option<PlacementRecord>) {
         self.restore_verified.set(false);
         self.enabled.set(true);
@@ -191,7 +191,7 @@ mod tests {
     use super::*;
     #[test]
     fn restore_verification_excludes_cancelled_and_stale_operations() {
-        let controller = SlidePlacementController::default();
+        let controller = AudiencePlacementController::default();
         controller.initialize(None);
         let generation = controller.suspend();
         controller.restoring.set(true);
@@ -228,7 +228,7 @@ mod tests {
     }
     #[test]
     fn capture_excludes_fullscreen_minimized_and_disabled_windows() {
-        let controller = SlidePlacementController::default();
+        let controller = AudiencePlacementController::default();
         assert!(!controller.can_capture(false, false));
         controller.initialize(Some(record()));
         assert!(controller.can_capture(false, false));
@@ -362,7 +362,7 @@ mod tests {
     }
     #[test]
     fn suspended_hidden_and_cancelled_operations_do_not_capture() {
-        let controller = SlidePlacementController::default();
+        let controller = AudiencePlacementController::default();
         controller.initialize(Some(record()));
         let generation = controller.suspend();
         assert!(controller.current(generation));
