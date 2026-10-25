@@ -30,13 +30,50 @@ An intermediate full rerun timed out in the existing
 renderer integration test while GUI validation was also running. The final
 complete rerun passed.
 
-Full macOS GUI smoke, run both directly from the signed bundle and through
-Launch Services, stops before PDF/comment checks at rapid fullscreen-entry
-cancellation: `notifications=[1, 0, 0, 0]` without completion. This is the same
-failure shape documented in the earlier fullscreen investigations; no native
-notification assertions were relaxed. The new GUI comment assertions compile
-but were not reached in these runs. Normal-launch UI checks above were
-performed separately and do not establish a full GUI smoke pass.
+Before desktop unlock, full macOS GUI smoke stopped at rapid fullscreen-entry
+cancellation: `notifications=[1, 0, 0, 0]` without completion. No native
+notification assertions were relaxed.
+
+## Unlocked desktop rerun and screenshots
+
+After desktop unlock, the full signed-app GUI suite reached **229 passes**,
+including all comment assertions on both an empty deck and a loaded PDF. It
+then stopped in the later hidden-window fullscreen check:
+`hidden-window fullscreen=true did not complete`, with notification counts
+`[5, 5, 5, 5] -> [6, 5, 5, 5]`. Full GUI qualification remains incomplete.
+Subsequent full-suite retries also reproduced the early native fullscreen
+notification timeout.
+
+A separately identified focused run against `docs/samples/quick-presenter-demo.pdf`
+passed **117 checks, zero failures**. It covers Audience Live start/stop, real
+loopback WebSocket comments/reactions, both comment styles together, bubble-only
+mode, author separation, pause/resume and generation handling, both styles OFF,
+page-0 continuity, four-card burst bounds/ordering, panel layout, and Settings.
+It does not run or claim to pass native fullscreen checks.
+
+The optional `QP_GUI_SMOKE_SCOPE=comments` selects this focused scope; leaving
+it unset retains the full suite. `QP_GUI_SMOKE_BUBBLES_SNAPSHOT=/tmp/comments.ppm`
+saves separate PPM snapshots for combined/two-bubble/four-bubble stages, with
+`pdf` or `no-deck` in each filename. The existing
+`QP_GUI_SMOKE_SETTINGS_SNAPSHOT` saves the Settings view.
+
+These PNGs were converted from actual Slint window snapshots during the focused
+run, without compositing or modifying their content:
+
+| State | Screenshot |
+| --- | --- |
+| Flowing comments entering while a bubble is visible | [Combined styles](../assets/comment-bubbles/combined.png) |
+| Two bubbles; anonymous and named author | [Two bubbles](../assets/comment-bubbles/two-bubbles.png) |
+| Latest four after five posts; oldest removed | [Four bubbles](../assets/comment-bubbles/four-bubbles.png) |
+| Independent display toggles | [Settings](../assets/comment-bubbles/settings.png) |
+
+![Combined styles](../assets/comment-bubbles/combined.png)
+
+![Two bubbles](../assets/comment-bubbles/two-bubbles.png)
+
+![Four bubbles](../assets/comment-bubbles/four-bubbles.png)
+
+![Settings](../assets/comment-bubbles/settings.png)
 
 Temporary bundles and raw reports remain under `/tmp/quick-presenter-bubbles*`.
 This is not Windows/Linux runtime, physical mobile-client, Store, notarized

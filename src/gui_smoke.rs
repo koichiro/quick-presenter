@@ -90,6 +90,22 @@ async fn run_checks(
         .audience
         .show()
         .context("failed to show audience window")?;
+    if std::env::var("QP_GUI_SMOKE_SCOPE").as_deref() == Ok("comments") {
+        report.pass("scope: focused Audience Live/comments only; not the full GUI suite");
+        let window_refs = windows.refs();
+        crate::apply_macos_audience_window_chrome(&window_refs);
+        crate::sync_audience_chrome(&window_refs);
+        windows
+            .presenter
+            .show()
+            .context("failed to show presenter window")?;
+        check_audience_join_screen(&windows, &state, report).await?;
+        crate::begin_open_pdf(&window_refs, &state, options.pdf_path.clone());
+        wait_for_async_open(&window_refs, &state).await?;
+        check_audience_join_screen(&windows, &state, report).await?;
+        check_settings_dialog(&windows, &state, report).await?;
+        return Ok(());
+    }
     #[cfg(target_os = "macos")]
     let transitions = macos_fullscreen::Transitions::new(&windows.audience)?;
     #[cfg(target_os = "macos")]
@@ -1570,6 +1586,7 @@ async fn check_live_comments(
         "anonymous bubble and flowing comment are visible together",
         "one of the enabled styles is missing",
     );
+    save_comment_smoke_snapshot(audience, state, "combined").await?;
     presenter.invoke_audience_set_comment_display(false, true);
     submit_audience_smoke_event(
         url,
@@ -1604,15 +1621,29 @@ async fn check_live_comments(
         "bubbles retained",
         "page transition cleared bubbles",
     );
-    if let Some(path) = std::env::var_os("QP_GUI_SMOKE_BUBBLES_SNAPSHOT") {
-        let snapshot = audience.window().take_snapshot()?;
-        let mut bytes =
-            format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
-        for pixel in snapshot.as_bytes().chunks_exact(4) {
-            bytes.extend_from_slice(&pixel[..3]);
-        }
-        fs::write(path, bytes).context("failed to save bubble comment smoke snapshot")?;
+    save_comment_smoke_snapshot(audience, state, "two-bubbles").await?;
+    for body in ["Bubble three", "Bubble four", "Bubble five"] {
+        submit(body)?;
     }
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !presenter
+        .get_audience_comment_history()
+        .contains("Bubble five")
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    delay(Duration::from_millis(300)).await;
+    let stacked = audience.get_audience_bubbles().iter().collect::<Vec<_>>();
+    report.check(
+        "Bubble bursts keep the newest four cards in ascending order",
+        stacked.len() == 4
+            && stacked.last().is_some_and(|b| b.text == "Bubble five")
+            && stacked.windows(2).all(|pair| pair[0].y < pair[1].y),
+        "oldest card evicted and newest card at the bottom",
+        format!("bubbles={stacked:?}"),
+    );
+    save_comment_smoke_snapshot(audience, state, "four-bubbles").await?;
     presenter.invoke_audience_toggle_comments();
     report.check(
         "Pause clears bubble comments immediately",
@@ -1661,6 +1692,36 @@ async fn check_live_comments(
     presenter.set_audience_comment_history(history);
     presenter.invoke_audience_toggle_comments();
     presenter.invoke_audience_toggle_comments();
+    Ok(())
+}
+
+async fn save_comment_smoke_snapshot(
+    audience: &crate::AudienceWindow,
+    state: &Rc<RefCell<AppState>>,
+    stage: &str,
+) -> Result<()> {
+    let Some(path) = std::env::var_os("QP_GUI_SMOKE_BUBBLES_SNAPSHOT") else {
+        return Ok(());
+    };
+    // Let entry motion settle and bring flowing text fully inside the canvas.
+    delay(Duration::from_secs(1)).await;
+    let snapshot = audience.window().take_snapshot()?;
+    let mut bytes = format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+    for pixel in snapshot.as_bytes().chunks_exact(4) {
+        bytes.extend_from_slice(&pixel[..3]);
+    }
+    let path = std::path::PathBuf::from(path);
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("comments");
+    let context = if state.borrow().presentation.snapshot().is_some() {
+        "pdf"
+    } else {
+        "no-deck"
+    };
+    let destination = path.with_file_name(format!("{stem}-{context}-{stage}.ppm"));
+    fs::write(destination, bytes).context("failed to save comment smoke snapshot")?;
     Ok(())
 }
 
