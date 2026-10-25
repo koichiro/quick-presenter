@@ -38,7 +38,7 @@ pixels tall; the author and comment text remain opaque for readability. A smalle
 author line appears above the wrapped comment;
 empty/whitespace-only handles and case-insensitive `Anonymous` omit that line.
 Each new bubble enters from below over 250 ms, moving older bubbles upward by
-one slot. Four settled bubbles fit in the stack; the oldest leaves through its
+one slot. Five settled bubbles fit in the stack; the oldest leaves through its
 clipped top as the next arrives. Bubbles stay in place until another comment
 arrives, a style is disabled, comments are paused, or the session ends. Long
 text is wrapped and elided within its fixed card, preserving the stack bounds.

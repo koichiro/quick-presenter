@@ -2375,11 +2375,11 @@ export component AudienceWindow inherits Window {
                 property <float> canvas-scale: min(parent.width / 1280px, parent.height / 720px);
                 y: parent.height - self.height;
                 width: parent.width;
-                height: 552px * self.canvas-scale;
+                height: 684px * self.canvas-scale;
                 clip: true;
                 for bubble in root.audience-bubbles: bubble-card := Rectangle {
                     x: parent.width - self.width - 24px * bubble-stack.canvas-scale;
-                    y: (bubble.y - 168) * bubble-stack.canvas-scale * 1px;
+                    y: (bubble.y - 36) * bubble-stack.canvas-scale * 1px;
                     width: parent.width / 3;
                     height: 120px * bubble-stack.canvas-scale;
                     border-radius: 16px * bubble-stack.canvas-scale;

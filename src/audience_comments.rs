@@ -49,7 +49,7 @@ impl Default for CommentDisplaySettings {
 const BUBBLE_STEP: f32 = 132.0;
 const BUBBLE_BOTTOM: f32 = 576.0;
 const BUBBLE_MOTION: Duration = Duration::from_millis(250);
-const BUBBLE_COUNT: usize = 4;
+const BUBBLE_COUNT: usize = 5;
 const BUBBLE_TOP: f32 = BUBBLE_BOTTOM - (BUBBLE_COUNT - 1) as f32 * BUBBLE_STEP;
 #[derive(Clone, Debug)]
 pub struct BubbleFrame {

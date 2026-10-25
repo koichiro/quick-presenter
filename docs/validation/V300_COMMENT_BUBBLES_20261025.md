@@ -53,7 +53,7 @@ It does not run or claim to pass native fullscreen checks.
 
 The optional `QP_GUI_SMOKE_SCOPE=comments` selects this focused scope; leaving
 it unset retains the full suite. `QP_GUI_SMOKE_BUBBLES_SNAPSHOT=/tmp/comments.ppm`
-saves separate PPM snapshots for combined/two-bubble/four-bubble stages, with
+saves separate PPM snapshots for combined/two-bubble/five-bubble stages, with
 `pdf` or `no-deck` in each filename. The existing
 `QP_GUI_SMOKE_SETTINGS_SNAPSHOT` saves the Settings view.
 
@@ -143,6 +143,24 @@ Native manual startup checks confirm that a valid local transport with invalid
 Settings, and uses default ON/OFF values. A broken remote transport with valid
 OFF/OFF preferences loads both switches as OFF; Reset restores the start button
 and leaves both preferences OFF in the UI and saved TOML.
+
+## Five bubbles with simultaneous flowing comments
+
+The stack limit is now five settled cards plus one exiting card. The same
+120-pixel card height, 132-pixel spacing, right alignment, one-third window
+width, and 50% background opacity are retained. The clip region extends upward
+to accommodate all five cards.
+
+The actual demo-PDF Audience window below shows five stacked bubbles while a
+new comment also flows across the slide. The capture waits for entry/exit
+motion to settle and for the flowing text to reach the left half of the slide.
+The first new coexistence assertion ran during the transient exiting-card
+animation; it was corrected to wait for that animation before checking the
+settled count. The screenshot was taken after settling. The final focused run passes **123
+checks, zero failures**; the complete Rust suite passes **624 tests** with two
+existing ignored tests. Formatting and `cargo check` also pass.
+
+![Five bubbles and flowing comments](../assets/comment-bubbles/five-bubbles-combined.png)
 
 Temporary bundles and raw reports remain under `/tmp/quick-presenter-bubbles*`.
 This is not Windows/Linux runtime, physical mobile-client, Store, notarized

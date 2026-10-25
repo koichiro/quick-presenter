@@ -1622,13 +1622,13 @@ async fn check_live_comments(
         "page transition cleared bubbles",
     );
     save_comment_smoke_snapshot(audience, state, "two-bubbles").await?;
-    for body in ["Bubble three", "Bubble four", "Bubble five"] {
+    for body in ["Bubble three", "Bubble four", "Bubble five", "Bubble six"] {
         submit(body)?;
     }
     let deadline = Instant::now() + Duration::from_secs(3);
     while !presenter
         .get_audience_comment_history()
-        .contains("Bubble five")
+        .contains("Bubble six")
         && Instant::now() < deadline
     {
         settle_presenter_notes_layout(presenter).await?;
@@ -1636,14 +1636,32 @@ async fn check_live_comments(
     delay(Duration::from_millis(300)).await;
     let stacked = audience.get_audience_bubbles().iter().collect::<Vec<_>>();
     report.check(
-        "Bubble bursts keep the newest four cards in ascending order",
-        stacked.len() == 4
-            && stacked.last().is_some_and(|b| b.text == "Bubble five")
+        "Bubble bursts keep the newest five cards in ascending order",
+        stacked.len() == 5
+            && stacked.last().is_some_and(|b| b.text == "Bubble six")
             && stacked.windows(2).all(|pair| pair[0].y < pair[1].y),
         "oldest card evicted and newest card at the bottom",
         format!("bubbles={stacked:?}"),
     );
-    save_comment_smoke_snapshot(audience, state, "four-bubbles").await?;
+    save_comment_smoke_snapshot(audience, state, "five-bubbles").await?;
+    presenter.invoke_audience_set_comment_display(true, true);
+    submit("Flowing comments are also ON")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while audience.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    delay(Duration::from_millis(300)).await;
+    report.check(
+        "Five bubble cards coexist with flowing comments",
+        audience.get_audience_bubbles().row_count() == 5
+            && audience.get_audience_comments().row_count() > 0,
+        "five cards and a flowing comment are visible together",
+        "combined five-card display is missing",
+    );
+    if std::env::var_os("QP_GUI_SMOKE_BUBBLES_SNAPSHOT").is_some() {
+        delay(Duration::from_secs(6)).await;
+    }
+    save_comment_smoke_snapshot(audience, state, "five-bubbles-combined").await?;
     presenter.invoke_audience_toggle_comments();
     report.check(
         "Pause clears bubble comments immediately",
