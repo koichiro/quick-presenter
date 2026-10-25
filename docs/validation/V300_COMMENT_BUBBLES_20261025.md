@@ -57,6 +57,23 @@ saves separate PPM snapshots for combined/two-bubble/four-bubble stages, with
 `pdf` or `no-deck` in each filename. The existing
 `QP_GUI_SMOKE_SETTINGS_SNAPSHOT` saves the Settings view.
 
+### Right-aligned compact revision
+
+The cards now anchor to the Audience window's right edge, including when the
+window and slide aspect ratios differ. Width is one third of the window;
+height is reduced from 144 to 120 logical pixels. Background opacity is reduced
+from about 70% to 50%, while text remains opaque. The four-card stack uses
+132-pixel slots and clips outgoing cards above its top edge.
+
+Formatting, `cargo check`, `cargo build --bins`, and the complete `cargo test`
+pass after the revision (622 passed, two existing ignored tests).
+The revised signed app passes the focused Audience Live/comments run again:
+**117 checks, zero failures**. The combined, two-card, and four-card screenshots
+below were recaptured from that run on the demo PDF and visually reviewed for
+right alignment, reduced footprint, and slide visibility through the cards.
+The Settings screenshot is unchanged. This revision does not rerun or claim to
+resolve the full-suite macOS fullscreen timeout recorded above.
+
 These PNGs were converted from actual Slint window snapshots during the focused
 run, without compositing or modifying their content:
 

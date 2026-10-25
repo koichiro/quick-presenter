@@ -2281,41 +2281,6 @@ export component AudienceWindow inherits Window {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             clip: true;
-            bubble-stack := Rectangle {
-                property <float> canvas-scale: parent.canvas-scale;
-                y: 72px * self.canvas-scale;
-                width: parent.width;
-                height: 648px * self.canvas-scale;
-                clip: true;
-                for bubble in root.audience-bubbles: bubble-card := Rectangle {
-                    x: 24px * bubble-stack.canvas-scale;
-                    y: (bubble.y - 72) * bubble-stack.canvas-scale * 1px;
-                    width: 560px * bubble-stack.canvas-scale;
-                    height: 144px * bubble-stack.canvas-scale;
-                    border-radius: 16px * bubble-stack.canvas-scale;
-                    background: #606060b3;
-                    property <float> scale: bubble-stack.canvas-scale;
-                    VerticalLayout {
-                        padding: 16px * bubble-card.scale;
-                        spacing: 4px * bubble-card.scale;
-                        if bubble.name != "": Text {
-                            text: bubble.name;
-                            color: #eeeeee;
-                            font-size: 16px * bubble-card.scale;
-                            height: 20px * bubble-card.scale;
-                            overflow: elide;
-                        }
-                        Text {
-                            text: bubble.text;
-                            color: white;
-                            font-size: 24px * bubble-card.scale;
-                            wrap: word-wrap;
-                            overflow: elide;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-            }
             for comment in root.audience-comments: Text {
                 x: comment.x * parent.canvas-scale * 1px;
                 y: comment.y * parent.canvas-scale * 1px;
@@ -2326,6 +2291,45 @@ export component AudienceWindow inherits Window {
                 font-size: 32px * parent.canvas-scale;
                 font-weight: 700;
                 wrap: no-wrap;
+            }
+        }
+        if !root.black-screen-active: Rectangle {
+            width: parent.width;
+            height: parent.height;
+            bubble-stack := Rectangle {
+                property <float> canvas-scale: min(parent.width / 1280px, parent.height / 720px);
+                y: parent.height - self.height;
+                width: parent.width;
+                height: 552px * self.canvas-scale;
+                clip: true;
+                for bubble in root.audience-bubbles: bubble-card := Rectangle {
+                    x: parent.width - self.width - 24px * bubble-stack.canvas-scale;
+                    y: (bubble.y - 168) * bubble-stack.canvas-scale * 1px;
+                    width: parent.width / 3;
+                    height: 120px * bubble-stack.canvas-scale;
+                    border-radius: 16px * bubble-stack.canvas-scale;
+                    background: #60606080;
+                    property <float> scale: bubble-stack.canvas-scale;
+                    VerticalLayout {
+                        padding: 12px * bubble-card.scale;
+                        spacing: 4px * bubble-card.scale;
+                        if bubble.name != "": Text {
+                            text: bubble.name;
+                            color: #eeeeee;
+                            font-size: 14px * bubble-card.scale;
+                            height: 20px * bubble-card.scale;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: bubble.text;
+                            color: white;
+                            font-size: 22px * bubble-card.scale;
+                            wrap: word-wrap;
+                            overflow: elide;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
             }
         }
         if root.black-screen-active: Rectangle { width: parent.width; height: parent.height; background: black; }

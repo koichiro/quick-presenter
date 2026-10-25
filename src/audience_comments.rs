@@ -46,10 +46,11 @@ impl Default for CommentDisplaySettings {
 }
 
 // Keep these logical dimensions in sync with the bubble stack in ui/app.slint.
-const BUBBLE_STEP: f32 = 156.0;
-const BUBBLE_BOTTOM: f32 = 552.0;
+const BUBBLE_STEP: f32 = 132.0;
+const BUBBLE_BOTTOM: f32 = 576.0;
 const BUBBLE_MOTION: Duration = Duration::from_millis(250);
 const BUBBLE_COUNT: usize = 4;
+const BUBBLE_TOP: f32 = BUBBLE_BOTTOM - (BUBBLE_COUNT - 1) as f32 * BUBBLE_STEP;
 #[derive(Clone, Debug)]
 pub struct BubbleFrame {
     pub name: String,
@@ -110,8 +111,9 @@ impl CommentEngine {
             .bubbles
             .iter()
             .any(|b| now.saturating_duration_since(b.moved_at) < BUBBLE_MOTION);
-        self.bubbles
-            .retain(|b| b.to_y >= 0.0 || now.saturating_duration_since(b.moved_at) < BUBBLE_MOTION);
+        self.bubbles.retain(|b| {
+            b.to_y >= BUBBLE_TOP || now.saturating_duration_since(b.moved_at) < BUBBLE_MOTION
+        });
         self.bubbles
             .iter()
             .map(|b| BubbleFrame {

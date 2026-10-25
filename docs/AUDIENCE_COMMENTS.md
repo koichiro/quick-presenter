@@ -30,8 +30,11 @@ The defaults preserve the existing flowing overlay. Disabling a style clears
 its visible/pending items; enabling it waits for new comments without replaying
 history. Relay import/reset preserves these preferences.
 
-Bubbles are translucent gray rounded rectangles at the lower left of the
-logical canvas. A smaller author line appears above the wrapped comment;
+Bubbles are translucent gray rounded rectangles anchored to the lower right of
+the Audience window. Each card occupies one third of the window width, with a
+scaled right/bottom margin and 50% background opacity. Cards are 120 logical
+pixels tall; the author and comment text remain opaque for readability. A smaller
+author line appears above the wrapped comment;
 empty/whitespace-only handles and case-insensitive `Anonymous` omit that line.
 Each new bubble enters from below over 250 ms, moving older bubbles upward by
 one slot. Four settled bubbles fit in the stack; the oldest leaves through its
