@@ -118,9 +118,9 @@ The homepage introduces the stable `qp` interface alongside PDF playback:
 source context, explicit presentation control, and NDJSON change observation.
 The optional external narration runner is linked from the `v2.5.0` examples.
 It is separate from the player; Quick Presenter does not bundle an AI model or
-Kokoro. Under the Store rollout assumption in the release checklist below,
-the website describes macOS automation as available in both the Mac App Store
-and Developer ID / DMG distributions in v2.5.0.
+Kokoro. macOS automation is available in both the Mac App Store and Developer
+ID / DMG distributions in v2.5.0. Public Store delivery was confirmed on
+2026-10-25 JST; see the release checklist below.
 
 The checked-in `src/assets/kokoro-demo.mp4` is an actual macOS presenter-window
 recording of the four-slide Marp notes demo from #445, with the cursor hidden.
@@ -199,11 +199,10 @@ restoring a saved page.
 
 ## Release and local verification checklist
 
-This website targets v2.5.0 and is prepared under the maintainer's assumption
-that both Microsoft Store and Mac App Store distribution have begun. This is a
-publication assumption for the website, not a record of customer Store checks.
-The release qualification and rollout evidence remain in the release record
-and [#520](https://github.com/koichiro/quick-presenter/issues/520).
+This website targets v2.5.0. Public release and actual Store delivery were
+confirmed for both Mac App Store and Microsoft Store on 2026-10-25 JST.
+The completed [Store qualification tracker #520](https://github.com/koichiro/quick-presenter/issues/520#issuecomment-6391442187)
+records the results and remaining validation limits.
 
 Both localized homepages and interactive guides describe matching v2.5.0
 GUI/CLI packages. Mac App Store now supports CLI control via the bundled
