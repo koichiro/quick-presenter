@@ -1207,6 +1207,8 @@ html:lang(ja) {
 .download-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 30px 0; }
 .preparation-grid article, .download-grid article { min-width: 0; padding: 26px; background: var(--surface-strong); border: 1px solid var(--line); border-radius: 10px; }
 .preparation-grid code { display: block; overflow-wrap: anywhere; }
+.download-grid article { display: flex; flex-direction: column; }
+.download-grid .button { align-self: flex-start; margin-top: auto; }
 .download-grid p { font-size: 1rem; }
 .release-status { color: var(--muted); }
 a:focus-visible, summary:focus-visible, video:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
