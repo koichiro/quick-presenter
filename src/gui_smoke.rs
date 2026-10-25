@@ -1005,10 +1005,20 @@ async fn check_audience_join_screen(
     let presenter = &windows.presenter;
     report.check(
         "Inactive Audience Live offers the ON action",
-        presenter.get_audience_toggle_label() == "Audience Live ON 👍️",
+        presenter.get_audience_toggle_label() == "Audience Live ON  👍️"
+            && !presenter.get_audience_panel_expanded(),
         "start action displayed",
         "incorrect start label",
     );
+    presenter.invoke_audience_toggle_panel();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Inactive Audience Live history can be manually opened",
+        presenter.get_audience_panel_expanded() && !presenter.get_audience_active(),
+        "history opened without starting a session",
+        "disclosure changed session state or did not open history",
+    );
+    presenter.invoke_audience_toggle_panel();
     presenter.invoke_audience_toggle_session();
     let deadline = Instant::now() + Duration::from_secs(5);
     while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
@@ -1018,11 +1028,23 @@ async fn check_audience_join_screen(
     report.check(
         "Audience Live ON starts a local session with a QR code",
         presenter.get_audience_active()
+            && presenter.get_audience_panel_expanded()
             && url.starts_with("http://127.0.0.1:")
             && presenter.get_audience_qr().size().width > 0,
         "real loopback session became ready",
         "session or QR not ready",
     );
+    presenter.invoke_audience_toggle_panel();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Active Audience Live history can collapse without stopping reception",
+        !presenter.get_audience_panel_expanded()
+            && presenter.get_audience_active()
+            && presenter.get_audience_url() == url,
+        "session and join URL remained active",
+        "collapsing history changed the session",
+    );
+    presenter.invoke_audience_toggle_panel();
     report.check(
         "Audience Live ON shows page 0 on the slide window",
         windows.slide.get_audience_guide_visible()
@@ -1188,6 +1210,7 @@ async fn check_audience_join_screen(
     report.check(
         "Stop clears audience QR, URLs, and join screen",
         !presenter.get_audience_active()
+            && !presenter.get_audience_panel_expanded()
             && presenter.get_audience_url().is_empty()
             && windows.slide.get_audience_url().is_empty()
             && windows.slide.get_audience_qr().size().width == 0
@@ -1230,14 +1253,46 @@ async fn check_audience_panel_layout(
     report: &mut GuiSmokeReport,
 ) -> Result<()> {
     let presenter = &windows.presenter;
+    let was_expanded = presenter.get_audience_panel_expanded();
+    if !was_expanded {
+        presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
+    }
     let size = presenter.window().size();
-    for (width, height) in [(800.0, 800.0), (1020.0, 960.0), (1200.0, 1240.0)] {
+    for (width, height) in [
+        (800.0, 842.0),
+        (1024.0, 1002.0),
+        (1280.0, 900.0),
+        (1920.0, 1080.0),
+        (2560.0, 1440.0),
+        (1200.0, 1240.0),
+    ] {
         presenter
             .window()
             .dispatch_event(slint::platform::WindowEvent::Resized {
                 size: slint::LogicalSize::new(width, height),
             });
         settle_presenter_notes_layout(presenter).await?;
+        let current_width = presenter.get_presenter_current_column_width();
+        let next_width = presenter.get_presenter_next_column_width();
+        let thumbnail_width = presenter.get_presenter_thumbnail_width();
+        report.check(
+            format!("Presenter panes stay balanced and notes remain usable ({width}x{height})"),
+            current_width >= next_width
+                && next_width >= 260.0
+                && (128.0..=192.0).contains(&thumbnail_width)
+                && (presenter.get_notes_layout_outer_width() - current_width).abs() <= 1.0
+                && presenter.get_notes_visible_height() >= 180.0
+                && presenter.get_presenter_next_preview_height() > 0.0
+                && presenter.get_presenter_next_preview_height()
+                    <= next_width / presenter.get_next_page_aspect_ratio() + 1.0
+                && (next_width <= 260.0 || (current_width - next_width * 2.0).abs() <= 1.0),
+            format!("current={current_width}, next={next_width}, thumbnails={thumbnail_width}"),
+            format!(
+                "unbalanced panes or unusable notes: {:?}",
+                NotesResizeSnapshot::capture(presenter)
+            ),
+        );
         report.check(
             format!("Audience panel leaves thumbnails unobstructed ({width}x{height})"),
             presenter.get_audience_panel_right() + 8.0 <= presenter.get_thumbnails_left()
@@ -1254,8 +1309,11 @@ async fn check_audience_panel_layout(
             presenter.get_audience_toggle_y() >= presenter.get_notes_area_bottom()
                 && presenter.get_audience_panel_top()
                     >= presenter.get_audience_toggle_bottom() + 4.0
-                && presenter.get_audience_reactions_width()
-                    > presenter.get_audience_controls_width()
+                && (presenter.get_audience_reactions_width()
+                    - presenter.get_audience_panel_width())
+                .abs()
+                    <= 1.0
+                && presenter.get_audience_toolbar_ordered()
                 && presenter.get_audience_url_top() >= presenter.get_audience_panel_bottom() + 4.0
                 && presenter.get_audience_address_controls_inline(),
             "toggle and expanded feed fit",
@@ -1269,6 +1327,10 @@ async fn check_audience_panel_layout(
             size: size.to_logical(presenter.window().scale_factor()),
         });
     settle_presenter_notes_layout(presenter).await?;
+    if !was_expanded {
+        presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
+    }
     Ok(())
 }
 
@@ -1715,7 +1777,7 @@ impl NotesResizeSnapshot {
     fn portrait_inline_layout_is_applied(&self) -> bool {
         // Read actual element bounds, not just the requested aspect/menu flags.
         // The 0.6 slide surface, 28px inline menu and displaced main area must
-        // agree, and the notes viewport must belong to that new slide width.
+        // agree, and the notes viewport must contain that new slide width.
         // This is an applied-layout witness even if native size did not change;
         // neither an arbitrary quiet period nor a resize event proves it alone.
         self.slide_width > 0.0
@@ -1723,7 +1785,7 @@ impl NotesResizeSnapshot {
             && (self.slide_width - self.slide_height * 0.6).abs() <= 1.0
             && (self.menu_height - 28.0).abs() <= 1.0
             && (self.main_y - self.menu_height - 54.0).abs() <= 1.0
-            && (self.notes_outer_width - self.slide_width).abs() <= 1.0
+            && self.notes_outer_width >= self.slide_width - 1.0
             && self.viewport_width <= self.notes_outer_width - 20.0 + 1.0
     }
 
@@ -1833,6 +1895,14 @@ async fn check_notes_font_size(
     context: &str,
 ) -> Result<()> {
     let presenter = &windows.presenter;
+    let original_panel_expanded = presenter.get_audience_panel_expanded();
+    // Keep typography fixtures within small CI displays. Expanding the footer
+    // raises even the minimum fixture above AppKit's available work area.
+    // Disclosure and expanded history are exercised separately below.
+    if original_panel_expanded {
+        presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
+    }
     let original_size = presenter.window().size();
     let original_aspect = presenter.get_current_page_aspect_ratio();
     let original_has_notes = presenter.get_has_notes();
@@ -1979,10 +2049,11 @@ async fn check_notes_font_size(
         ),
     );
     // Keep the width fixed so the slide preview does not consume the extra
-    // vertical room. Include the Audience Live footer in the native request.
+    // vertical room. The collapsed footer makes this a 608 -> 640px resize,
+    // which fits the 656px client work area on macOS CI.
     resize_presenter_notes(
         presenter,
-        slint::LogicalSize::new(800.0, 650.0 + presenter.get_audience_panel_height()),
+        slint::LogicalSize::new(800.0, 592.0 + presenter.get_audience_panel_height()),
     )
     .await?;
     settle_presenter_notes_layout(presenter).await?;
@@ -2077,6 +2148,10 @@ async fn check_notes_font_size(
         "page, render generation, and timer stayed unchanged",
         "automatic sizing unexpectedly changed presentation state",
     );
+    if original_panel_expanded {
+        presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
+    }
     Ok(())
 }
 

@@ -13,7 +13,7 @@ use slint::{
     ComponentHandle, Model, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel, Weak,
 };
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::VecDeque,
     net::Ipv4Addr,
     rc::Rc,
@@ -33,8 +33,38 @@ fn ensure_relay_replaceable(
     }
 }
 
+fn join_url_for_copy(status: Option<SessionStatus>, stopping: bool) -> Option<String> {
+    match (stopping, status) {
+        (false, Some(SessionStatus::Running { url, .. })) if !url.is_empty() => Some(url),
+        _ => None,
+    }
+}
+
+// Manual choices last until the session changes, not merely until its next poll.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct AudiencePanelVisibility {
+    active: bool,
+    expanded: bool,
+}
+
+impl AudiencePanelVisibility {
+    fn set_active(&mut self, active: bool) {
+        if self.active != active {
+            self.active = active;
+            self.expanded = active;
+        }
+    }
+
+    fn toggle(&mut self) {
+        self.expanded = !self.expanded;
+    }
+}
+
 pub struct AudienceUi {
+    panel_visibility: Cell<AudiencePanelVisibility>,
+    panel_geometry: RefCell<crate::audience_panel::AudiencePanelGeometry>,
     session: RefCell<Option<AudienceSession>>,
+    clipboard: RefCell<crate::clipboard::TextClipboard>,
     timer: Timer,
     addresses: RefCell<Vec<Ipv4Addr>>,
     relay_config: RefCell<Option<crate::audience_relay_http::ManagedRelay>>,
@@ -123,6 +153,7 @@ impl AudienceUi {
                             window.set_audience_status(error.into());
                             window.set_audience_alert_title("Audience Live configuration needs attention".into());
                             window.set_audience_alert_guidance("Open Settings to import a valid configuration, or check the file and its access permissions. PDF playback is still available.".into());
+                            ui.reveal_alert(&window);
                         }
                     }
                 }
@@ -152,7 +183,10 @@ impl AudienceUi {
     ) -> Rc<Self> {
         let presenter = &windows.presenter;
         let ui = Rc::new(Self {
+            panel_visibility: Cell::new(AudiencePanelVisibility::default()),
+            panel_geometry: RefCell::new(crate::audience_panel::AudiencePanelGeometry::default()),
             session: RefCell::new(None),
+            clipboard: RefCell::new(crate::clipboard::TextClipboard::default()),
             timer: Timer::default(),
             addresses: RefCell::new(Vec::new()),
             relay_config: RefCell::new(relay_config),
@@ -180,6 +214,19 @@ impl AudienceUi {
         windows
             .slide
             .set_audience_comments(ui.comment_model.clone().into());
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_toggle_panel(move || {
+            if let Some(ui) = weak.upgrade() {
+                let mut visibility = ui.panel_visibility.get();
+                visibility.toggle();
+                ui.panel_visibility.set(visibility);
+                if let Some(window) = ui.windows.presenter.upgrade() {
+                    ui.panel_geometry
+                        .borrow_mut()
+                        .set_expanded(&window, visibility.expanded);
+                }
+            }
+        });
         let weak = Rc::downgrade(&ui);
         presenter.on_audience_toggle_comments(move || {
             if let Some(ui) = weak.upgrade() {
@@ -399,7 +446,7 @@ impl AudienceUi {
                     *ui.session.borrow_mut() = Some(session);
                     state.borrow_mut().audience_join_available = true;
                     if let Some(window) = window.upgrade() {
-                        window.set_audience_active(true);
+                        ui.set_active(&window, true);
                         window.set_audience_busy(true);
                         window.set_audience_status("Starting…".into());
                         window.set_audience_alert_title("".into());
@@ -429,6 +476,7 @@ impl AudienceUi {
                         window.set_audience_status(alert.title.into());
                         window.set_audience_alert_title(alert.title.into());
                         window.set_audience_alert_guidance(alert.guidance.into());
+                        ui.reveal_alert(&window);
                     }
                 }
             }
@@ -466,8 +514,50 @@ impl AudienceUi {
                 }
             });
         });
+        let weak = Rc::downgrade(&ui);
+        let window = presenter.as_weak();
+        presenter.on_audience_copy_url(move || {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let status = ui
+                .session
+                .borrow()
+                .as_ref()
+                .map(|session| session.snapshot().status);
+            let Some(url) = join_url_for_copy(status, *ui.stopping.borrow()) else {
+                return;
+            };
+            let message = match ui.clipboard.borrow_mut().copy(&url) {
+                Ok(()) => "Join URL copied.",
+                Err(error) => {
+                    tracing::warn!(%error, "Join URL clipboard copy failed");
+                    "Cannot copy the join URL. Try again."
+                }
+            };
+            if let Some(window) = window.upgrade() {
+                window.set_status_text(message.into());
+            }
+        });
         presenter.invoke_audience_refresh_addresses();
         ui
+    }
+
+    fn set_active(&self, window: &PresenterWindow, active: bool) {
+        let mut visibility = self.panel_visibility.get();
+        visibility.set_active(active);
+        self.panel_visibility.set(visibility);
+        window.set_audience_active(active);
+        self.panel_geometry
+            .borrow_mut()
+            .set_expanded(window, visibility.expanded);
+    }
+
+    fn reveal_alert(&self, window: &PresenterWindow) {
+        let mut visibility = self.panel_visibility.get();
+        visibility.expanded = true;
+        self.panel_visibility.set(visibility);
+        self.panel_geometry.borrow_mut().set_expanded(window, true);
     }
 
     fn can_start(&self) -> bool {
@@ -689,8 +779,11 @@ impl AudienceUi {
                     .as_ref()
                     .is_some_and(AudienceSession::is_finished)
                 {
+                    window.set_audience_busy(true);
+                    window.set_audience_url("".into());
                     return;
                 }
+                let failed = matches!(&snapshot.status, SessionStatus::Failed(_));
                 let message: String = match snapshot.status {
                     SessionStatus::Failed(error) => {
                         let alert = crate::audience_alert::for_failure(&error);
@@ -705,7 +798,10 @@ impl AudienceUi {
                 *self.stopping.borrow_mut() = false;
                 self.timer.stop();
                 self.last_url.borrow_mut().clear();
-                window.set_audience_active(false);
+                self.set_active(&window, false);
+                if failed {
+                    self.reveal_alert(&window);
+                }
                 window.set_audience_busy(false);
                 window.set_audience_recovery_pending(
                     ensure_relay_replaceable(self.relay_config.borrow().as_ref()).is_err(),
@@ -720,6 +816,7 @@ impl AudienceUi {
     }
 
     pub fn shutdown(&self) {
+        self.clipboard.borrow_mut().release();
         self.clear_overlay();
         self.comments.borrow_mut().reset();
         self.comment_model.set_vec(Vec::new());
@@ -827,5 +924,78 @@ mod configuration_change_tests {
         // The session lifecycle, not a settings action, releases the retained identity.
         shared.clear();
         assert!(ensure_relay_replaceable(Some(&relay)).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod panel_visibility_tests {
+    use super::AudiencePanelVisibility;
+
+    #[test]
+    fn inactive_starts_collapsed_and_supports_manual_open_and_close() {
+        let mut panel = AudiencePanelVisibility::default();
+        assert!(!panel.expanded);
+        panel.toggle();
+        assert!(panel.expanded);
+        panel.set_active(false);
+        assert!(panel.expanded);
+        panel.toggle();
+        assert!(!panel.expanded);
+        assert!(!panel.active);
+    }
+
+    #[test]
+    fn session_transitions_override_manual_choice_but_polls_do_not() {
+        let mut panel = AudiencePanelVisibility::default();
+        panel.set_active(true);
+        assert!(panel.expanded);
+        panel.toggle();
+        assert!(!panel.expanded);
+        panel.set_active(true);
+        assert!(!panel.expanded);
+        assert!(panel.active);
+        panel.toggle();
+        panel.set_active(false);
+        assert!(!panel.expanded);
+        panel.toggle();
+        assert!(panel.expanded);
+        panel.set_active(true);
+        panel.set_active(false);
+        assert!(!panel.expanded);
+    }
+}
+
+#[cfg(test)]
+mod join_url_copy_tests {
+    use super::{join_url_for_copy, SessionStatus};
+
+    #[test]
+    fn copy_preserves_the_full_join_url_including_its_fragment() {
+        let url = "https://relay.example/join/session?lang=en#k=secret-test-token";
+        let running = SessionStatus::Running {
+            url: url.into(),
+            code: "session".into(),
+        };
+        assert_eq!(
+            join_url_for_copy(Some(running.clone()), false).as_deref(),
+            Some(url)
+        );
+        assert_eq!(join_url_for_copy(Some(running), true), None);
+    }
+
+    #[test]
+    fn copy_is_unavailable_without_a_current_running_url() {
+        for status in [
+            None,
+            Some(SessionStatus::Starting),
+            Some(SessionStatus::Stopped),
+            Some(SessionStatus::Failed("offline".into())),
+            Some(SessionStatus::Running {
+                url: String::new(),
+                code: "session".into(),
+            }),
+        ] {
+            assert_eq!(join_url_for_copy(status, false), None);
+        }
     }
 }

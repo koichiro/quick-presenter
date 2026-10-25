@@ -351,6 +351,61 @@ component NavigationButton inherits Button {
     }
 }
 
+// An unfilled icon button with explicit focus and accessibility behavior.
+component AudienceIconButton inherits FocusScope {
+    in property <image> icon;
+    in property <string> action-name;
+    in property <string> tooltip-text;
+    callback clicked();
+
+    min-width: 36px;
+    max-width: 36px;
+    height: 32px;
+    accessible-role: button;
+    accessible-enabled: root.enabled;
+    accessible-label: root.action-name;
+    accessible-action-default => { root.focus(); root.clicked(); }
+
+    key-pressed(event) => {
+        if (event.text == Key.Space || event.text == Key.Return) {
+            root.clicked();
+            return accept;
+        }
+        return reject;
+    }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: transparent;
+        border-width: 1px;
+        border-radius: 4px;
+        border-color: #8ab4f8;
+        visible: root.has-focus && root.enabled;
+    }
+    Image {
+        source: root.icon;
+        width: 20px;
+        height: 20px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: root.enabled ? #f1f3f4 : #666b70;
+    }
+    TouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.focus();
+            root.clicked();
+        }
+    }
+    Tooltip {
+        text: @markdown("\{root.tooltip-text}");
+    }
+}
+
 component KeyboardBindingsPanel inherits Rectangle {
     background: #111315;
     border-color: #3c4043;
@@ -708,10 +763,21 @@ export component PresenterWindow inherits Window {
     in property <string> audience-code;
     in property <image> audience-qr;
     in property <bool> audience-active: false;
+    in property <bool> audience-panel-expanded: false;
+    callback audience-toggle-panel();
     in property <bool> audience-can-start: false;
     in property <int> audience-count: 0;
     in property <bool> audience-guide-visible: false;
-    out property <length> audience-panel-height: 282px;
+    out property <length> audience-panel-height: root.audience-panel-expanded ? root.audience-expanded-height : 48px;
+    // Infer the equivalent expanded height while collapsed so resizing the
+    // window by the hidden footer height keeps slides and notes unchanged.
+    out property <length> audience-expanded-height: root.audience-panel-expanded
+        ? clamp(round((root.height - root.inline-menu-height) / 1px * 0.28) * 1px, 282px, 360px)
+        : clamp(round((root.height - root.inline-menu-height - 48px) / 1px * (0.28 / 0.72)) * 1px, 282px, 360px);
+    out property <length> presenter-minimum-height: root.audience-panel-expanded ? 842px : 608px;
+    out property <bool> audience-history-visible: audience-panel.visible;
+    out property <bool> audience-url-visible: audience-url-row.visible;
+    out property <length> audience-footer-bottom: root.audience-panel-expanded ? root.audience-url-bottom : root.audience-toggle-bottom;
     in property <bool> audience-busy: false;
     in property <string> audience-recent-reactions;
     in property <string> audience-comment-history;
@@ -721,6 +787,7 @@ export component PresenterWindow inherits Window {
     callback audience-toggle-comments();
     in property <int> audience-reaction-count;
     callback audience-open-url();
+    callback audience-copy-url();
     callback audience-toggle-session();
     callback audience-import-configuration();
     callback audience-reset-configuration();
@@ -744,6 +811,11 @@ export component PresenterWindow inherits Window {
     out property <length> audience-panel-right: audience-panel.x + audience-panel.width;
     out property <string> audience-toggle-label: audience-live-toggle.text;
     out property <string> audience-url-text: audience-url-link.text;
+    out property <bool> audience-url-copy-enabled: audience-url-copy.enabled;
+    out property <bool> audience-url-copy-fits: audience-url-field.x + audience-url-field.width + 8px <= audience-url-copy.x
+        && audience-url-copy.x + audience-url-copy.width <= audience-url-row.width
+        && audience-url-copy.y >= 0px
+        && audience-url-copy.y + audience-url-copy.height <= audience-url-row.height;
     out property <bool> audience-address-controls-inline: next-address.x >= address-text.x + address-text.width && refresh-address.x >= next-address.x + next-address.width && abs(next-address.y - refresh-address.y) < 1px;
     out property <length> audience-url-bottom: audience-url-row.y + audience-url-row.height;
     out property <length> audience-url-top: audience-url-row.y;
@@ -754,10 +826,21 @@ export component PresenterWindow inherits Window {
     out property <length> notes-area-bottom: main-area.y + main-area.height;
     out property <length> thumbnails-left: main-area.x + thumbnail-column.x;
     out property <length> thumbnails-bottom: main-area.y + thumbnail-column.y + thumbnail-column.height;
-    out property <length> audience-controls-width: audience-controls.width;
+    out property <length> audience-panel-width: audience-panel.width;
+    out property <string> audience-count-label: "👥" + audience-count-text.text;
+    out property <bool> audience-toolbar-ordered: audience-disclosure.x + audience-disclosure.width <= audience-count.x
+        && audience-count.x + audience-count.width <= audience-led.x
+        && audience-led.x + audience-led.width <= audience-live-toggle.x
+        && audience-pause.x + audience-pause.width <= address-text.x
+        && refresh-address.x + refresh-address.width <= audience-toggle-row.width;
     out property <length> audience-reactions-width: audience-reactions.width;
     out property <length> notes-layout-slide-width: current-slide-with-progress.page-surface-width;
     out property <length> notes-layout-slide-height: current-slide-with-progress.page-surface-height;
+    out property <length> presenter-current-column-width: main-area.left-column-width;
+    out property <length> presenter-next-column-width: main-area.next-column-width;
+    out property <length> presenter-next-preview-height: next-preview-slot.height;
+    out property <length> presenter-next-slide-width: next-slide.page-surface-width;
+    out property <length> presenter-thumbnail-width: thumbnail-column.width;
     out property <length> notes-layout-outer-width: notes-view.width;
     out property <length> notes-layout-menu-height: inline-menu.height;
     out property <length> notes-layout-main-y: main-area.y;
@@ -798,11 +881,10 @@ export component PresenterWindow inherits Window {
     property <int> active-menu-index: -1;
     property <length> inline-menu-height: root.use-native-menu-bar ? 0px : 28px;
     property <length> presenter-main-height: max(0px, root.height - root.inline-menu-height - 96px - root.audience-panel-height);
-    property <length> presenter-bottom-section-height: 200px;
+    // Reserve readable notes space; larger windows share spare height with slides.
+    property <length> presenter-bottom-section-height: max(200px, root.presenter-main-height * 0.34 - 34px);
     property <float> safe-current-page-aspect-ratio: root.current-page-aspect-ratio > 0 ? root.current-page-aspect-ratio : 16.0 / 9.0;
     property <float> safe-next-page-aspect-ratio: root.next-page-aspect-ratio > 0 ? root.next-page-aspect-ratio : 16.0 / 9.0;
-    property <length> next-preview-natural-height: 260px / root.safe-next-page-aspect-ratio;
-    property <length> next-preview-height: root.next-preview-natural-height > 190px ? 190px : root.next-preview-natural-height;
 
     callback open-pdf();
     callback open-recent-file(int);
@@ -831,9 +913,9 @@ export component PresenterWindow inherits Window {
 
     title: "Quick Presenter";
     preferred-width: 1024px;
-    preferred-height: 1002px;
+    preferred-height: root.audience-panel-expanded ? 1002px : 768px;
     min-width: 800px;
-    min-height: 842px;
+    min-height: root.presenter-minimum-height;
     background: #202124;
     forward-focus: presenter-focus;
 
@@ -1273,8 +1355,9 @@ export component PresenterWindow inherits Window {
                 width: parent.width - 24px;
                 height: root.presenter-main-height;
                 property <length> column-gap: 10px;
-                property <length> next-column-width: 260px;
-                property <length> thumbnail-column-width: 128px;
+                // Share extra width at 2:1, including on 4K and larger displays.
+                property <length> next-column-width: max(260px, (main-area.width - main-area.thumbnail-column-width - main-area.column-gap * 2) / 3);
+                property <length> thumbnail-column-width: clamp(main-area.width * 0.10, 128px, 192px);
                 property <length> left-column-width: max(0px, main-area.width - main-area.next-column-width - main-area.thumbnail-column-width - main-area.column-gap * 2);
                 property <length> current-slide-natural-height: main-area.left-column-width / root.safe-current-page-aspect-ratio + (root.has-slide-progress ? 4px : 0px);
                 property <length> top-section-height: min(main-area.current-slide-natural-height, max(0px, main-area.height - root.presenter-bottom-section-height - 34px));
@@ -1304,7 +1387,7 @@ export component PresenterWindow inherits Window {
 
                         Text {
                             x: (parent.width - self.width) / 2;
-                            width: current-slide-with-progress.page-surface-width;
+                            width: parent.width;
                             height: parent.height;
                             text: "Notes";
                             color: #d9dce0;
@@ -1320,7 +1403,7 @@ export component PresenterWindow inherits Window {
                         notes-view := NotesView {
                             navigation-key(event) => { root.notes-navigation-key(event) }
                             x: (parent.width - self.width) / 2;
-                            width: current-slide-with-progress.page-surface-width;
+                            width: parent.width;
                             height: parent.height;
                             has-notes: root.has-notes;
                             notes-text: root.notes-text;
@@ -1337,15 +1420,18 @@ export component PresenterWindow inherits Window {
                     y: 0px;
                     width: main-area.next-column-width;
                     height: parent.height;
-                    property <length> preview-height: min(root.next-preview-height, main-area.top-section-height);
+                    // Size the preview from the rendered current slide, not just its column:
+                    // height-constrained slides can leave substantial horizontal letterboxing.
+                    property <length> preview-width: min(self.width, current-slide-with-progress.page-surface-width / 2);
+                    property <length> preview-height: min(self.preview-width / root.safe-next-page-aspect-ratio, main-area.top-section-height);
 
                     next-preview-slot := Rectangle {
                         x: 0px;
                         y: 0px;
-                        width: parent.width;
+                        width: parent.preview-width;
                         height: parent.preview-height;
 
-                        SlideView {
+                        next-slide := SlideView {
                             x: 0px;
                             y: 0px;
                             page-image: root.next-page-image;
@@ -1389,9 +1475,10 @@ export component PresenterWindow inherits Window {
                     }
 
                     KeyboardBindingsPanel {
+                        x: 0px;
                         y: main-area.lower-section-y + 34px;
-                        width: parent.width;
-                        height: max(0px, parent.height - self.y);
+                        width: min(480px, parent.width);
+                        height: min(200px, max(0px, parent.height - self.y));
                     }
                 }
 
@@ -1399,7 +1486,7 @@ export component PresenterWindow inherits Window {
                     x: main-area.left-column-width + main-area.column-gap + main-area.next-column-width + main-area.column-gap;
                     y: 0px;
                     width: main-area.thumbnail-column-width;
-                    height: audience-url-row.y + audience-url-row.height - main-area.y - self.y;
+                    height: root.audience-footer-bottom - main-area.y - self.y;
                     background: #111315;
                     border-color: #3c4043;
                     border-width: 1px;
@@ -1445,8 +1532,38 @@ export component PresenterWindow inherits Window {
                 height: 36px;
                 HorizontalBox {
                     padding: 0px;
-                    spacing: 8px;
-                    Rectangle {
+                    spacing: parent.width < 760px ? 4px : 8px;
+                    audience-disclosure := AudienceIconButton {
+                        icon: root.audience-panel-expanded ? @image-url("../assets/navigation/collapse.svg") : @image-url("../assets/navigation/expand.svg");
+                        action-name: root.audience-panel-expanded ? "Collapse Audience Live pane" : "Expand Audience Live pane";
+                        tooltip-text: root.audience-panel-expanded ? "Hide reactions and comment history" : "Show reactions and comment history";
+                        clicked => { root.audience-toggle-panel(); }
+                    }
+                    audience-count := HorizontalBox {
+                        padding: 0px;
+                        spacing: 2px;
+                        horizontal-stretch: 0;
+                        Rectangle {
+                            width: 20px;
+                            height: 36px;
+                            Image {
+                                source: @image-url("../assets/navigation/audience.svg");
+                                y: (parent.height - self.height) / 2;
+                                width: 20px;
+                                height: 20px;
+                                accessible-role: image;
+                                accessible-label: "Connected audience";
+                            }
+                        }
+                        audience-count-text := Text {
+                            text: "(" + root.audience-count + ")";
+                            accessible-label: "Connected audience: " + root.audience-count;
+                            color: white;
+                            font-size: 14px;
+                            vertical-alignment: center;
+                        }
+                    }
+                    audience-led := Rectangle {
                         width: 16px;
                         height: 36px;
                         Rectangle {
@@ -1460,14 +1577,39 @@ export component PresenterWindow inherits Window {
                         }
                     }
                     audience-live-toggle := Button {
-                        text: root.audience-active ? "Audience Live OFF 👍️" : "Audience Live ON 👍️";
+                        text: root.audience-active ? "Audience Live OFF 👍️" : "Audience Live ON  👍️";
+                        min-width: 160px;
+                        max-width: 160px;
                         enabled: !root.audience-busy && (root.audience-active || root.audience-can-start);
                         clicked => { root.audience-toggle-session(); }
                     }
-                    Button {
+                    audience-pause := Button {
                         text: root.audience-comments-paused ? "Resume" : "Pause";
                         enabled: root.audience-active && !root.audience-busy;
                         clicked => { root.audience-toggle-comments(); }
+                    }
+                    address-text := Text {
+                        text: root.audience-address;
+                        accessible-label: "Server IP address: " + root.audience-address;
+                        color: #9aa0a6;
+                        font-size: 11px;
+                        min-width: 120px;
+                        max-width: 120px;
+                        horizontal-stretch: 0;
+                        overflow: elide;
+                        vertical-alignment: center;
+                    }
+                    next-address := Button {
+                        text: "Next";
+                        accessible-label: "Next server address";
+                        enabled: !root.audience-active;
+                        clicked => { root.audience-next-address(); }
+                    }
+                    refresh-address := Button {
+                        text: "Refresh";
+                        accessible-label: "Refresh server addresses";
+                        enabled: !root.audience-active;
+                        clicked => { root.audience-refresh-addresses(); }
                     }
                     Rectangle { horizontal-stretch: 1; }
                 }
@@ -1477,59 +1619,41 @@ export component PresenterWindow inherits Window {
                 x: main-area.x;
                 y: audience-toggle-row.y + audience-toggle-row.height + 6px;
                 width: audience-toggle-row.width;
-                height: root.audience-panel-height - 90px;
+                height: root.audience-panel-expanded ? root.audience-expanded-height - 90px : 0px;
+                visible: root.audience-panel-expanded;
                 background: #111315;
                 border-color: #3c4043;
                 border-width: 1px;
                 clip: true;
-                HorizontalBox {
-                    padding: 10px;
-                    spacing: 12px;
-                    audience-controls := Rectangle {
-                        width: min(300px, parent.width * 0.4);
-                        VerticalBox {
-                            padding: 0px;
-                            spacing: 6px;
-                            Text { text: "Connected: " + root.audience-count; color: white; font-size: 16px; }
-                            Text { text: root.audience-status; color: #d9dce0; wrap: word-wrap; }
-                            audience-address-row := HorizontalBox {
-                                padding: 0px;
-                                spacing: 4px;
-                                height: 24px;
-                                address-text := Text { text: root.audience-address; color: #9aa0a6; font-size: 11px; overflow: elide; vertical-alignment: center; horizontal-stretch: 1; }
-                                next-address := Button { text: "Next Address"; height: 22px; enabled: !root.audience-active; clicked => { root.audience-next-address(); } }
-                                refresh-address := Button { text: "Refresh"; height: 22px; enabled: !root.audience-active; clicked => { root.audience-refresh-addresses(); } }
-                            }
-                            Rectangle { vertical-stretch: 1; }
+                audience-reactions := Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    background: #202124;
+                    border-color: #3c4043;
+                    border-width: 1px;
+                    VerticalBox {
+                        padding: 10px;
+                        Text { text: "Reactions: " + root.audience-reaction-count; color: white; font-weight: 700; }
+                        Text {
+                            text: root.audience-recent-reactions;
+                            color: white;
+                            font-size: 22px;
+                            overflow: elide;
                         }
-                    }
-                    audience-reactions := Rectangle {
-                        horizontal-stretch: 1;
-                        background: #202124;
-                        border-color: #3c4043;
-                        border-width: 1px;
-                        VerticalBox {
-                            padding: 10px;
-                            Text { text: "Reactions: " + root.audience-reaction-count; color: white; font-weight: 700; }
-                            Text {
-                                text: root.audience-recent-reactions;
+                        comment-history-scroll := ScrollView {
+                            vertical-stretch: 1;
+                            content-width: self.visible-width;
+                            content-height: comment-history.preferred-height;
+                            content-y: min(0px, self.visible-height - self.content-height);
+                            comment-history := Text {
+                                width: parent.width;
+                                height: self.preferred-height;
+                                text: root.audience-comment-history == "" ? "Waiting for comments…" : root.audience-comment-history;
                                 color: white;
-                                font-size: 22px;
-                                overflow: elide;
-                            }
-                            comment-history-scroll := ScrollView {
-                                vertical-stretch: 1;
-                                content-width: self.visible-width;
-                                content-height: comment-history.preferred-height;
-                                content-y: min(0px, self.visible-height - self.content-height);
-                                comment-history := Text {
-                                    width: parent.width;
-                                    height: self.preferred-height;
-                                    text: root.audience-comment-history == "" ? "Waiting for comments…" : root.audience-comment-history;
-                                    color: white;
-                                    font-size: 14px;
-                                    wrap: word-wrap;
-                                }
+                                font-size: 14px;
+                                wrap: word-wrap;
                             }
                         }
                     }
@@ -1553,25 +1677,43 @@ export component PresenterWindow inherits Window {
                 x: audience-panel.x;
                 y: audience-panel.y + audience-panel.height + 6px;
                 width: audience-panel.width;
-                height: 36px;
-                background: #111315;
-                border-color: #3c4043;
-                border-width: 1px;
-                audience-url-link := Text {
-                    x: 8px;
-                    y: 3px;
-                    width: max(0px, parent.width - 16px);
-                    height: max(0px, parent.height - 6px);
-                    text: root.audience-url;
-                    wrap: word-wrap;
-                    font-size: 12px;
-                    color: #8ab4f8;
-                    vertical-alignment: center;
-                    TouchArea {
-                        enabled: root.audience-url != "";
-                        mouse-cursor: pointer;
-                        clicked => { root.audience-open-url(); }
+                height: root.audience-panel-expanded ? 36px : 0px;
+                visible: root.audience-panel-expanded;
+                audience-url-field := Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: max(0px, parent.width - 44px);
+                    height: parent.height;
+                    background: #111315;
+                    border-color: #3c4043;
+                    border-width: 1px;
+                    audience-url-link := Text {
+                        x: 8px;
+                        y: 3px;
+                        width: max(0px, parent.width - 16px);
+                        height: max(0px, parent.height - 6px);
+                        text: root.audience-url;
+                        overflow: elide;
+                        font-size: 12px;
+                        color: #8ab4f8;
+                        vertical-alignment: center;
+                        TouchArea {
+                            enabled: root.audience-url != "";
+                            mouse-cursor: pointer;
+                            clicked => { root.audience-open-url(); }
+                        }
                     }
+                }
+                audience-url-copy := AudienceIconButton {
+                    width: 36px;
+                    height: 32px;
+                    x: parent.width - self.width;
+                    y: 2px;
+                    icon: @image-url("../assets/navigation/copy.svg");
+                    action-name: "Copy join URL";
+                    tooltip-text: "Copy join URL";
+                    enabled: root.audience-active && !root.audience-busy && root.audience-url != "";
+                    clicked => { root.audience-copy-url(); }
                 }
             }
 
