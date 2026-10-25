@@ -50,7 +50,7 @@ alone does not establish Store availability. Windows MSI, direct MSIX, and raw
 CI executables are validation artifacts, not supported public downloads.
 
 Launch the installed app and choose **Open**, or drop a PDF onto its presenter
-or slide window. On macOS, install the app before using PDF drag and drop:
+or audience window. On macOS, install the app before using PDF drag and drop:
 dropping onto the app icon while it is still on the read-only DMG is unsupported.
 
 See [installation and launch details](docs/RELEASE.md) and
@@ -155,7 +155,13 @@ The tested workflows are:
 Check the exported notes before a talk. See [PDF compatibility](docs/PDF_COMPATIBILITY.md)
 and the [notes-bearing sample](website/src/assets/interactive-ai-sample.pdf).
 
-On orderly exit, the app remembers the PDF and normal slide-window placement.
+The audience-facing window is called **Audience Window** starting with v3.0.0
+(previously Slide Window). Use **Window > Show Audience Window**,
+**Hide Audience Window**, or **Bring Audience Window to Front** to manage it.
+See the [Audience Window contract](docs/AUDIENCE_WINDOW.md) for its role and
+compatibility guarantees.
+
+On orderly exit, the app remembers the PDF and normal audience-window placement.
 The next launch reopens the PDF at page 1 in windowed mode; an explicit startup
 PDF takes precedence. Missing or inaccessible files leave the app ready to
 select another deck. Display changes use an available-screen fallback; Wayland
@@ -163,7 +169,7 @@ leaves placement to the compositor. Valid external PDF saves reload the active
 deck while preserving the current page where possible and retaining the last
 good display through incomplete or failed saves.
 
-See [keyboard controls](docs/KEYBOARD.md), [window placement](docs/SLIDE_WINDOW_PLACEMENT.md),
+See [keyboard controls](docs/KEYBOARD.md), [window placement](docs/AUDIENCE_WINDOW_PLACEMENT.md),
 [privacy/reset](docs/PRIVACY.md), and [diagnostic logs](docs/PACKAGING.md#diagnostic-logs).
 
 <details>
@@ -171,7 +177,7 @@ See [keyboard controls](docs/KEYBOARD.md), [window placement](docs/SLIDE_WINDOW_
 
 ![Presenter window with slide text and speaker notes](website/src/assets/presenter-window-v2-macos.png)
 
-![Audience slide window](docs/assets/slide-window-title-en-macos.png)
+![Audience Window](docs/assets/audience-window-title-en-macos.png)
 
 The screenshots use the [repository-owned sample deck](docs/samples/quick-presenter-demo.md).
 

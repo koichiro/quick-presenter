@@ -16,8 +16,8 @@ use crate::{
 
 pub fn apply_closed_state_to_windows(windows: &AppWindowRefs) {
     apply_opening_state_to_windows(windows, "Quick Presenter");
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.set_black_screen_active(false);
+    if let Some(audience) = windows.audience.upgrade() {
+        audience.set_black_screen_active(false);
     }
     if let Some(presenter) = windows.presenter.upgrade() {
         presenter.set_status_text("Open a PDF to begin.".into());
@@ -50,9 +50,9 @@ pub fn apply_opening_state_to_windows(windows: &AppWindowRefs, title: &str) {
         presenter.set_notes_text("".into());
     }
 
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.set_page_aspect_ratio(placeholder.aspect_ratio);
-        slide.set_page_image(placeholder.image);
+    if let Some(audience) = windows.audience.upgrade() {
+        audience.set_page_aspect_ratio(placeholder.aspect_ratio);
+        audience.set_page_image(placeholder.image);
     }
 }
 
@@ -114,10 +114,10 @@ pub fn apply_snapshot_to_windows(
         presenter.set_notes_text(current_note.unwrap_or_default().into());
     }
 
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.set_black_screen_active(state.black_screen.is_active());
-        slide.set_page_aspect_ratio(audience_current.aspect_ratio);
-        slide.set_page_image(if state.black_screen.is_active() {
+    if let Some(audience) = windows.audience.upgrade() {
+        audience.set_black_screen_active(state.black_screen.is_active());
+        audience.set_page_aspect_ratio(audience_current.aspect_ratio);
+        audience.set_page_image(if state.black_screen.is_active() {
             black_slide_image()
         } else {
             audience_current.image

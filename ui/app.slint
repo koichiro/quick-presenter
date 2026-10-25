@@ -850,7 +850,7 @@ export component PresenterWindow inherits Window {
     out property <length> notes-text-y: notes-view.text-y;
     in-out property <length> notes-scroll-y <=> notes-view.scroll-y;
     out property <[float]> notes-measured-heights: notes-view.measured-heights;
-    in property <bool> slide-fullscreen: false;
+    in property <bool> audience-fullscreen: false;
     in property <bool> use-physical-control-shortcuts: false;
     in property <bool> use-native-menu-bar: true;
     in property <string> clock-time-label: "--:--";
@@ -894,13 +894,13 @@ export component PresenterWindow inherits Window {
     callback first-page();
     callback last-page();
     callback toggle-black-screen();
-    callback toggle-slide-fullscreen();
-    callback exit-slide-fullscreen();
+    callback toggle-audience-fullscreen();
+    callback exit-audience-fullscreen();
     callback show-presenter-window();
-    callback show-slide-window();
-    callback hide-slide-window();
+    callback show-audience-window();
+    callback hide-audience-window();
     callback bring-presenter-window-to-front();
-    callback bring-slide-window-to-front();
+    callback bring-audience-window-to-front();
     callback keyboard-previous-page();
     callback keyboard-next-page();
     callback keyboard-first-page();
@@ -1034,9 +1034,9 @@ export component PresenterWindow inherits Window {
             title: "View";
 
             MenuItem {
-                title: "Toggle Slide Fullscreen";
+                title: "Toggle Audience Fullscreen";
                 activated => {
-                    root.toggle-slide-fullscreen();
+                    root.toggle-audience-fullscreen();
                 }
             }
 
@@ -1059,16 +1059,16 @@ export component PresenterWindow inherits Window {
             }
 
             MenuItem {
-                title: "Show Slide Window";
+                title: "Show Audience Window";
                 activated => {
-                    root.show-slide-window();
+                    root.show-audience-window();
                 }
             }
 
             MenuItem {
-                title: "Hide Slide Window";
+                title: "Hide Audience Window";
                 activated => {
-                    root.hide-slide-window();
+                    root.hide-audience-window();
                 }
             }
 
@@ -1082,9 +1082,9 @@ export component PresenterWindow inherits Window {
             }
 
             MenuItem {
-                title: "Bring Slide Window to Front";
+                title: "Bring Audience Window to Front";
                 activated => {
-                    root.bring-slide-window-to-front();
+                    root.bring-audience-window-to-front();
                 }
             }
         }
@@ -1215,21 +1215,21 @@ export component PresenterWindow inherits Window {
         KeyBinding {
             keys: @keys(Escape);
             activated => {
-                root.exit-slide-fullscreen();
+                root.exit-audience-fullscreen();
             }
         }
 
         KeyBinding {
             keys: @keys(F5);
             activated => {
-                root.toggle-slide-fullscreen();
+                root.toggle-audience-fullscreen();
             }
         }
 
         KeyBinding {
             keys: @keys(F);
             activated => {
-                root.toggle-slide-fullscreen();
+                root.toggle-audience-fullscreen();
             }
         }
 
@@ -1306,9 +1306,9 @@ export component PresenterWindow inherits Window {
 
                 Button {
                     height: 32px;
-                    text: root.slide-fullscreen ? "Exit Fullscreen" : "Fullscreen";
+                    text: root.audience-fullscreen ? "Exit Fullscreen" : "Fullscreen";
                     clicked => {
-                        root.toggle-slide-fullscreen();
+                        root.toggle-audience-fullscreen();
                     }
                 }
 
@@ -1815,7 +1815,7 @@ export component PresenterWindow inherits Window {
                 border-color: #c8ccd0;
                 border-width: 1px;
 
-                PresenterMenuItem { y: 0px; width: parent.width; text: "Toggle Slide Fullscreen"; clicked => { root.active-menu-index = -1; root.toggle-slide-fullscreen(); } }
+                PresenterMenuItem { y: 0px; width: parent.width; text: "Toggle Audience Fullscreen"; clicked => { root.active-menu-index = -1; root.toggle-audience-fullscreen(); } }
                 PresenterMenuItem { y: 28px; width: parent.width; text: "Toggle Black Screen"; clicked => { root.active-menu-index = -1; root.toggle-black-screen(); } }
             }
 
@@ -1829,10 +1829,10 @@ export component PresenterWindow inherits Window {
                 border-width: 1px;
 
                 PresenterMenuItem { y: 0px; width: parent.width; text: "Show Presenter Window"; clicked => { root.active-menu-index = -1; root.show-presenter-window(); } }
-                PresenterMenuItem { y: 28px; width: parent.width; text: "Show Slide Window"; clicked => { root.active-menu-index = -1; root.show-slide-window(); } }
-                PresenterMenuItem { y: 56px; width: parent.width; text: "Hide Slide Window"; clicked => { root.active-menu-index = -1; root.hide-slide-window(); } }
+                PresenterMenuItem { y: 28px; width: parent.width; text: "Show Audience Window"; clicked => { root.active-menu-index = -1; root.show-audience-window(); } }
+                PresenterMenuItem { y: 56px; width: parent.width; text: "Hide Audience Window"; clicked => { root.active-menu-index = -1; root.hide-audience-window(); } }
                 PresenterMenuItem { y: 84px; width: parent.width; text: "Bring Presenter Window to Front"; clicked => { root.active-menu-index = -1; root.bring-presenter-window-to-front(); } }
-                PresenterMenuItem { y: 112px; width: parent.width; text: "Bring Slide Window to Front"; clicked => { root.active-menu-index = -1; root.bring-slide-window-to-front(); } }
+                PresenterMenuItem { y: 112px; width: parent.width; text: "Bring Audience Window to Front"; clicked => { root.active-menu-index = -1; root.bring-audience-window-to-front(); } }
             }
 
             if !root.use-native-menu-bar && root.active-menu-index == 4: Rectangle {
@@ -2030,7 +2030,7 @@ export component PresenterWindow inherits Window {
     }
 }
 
-export component SlideWindow inherits Window {
+export component AudienceWindow inherits Window {
     icon: @image-url("../assets/icons/png/quick-presenter-icon-256.png");
     in property <bool> audience-guide-visible: false;
     in property <bool> black-screen-active: false;
@@ -2045,29 +2045,29 @@ export component SlideWindow inherits Window {
     in property <string> audience-status;
     in property <image> page-image;
     in property <float> page-aspect-ratio: 16.0 / 9.0;
-    in property <length> slide-window-width: 1024px;
-    in property <length> slide-window-height: 720px;
+    in property <length> audience-window-width: 1024px;
+    in property <length> audience-window-height: 720px;
     in property <length> titlebar-compensation-height: 0px;
     in property <bool> use-physical-control-shortcuts: false;
 
     callback exit-fullscreen();
     callback toggle-black-screen();
-    callback toggle-slide-fullscreen();
+    callback toggle-audience-fullscreen();
     callback keyboard-previous-page();
     callback keyboard-next-page();
     callback keyboard-first-page();
     callback keyboard-last-page();
     callback swap-displays();
 
-    title: "Quick Presenter - Slide";
-    preferred-width: root.slide-window-width;
-    preferred-height: root.slide-window-height;
+    title: "Quick Presenter - Audience";
+    preferred-width: root.audience-window-width;
+    preferred-height: root.audience-window-height;
     min-width: 640px;
     min-height: 360px;
     background: #111315;
-    forward-focus: slide-focus;
+    forward-focus: audience-focus;
 
-    slide-focus := FocusScope {
+    audience-focus := FocusScope {
         width: parent.width;
         height: parent.height;
 
@@ -2186,14 +2186,14 @@ export component SlideWindow inherits Window {
         KeyBinding {
             keys: @keys(F5);
             activated => {
-                root.toggle-slide-fullscreen();
+                root.toggle-audience-fullscreen();
             }
         }
 
         KeyBinding {
             keys: @keys(F);
             activated => {
-                root.toggle-slide-fullscreen();
+                root.toggle-audience-fullscreen();
             }
         }
 

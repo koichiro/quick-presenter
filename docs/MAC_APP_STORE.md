@@ -140,7 +140,7 @@ python3 scripts/check_macos_store_private_apis.py target/release/quick-presenter
 ```
 
 The repository pins winit 0.30.13 to a local copy with its unused macOS blur
-implementation disabled. The Slide window's transparent title bar uses public
+implementation disabled. The Audience Window's transparent title bar uses public
 AppKit APIs separately. The binary check is mandatory because source-level
 non-use alone did not remove winit's private CoreGraphics imports from linked
 executables. Keep this check when replacing the local copy with a newer winit.

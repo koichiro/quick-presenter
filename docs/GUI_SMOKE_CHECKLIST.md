@@ -148,12 +148,12 @@ An ad-hoc staged bundle can exercise fullscreen, but cannot validate the signed
 XPC PDF renderer. Do not skip native notification assertions to make an
 unbundled run pass.
 
-Unlike `--smoke-open-pdf`, this mode creates the presenter and slide Slint
+Unlike `--smoke-open-pdf`, this mode creates the presenter and audience Slint
 windows, opens the PDF in those windows, and drives the same Rust presentation
 commands used by buttons and keyboard callbacks. It verifies app-observable
 state after each step: opened document metadata, current page, next preview
 availability, speaker-note handling, black-screen state, fullscreen state, and
-presenter/slide synchronization. It writes a text report and exits non-zero on
+presenter/audience synchronization. It writes a text report and exits non-zero on
 failed checks.
 
 A maintainer must still confirm OS-owned behavior that the app cannot reliably
@@ -191,7 +191,9 @@ Run these checks on every platform.
 | --- | --- |
 | Launch the packaged app from the normal platform entry point. | Quick Presenter starts without requiring a terminal or PDFium path. |
 | Open the known-good PDF from the app UI. | The PDF opens without a presenter-visible error. |
-| Confirm both windows are visible. | The presenter window and audience-facing slide window appear. |
+| Open the Window and View menus (native and in-window variants). | Window actions read Show Audience Window, Hide Audience Window, and Bring Audience Window to Front; the fullscreen action reads Toggle Audience Fullscreen. |
+| Inspect the audience window title where the platform exposes it. | The title is Quick Presenter - Audience; macOS retains its hidden-title chrome policy. |
+| Confirm both windows are visible. | The presenter window and audience window appear. |
 | Press next-page controls until the end of the deck. | The current slide, next preview, page label, timer, clock, and notes stay readable. |
 | Open `tests/fixtures/long-speaker-notes.pdf` at the minimum presenter window size. | The notes area scrolls so the full speaker note can be read without resizing the app, while the current slide, next preview, and thumbnails remain usable. |
 | At 800 × 560, open a page with a short note, then a page with a longer note. Repeat with Japanese text and explicit newlines. | Notes use natural line height on Linux and 1.25 times natural line height on macOS/Windows. Short notes use up to 24px; longer notes select the largest fitting size down to 12px with the platform spacing included. Current slide, next preview, and thumbnails remain usable. |
@@ -201,22 +203,22 @@ Run these checks on every platform.
 | Press previous-page controls until the start of the deck. | Both windows stay synchronized and page navigation clamps at page 1. |
 | Use first-page and last-page controls. | Both windows jump to the expected page. |
 | Use keyboard navigation in the presenter window. | Keys in `docs/KEYBOARD.md` update both windows. |
-| Use keyboard navigation in the slide window. | Keys in `docs/KEYBOARD.md` update both windows when the slide window has focus. |
-| Toggle slide fullscreen from presenter controls. | The slide window enters fullscreen and the presenter window remains usable. |
-| Exit slide fullscreen from presenter controls. | The slide window returns to windowed mode. |
-| Toggle slide fullscreen with `F5` or `F`. | The slide window enters or exits fullscreen from the focused window. |
-| Press `Escape` while the slide window has focus and is fullscreen. | The slide window exits fullscreen without changing pages. |
-| Toggle black screen mode with the UI and `B`. | The slide window blanks and restores while presenter controls remain usable. |
+| Use keyboard navigation in the audience window. | Keys in `docs/KEYBOARD.md` update both windows when the audience window has focus. |
+| Toggle audience fullscreen from presenter controls. | The audience window enters fullscreen and the presenter window remains usable. |
+| Exit audience fullscreen from presenter controls. | The audience window returns to windowed mode. |
+| Toggle audience fullscreen with `F5` or `F`. | The audience window enters or exits fullscreen from the focused window. |
+| Press `Escape` while the audience window has focus and is fullscreen. | The audience window exits fullscreen without changing pages. |
+| Toggle black screen mode with the UI and `B`. | The audience window blanks and restores while presenter controls remain usable. |
 | Navigate while black screen mode is active, then restore. | The restored slide shows the current page after the hidden navigation. |
-| In extended-desktop mode, place the presenter and slide windows on different displays, focus the presenter, and press `X`. | The windows exchange displays without changing their roles, current page, timer, or black-screen state. |
-| Press `X` again from the focused slide window. | The original display assignment is restored and the next keyboard navigation command works without an extra click. |
-| Press `X` while the slide window is fullscreen on another display. | The slide remains fullscreen on the destination display and the presenter window moves to the former slide display without a visible windowed transition. |
+| In extended-desktop mode, place the presenter and audience windows on different displays, focus the presenter, and press `X`. | The windows exchange displays without changing their roles, current page, timer, or black-screen state. |
+| Press `X` again from the focused audience window. | The original display assignment is restored and the next keyboard navigation command works without an extra click. |
+| Press `X` while the audience window is fullscreen on another display. | The slide remains fullscreen on the destination display and the presenter window moves to the former slide display without a visible windowed transition. |
 | Press `X` with one display or both windows on the same display. | Neither window moves or becomes unreachable, and the presenter shows a short explanation. |
 | Confirm the Window menu does not offer a presenter-hide action. | The presenter controls cannot be hidden from the app menu. |
-| Hide the slide window from the Window menu, then show it again. | The presenter window remains visible and can recover the slide window. |
-| Bring the presenter window to front from the Window menu after focusing or covering it with the slide window. | The presenter window becomes usable again without changing the current slide, fullscreen state, or black-screen state. |
-| Bring the slide window to front from the Window menu after focusing or covering it with the presenter window. | The slide window becomes usable again and stays synchronized with the presenter window. |
-| Move focus between the presenter window, slide window, and another application, then return through the normal app switcher or Window menu. | Keyboard navigation still works in the focused Quick Presenter window, and presenter controls remain reachable. |
+| Hide the audience window from the Window menu, then show it again. | The presenter window remains visible and can recover the audience window. |
+| Bring the presenter window to front from the Window menu after focusing or covering it with the audience window. | The presenter window becomes usable again without changing the current slide, fullscreen state, or black-screen state. |
+| Bring the audience window to front from the Window menu after focusing or covering it with the presenter window. | The audience window becomes usable again and stays synchronized with the presenter window. |
+| Move focus between the presenter window, audience window, and another application, then return through the normal app switcher or Window menu. | Keyboard navigation still works in the focused Quick Presenter window, and presenter controls remain reachable. |
 | Close the app from normal window controls. | The app exits without hanging windows or crash dialogs. |
 
 ## Focus and Window Recovery Checks
@@ -231,13 +233,13 @@ normal presenter workflow.
 | Give focus to the presenter window and press next, previous, first, and last keyboard shortcuts from `docs/KEYBOARD.md`. | Both windows update together, and page navigation clamps at the document bounds. |
 | Open a PDF from the file picker, then immediately press presenter keyboard navigation shortcuts without clicking either Quick Presenter window. | The presenter window receives keyboard input and both windows advance or go back as expected. |
 | Open a PDF from the Recent PDF menu, then immediately press presenter keyboard navigation shortcuts without clicking either Quick Presenter window. | The presenter window receives keyboard input and both windows advance or go back as expected. |
-| Give focus to the slide window and press next, previous, first, and last keyboard shortcuts from `docs/KEYBOARD.md`. | Both windows update together even when the audience-facing window has focus. |
-| Enter slide fullscreen from the presenter controls, switch focus away from Quick Presenter, then return to Quick Presenter. | The presenter window remains reachable, and the slide window stays fullscreen until a documented exit control is used. |
-| Enter slide fullscreen from the slide window with `F5` or `F`, then exit with `Escape`. | The slide window returns to windowed mode without changing pages. |
-| Toggle black screen, switch focus away from Quick Presenter, return, then toggle black screen off. | The slide window restores to the current page and both windows remain synchronized. |
-| Hide the slide window, continue navigating from the presenter window, then show or bring the slide window to front. | The recovered slide window shows the current page, not the page that was visible before hiding. |
-| Cover or background each Quick Presenter window, then use the Window menu to bring the presenter and slide windows back to front. | Each window can be recovered without reopening the PDF or restarting the app. |
-| After accidental focus changes, recover to a normal presenter state: presenter window visible, slide window visible or fullscreen, keyboard navigation working in the focused Quick Presenter window. | The presenter can continue the deck without losing page position, black-screen state, or fullscreen state. |
+| Give focus to the audience window and press next, previous, first, and last keyboard shortcuts from `docs/KEYBOARD.md`. | Both windows update together even when the audience-facing window has focus. |
+| Enter audience fullscreen from the presenter controls, switch focus away from Quick Presenter, then return to Quick Presenter. | The presenter window remains reachable, and the audience window stays fullscreen until a documented exit control is used. |
+| Enter audience fullscreen from the audience window with `F5` or `F`, then exit with `Escape`. | The audience window returns to windowed mode without changing pages. |
+| Toggle black screen, switch focus away from Quick Presenter, return, then toggle black screen off. | The audience window restores to the current page and both windows remain synchronized. |
+| Hide the audience window, continue navigating from the presenter window, then show or bring the audience window to front. | The recovered audience window shows the current page, not the page that was visible before hiding. |
+| Cover or background each Quick Presenter window, then use the Window menu to bring the presenter and audience windows back to front. | Each window can be recovered without reopening the PDF or restarting the app. |
+| After accidental focus changes, recover to a normal presenter state: presenter window visible, audience window visible or fullscreen, keyboard navigation working in the focused Quick Presenter window. | The presenter can continue the deck without losing page position, black-screen state, or fullscreen state. |
 
 ## macOS
 
@@ -249,13 +251,13 @@ Test on a normal signed-in desktop session, not a headless CI session.
   an unidentified-developer warning. Treat a trust prompt as a release blocker.
 - Confirm the app name and icon appear in Cmd+Tab.
 - Confirm `File > Open PDF...` opens the file picker and can load the test PDF.
-- Confirm window menu actions for showing or focusing the presenter and slide
+- Confirm window menu actions for showing or focusing the presenter and audience
   windows work where present, and that the presenter window cannot be hidden
   from the app menu.
-- Confirm fullscreen entry and exit do not strand the slide window on a hidden
+- Confirm fullscreen entry and exit do not strand the audience window on a hidden
   Space.
 - Record any Space, Dock, or Cmd+Tab behavior that changes how the presenter
-  window is recovered while the slide window is fullscreen.
+  window is recovered while the audience window is fullscreen.
 
 ## Windows
 
@@ -273,10 +275,10 @@ or raw `quick-presenter.exe` test does not satisfy the Windows trust check.
 - Confirm `File > Open PDF...` opens the file picker and can load the test PDF.
 - Confirm window show, hide, or bring-to-front menu actions work where present,
   and that the presenter window cannot be hidden from the app menu.
-- Confirm fullscreen entry and exit work with the slide window on the intended
+- Confirm fullscreen entry and exit work with the audience window on the intended
   display.
 - Record any taskbar, Alt+Tab, or display-selection behavior that changes how
-  the presenter and slide windows are recovered after focus moves away.
+  the presenter and audience windows are recovered after focus moves away.
 - Uninstall the app through Windows Settings after testing and confirm the
   normal uninstall path works.
 
@@ -319,7 +321,7 @@ notes:
 
 - The packaged app cannot launch from the platform entry point.
 - A supported packaged artifact cannot open the known-good PDF.
-- Presenter and slide windows become unsynchronized.
+- Presenter and audience windows become unsynchronized.
 - Fullscreen cannot be exited through a documented control path.
 - Keyboard navigation stops working in both windows.
 - Black screen mode cannot be restored.
@@ -346,14 +348,14 @@ the raw binary as well as from the packaged artifact.
 Use normal GUI launches for these checks; `--smoke-open-pdf` and `--gui-smoke`
 deliberately bypass saved startup state.
 
-- Open a deck, move and resize the slide window, quit normally, and relaunch
+- Open a deck, move and resize the audience window, quit normally, and relaunch
   without arguments. Confirm the same deck opens at page 1 with the remembered
   slide size/position and presenter focus.
 - Repeat with an explicit different PDF; confirm it takes precedence and the
   saved size survives opening a deck with a different aspect ratio.
 - Quit while fullscreen, including after a verified display swap; confirm the
   next launch is windowed with the remembered normal size and destination.
-- Disconnect or rearrange displays, then relaunch or show a hidden slide window;
+- Disconnect or rearrange displays, then relaunch or show a hidden audience window;
   confirm usable placement and keyboard controls.
 - Remove or deny access to the remembered PDF; confirm a short error, working
   open controls, and no automatic fallback to another recent PDF. Quit without

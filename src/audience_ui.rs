@@ -209,10 +209,10 @@ impl AudienceUi {
         });
         *ui.weak_self.borrow_mut() = Rc::downgrade(&ui);
         windows
-            .slide
+            .audience
             .set_audience_overlay(ui.overlay_model.clone().into());
         windows
-            .slide
+            .audience
             .set_audience_comments(ui.comment_model.clone().into());
         let weak = Rc::downgrade(&ui);
         presenter.on_audience_toggle_panel(move || {
@@ -242,7 +242,7 @@ impl AudienceUi {
             }
         });
         let weak = Rc::downgrade(&ui);
-        windows.slide.on_audience_clear_overlay(move || {
+        windows.audience.on_audience_clear_overlay(move || {
             if let Some(ui) = weak.upgrade() {
                 ui.clear_overlay();
             }
@@ -468,7 +468,7 @@ impl AudienceUi {
                             }
                         });
                     set_join_visible(&refs, &state, true);
-                    crate::show_slide_window_from_menu(&refs, &state);
+                    crate::show_audience_window_from_menu(&refs, &state);
                 }
                 Err(error) => {
                     if let Some(window) = window.upgrade() {
@@ -578,10 +578,9 @@ impl AudienceUi {
     }
 
     fn overlay_visible(&self) -> bool {
-        self.windows
-            .slide
-            .upgrade()
-            .is_some_and(|slide| slide.window().is_visible() && !slide.get_black_screen_active())
+        self.windows.audience.upgrade().is_some_and(|audience| {
+            audience.window().is_visible() && !audience.get_black_screen_active()
+        })
     }
     fn clear_overlay(&self) {
         self.overlay.borrow_mut().clear(Instant::now());
@@ -708,9 +707,10 @@ impl AudienceUi {
                             }
                             AudienceEvent::Comment { body, handle } => {
                                 let text = crate::audience_events::comment_display(body, handle);
-                                let width = if let Some(slide) = self.windows.slide.upgrade() {
-                                    slide.set_comment_measure_text(text.into());
-                                    slide.get_comment_measure_width()
+                                let width = if let Some(audience) = self.windows.audience.upgrade()
+                                {
+                                    audience.set_comment_measure_text(text.into());
+                                    audience.get_comment_measure_width()
                                 } else {
                                     f32::NAN
                                 };
@@ -845,28 +845,30 @@ pub fn set_join_visible(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>, 
     if let Some(presenter) = windows.presenter.upgrade() {
         presenter.set_audience_guide_visible(visible);
     }
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.invoke_audience_clear_overlay();
-        slide.set_audience_guide_visible(visible);
-        slide.set_black_screen_active(state.borrow().black_screen.is_active());
+    if let Some(audience) = windows.audience.upgrade() {
+        audience.invoke_audience_clear_overlay();
+        audience.set_audience_guide_visible(visible);
+        audience.set_black_screen_active(state.borrow().black_screen.is_active());
     }
     sync_join_metadata(windows);
 }
 
 fn sync_join_metadata(windows: &AppWindowRefs) {
-    if let (Some(presenter), Some(slide)) = (windows.presenter.upgrade(), windows.slide.upgrade()) {
-        slide.set_audience_qr(presenter.get_audience_qr());
-        slide.set_audience_url(presenter.get_audience_url());
-        slide.set_audience_code(presenter.get_audience_code());
-        slide.set_audience_status(presenter.get_audience_status());
+    if let (Some(presenter), Some(audience)) =
+        (windows.presenter.upgrade(), windows.audience.upgrade())
+    {
+        audience.set_audience_qr(presenter.get_audience_qr());
+        audience.set_audience_url(presenter.get_audience_url());
+        audience.set_audience_code(presenter.get_audience_code());
+        audience.set_audience_status(presenter.get_audience_status());
     }
 }
 
 fn clear_join_metadata(windows: &AppWindowRefs) {
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.set_audience_qr(Default::default());
-        slide.set_audience_url("".into());
-        slide.set_audience_code("".into());
+    if let Some(audience) = windows.audience.upgrade() {
+        audience.set_audience_qr(Default::default());
+        audience.set_audience_url("".into());
+        audience.set_audience_code("".into());
     }
 }
 

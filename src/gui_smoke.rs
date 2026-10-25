@@ -18,7 +18,7 @@ use crate::{
     input::PresentationCommand,
     render_controller::CURRENT_RENDER_WIDTH,
     rendering::{RenderPurpose, RenderRequest},
-    window_controller::{set_slide_fullscreen, AppWindows},
+    window_controller::{set_audience_fullscreen, AppWindows},
 };
 
 const ASYNC_OPEN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -82,43 +82,43 @@ async fn run_checks(
 
     windows.apply_initial_positions();
     windows
-        .slide
+        .audience
         .show()
-        .context("failed to show slide window")?;
+        .context("failed to show audience window")?;
     #[cfg(target_os = "macos")]
-    let transitions = macos_fullscreen::Transitions::new(&windows.slide)?;
+    let transitions = macos_fullscreen::Transitions::new(&windows.audience)?;
     #[cfg(target_os = "macos")]
     {
         use slint::winit_030::WinitWindowAccessor;
         check_macos_fullscreen_reversal(&windows, report, &transitions).await?;
         settle_notes_layout().await?;
         report.check(
-            "macOS native slide titlebar is transparent and hidden from creation",
-            macos_slide_chrome_is_correct(&windows.slide),
+            "macOS native audience titlebar is transparent and hidden from creation",
+            macos_audience_chrome_is_correct(&windows.audience),
             "AppKit full-size content, transparent titlebar, and hidden title are set",
             "initial native titlebar attributes are incomplete",
         );
         report.check(
-            "macOS slide content includes the titlebar from creation",
+            "macOS audience content includes the titlebar from creation",
             windows
-                .slide
+                .audience
                 .window()
                 .with_winit_window(|native| native.inner_size() == native.outer_size())
                 == Some(true),
-            "native slide viewport covers the entire window before chrome synchronization",
-            "native slide viewport excludes the titlebar",
+            "native audience viewport covers the entire window before chrome synchronization",
+            "native audience viewport excludes the titlebar",
         );
     }
     let window_refs = windows.refs();
-    crate::apply_macos_slide_window_chrome(&window_refs);
-    crate::sync_slide_chrome(&window_refs);
+    crate::apply_macos_audience_window_chrome(&window_refs);
+    crate::sync_audience_chrome(&window_refs);
     windows
         .presenter
         .show()
         .context("failed to show presenter window")?;
     crate::set_application_icon();
 
-    report.pass("created presenter and slide windows");
+    report.pass("created presenter and audience windows");
     report.check(
         "presenter window handle is alive",
         window_refs.presenter.upgrade().is_some(),
@@ -126,10 +126,10 @@ async fn run_checks(
         "presenter window weak handle could not be upgraded",
     );
     report.check(
-        "slide window handle is alive",
-        window_refs.slide.upgrade().is_some(),
-        "slide window weak handle upgraded",
-        "slide window weak handle could not be upgraded",
+        "audience window handle is alive",
+        window_refs.audience.upgrade().is_some(),
+        "audience window weak handle upgraded",
+        "audience window weak handle could not be upgraded",
     );
 
     check_notes_font_size(&windows, &state, report, "before opening a PDF").await?;
@@ -277,37 +277,37 @@ async fn run_checks(
     report_state(
         report,
         &state,
-        "black screen command restores slide output",
+        "black screen command restores audience output",
         |state| !state.black_screen.is_active() && current_page_index(state) == Some(1),
     );
 
     {
-        let fullscreen = state.borrow_mut().fullscreen.toggle_slide_fullscreen();
-        set_slide_fullscreen(&window_refs, fullscreen);
+        let fullscreen = state.borrow_mut().fullscreen.toggle_audience_fullscreen();
+        set_audience_fullscreen(&window_refs, fullscreen);
     }
     report_state(report, &state, "fullscreen state toggles on", |state| {
-        state.fullscreen.is_slide_fullscreen()
+        state.fullscreen.is_audience_fullscreen()
     });
     crate::handle_presentation_command(
         &window_refs,
         &state,
-        PresentationCommand::ExitSlideFullscreen,
+        PresentationCommand::ExitAudienceFullscreen,
     );
     report_state(
         report,
         &state,
         "fullscreen exit command toggles off",
-        |state| !state.fullscreen.is_slide_fullscreen(),
+        |state| !state.fullscreen.is_audience_fullscreen(),
     );
 
     report_state(
         report,
         &state,
-        "presenter and slide state remain synchronized",
+        "presenter and audience state remain synchronized",
         |state| {
             state.presentation.snapshot().is_some()
                 && !state.black_screen.is_active()
-                && !state.fullscreen.is_slide_fullscreen()
+                && !state.fullscreen.is_audience_fullscreen()
         },
     );
 
@@ -316,7 +316,7 @@ async fn run_checks(
         crate::control_smoke::run(&windows, state.clone(), options.pdf_path.clone()).await?;
         report.pass("local control operates through the GUI and isolated renderer");
     }
-    check_hidden_slide_recovery(
+    check_hidden_audience_recovery(
         &windows,
         &state,
         report,
@@ -326,7 +326,7 @@ async fn run_checks(
     .await?;
     #[cfg(target_os = "macos")]
     {
-        check_macos_slide_edges(&windows, report, &transitions).await?;
+        check_macos_audience_edges(&windows, report, &transitions).await?;
         check_macos_preserved_pdf_open(&windows, &state, options, report).await?;
     }
 
@@ -334,19 +334,19 @@ async fn run_checks(
 }
 
 #[cfg(target_os = "macos")]
-async fn check_macos_slide_edges(
+async fn check_macos_audience_edges(
     windows: &AppWindows,
     report: &mut GuiSmokeReport,
     transitions: &macos_fullscreen::Transitions,
 ) -> Result<()> {
     use slint::winit_030::WinitWindowAccessor;
-    let slide = &windows.slide;
-    let original_image = slide.get_page_image();
-    let original_aspect = slide.get_page_aspect_ratio();
-    let original_size = slide
+    let audience = &windows.audience;
+    let original_image = audience.get_page_image();
+    let original_aspect = audience.get_page_aspect_ratio();
+    let original_size = audience
         .window()
         .size()
-        .to_logical(slide.window().scale_factor());
+        .to_logical(audience.window().scale_factor());
     // Narrow edge bands disappear if the old 28-point offset crops the slide.
     let mut buffer = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(160, 90);
     for (row, pixels) in buffer
@@ -372,10 +372,10 @@ async fn check_macos_slide_edges(
             pixel.copy_from_slice(&color);
         }
     }
-    slide.set_page_image(slint::Image::from_rgba8(buffer));
-    slide.set_page_aspect_ratio(16.0 / 9.0);
+    audience.set_page_image(slint::Image::from_rgba8(buffer));
+    audience.set_page_aspect_ratio(16.0 / 9.0);
     let refs = windows.refs();
-    let display_size = slide
+    let display_size = audience
         .window()
         .with_winit_window(|native| {
             native
@@ -397,21 +397,21 @@ async fn check_macos_slide_edges(
         let width = width * scale;
         let height = height * scale;
         if name == "after fullscreen" {
-            settle_slide_fullscreen(&refs, true, transitions).await?;
-            settle_slide_fullscreen(&refs, false, transitions).await?;
+            settle_audience_fullscreen(&refs, true, transitions).await?;
+            settle_audience_fullscreen(&refs, false, transitions).await?;
         }
         let action_refs = refs.clone();
         run_macos_window_action(move || {
-            crate::window_controller::set_slide_logical_size(&action_refs, [width, height]);
+            crate::window_controller::set_audience_logical_size(&action_refs, [width, height]);
             if name == "restored tall window" {
                 let preserve = action_refs.placement.preserve_size.replace(true);
-                crate::fit_slide_window_to_aspect_ratio(&action_refs, 16.0 / 9.0);
+                crate::fit_audience_window_to_aspect_ratio(&action_refs, 16.0 / 9.0);
                 action_refs.placement.preserve_size.set(preserve);
             }
-            crate::sync_slide_chrome(&action_refs);
+            crate::sync_audience_chrome(&action_refs);
         })
         .await?;
-        check_macos_native_slide_edges(slide, report, name)?;
+        check_macos_native_audience_edges(audience, report, name)?;
     }
 
     let unrelated_tick = Rc::new(Cell::new(false));
@@ -451,7 +451,7 @@ async fn check_macos_slide_edges(
 
     // Exercise the actual startup planner and its asynchronous verification,
     // rather than directly invoking the PDF fitting helper.
-    let saved = slide
+    let saved = audience
         .window()
         .with_winit_window(|native| {
             let monitor = native
@@ -486,14 +486,14 @@ async fn check_macos_slide_edges(
         let width = width * scale;
         let height = height * scale;
         // Distort the image to the test page ratio; edge colors remain intact.
-        slide.set_page_aspect_ratio(aspect);
+        audience.set_page_aspect_ratio(aspect);
         let mut record = saved.clone();
         record.logical_inner_size = [width, height];
         refs.placement.initialize(Some(record));
         let action_refs = refs.clone();
         let verification_refs = refs.clone();
         run_macos_window_action_until(
-            move || crate::window_controller::start_slide_placement(action_refs),
+            move || crate::window_controller::start_audience_placement(action_refs),
             move || verification_refs.placement.restore_verified.get(),
             Duration::from_secs(5),
         )
@@ -504,10 +504,10 @@ async fn check_macos_slide_edges(
             "startup restore settled through the production verification path",
             "startup restore did not verify the saved geometry",
         );
-        let logical = slide
+        let logical = audience
             .window()
             .size()
-            .to_logical(slide.window().scale_factor());
+            .to_logical(audience.window().scale_factor());
         report.check(
             format!("macOS {name} preserves scale within saved bounds"),
             logical.width <= width as f32 + 2.0
@@ -517,14 +517,14 @@ async fn check_macos_slide_edges(
             "one saved dimension is retained and the other fits the page",
             format!("unexpected restored size {logical:?} for {width}x{height}"),
         );
-        check_macos_native_slide_edges(slide, report, name)?;
+        check_macos_native_audience_edges(audience, report, name)?;
     }
     refs.placement.cancel();
     refs.placement.enabled.set(false);
-    slide.set_page_image(original_image);
-    slide.set_page_aspect_ratio(original_aspect);
+    audience.set_page_image(original_image);
+    audience.set_page_aspect_ratio(original_aspect);
     run_macos_window_action(move || {
-        crate::window_controller::set_slide_logical_size(
+        crate::window_controller::set_audience_logical_size(
             &refs,
             [
                 f64::from(original_size.width),
@@ -537,10 +537,10 @@ async fn check_macos_slide_edges(
 }
 
 #[cfg(target_os = "macos")]
-fn macos_native_fullscreen(slide: &crate::SlideWindow) -> Option<bool> {
+fn macos_native_fullscreen(audience: &crate::AudienceWindow) -> Option<bool> {
     use objc2_app_kit::{NSView, NSWindowStyleMask};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    let handle = slide.window().window_handle();
+    let handle = audience.window().window_handle();
     let handle = handle.window_handle().ok()?;
     let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
         return None;
@@ -569,7 +569,7 @@ async fn check_macos_fullscreen_reversal(
     ] {
         let before = transitions.counts();
         let started = Instant::now();
-        set_slide_fullscreen(&refs, sequence[0]);
+        set_audience_fullscreen(&refs, sequence[0]);
         if sequence.len() == 2 {
             let will = if sequence[0] { 0 } else { 2 };
             while transitions.counts()[will] == before[will] {
@@ -582,14 +582,14 @@ async fn check_macos_fullscreen_reversal(
                 transitions.counts()[will + 1] == before[will + 1],
                 "macOS {name}: initial transition finished before reversal"
             );
-            set_slide_fullscreen(&refs, sequence[1]);
+            set_audience_fullscreen(&refs, sequence[1]);
         }
         loop {
             let actual = (
-                macos_native_fullscreen(&windows.slide),
-                windows.slide.window().is_fullscreen(),
+                macos_native_fullscreen(&windows.audience),
+                windows.audience.window().is_fullscreen(),
                 windows
-                    .slide
+                    .audience
                     .window()
                     .with_winit_window(|native| native.fullscreen().is_some()),
             );
@@ -627,10 +627,10 @@ async fn check_macos_fullscreen_reversal(
 }
 
 #[cfg(target_os = "macos")]
-fn macos_slide_chrome_is_correct(slide: &crate::SlideWindow) -> bool {
+fn macos_audience_chrome_is_correct(audience: &crate::AudienceWindow) -> bool {
     use objc2_app_kit::{NSView, NSWindowStyleMask, NSWindowTitleVisibility};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    let handle = slide.window().window_handle();
+    let handle = audience.window().window_handle();
     let Ok(handle) = handle.window_handle() else {
         return false;
     };
@@ -650,20 +650,20 @@ fn macos_slide_chrome_is_correct(slide: &crate::SlideWindow) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-fn check_macos_native_slide_edges(
-    slide: &crate::SlideWindow,
+fn check_macos_native_audience_edges(
+    audience: &crate::AudienceWindow,
     report: &mut GuiSmokeReport,
     name: &str,
 ) -> Result<()> {
     use slint::winit_030::WinitWindowAccessor;
     report.check(
         format!("macOS {name} native titlebar remains transparent"),
-        macos_slide_chrome_is_correct(slide),
+        macos_audience_chrome_is_correct(audience),
         "native titlebar allows the slide behind window buttons",
         "native titlebar attributes were lost",
     );
-    let snapshot = slide.window().take_snapshot()?;
-    let native_size = slide.window().with_winit_window(|native| {
+    let snapshot = audience.window().take_snapshot()?;
+    let native_size = audience.window().with_winit_window(|native| {
         (
             native.inner_size(),
             native.outer_size(),
@@ -672,7 +672,7 @@ fn check_macos_native_slide_edges(
     });
     report.check(
         format!("macOS {name} renderer covers the native window including the titlebar"),
-        slide.window().with_winit_window(|native| {
+        audience.window().with_winit_window(|native| {
             let size = native.outer_size();
             size.width == snapshot.width() && size.height == snapshot.height()
         }) == Some(true),
@@ -681,12 +681,12 @@ fn check_macos_native_slide_edges(
             "renderer {}x{}, Slint {:?}, native {native_size:?}",
             snapshot.width(),
             snapshot.height(),
-            slide.window().size()
+            audience.window().size()
         ),
     );
     anyhow::ensure!(
         snapshot.width() >= 8 && snapshot.height() >= 8,
-        "slide snapshot is too small"
+        "audience snapshot is too small"
     );
     for fraction in 1..=3 {
         for (edge, x, y, color) in [
@@ -708,7 +708,7 @@ fn check_macos_native_slide_edges(
             let index = ((y * snapshot.width() + x) * 4) as usize;
             let pixel = &snapshot.as_bytes()[index..index + 3];
             report.check(
-                format!("macOS {name} slide {edge} edge at {fraction}/4 fills the window without cropping"),
+                format!("macOS {name} audience {edge} edge at {fraction}/4 fills the window without cropping"),
                 pixel.iter().zip(color).all(|(actual, expected)| actual.abs_diff(expected) <= 2),
                 "the original slide edge reaches the window edge",
                 format!("pixel at ({x}, {y}) is {pixel:?}, expected {color:?}"),
@@ -729,18 +729,18 @@ async fn check_macos_preserved_pdf_open(
     refs.placement.preserve_size.set(true);
     let action_refs = refs.clone();
     run_macos_window_action(move || {
-        crate::window_controller::set_slide_logical_size(&action_refs, [1704.0, 1063.0]);
+        crate::window_controller::set_audience_logical_size(&action_refs, [1704.0, 1063.0]);
     })
     .await?;
     crate::begin_open_pdf(&refs, state, options.pdf_path.clone());
     wait_for_async_open(&refs, state).await?;
     run_macos_window_action(|| {}).await?;
     let size = windows
-        .slide
+        .audience
         .window()
         .size()
-        .to_logical(windows.slide.window().scale_factor());
-    let aspect = windows.slide.get_page_aspect_ratio();
+        .to_logical(windows.audience.window().scale_factor());
+    let aspect = windows.audience.get_page_aspect_ratio();
     report.check(
         "macOS opening a PDF refits a preserved window through the async open path",
         (size.width - size.height * aspect).abs() < 2.0,
@@ -791,7 +791,7 @@ async fn run_macos_window_action_until(
     }
 }
 
-async fn settle_slide_fullscreen(
+async fn settle_audience_fullscreen(
     refs: &crate::window_controller::AppWindowRefs,
     fullscreen: bool,
     #[cfg(target_os = "macos")] transitions: &macos_fullscreen::Transitions,
@@ -812,24 +812,24 @@ async fn settle_slide_fullscreen(
             }
             delay(Duration::from_millis(10)).await;
         }
-        let slide = refs
-            .slide
+        let audience = refs
+            .audience
             .upgrade()
-            .context("hidden-window fixture lost its slide")?;
+            .context("hidden-window fixture lost its audience")?;
         let initial =
-            macos_native_fullscreen(&slide).context("native slide delegate is missing")?;
+            macos_native_fullscreen(&audience).context("native audience delegate is missing")?;
         let before = transitions.counts();
         let did = if fullscreen { 1 } else { 3 };
-        set_slide_fullscreen(refs, fullscreen);
+        set_audience_fullscreen(refs, fullscreen);
         loop {
             let counts = transitions.counts();
             let completed = counts[0] == counts[1]
                 && counts[2] == counts[3]
                 && (initial == fullscreen || counts[did] > before[did]);
             let actual = (
-                macos_native_fullscreen(&slide),
-                slide.window().is_fullscreen(),
-                slide
+                macos_native_fullscreen(&audience),
+                audience.window().is_fullscreen(),
+                audience
                     .window()
                     .with_winit_window(|native| native.fullscreen().is_some()),
             );
@@ -844,12 +844,12 @@ async fn settle_slide_fullscreen(
     }
     #[cfg(not(target_os = "macos"))]
     {
-        set_slide_fullscreen(refs, fullscreen);
+        set_audience_fullscreen(refs, fullscreen);
         settle_notes_layout().await
     }
 }
 
-async fn check_hidden_slide_recovery(
+async fn check_hidden_audience_recovery(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
     report: &mut GuiSmokeReport,
@@ -859,18 +859,18 @@ async fn check_hidden_slide_recovery(
     let frames = Rc::new(Cell::new(0_u32));
     let rendered_frames = frames.clone();
     windows
-        .slide
+        .audience
         .window()
         .set_rendering_notifier(move |phase, _| {
             if matches!(phase, slint::RenderingState::AfterRendering) {
                 rendered_frames.set(rendered_frames.get() + 1);
             }
         })
-        .context("failed to monitor slide rendering for hidden-window recovery")?;
+        .context("failed to monitor audience rendering for hidden-window recovery")?;
     settle_notes_layout().await?;
 
     for fullscreen in [false, true] {
-        settle_slide_fullscreen(
+        settle_audience_fullscreen(
             &refs,
             fullscreen,
             #[cfg(target_os = "macos")]
@@ -885,22 +885,23 @@ async fn check_hidden_slide_recovery(
         ] {
             if close_request {
                 windows
-                    .slide
+                    .audience
                     .window()
                     .dispatch_event(slint::platform::WindowEvent::CloseRequested);
             } else {
-                crate::hide_slide_window_from_menu(&refs, state);
+                crate::hide_audience_window_from_menu(&refs, state);
             }
             report.check(
                 format!(
-                    "slide is hidden through {}",
+                    "audience is hidden through {}",
                     if close_request {
                         "close request"
                     } else {
-                        "Hide Slide"
+                        "Hide Audience"
                     }
                 ),
-                !windows.slide.window().is_visible() && !state.borrow().window_menu.slide_visible(),
+                !windows.audience.window().is_visible()
+                    && !state.borrow().window_menu.audience_visible(),
                 "Slint lifecycle is hidden",
                 "native hide left the Slint lifecycle visible",
             );
@@ -909,36 +910,36 @@ async fn check_hidden_slide_recovery(
             let buffer =
                 slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(&color, 1, 1);
             windows
-                .slide
+                .audience
                 .set_page_image(slint::Image::from_rgba8(buffer));
             settle_notes_layout().await?;
             let previous_frames = frames.get();
             if raise {
-                crate::bring_slide_window_to_front(&refs, state);
+                crate::bring_audience_window_to_front(&refs, state);
             } else {
-                crate::show_slide_window_from_menu(&refs, state);
+                crate::show_audience_window_from_menu(&refs, state);
             }
             settle_notes_layout().await?;
             let action = format!(
                 "{} ({})",
                 if raise {
-                    "Bring Slide to Front"
+                    "Bring Audience to Front"
                 } else {
-                    "Show Slide"
+                    "Show Audience"
                 },
                 if fullscreen { "fullscreen" } else { "windowed" }
             );
             report.check(
-                format!("{action} restores the slide rendering lifecycle"),
-                windows.slide.window().is_visible() && frames.get() > previous_frames,
+                format!("{action} restores the audience rendering lifecycle"),
+                windows.audience.window().is_visible() && frames.get() > previous_frames,
                 "Slint is visible and rendered a new frame",
                 "Slint is hidden or no new frame was rendered",
             );
             let snapshot = windows
-                .slide
+                .audience
                 .window()
                 .take_snapshot()
-                .context("failed to capture the restored slide")?;
+                .context("failed to capture the restored audience")?;
             let center = &snapshot.as_bytes()[((snapshot.height() / 2 * snapshot.width()
                 + snapshot.width() / 2)
                 * 4) as usize..];
@@ -948,7 +949,7 @@ async fn check_hidden_slide_recovery(
                     .iter()
                     .zip(color[..3].iter())
                     .all(|(actual, expected)| actual.abs_diff(*expected) <= 2),
-                "restored slide has the replacement image pixels",
+                "restored audience has the replacement image pixels",
                 format!(
                     "unexpected center pixel: {:?}, expected {:?}",
                     &center[..4],
@@ -957,7 +958,7 @@ async fn check_hidden_slide_recovery(
             );
         }
     }
-    settle_slide_fullscreen(
+    settle_audience_fullscreen(
         &refs,
         false,
         #[cfg(target_os = "macos")]
@@ -1046,12 +1047,12 @@ async fn check_audience_join_screen(
     );
     presenter.invoke_audience_toggle_panel();
     report.check(
-        "Audience Live ON shows page 0 on the slide window",
-        windows.slide.get_audience_guide_visible()
-            && windows.slide.get_audience_url() == url
-            && windows.slide.get_audience_code() == presenter.get_audience_code()
-            && windows.slide.get_audience_qr().size().width > 0
-            && windows.slide.get_audience_overlay().row_count() == 0,
+        "Audience Live ON shows page 0 on the audience window",
+        windows.audience.get_audience_guide_visible()
+            && windows.audience.get_audience_url() == url
+            && windows.audience.get_audience_code() == presenter.get_audience_code()
+            && windows.audience.get_audience_qr().size().width > 0
+            && windows.audience.get_audience_overlay().row_count() == 0,
         "join metadata reached the audience window",
         "join screen or metadata missing",
     );
@@ -1065,10 +1066,10 @@ async fn check_audience_join_screen(
     );
     submit_audience_smoke_reaction(&url)?;
     let deadline = Instant::now() + Duration::from_secs(2);
-    while windows.slide.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
+    while windows.audience.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter).await?;
     }
-    let snapshot = windows.slide.window().take_snapshot()?;
+    let snapshot = windows.audience.window().take_snapshot()?;
     let colored = snapshot
         .as_bytes()
         .chunks_exact(4)
@@ -1076,10 +1077,10 @@ async fn check_audience_join_screen(
         .count();
     report.check(
         "Page 0 renders incoming reactions above the join information",
-        windows.slide.get_audience_guide_visible()
-            && windows.slide.get_audience_overlay().row_count() > 0
+        windows.audience.get_audience_guide_visible()
+            && windows.audience.get_audience_overlay().row_count() > 0
             && colored > 5
-            && windows.slide.get_audience_url() == url
+            && windows.audience.get_audience_url() == url
             && state.borrow().render_generation == generation,
         "reaction pixels visible on the join screen without PDF rendering",
         "page 0 reaction missing or presentation changed",
@@ -1090,7 +1091,7 @@ async fn check_audience_join_screen(
         PresentationCommand::SetBlackScreen(true),
     );
     settle_presenter_notes_layout(presenter).await?;
-    let blank = windows.slide.window().take_snapshot()?;
+    let blank = windows.audience.window().take_snapshot()?;
     let center = ((blank.height() / 2 * blank.width() + blank.width() / 2) * 4) as usize;
     report.check(
         "blackout renders black over the join QR code",
@@ -1100,7 +1101,7 @@ async fn check_audience_join_screen(
     );
     report.check(
         "blackout hides the page 0 join screen",
-        windows.slide.get_black_screen_active(),
+        windows.audience.get_black_screen_active(),
         "blackout covers join information",
         "join information bypassed blackout",
     );
@@ -1112,7 +1113,7 @@ async fn check_audience_join_screen(
     crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::NextPage);
     report.check(
         "next from page 0 returns to the current PDF without skipping",
-        !windows.slide.get_audience_guide_visible()
+        !windows.audience.get_audience_guide_visible()
             && state.borrow().presentation.snapshot() == before,
         "join screen dismissed without PDF navigation",
         "PDF page skipped or join screen remained",
@@ -1128,7 +1129,7 @@ async fn check_audience_join_screen(
         );
         report.check(
             "Previous from PDF page 1 returns to page 0 while Audience Live is ON",
-            windows.slide.get_audience_guide_visible()
+            windows.audience.get_audience_guide_visible()
                 && state.borrow().presentation.snapshot() == first
                 && state.borrow().render_generation == generation,
             "join screen restored without rendering or PDF navigation",
@@ -1141,14 +1142,14 @@ async fn check_audience_join_screen(
         );
         report.check(
             "Previous at page 0 remains on page 0",
-            windows.slide.get_audience_guide_visible(),
+            windows.audience.get_audience_guide_visible(),
             "lower boundary preserved",
             "join screen dismissed at lower boundary",
         );
         crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::NextPage);
         report.check(
             "Next from restored page 0 returns to PDF page 1",
-            !windows.slide.get_audience_guide_visible()
+            !windows.audience.get_audience_guide_visible()
                 && state.borrow().presentation.snapshot() == first,
             "first PDF page restored",
             "PDF skipped or guide remained",
@@ -1178,7 +1179,7 @@ async fn check_audience_join_screen(
     report.check(
         "PDF navigation keeps Audience Live running",
         !state.borrow().audience_join_visible
-            && !windows.slide.get_audience_guide_visible()
+            && !windows.audience.get_audience_guide_visible()
             && presenter.get_audience_active()
             && presenter.get_audience_toggle_label() == "Audience Live OFF 👍️"
             && presenter.get_audience_url_text() == presenter.get_audience_url(),
@@ -1187,19 +1188,19 @@ async fn check_audience_join_screen(
     );
     submit_audience_smoke_reaction(&url)?;
     let deadline = Instant::now() + Duration::from_secs(2);
-    while windows.slide.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
+    while windows.audience.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
         "Reaction is visible before session stop",
-        windows.slide.get_audience_overlay().row_count() > 0,
+        windows.audience.get_audience_overlay().row_count() > 0,
         "overlay active",
         "overlay missing before stop",
     );
     presenter.invoke_audience_toggle_session();
     report.check(
         "Stop immediately clears live reaction overlays",
-        windows.slide.get_audience_overlay().row_count() == 0,
+        windows.audience.get_audience_overlay().row_count() == 0,
         "overlay cleared",
         "overlay survived stop",
     );
@@ -1212,9 +1213,9 @@ async fn check_audience_join_screen(
         !presenter.get_audience_active()
             && !presenter.get_audience_panel_expanded()
             && presenter.get_audience_url().is_empty()
-            && windows.slide.get_audience_url().is_empty()
-            && windows.slide.get_audience_qr().size().width == 0
-            && !windows.slide.get_audience_guide_visible()
+            && windows.audience.get_audience_url().is_empty()
+            && windows.audience.get_audience_qr().size().width == 0
+            && !windows.audience.get_audience_guide_visible()
             && !state.borrow().audience_join_available
             && presenter.get_audience_recent_reactions().is_empty(),
         "stale join credentials cleared",
@@ -1340,12 +1341,12 @@ async fn check_audience_overlay(
     url: &str,
     report: &mut GuiSmokeReport,
 ) -> Result<()> {
-    let slide = &windows.slide;
+    let audience = &windows.audience;
     let presenter = &windows.presenter;
     let generation = state.borrow().render_generation;
-    let first = slide.get_audience_overlay().row_data(0);
+    let first = audience.get_audience_overlay().row_data(0);
     let observed_at = Instant::now();
-    let snapshot = slide.window().take_snapshot()?;
+    let snapshot = audience.window().take_snapshot()?;
     let colored = snapshot
         .as_bytes()
         .chunks_exact(4)
@@ -1357,21 +1358,21 @@ async fn check_audience_overlay(
         "overlay model and colored pixels present",
         "reaction overlay was not rendered",
     );
-    let size = slide.window().size();
-    slide
+    let size = audience.window().size();
+    audience
         .window()
         .set_size(slint::LogicalSize::new(800.0, 600.0));
     settle_presenter_notes_layout(presenter).await?;
-    let moving = slide.get_audience_overlay().row_data(0);
+    let moving = audience.get_audience_overlay().row_data(0);
     report.check(
         "Overlay animates within resized bounds and preserves the presentation session",
         first.as_ref().zip(moving.as_ref()).is_some_and(|(a, b)| {
             b.y < a.y && (0.0..=1.0).contains(&b.x) && (0.0..=1.0).contains(&b.y)
         }) && state.borrow().render_generation == generation,
         "motion stays normalized and render generation unchanged",
-        format!("first={first:?}, after={moving:?}, elapsed={:?}, generation={generation}->{}, window={:?}", observed_at.elapsed(), state.borrow().render_generation, slide.window().size()),
+        format!("first={first:?}, after={moving:?}, elapsed={:?}, generation={generation}->{}, window={:?}", observed_at.elapsed(), state.borrow().render_generation, audience.window().size()),
     );
-    slide.window().set_size(size);
+    audience.window().set_size(size);
     crate::handle_presentation_command(
         &windows.refs(),
         state,
@@ -1379,13 +1380,13 @@ async fn check_audience_overlay(
     );
     report.check(
         "Blackout immediately discards reaction overlays",
-        slide.get_audience_overlay().row_count() == 0,
+        audience.get_audience_overlay().row_count() == 0,
         "model cleared",
         "overlay remained queued",
     );
     submit_audience_smoke_reaction(url)?;
     settle_presenter_notes_layout(presenter).await?;
-    let blank = slide.window().take_snapshot()?;
+    let blank = audience.window().take_snapshot()?;
     report.check(
         "Blackout remains black while audience reactions arrive",
         blank
@@ -1403,40 +1404,40 @@ async fn check_audience_overlay(
     settle_presenter_notes_layout(presenter).await?;
     report.check(
         "Restoring blackout never replays suppressed reactions",
-        slide.get_audience_overlay().row_count() == 0,
+        audience.get_audience_overlay().row_count() == 0,
         "no stale reactions",
         "old reaction replayed",
     );
-    crate::window_controller::hide_slide_window(&windows.refs());
+    crate::window_controller::hide_audience_window(&windows.refs());
     submit_audience_smoke_reaction(url)?;
     settle_presenter_notes_layout(presenter).await?;
-    crate::window_controller::show_slide_window(&windows.refs());
+    crate::window_controller::show_audience_window(&windows.refs());
     settle_presenter_notes_layout(presenter).await?;
     report.check(
-        "Showing the slide never replays hidden-window reactions",
-        slide.get_audience_overlay().row_count() == 0,
+        "Showing the audience never replays hidden-window reactions",
+        audience.get_audience_overlay().row_count() == 0,
         "hidden reactions discarded",
         "hidden reaction replayed",
     );
     submit_audience_smoke_reaction(url)?;
     let deadline = Instant::now() + Duration::from_secs(2);
-    while slide.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
+    while audience.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
-        "New reactions resume after showing the slide",
-        slide.get_audience_overlay().row_count() > 0,
+        "New reactions resume after showing the audience",
+        audience.get_audience_overlay().row_count() > 0,
         "new input displayed",
         "new input missing",
     );
     let deadline =
         Instant::now() + crate::audience_overlay::GUI_SMOKE_LIFETIME + Duration::from_secs(2);
-    while slide.get_audience_overlay().row_count() > 0 && Instant::now() < deadline {
+    while audience.get_audience_overlay().row_count() > 0 && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
         "Reaction overlay expires without further inputs",
-        slide.get_audience_overlay().row_count() == 0,
+        audience.get_audience_overlay().row_count() == 0,
         "animation expired",
         "animation retained an old reaction",
     );
@@ -1450,7 +1451,7 @@ async fn check_live_comments(
     report: &mut GuiSmokeReport,
 ) -> Result<()> {
     let presenter = &windows.presenter;
-    let slide = &windows.slide;
+    let audience = &windows.audience;
     let submit = |body: &str| {
         submit_audience_smoke_event(
             url,
@@ -1459,10 +1460,10 @@ async fn check_live_comments(
     };
     submit("Hello 世界")?;
     let deadline = Instant::now() + Duration::from_secs(3);
-    while slide.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
+    while audience.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter).await?;
     }
-    let first = slide.get_audience_comments().row_data(0);
+    let first = audience.get_audience_comments().row_data(0);
     report.check(
         "Live comments measure the actual font and enter the logical canvas",
         first.as_ref().is_some_and(|f| {
@@ -1473,13 +1474,13 @@ async fn check_live_comments(
         "measured comment and independent history present",
         format!("comment={first:?}"),
     );
-    let original_size = slide.window().size();
-    slide
+    let original_size = audience.window().size();
+    audience
         .window()
         .set_size(slint::LogicalSize::new(800.0, 600.0));
     crate::audience_ui::set_join_visible(&windows.refs(), state, true);
     settle_presenter_notes_layout(presenter).await?;
-    let next = slide.get_audience_comments().row_data(0);
+    let next = audience.get_audience_comments().row_data(0);
     report.check(
         "Resize and page 0 preserve comment lane, width, and elapsed motion",
         first
@@ -1490,11 +1491,12 @@ async fn check_live_comments(
         format!("before={first:?}, after={next:?}"),
     );
     crate::audience_ui::set_join_visible(&windows.refs(), state, false);
-    slide.window().set_size(original_size);
+    audience.window().set_size(original_size);
     presenter.invoke_audience_toggle_comments();
     report.check(
         "Pause immediately clears comments",
-        presenter.get_audience_comments_paused() && slide.get_audience_comments().row_count() == 0,
+        presenter.get_audience_comments_paused()
+            && audience.get_audience_comments().row_count() == 0,
         "comments cleared",
         "comments survived pause",
     );
@@ -1512,7 +1514,7 @@ async fn check_live_comments(
         presenter
             .get_audience_comment_history()
             .contains("Paused comment")
-            && slide.get_audience_comments().row_count() == 0,
+            && audience.get_audience_comments().row_count() == 0,
         "history updated only",
         "pause lost history or displayed comment",
     );
@@ -1523,19 +1525,20 @@ async fn check_live_comments(
     settle_presenter_notes_layout(presenter).await?;
     report.check(
         "Resume rejects old-generation UI deliveries",
-        !presenter.get_audience_comments_paused() && slide.get_audience_comments().row_count() == 0,
+        !presenter.get_audience_comments_paused()
+            && audience.get_audience_comments().row_count() == 0,
         "no replay",
         "old comment appeared after resume",
     );
     submit("After resume")?;
     let deadline = Instant::now() + Duration::from_secs(3);
-    while slide.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
+    while audience.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter).await?;
     }
     report.check(
         "New comments display after Resume",
-        slide.get_audience_comments().row_count() == 1
-            && slide
+        audience.get_audience_comments().row_count() == 1
+            && audience
                 .get_audience_comments()
                 .row_data(0)
                 .is_some_and(|f| f.text == "After resume"),

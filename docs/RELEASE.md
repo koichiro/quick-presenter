@@ -319,13 +319,13 @@ Download `quick-presenter-macos` and open `QuickPresenter-<version>.dmg`.
 2. Launch `Quick Presenter`.
 3. Choose `Open` or `File > Open PDF...`.
 4. Select a PDF slide deck.
-5. Use the presenter window for controls and the slide window for audience
+5. Use the presenter window for controls and the audience window for audience
    output.
 
 For v2.5.0, dropping a PDF onto the application-bundle icon on the mounted
 read-only DMG is a known unsupported route: Finder can display a prohibited
 cursor and refuse the drop. Use the installed app icon, its running Dock icon,
-or the presenter/slide windows. These installed-app routes passed final direct
+or the presenter/audience windows. These installed-app routes passed final direct
 and internal TestFlight 25010 qualification on the test Mac; the DMG refusal
 is a documented release limitation, not a passed test or an established OS cause.
 
@@ -341,7 +341,7 @@ Install Quick Presenter from Microsoft Store ID `9N913S9NJ6D1`.
 2. Launch `Quick Presenter` from the Start Menu.
 3. Choose `Open` or `File > Open PDF...`.
 4. Select a PDF slide deck.
-5. Use the presenter window for controls and the slide window for audience
+5. Use the presenter window for controls and the audience window for audience
    output.
 
 The Microsoft Store is the only supported Windows distribution channel for
@@ -391,8 +391,7 @@ Quick Presenter can open a PDF from the app UI or at startup:
 quick-presenter --pdf path/to/slides.pdf
 ```
 
-Packaged builds include a presenter window and a separate audience-facing slide
-window. Keyboard controls are documented in [KEYBOARD.md](KEYBOARD.md).
+Packaged builds include a presenter window and a separate audience-facing audience window. Keyboard controls are documented in [KEYBOARD.md](KEYBOARD.md).
 
 If opening a PDF fails, try a known-good PDF first. Quick Presenter reports
 short presenter-facing errors and does not attempt to repair invalid PDFs.

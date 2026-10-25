@@ -1,4 +1,4 @@
-# Presenter and Slide Display Swap
+# Presenter and Audience Display Swap
 
 ## Status
 
@@ -12,7 +12,7 @@ boundary and the `X` bindings in both Slint windows.
 
 Provide the same fast recovery path presenters expect from Keynote: pressing the
 unmodified `X` key swaps the displays occupied by the presenter window and the
-audience slide window.
+audience window.
 
 The swap changes window placement only. It must not change which window owns
 presenter controls or which window renders the audience slide.
@@ -21,14 +21,14 @@ presenter controls or which window renders the audience slide.
 
 - `X` invokes the swap from either Quick Presenter window when that window has
   keyboard focus.
-- The presenter and slide windows exchange their current displays. With three or
+- The presenter and audience windows exchange their current displays. With three or
   more displays, unrelated displays are not involved.
 - Repeating `X` swaps the same windows back when the display topology and window
   placement have not changed.
 - The shortcut works before or after a PDF is opened.
 - The current page, page images, notes, elapsed timer, black-screen state, render
   cache, render queue, and PDF session remain unchanged.
-- The app-controlled slide fullscreen state remains unchanged. A fullscreen slide
+- The app-controlled audience fullscreen state remains unchanged. A fullscreen audience window
   becomes fullscreen on the destination display without intentionally passing
   through a visible windowed state.
 - A windowed window keeps its logical size and approximately the same relative
@@ -36,7 +36,7 @@ presenter controls or which window renders the audience slide.
   useful part of the window remains reachable.
 - Keyboard focus returns to the window that received `X`. A successful swap must
   not require an extra click before the next presentation shortcut.
-- A hidden slide window is not shown as a side effect. Its last known display can
+- A hidden audience window is not shown as a side effect. Its last known display can
   participate only when the backend can still provide a reliable native window
   snapshot; otherwise the command is a no-op.
 - When both windows resolve to the same display, only one usable display exists,
@@ -47,7 +47,7 @@ presenter controls or which window renders the audience slide.
   message in the presenter window.
 
 The first implementation does not persist an explicit presenter-display or
-slide-display preference. Issue #31 remains responsible for any placement
+audience-display preference. Issue #31 remains responsible for any placement
 persistence across launches.
 
 ## Non-goals
@@ -79,7 +79,7 @@ initiated it:
 ```rust
 pub enum WindowRole {
     Presenter,
-    Slide,
+    Audience,
 }
 
 pub fn request_display_swap(
@@ -135,7 +135,7 @@ supported before moving either window.
 
 Targeted fullscreen support alone is not enough to claim swap support. If the
 presenter window cannot also be placed on its destination, the controller must
-not move the slide window. Log the technical reason and show a concise message
+not move the audience window. Log the technical reason and show a concise message
 such as `Display switching is unavailable on this desktop.`
 
 This limitation is preferable to a partial swap that unexpectedly exposes the
@@ -212,8 +212,8 @@ Idle -> Prepared -> Applying -> Verifying -> Idle
 4. Reconfirm that both target handles are still in the live topology.
 5. Apply both placements on the UI thread:
    - request the presenter window's windowed destination position;
-   - for a windowed slide, request its windowed destination position;
-   - for an app-controlled fullscreen slide, retarget it with
+   - for a windowed audience window, request its windowed destination position;
+   - for an app-controlled fullscreen audience window, retarget it with
      `Fullscreen::Borderless(Some(target_monitor))` without first clearing
      fullscreen.
 6. Request focus for the initiating role after both placement requests have been
@@ -226,7 +226,7 @@ from producing a one-sided move. Native window setters do not report compositor
 acceptance synchronously, so verification remains necessary.
 
 Do not hide either window during the normal sequence. Hiding the fullscreen
-slide can flash the desktop or presenter content on the audience display. Direct
+audience window can flash the desktop or presenter content on the audience display. Direct
 targeted borderless fullscreen is the preferred path specifically because it
 does not intentionally exit fullscreen.
 
@@ -245,10 +245,10 @@ If the topology changed or the retry budget expires:
 2. place each window on an available display when the backend permits it,
    preferring its current valid display and then the primary/first available
    display;
-3. preserve the slide's app-controlled fullscreen boolean, black-screen state,
+3. preserve the audience window's app-controlled fullscreen boolean, black-screen state,
    and presentation state;
 4. restore focus to the initiating window when it remains available; and
-5. show `Displays changed; check presenter and slide placement.` in the
+5. show `Displays changed; check presenter and audience placement.` in the
    presenter status area and log the detailed topology and failure reason.
 
 Recovery is best-effort because a display can disappear between any two native
@@ -272,8 +272,8 @@ swap does not toggle that state and does not invoke the existing toggle command.
 After a targeted fullscreen request, existing native window-state synchronization
 must continue to report fullscreen as active.
 
-The slide title-bar compensation remains zero while fullscreen and is recalculated
-through the existing `sync_slide_chrome()` path after verification. Windowed
+The audience window title-bar compensation remains zero while fullscreen and is recalculated
+through the existing `sync_audience_chrome()` path after verification. Windowed
 swaps also call that path after the new scale factor and native placement have
 settled.
 
@@ -284,7 +284,7 @@ log the reason.
 
 ## Focus and Status
 
-The Slint callback must identify whether the presenter or slide window received
+The Slint callback must identify whether the presenter or audience window received
 `X`. Focus restoration uses the existing window focus helpers or a small
 role-based extension of them. It runs after native placement requests and may be
 repeated once during verification on platforms whose window manager changes
@@ -297,7 +297,7 @@ Status text is short and does not include monitor names or coordinates:
 | --- | --- |
 | Same/only display | `Connect a second display before switching screens.` |
 | Unsupported backend/session | `Display switching is unavailable on this desktop.` |
-| Topology changed or verification failed | `Displays changed; check presenter and slide placement.` |
+| Topology changed or verification failed | `Displays changed; check presenter and audience placement.` |
 
 A successful swap needs no transient status message because the visual result is
 immediate and overwriting rendering or black-screen status would be misleading.
@@ -324,13 +324,13 @@ invoke the same Rust command, but it is not required for issue #384.
 | Three or more displays | Swap only the two displays currently occupied by the Quick Presenter windows. |
 | `X` pressed again while applying | Ignore the repeated request; do not queue it. |
 | Either native window or current monitor unavailable | No-op before mutation. |
-| Slide hidden and its monitor cannot be inspected | No-op; do not show it. |
-| Slide is blacked out | Preserve black-screen state and pixels while moving the window. |
-| Slide is app-controlled fullscreen | Retarget fullscreen directly; do not intentionally show windowed chrome. |
+| Audience Window hidden and its monitor cannot be inspected | No-op; do not show it. |
+| Audience Window is blacked out | Preserve black-screen state and pixels while moving the window. |
+| Audience Window is app-controlled fullscreen | Retarget fullscreen directly; do not intentionally show windowed chrome. |
 | Target disappears before apply | Abort the plan before mutation. |
 | Target disappears during apply | Stop retries, recover to available displays, and warn the presenter. |
 | One placement does not settle | Retry within the fixed budget, then recover and warn. |
-| Backend cannot place presenter window | No-op; never move only the slide. |
+| Backend cannot place presenter window | No-op; never move only the audience window. |
 | PDF open/render/reload is in progress | Move windows without cancelling or rescheduling PDF work. |
 
 ## Test Plan
@@ -351,7 +351,7 @@ Controller tests with a fake native adapter and fake event-loop ticks should
 cover:
 
 - both windowed placements applying and verifying;
-- a fullscreen slide receiving a targeted fullscreen monitor without an exit;
+- a fullscreen audience window receiving a targeted fullscreen monitor without an exit;
 - focus restoration for each initiating role;
 - repeated `X` while active being ignored;
 - delayed native placement followed by successful verification;
@@ -364,14 +364,14 @@ cover:
 Manual verification must use extended-desktop mode and include macOS, Windows,
 Linux X11, and a documented Linux Wayland no-op:
 
-- windowed presenter and windowed slide;
-- fullscreen slide;
+- windowed presenter and windowed audience window;
+- fullscreen audience window;
 - `X` from each focused window;
 - repeated swaps;
 - different resolutions and scale factors;
 - three displays;
 - black screen and active page navigation;
-- a hidden slide window;
+- a hidden audience window;
 - disconnecting a target immediately before or during the command; and
 - verifying that the next keyboard navigation command works without a click.
 
@@ -386,7 +386,7 @@ Slint code.
    packaged backend selection on all platforms.
 3. Add the controller state machine, bounded verification, and fake-adapter
    tests.
-4. Connect presenter and slide callbacks, `X` bindings, focus restoration, and
+4. Connect presenter and audience callbacks, `X` bindings, focus restoration, and
    short status messages.
 5. Add the keyboard-help row and manual multi-display smoke coverage.
 

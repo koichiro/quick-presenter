@@ -198,7 +198,7 @@ succeeds with no state change. A subsequent open may return `BUSY` briefly while
 | `document_revision` | Increases on committed open/reload or nonempty close |
 | `document` | Active path or null; GUI-opened non-UTF-8 paths use a lossy display string |
 | `page`, `pages` | Logical current page and count; null and zero when closed |
-| `fullscreen` | Existing slide-window fullscreen state |
+| `fullscreen` | Existing audience-window fullscreen state |
 | `blackout` | Existing audience black-screen state |
 | `timer` | Read-only snapshot of the existing GUI-owned timer: running flag and whole elapsed seconds |
 | `opening` | A PDF open is pending; the active deck may still be available |

@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.0.0 — Unreleased
+
+### Changed
+
+- Rename the audience-facing Slide Window to **Audience Window** throughout
+  menus, the native window title, Rust/Slint window APIs, and current
+  specifications. Existing startup settings and Control Protocol v1 remain
+  compatible; presentation behavior and keyboard shortcuts are unchanged.
+
 ## [2.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0) — 2026-10-24
 
 ### Added
