@@ -1645,7 +1645,7 @@ async fn check_live_comments(
     );
     save_comment_smoke_snapshot(audience, state, "five-bubbles").await?;
     presenter.invoke_audience_set_comment_display(true, true);
-    submit("Flowing comments are also ON")?;
+    submit("Great slide!")?;
     let deadline = Instant::now() + Duration::from_secs(3);
     while audience.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
         settle_presenter_notes_layout(presenter).await?;
@@ -1659,7 +1659,7 @@ async fn check_live_comments(
         "combined five-card display is missing",
     );
     if std::env::var_os("QP_GUI_SMOKE_BUBBLES_SNAPSHOT").is_some() {
-        delay(Duration::from_secs(6)).await;
+        delay(Duration::from_secs(3)).await;
     }
     save_comment_smoke_snapshot(audience, state, "five-bubbles-combined").await?;
     presenter.invoke_audience_toggle_comments();

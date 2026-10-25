@@ -153,7 +153,8 @@ to accommodate all five cards.
 
 The actual demo-PDF Audience window below shows five stacked bubbles while a
 new comment also flows across the slide. The capture waits for entry/exit
-motion to settle and for the flowing text to reach the left half of the slide.
+motion to settle and captures a short flowing comment in the open space between
+the slide badge and the right-hand bubble stack, reducing overlap with slide text.
 The first new coexistence assertion ran during the transient exiting-card
 animation; it was corrected to wait for that animation before checking the
 settled count. The screenshot was taken after settling. The final focused run passes **123
