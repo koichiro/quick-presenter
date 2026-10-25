@@ -78,13 +78,34 @@ async fn run_checks(
 
     crate::wire_callbacks(&windows, windows.refs(), state.clone());
     crate::apply_app_metadata(&windows.presenter);
-    let _audience_ui = crate::audience_ui::AudienceUi::install_for_smoke(&windows, state.clone());
+    let audience_config = tempfile::tempdir()?;
+    let _audience_ui = crate::audience_ui::AudienceUi::install_for_smoke(
+        &windows,
+        state.clone(),
+        audience_config.path().join("config.toml"),
+    );
 
     windows.apply_initial_positions();
     windows
         .audience
         .show()
         .context("failed to show audience window")?;
+    if std::env::var("QP_GUI_SMOKE_SCOPE").as_deref() == Ok("comments") {
+        report.pass("scope: focused Audience Live/comments only; not the full GUI suite");
+        let window_refs = windows.refs();
+        crate::apply_macos_audience_window_chrome(&window_refs);
+        crate::sync_audience_chrome(&window_refs);
+        windows
+            .presenter
+            .show()
+            .context("failed to show presenter window")?;
+        check_audience_join_screen(&windows, &state, report).await?;
+        crate::begin_open_pdf(&window_refs, &state, options.pdf_path.clone());
+        wait_for_async_open(&window_refs, &state).await?;
+        check_audience_join_screen(&windows, &state, report).await?;
+        check_settings_dialog(&windows, &state, report).await?;
+        return Ok(());
+    }
     #[cfg(target_os = "macos")]
     let transitions = macos_fullscreen::Transitions::new(&windows.audience)?;
     #[cfg(target_os = "macos")]
@@ -1545,6 +1566,131 @@ async fn check_live_comments(
         "new comment displayed",
         "new comment missing or old comment replayed",
     );
+    presenter.invoke_audience_set_comment_display(true, true);
+    submit("Bubble one")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while audience.get_audience_bubbles().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Both comment styles display the same live event",
+        audience
+            .get_audience_bubbles()
+            .row_data(0)
+            .is_some_and(|b| b.name.is_empty() && b.text == "Bubble one")
+            && audience
+                .get_audience_comments()
+                .iter()
+                .any(|c| c.text == "Bubble one"),
+        "anonymous bubble and flowing comment are visible together",
+        "one of the enabled styles is missing",
+    );
+    save_comment_smoke_snapshot(audience, state, "combined").await?;
+    presenter.invoke_audience_set_comment_display(false, true);
+    submit_audience_smoke_event(
+        url,
+        serde_json::json!({"protocol":"qp.audience","version":"1","type":"comment","request_id":"named-bubble","body":"Bubble two 日本語のコメント","handle":"Alice"}),
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while audience.get_audience_bubbles().row_count() < 2 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    settle_presenter_notes_layout(presenter).await?;
+    let bubbles = audience.get_audience_bubbles();
+    report.check(
+        "Bubble-only mode keeps the newest comment below the previous one",
+        audience.get_audience_comments().row_count() == 0
+            && bubbles
+                .row_data(0)
+                .zip(bubbles.row_data(1))
+                .is_some_and(|(old, new)| {
+                    old.y < new.y
+                        && new.name == "Alice"
+                        && new.text == "Bubble two 日本語のコメント"
+                }),
+        "ordered bubbles retain the author separately",
+        format!("bubbles={:?}", bubbles.iter().collect::<Vec<_>>()),
+    );
+    crate::audience_ui::set_join_visible(&windows.refs(), state, true);
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Page 0 transitions preserve the bubble stack",
+        audience.get_audience_bubbles().row_count() == 2,
+        "bubbles retained",
+        "page transition cleared bubbles",
+    );
+    save_comment_smoke_snapshot(audience, state, "two-bubbles").await?;
+    for body in ["Bubble three", "Bubble four", "Bubble five", "Bubble six"] {
+        submit(body)?;
+    }
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !presenter
+        .get_audience_comment_history()
+        .contains("Bubble six")
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    delay(Duration::from_millis(300)).await;
+    let stacked = audience.get_audience_bubbles().iter().collect::<Vec<_>>();
+    report.check(
+        "Bubble bursts keep the newest five cards in ascending order",
+        stacked.len() == 5
+            && stacked.last().is_some_and(|b| b.text == "Bubble six")
+            && stacked.windows(2).all(|pair| pair[0].y < pair[1].y),
+        "oldest card evicted and newest card at the bottom",
+        format!("bubbles={stacked:?}"),
+    );
+    save_comment_smoke_snapshot(audience, state, "five-bubbles").await?;
+    presenter.invoke_audience_set_comment_display(true, true);
+    submit("Great slide!")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while audience.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    delay(Duration::from_millis(300)).await;
+    report.check(
+        "Five bubble cards coexist with flowing comments",
+        audience.get_audience_bubbles().row_count() == 5
+            && audience.get_audience_comments().row_count() > 0,
+        "five cards and a flowing comment are visible together",
+        "combined five-card display is missing",
+    );
+    if std::env::var_os("QP_GUI_SMOKE_BUBBLES_SNAPSHOT").is_some() {
+        delay(Duration::from_secs(3)).await;
+    }
+    save_comment_smoke_snapshot(audience, state, "five-bubbles-combined").await?;
+    presenter.invoke_audience_toggle_comments();
+    report.check(
+        "Pause clears bubble comments immediately",
+        audience.get_audience_bubbles().row_count() == 0,
+        "bubbles cleared",
+        "bubbles survived pause",
+    );
+    presenter.invoke_audience_toggle_comments();
+    presenter.invoke_audience_set_comment_display(false, false);
+    submit("Hidden styles")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !presenter
+        .get_audience_comment_history()
+        .contains("Hidden styles")
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    report.check(
+        "Both disabled styles preserve history without displaying comments",
+        presenter
+            .get_audience_comment_history()
+            .contains("Hidden styles")
+            && audience.get_audience_bubbles().row_count() == 0
+            && audience.get_audience_comments().row_count() == 0,
+        "history updated without overlays",
+        "disabled style displayed or history missing",
+    );
+    presenter.invoke_audience_set_comment_display(true, false);
     let history = presenter.get_audience_comment_history();
     presenter.set_audience_comment_history(
         (1..=20)
@@ -1564,6 +1710,36 @@ async fn check_live_comments(
     presenter.set_audience_comment_history(history);
     presenter.invoke_audience_toggle_comments();
     presenter.invoke_audience_toggle_comments();
+    Ok(())
+}
+
+async fn save_comment_smoke_snapshot(
+    audience: &crate::AudienceWindow,
+    state: &Rc<RefCell<AppState>>,
+    stage: &str,
+) -> Result<()> {
+    let Some(path) = std::env::var_os("QP_GUI_SMOKE_BUBBLES_SNAPSHOT") else {
+        return Ok(());
+    };
+    // Let entry motion settle and bring flowing text fully inside the canvas.
+    delay(Duration::from_secs(1)).await;
+    let snapshot = audience.window().take_snapshot()?;
+    let mut bytes = format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+    for pixel in snapshot.as_bytes().chunks_exact(4) {
+        bytes.extend_from_slice(&pixel[..3]);
+    }
+    let path = std::path::PathBuf::from(path);
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("comments");
+    let context = if state.borrow().presentation.snapshot().is_some() {
+        "pdf"
+    } else {
+        "no-deck"
+    };
+    let destination = path.with_file_name(format!("{stem}-{context}-{stage}.ppm"));
+    fs::write(destination, bytes).context("failed to save comment smoke snapshot")?;
     Ok(())
 }
 
@@ -1716,6 +1892,37 @@ async fn check_settings_dialog(
         "settings opened without starting an audience session",
         "settings did not open independently",
     );
+    for (flowing, bubbles, stage) in [
+        (true, true, "both-on"),
+        (false, true, "bubbles-only"),
+        (false, false, "both-off"),
+        (true, false, "flow-only"),
+    ] {
+        presenter.invoke_audience_set_comment_display(flowing, bubbles);
+        delay(Duration::from_millis(180)).await;
+        report.check(
+            format!("Settings switches reflect {stage}"),
+            presenter.get_audience_flowing_enabled() == flowing
+                && presenter.get_audience_bubbles_enabled() == bubbles,
+            "independent display preferences applied",
+            "display preferences did not match the requested combination",
+        );
+        if let Some(path) = std::env::var_os("QP_GUI_SMOKE_SETTINGS_SNAPSHOT") {
+            let path = std::path::PathBuf::from(path);
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("settings");
+            let snapshot = presenter.window().take_snapshot()?;
+            let mut bytes =
+                format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+            for pixel in snapshot.as_bytes().chunks_exact(4) {
+                bytes.extend_from_slice(&pixel[..3]);
+            }
+            fs::write(path.with_file_name(format!("{stem}-{stage}.ppm")), bytes)
+                .context("failed to save switch state snapshot")?;
+        }
+    }
     for text in [" ", "\n"] {
         presenter
             .window()

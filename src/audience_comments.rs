@@ -30,9 +30,55 @@ struct Active {
     started: Instant,
     lane: usize,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CommentDisplaySettings {
+    pub flowing: bool,
+    pub bubbles: bool,
+}
+impl Default for CommentDisplaySettings {
+    fn default() -> Self {
+        Self {
+            flowing: true,
+            bubbles: false,
+        }
+    }
+}
+
+// Keep these logical dimensions in sync with the bubble stack in ui/app.slint.
+const BUBBLE_STEP: f32 = 132.0;
+const BUBBLE_BOTTOM: f32 = 576.0;
+const BUBBLE_MOTION: Duration = Duration::from_millis(250);
+const BUBBLE_COUNT: usize = 5;
+const BUBBLE_TOP: f32 = BUBBLE_BOTTOM - (BUBBLE_COUNT - 1) as f32 * BUBBLE_STEP;
+#[derive(Clone, Debug)]
+pub struct BubbleFrame {
+    pub name: String,
+    pub text: String,
+    pub y: f32,
+}
+struct Bubble {
+    name: String,
+    text: String,
+    from_y: f32,
+    to_y: f32,
+    moved_at: Instant,
+}
+impl Bubble {
+    fn y(&self, now: Instant) -> f32 {
+        let t = (now.saturating_duration_since(self.moved_at).as_secs_f32()
+            / BUBBLE_MOTION.as_secs_f32())
+        .min(1.0);
+        self.from_y + (self.to_y - self.from_y) * (1.0 - (1.0 - t).powi(3))
+    }
+}
+
 #[derive(Default)]
 pub struct CommentEngine {
     active: Vec<Active>,
+    bubbles: VecDeque<Bubble>,
+    bubbles_moving: bool,
+    settings: CommentDisplaySettings,
     pending: VecDeque<Pending>,
     last_lane: Option<usize>,
     generation: u64,
@@ -42,13 +88,47 @@ pub struct CommentEngine {
 }
 impl CommentEngine {
     pub fn reset(&mut self) {
+        let settings = self.settings;
         *self = Self::default();
+        self.settings = settings;
+    }
+    pub fn set_display_settings(&mut self, settings: CommentDisplaySettings) {
+        if !settings.flowing {
+            self.active.clear();
+            self.pending.clear();
+        }
+        if !settings.bubbles {
+            self.clear_bubbles();
+        }
+        self.settings = settings;
+    }
+    pub fn clear_bubbles(&mut self) {
+        self.bubbles.clear();
+        self.bubbles_moving = false;
+    }
+    pub fn bubble_frames(&mut self, now: Instant) -> Vec<BubbleFrame> {
+        self.bubbles_moving = self
+            .bubbles
+            .iter()
+            .any(|b| now.saturating_duration_since(b.moved_at) < BUBBLE_MOTION);
+        self.bubbles.retain(|b| {
+            b.to_y >= BUBBLE_TOP || now.saturating_duration_since(b.moved_at) < BUBBLE_MOTION
+        });
+        self.bubbles
+            .iter()
+            .map(|b| BubbleFrame {
+                name: b.name.clone(),
+                text: b.text.clone(),
+                y: b.y(now),
+            })
+            .collect()
     }
     pub fn set_paused(&mut self, paused: bool, generation: u64) {
         self.paused = paused;
         self.generation = generation;
         self.active.clear();
         self.pending.clear();
+        self.clear_bubbles();
     }
     pub fn paused(&self) -> bool {
         self.paused
@@ -74,6 +154,33 @@ impl CommentEngine {
             || event.display_generation != self.generation
             || now.saturating_duration_since(event.received_at) > WAIT
             || now >= event.overlay_deadline
+        {
+            return;
+        }
+        if self.settings.bubbles {
+            self.bubbles_moving = true;
+            for bubble in &mut self.bubbles {
+                bubble.from_y = bubble.y(now);
+                bubble.to_y -= BUBBLE_STEP;
+                bubble.moved_at = now;
+            }
+            let name = handle.split_whitespace().collect::<Vec<_>>().join(" ");
+            self.bubbles.push_back(Bubble {
+                name: if name.eq_ignore_ascii_case("anonymous") {
+                    String::new()
+                } else {
+                    name
+                },
+                text: body.clone(),
+                from_y: 744.0,
+                to_y: BUBBLE_BOTTOM,
+                moved_at: now,
+            });
+            while self.bubbles.len() > BUBBLE_COUNT + 1 {
+                self.bubbles.pop_front();
+            }
+        }
+        if !self.settings.flowing
             || !width.is_finite()
             || width < 0.0
             || self.active.len() >= MAX_ACTIVE
@@ -136,7 +243,7 @@ impl CommentEngine {
             .collect()
     }
     pub fn has_work(&self) -> bool {
-        !self.active.is_empty() || !self.pending.is_empty()
+        !self.active.is_empty() || !self.pending.is_empty() || self.bubbles_moving
     }
 }
 
@@ -155,6 +262,111 @@ mod tests {
                 handle: "Anonymous".into(),
             },
         }
+    }
+
+    #[test]
+    fn display_styles_are_independent_and_keep_history_when_both_are_off() {
+        let now = Instant::now();
+        for flowing in [false, true] {
+            for bubbles in [false, true] {
+                let mut e = CommentEngine::default();
+                e.set_display_settings(CommentDisplaySettings { flowing, bubbles });
+                e.receive(&event(1, now, 0), 100.0, now);
+                assert_eq!(e.frames(now).len(), usize::from(flowing));
+                assert_eq!(e.bubble_frames(now).len(), usize::from(bubbles));
+                assert_eq!(e.history().len(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn bubbles_enter_from_bottom_and_move_only_when_new_comments_arrive() {
+        let now = Instant::now();
+        let mut e = CommentEngine::default();
+        e.set_display_settings(CommentDisplaySettings {
+            flowing: false,
+            bubbles: true,
+        });
+        e.receive(&event(1, now, 0), f32::NAN, now);
+        assert!(e.bubble_frames(now)[0].y > 720.0);
+        let later = now + Duration::from_secs(1);
+        assert_eq!(e.bubble_frames(later)[0].y, BUBBLE_BOTTOM);
+        e.receive(&event(2, later, 0), f32::NAN, later);
+        let middle = e.bubble_frames(later + BUBBLE_MOTION / 2);
+        assert!(middle[0].y < BUBBLE_BOTTOM && middle[0].y > BUBBLE_BOTTOM - BUBBLE_STEP);
+        let settled = e.bubble_frames(later + BUBBLE_MOTION);
+        assert_eq!(settled[0].text, "Comment 1");
+        assert_eq!(settled[0].y, BUBBLE_BOTTOM - BUBBLE_STEP);
+        assert_eq!(settled[1].text, "Comment 2");
+        assert_eq!(settled[1].y, BUBBLE_BOTTOM);
+        assert!(!e.has_work());
+        assert_eq!(
+            e.bubble_frames(later + Duration::from_secs(60))[1].y,
+            BUBBLE_BOTTOM
+        );
+    }
+
+    #[test]
+    fn bubbles_bound_bursts_and_normalize_anonymous_names() {
+        let now = Instant::now();
+        let mut e = CommentEngine::default();
+        e.set_display_settings(CommentDisplaySettings {
+            flowing: true,
+            bubbles: true,
+        });
+        for sequence in 1..=80 {
+            e.receive(&event(sequence, now, 0), 1000.0, now);
+        }
+        assert!(e.bubble_frames(now).len() <= BUBBLE_COUNT + 1);
+        let settled = e.bubble_frames(now + BUBBLE_MOTION);
+        assert_eq!(settled.len(), BUBBLE_COUNT);
+        assert_eq!(settled.last().unwrap().text, "Comment 80");
+        assert!(settled.iter().all(|b| b.name.is_empty()));
+        let mut named = event(81, now, 0);
+        named.event = AudienceEvent::Comment {
+            body: "Hello".into(),
+            handle: "  Alice  Smith ".into(),
+        };
+        e.receive(&named, 100.0, now);
+        assert_eq!(e.bubble_frames(now).last().unwrap().name, "Alice Smith");
+        named.sequence = 82;
+        named.event = AudienceEvent::Comment {
+            body: "Hello".into(),
+            handle: " aNoNyMoUs ".into(),
+        };
+        e.receive(&named, 100.0, now);
+        assert!(e.bubble_frames(now).last().unwrap().name.is_empty());
+    }
+
+    #[test]
+    fn bubble_pause_generation_modes_and_reset_do_not_replay_history() {
+        let now = Instant::now();
+        let mut e = CommentEngine::default();
+        let settings = CommentDisplaySettings {
+            flowing: false,
+            bubbles: true,
+        };
+        e.set_display_settings(settings);
+        e.receive(&event(1, now, 0), 100.0, now);
+        e.set_paused(true, 1);
+        e.receive(&event(2, now, 1), 100.0, now);
+        e.set_paused(false, 2);
+        e.receive(&event(3, now, 1), 100.0, now);
+        e.receive(&event(4, now, 2), 100.0, now + WAIT);
+        assert!(e.bubble_frames(now).is_empty());
+        e.receive(&event(5, now, 2), 100.0, now);
+        e.receive(&event(5, now, 2), 100.0, now);
+        assert_eq!(e.bubble_frames(now).len(), 1);
+        e.set_display_settings(CommentDisplaySettings {
+            flowing: false,
+            bubbles: false,
+        });
+        e.set_display_settings(settings);
+        assert!(e.bubble_frames(now).is_empty());
+        e.reset();
+        assert_eq!(e.settings, settings);
+        assert!(e.history().is_empty());
+        assert!(e.bubble_frames(now).is_empty());
     }
 
     #[test]

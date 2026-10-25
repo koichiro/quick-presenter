@@ -7,7 +7,7 @@ use crate::{
     audience_overlay::OverlayEngine,
     audience_session::AudienceSession,
     window_controller::{AppWindowRefs, AppWindows},
-    CommentOverlayItem, PresenterWindow, ReactionOverlayItem,
+    BubbleOverlayItem, CommentOverlayItem, PresenterWindow, ReactionOverlayItem,
 };
 use slint::{
     ComponentHandle, Model, Rgba8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel, Weak,
@@ -22,6 +22,27 @@ use std::{
 
 const RELAY_RECOVERY_GUIDANCE: &str =
     "Close Settings, retry Audience Live on, then stop it before importing or resetting settings.";
+
+struct LoadedAudienceConfiguration {
+    relay: Result<Option<crate::app_config::RelayEndpoint>, &'static str>,
+    display: crate::audience_comments::CommentDisplaySettings,
+    display_error: Option<&'static str>,
+}
+
+impl LoadedAudienceConfiguration {
+    fn load(path: Option<std::path::PathBuf>) -> Self {
+        let relay = crate::app_config::load(path.clone());
+        let (display, display_error) = match crate::app_config::load_comment_display(path) {
+            Ok(settings) => (settings, None),
+            Err(error) => (Default::default(), Some(error)),
+        };
+        Self {
+            relay,
+            display,
+            display_error,
+        }
+    }
+}
 
 fn ensure_relay_replaceable(
     relay: Option<&crate::audience_relay_http::ManagedRelay>,
@@ -83,6 +104,7 @@ pub struct AudienceUi {
     overlay_model: Rc<VecModel<ReactionOverlayItem>>,
     comments: RefCell<CommentEngine>,
     comment_model: Rc<VecModel<CommentOverlayItem>>,
+    bubble_model: Rc<VecModel<BubbleOverlayItem>>,
     weak_self: RefCell<std::rc::Weak<Self>>,
 }
 
@@ -110,7 +132,7 @@ impl AudienceUi {
         let spawned = std::thread::Builder::new()
             .name("audience-config".into())
             .spawn(move || {
-                let _ = sender.send(crate::app_config::load(config_path));
+                let _ = sender.send(LoadedAudienceConfiguration::load(config_path));
             });
         if spawned.is_err() {
             ui.configuring.set(false);
@@ -131,17 +153,26 @@ impl AudienceUi {
                 let result = match receiver.try_recv() {
                     Ok(result) => result,
                     Err(std::sync::mpsc::TryRecvError::Empty) => return,
-                    Err(_) => Err("Cannot load Audience configuration."),
+                    Err(_) => LoadedAudienceConfiguration {
+                        relay: Err("Cannot load Audience configuration."),
+                        display: Default::default(),
+                        display_error: None,
+                    },
                 };
                 ui.config_timer.stop();
                 ui.configuring.set(false);
                 if let Some(window) = window.upgrade() { window.set_audience_can_import(true); }
-                match result {
+                ui.comments.borrow_mut().set_display_settings(result.display);
+                if let Some(window) = window.upgrade() {
+                    window.set_audience_flowing_enabled(result.display.flowing);
+                    window.set_audience_bubbles_enabled(result.display.bubbles);
+                }
+                match result.relay {
                     Ok(endpoint) => {
                         *ui.relay_config.borrow_mut() =
                             endpoint.map(crate::audience_relay_http::ManagedRelay::new);
                         if let Some(window) = window.upgrade() {
-                            window.set_audience_status("".into());
+                            window.set_audience_status(result.display_error.unwrap_or("").into());
                             window.set_audience_address(ui.address_label().into());
                             window.set_audience_can_start(ui.can_start());
                         }
@@ -164,14 +195,17 @@ impl AudienceUi {
     pub(crate) fn install_for_smoke(
         windows: &AppWindows,
         state: Rc<RefCell<AppState>>,
+        config_path: std::path::PathBuf,
     ) -> Rc<Self> {
-        Self::install_with_address_source(
+        let ui = Self::install_with_address_source(
             windows,
             state,
             || Ok(vec![Ipv4Addr::LOCALHOST]),
             OverlayEngine::for_gui_smoke(),
             None,
-        )
+        );
+        *ui.config_path.borrow_mut() = Some(config_path);
+        ui
     }
 
     fn install_with_address_source(
@@ -205,6 +239,7 @@ impl AudienceUi {
             overlay_model: Rc::new(VecModel::default()),
             comments: RefCell::new(CommentEngine::default()),
             comment_model: Rc::new(VecModel::default()),
+            bubble_model: Rc::new(VecModel::default()),
             weak_self: RefCell::new(std::rc::Weak::new()),
         });
         *ui.weak_self.borrow_mut() = Rc::downgrade(&ui);
@@ -214,6 +249,35 @@ impl AudienceUi {
         windows
             .audience
             .set_audience_comments(ui.comment_model.clone().into());
+        windows
+            .audience
+            .set_audience_bubbles(ui.bubble_model.clone().into());
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_set_comment_display(move |flowing, bubbles| {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let Some(window) = ui.windows.presenter.upgrade() else {
+                return;
+            };
+            if ui.configuring.get() {
+                return;
+            }
+            let settings = crate::audience_comments::CommentDisplaySettings { flowing, bubbles };
+            let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
+                .and_then(|path| crate::app_config::save_comment_display(&path, settings));
+            match result {
+                Ok(()) => {
+                    ui.comments.borrow_mut().set_display_settings(settings);
+                    window.set_audience_flowing_enabled(flowing);
+                    window.set_audience_bubbles_enabled(bubbles);
+                    ui.start_overlay_animation();
+                }
+                Err(error) => {
+                    window.set_audience_status(error.into());
+                }
+            }
+        });
         let weak = Rc::downgrade(&ui);
         presenter.on_audience_toggle_panel(move || {
             if let Some(ui) = weak.upgrade() {
@@ -235,6 +299,7 @@ impl AudienceUi {
                     let generation = session.advance_comment_generation(paused);
                     ui.comments.borrow_mut().set_paused(paused, generation);
                     ui.comment_model.set_vec(Vec::new());
+                    ui.bubble_model.set_vec(Vec::new());
                     if let Some(window) = ui.windows.presenter.upgrade() {
                         window.set_audience_comments_paused(paused);
                     }
@@ -595,6 +660,17 @@ impl AudienceUi {
             self.overlay_model.set_vec(Vec::new());
         }
         let now = Instant::now();
+        let bubble_frames = self.comments.borrow_mut().bubble_frames(now);
+        self.bubble_model.set_vec(
+            bubble_frames
+                .into_iter()
+                .map(|f| BubbleOverlayItem {
+                    name: f.name.into(),
+                    text: f.text.into(),
+                    y: f.y,
+                })
+                .collect::<Vec<_>>(),
+        );
         let comment_frames = self.comments.borrow_mut().frames(now);
         self.comment_model.set_vec(
             comment_frames
@@ -653,6 +729,7 @@ impl AudienceUi {
         self.clear_overlay();
         self.comments.borrow_mut().reset();
         self.comment_model.set_vec(Vec::new());
+        self.bubble_model.set_vec(Vec::new());
         window.set_audience_comments_paused(false);
         window.set_audience_comment_history("".into());
         self.recent.borrow_mut().clear();
@@ -820,6 +897,7 @@ impl AudienceUi {
         self.clear_overlay();
         self.comments.borrow_mut().reset();
         self.comment_model.set_vec(Vec::new());
+        self.bubble_model.set_vec(Vec::new());
         self.overlay_timer.stop();
         self.timer.stop();
         self.config_timer.stop();
@@ -902,6 +980,88 @@ pub(crate) fn qr_image(url: &str) -> Result<slint::Image, qrcode::types::QrError
 mod configuration_change_tests {
     use super::*;
     use crate::{app_config::RelayEndpoint, audience_relay_http::ManagedRelay};
+
+    #[test]
+    fn invalid_display_settings_do_not_block_a_valid_local_transport() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[audience]\ntransport='local'\n[comment_display]\nflowing='invalid'\n",
+        )
+        .unwrap();
+        let loaded = LoadedAudienceConfiguration::load(Some(path));
+        assert!(matches!(loaded.relay, Ok(None)));
+        assert_eq!(loaded.display, Default::default());
+        assert_eq!(
+            loaded.display_error,
+            Some("Invalid comment display settings.")
+        );
+    }
+
+    #[test]
+    fn relay_failure_preserves_display_policy_through_toggle_and_recovery() {
+        use crate::audience_comments::CommentDisplaySettings;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[audience]\ntransport='remote'\n[comment_display]\nflowing=false\nbubbles=false\n",
+        )
+        .unwrap();
+        let loaded = LoadedAudienceConfiguration::load(Some(path.clone()));
+        assert!(loaded.relay.is_err());
+        assert!(loaded.display_error.is_none());
+        assert_eq!(
+            loaded.display,
+            CommentDisplaySettings {
+                flowing: false,
+                bubbles: false
+            }
+        );
+        let mut engine = CommentEngine::default();
+        engine.set_display_settings(loaded.display);
+        engine.reset();
+        let now = Instant::now();
+        engine.receive(
+            &crate::audience_events::AcceptedAudienceEvent {
+                sequence: 1,
+                participant_id: 1,
+                received_at: now,
+                overlay_deadline: now + crate::audience_comments::WAIT,
+                display_generation: 0,
+                event: AudienceEvent::Comment {
+                    body: "Hidden after recovery".into(),
+                    handle: "Anonymous".into(),
+                },
+            },
+            100.0,
+            now,
+        );
+        assert!(engine.frames(now).is_empty());
+        assert!(engine.bubble_frames(now).is_empty());
+        assert_eq!(engine.history().len(), 1);
+        // Changing one preference uses the loaded value for the other preference.
+        crate::app_config::save_comment_display(
+            &path,
+            CommentDisplaySettings {
+                bubbles: true,
+                ..loaded.display
+            },
+        )
+        .unwrap();
+        crate::app_config::reset_relay(&path).unwrap();
+        let recovered = LoadedAudienceConfiguration::load(Some(path));
+        assert!(matches!(recovered.relay, Ok(None)));
+        assert_eq!(
+            recovered.display,
+            CommentDisplaySettings {
+                flowing: false,
+                bubbles: true
+            }
+        );
+        assert!(recovered.display_error.is_none());
+    }
 
     #[test]
     fn pending_creation_blocks_configuration_changes_without_losing_retry_identity() {
