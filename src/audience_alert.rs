@@ -28,6 +28,10 @@ pub fn for_failure(error: &str) -> AudienceAlert {
             title: "Audience Live could not connect",
             guidance: "Check your network and relay server, then turn Audience Live ON again. PDF playback is still available.",
         },
+        "Cannot confirm relay room termination." => AudienceAlert {
+            title: "Audience Live room end is not confirmed",
+            guidance: "Do not assume the previous room has ended. Check that same room through your relay administrator or dashboard before starting another session. PDF playback is still available.",
+        },
         "Cannot confirm session termination. Retry to check the same session." => AudienceAlert {
             title: "Audience Live end is not confirmed",
             guidance: "Check your network and relay server. Turn Audience Live ON to retry the pending end before any connection is attempted. If your relay provides a dashboard, check the same session there. PDF playback is still available.",
@@ -48,6 +52,19 @@ pub fn for_failure(error: &str) -> AudienceAlert {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn room_end_failure_requires_previous_room_confirmation() {
+        let alert = for_failure("Cannot confirm relay room termination.");
+        assert_eq!(alert.title, "Audience Live room end is not confirmed");
+        assert!(alert.guidance.contains("previous room"));
+        assert!(alert.guidance.contains("before starting another session"));
+        assert!(alert.guidance.contains("PDF playback is still available"));
+        assert_ne!(
+            alert.title,
+            for_failure("Cannot confirm session termination. Retry to check the same session.")
+                .title
+        );
+    }
     #[test]
     fn pending_end_guidance_preserves_same_session_recovery() {
         let alert =
