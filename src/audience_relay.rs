@@ -15,7 +15,7 @@ use std::{
     io::Read,
     path::PathBuf,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex,
     },
     thread::{self, JoinHandle},
@@ -254,6 +254,7 @@ pub struct RemoteAudienceSession {
     connections: Arc<AtomicUsize>,
     engine: Arc<Mutex<AudienceEngine>>,
     stop: watch::Sender<bool>,
+    end_requested: Arc<AtomicBool>,
     display: watch::Sender<Display>,
     worker: Option<JoinHandle<()>>,
 }
@@ -274,6 +275,10 @@ impl RemoteAudienceSession {
         let connections = Arc::new(AtomicUsize::new(0));
         let engine = Arc::new(Mutex::new(AudienceEngine::new(Instant::now())));
         let (stop, mut stopped) = watch::channel(false);
+        let end_requested = managed
+            .as_ref()
+            .map(|s| s.end_requested.clone())
+            .unwrap_or_else(|| Arc::new(AtomicBool::new(false)));
         let (display, updates) = watch::channel(Display::default());
         let shared = (status.clone(), connections.clone(), engine.clone());
         let worker = thread::Builder::new().name("audience-relay".into()).spawn(move || {
@@ -285,7 +290,7 @@ impl RemoteAudienceSession {
                 runtime.block_on(async {
                     if *stopped.borrow() {
                         if let Some(settings) = managed.as_ref() {
-                            if settings.has_attempt() {
+                            if settings.has_attempt() || settings.end_requested.load(Ordering::Acquire) {
                                 let client = crate::audience_relay_http::client()?;
                                 crate::audience_relay_http::cleanup(&client, settings).await?;
                             }
@@ -294,6 +299,7 @@ impl RemoteAudienceSession {
                     }
                     if let Some(settings) = managed {
                         let client = crate::audience_relay_http::client()?;
+                        if settings.end_requested.load(Ordering::Acquire) { crate::audience_relay_http::cleanup(&client, &settings).await?; }
                         let mut replaced_terminal_room = false;
                         loop {
                             let room = tokio::select! {
@@ -319,7 +325,7 @@ impl RemoteAudienceSession {
                                     continue;
                                 }
                             }
-                            if *stopped.borrow() && settings.has_attempt() { crate::audience_relay_http::cleanup(&client, &settings).await?; }
+                            if *stopped.borrow() && (settings.has_attempt() || settings.end_requested.load(Ordering::Acquire)) { crate::audience_relay_http::cleanup(&client, &settings).await?; }
                             break outcome;
                         }
                     } else {
@@ -343,6 +349,7 @@ impl RemoteAudienceSession {
             connections,
             engine,
             stop,
+            end_requested,
             display,
             worker: Some(worker),
         })
@@ -379,6 +386,10 @@ impl RemoteAudienceSession {
             .logger
             .as_ref()
             .is_some_and(|l| l.failed())
+    }
+    pub fn request_end(&self) {
+        self.end_requested.store(true, Ordering::Release);
+        self.request_stop();
     }
     pub fn request_stop(&self) {
         self.engine.lock().unwrap_or_else(|e| e.into_inner()).stop();

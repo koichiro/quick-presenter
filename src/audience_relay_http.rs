@@ -5,7 +5,10 @@ use crate::{
 };
 use futures_util::StreamExt;
 use std::{
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
 
@@ -15,6 +18,7 @@ pub(crate) const ROOM_EXPIRED: &str = "Relay room expired. Start again to create
 pub struct ManagedRelay {
     pub endpoint: RelayEndpoint,
     pub attempt: Arc<Mutex<Option<Attempt>>>,
+    pub end_requested: Arc<AtomicBool>,
 }
 #[derive(Clone)]
 pub struct Attempt {
@@ -26,6 +30,7 @@ impl ManagedRelay {
         Self {
             endpoint,
             attempt: Arc::new(Mutex::new(None)),
+            end_requested: Arc::new(AtomicBool::new(false)),
         }
     }
     pub fn attempt(&self) -> Result<Attempt, &'static str> {
@@ -158,6 +163,25 @@ pub async fn cleanup(
     client: &reqwest::Client,
     settings: &ManagedRelay,
 ) -> Result<(), &'static str> {
+    // Explicit presenter intent is separate from crash/shutdown transport cleanup.
+    if settings.end_requested.load(Ordering::Acquire) {
+        let response = client
+            .post(
+                settings
+                    .endpoint
+                    .origin
+                    .join("api/relay/v1/session/end")
+                    .unwrap(),
+            )
+            .bearer_auth(&settings.endpoint.create_token)
+            .send()
+            .await
+            .map_err(|_| "Cannot confirm session termination. Retry to check the same session.")?;
+        if !matches!(response.status().as_u16(), 200 | 404 | 410) {
+            return Err("Cannot confirm session termination. Retry to check the same session.");
+        }
+        settings.end_requested.store(false, Ordering::Release);
+    }
     // Cleanup may recover an existing attempt, but must never start a new one.
     if !settings.has_attempt() {
         return Ok(());
@@ -211,6 +235,8 @@ mod tests {
         responses: Arc<Mutex<VecDeque<(u16, String)>>>,
         requests: Arc<Mutex<Vec<(String, String)>>>,
         ends: Arc<AtomicUsize>,
+        session_ends: Arc<AtomicUsize>,
+        session_results: Arc<Mutex<VecDeque<u16>>>,
         handshakes: Arc<Mutex<VecDeque<u16>>>,
         creation_gate: Arc<Mutex<Option<Arc<tokio::sync::Notify>>>>,
     }
@@ -235,10 +261,17 @@ mod tests {
             responses: Arc::new(Mutex::new(VecDeque::new())),
             requests: Arc::new(Mutex::new(Vec::new())),
             ends: Arc::new(AtomicUsize::new(0)),
+            session_ends: Arc::new(AtomicUsize::new(0)),
+            session_results: Arc::new(Mutex::new(VecDeque::new())),
             handshakes: Arc::new(Mutex::new(VecDeque::new())),
             creation_gate: Arc::new(Mutex::new(None)),
         };
         let app = Router::new()
+            .route("/api/relay/v1/session/end", post(|State(peer): State<Peer>, headers: HeaderMap| async move {
+                assert_eq!(headers["authorization"], format!("Bearer {}", "A".repeat(43)));
+                peer.session_ends.fetch_add(1, Ordering::SeqCst);
+                StatusCode::from_u16(peer.session_results.lock().unwrap().pop_front().unwrap_or(200)).unwrap()
+            }))
             .route(
                 "/api/relay/v1/rooms",
                 post(
@@ -337,6 +370,47 @@ mod tests {
         assert!(clone.attempt().unwrap().room.is_none());
     }
 
+    #[tokio::test]
+    async fn explicit_end_works_without_a_created_room_but_transport_cleanup_never_ends_session() {
+        let s = server().await;
+        let http = client().unwrap();
+        cleanup(&http, &s.settings).await.unwrap();
+        assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 0);
+        s.settings.end_requested.store(true, Ordering::Release);
+        cleanup(&http, &s.settings).await.unwrap();
+        assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 1);
+        assert!(!s.settings.end_requested.load(Ordering::Acquire));
+        assert!(s.peer.requests.lock().unwrap().is_empty());
+    }
+    #[tokio::test]
+    async fn failed_explicit_end_preserves_intent_and_room_until_confirmed_retry() {
+        let s = server().await;
+        let http = client().unwrap();
+        push(&s, 201, room(&s.settings).to_string());
+        create(&http, &s.settings).await.unwrap();
+        s.settings.end_requested.store(true, Ordering::Release);
+        s.peer.session_results.lock().unwrap().extend([503, 200]);
+        assert!(cleanup(&http, &s.settings).await.is_err());
+        assert!(s.settings.end_requested.load(Ordering::Acquire));
+        assert!(s.settings.has_attempt());
+        assert_eq!(s.peer.ends.load(Ordering::SeqCst), 0);
+        cleanup(&http, &s.settings).await.unwrap();
+        assert!(!s.settings.end_requested.load(Ordering::Acquire));
+        assert!(!s.settings.has_attempt());
+        assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 2);
+        assert_eq!(s.peer.ends.load(Ordering::SeqCst), 1);
+        assert_eq!(s.peer.requests.lock().unwrap().len(), 1);
+    }
+    #[tokio::test]
+    async fn explicit_end_is_backward_compatible_with_room_only_servers() {
+        for status in [404, 410] {
+            let s = server().await;
+            s.peer.session_results.lock().unwrap().push_back(status);
+            s.settings.end_requested.store(true, Ordering::Release);
+            cleanup(&client().unwrap(), &s.settings).await.unwrap();
+            assert!(!s.settings.end_requested.load(Ordering::Acquire));
+        }
+    }
     #[tokio::test]
     async fn denied_creation_keeps_the_attempt_for_a_later_explicit_retry() {
         let s = server().await;
