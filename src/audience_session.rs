@@ -60,10 +60,10 @@ impl AudienceSession {
             Self::Remote(s) => s.comment_log_failed(),
         }
     }
-    pub fn request_stop(&self) {
+    pub fn request_end(&self) {
         match self {
             Self::Local(s) => s.request_stop(),
-            Self::Remote(s) => s.request_stop(),
+            Self::Remote(s) => s.request_end(),
         }
     }
     pub fn is_finished(&self) -> bool {

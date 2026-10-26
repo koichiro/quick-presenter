@@ -479,7 +479,7 @@ impl AudienceUi {
             }
             if let Some(session) = ui.session.borrow().as_ref() {
                 *ui.stopping.borrow_mut() = true;
-                session.request_stop();
+                session.request_end();
                 state.borrow_mut().audience_join_available = false;
                 set_join_visible(&refs, &state, false);
                 clear_join_metadata(&refs);
