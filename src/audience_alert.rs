@@ -14,11 +14,11 @@ pub fn for_failure(error: &str) -> AudienceAlert {
         },
         "Relay denied room creation." => AudienceAlert {
             title: "Audience Live could not start a new session",
-            guidance: "Another session may still be active, or new sessions may be restricted. Stop Audience Live on the previous presenter, or ask your relay administrator to check session access and end the old session if needed. Then turn Audience Live ON again. PDF playback is still available.",
+            guidance: "Another session may still be active, or new sessions may be restricted. If your relay provides a dashboard, check its status and complete any required activation there first. Stop Audience Live on the previous presenter, or ask your relay administrator to check session access and end the old session if needed. Then turn Audience Live ON again. PDF playback is still available.",
         },
         "Relay room expired. Start again to create a new room." => AudienceAlert {
             title: "Audience Live session has ended",
-            guidance: "Turn Audience Live ON to start a new session, then share the new QR code. PDF playback is still available.",
+            guidance: "Check whether your relay allows another session within the original service period. If a dashboard is provided, check its status before retrying. When a new session is available, turn Audience Live ON and share the new QR code. PDF playback is still available.",
         },
         "Cannot connect to relay." | "Relay connection timed out."
         | "Relay authentication timed out."
@@ -27,6 +27,10 @@ pub fn for_failure(error: &str) -> AudienceAlert {
         | "Relay room creation timed out. Retry to recover the same room." => AudienceAlert {
             title: "Audience Live could not connect",
             guidance: "Check your network and relay server, then turn Audience Live ON again. PDF playback is still available.",
+        },
+        "Cannot confirm session termination. Retry to check the same session." => AudienceAlert {
+            title: "Audience Live end is not confirmed",
+            guidance: "Check your network and relay server. Turn Audience Live ON to retry the pending end before any connection is attempted. If your relay provides a dashboard, check the same session there. PDF playback is still available.",
         },
         "Relay heartbeat timed out." | "Relay connection closed."
         | "Relay send timed out."
@@ -45,6 +49,15 @@ pub fn for_failure(error: &str) -> AudienceAlert {
 mod tests {
     use super::*;
     #[test]
+    fn pending_end_guidance_preserves_same_session_recovery() {
+        let alert =
+            for_failure("Cannot confirm session termination. Retry to check the same session.");
+        assert_eq!(alert.title, "Audience Live end is not confirmed");
+        assert!(alert.guidance.contains("retry the pending end"));
+        assert!(alert.guidance.contains("same session"));
+        assert!(alert.guidance.contains("PDF playback is still available"));
+    }
+    #[test]
     fn denied_access_has_actionable_guidance() {
         for error in [
             "Relay creation credential was rejected.",
@@ -62,6 +75,8 @@ mod tests {
         assert_eq!(alert.title, "Audience Live could not start a new session");
         assert!(alert.guidance.contains("may still be active"));
         assert!(alert.guidance.contains("previous presenter"));
+        assert!(alert.guidance.contains("required activation"));
+        assert!(alert.guidance.contains("dashboard"));
         assert!(alert.guidance.contains("check session access"));
         assert!(alert.guidance.contains("PDF playback is still available"));
     }
@@ -70,6 +85,8 @@ mod tests {
         let alert = for_failure("Relay room expired. Start again to create a new room.");
         assert_eq!(alert.title, "Audience Live session has ended");
         assert!(alert.guidance.contains("new QR code"));
+        assert!(alert.guidance.contains("original service period"));
+        assert!(alert.guidance.contains("dashboard"));
     }
     #[test]
     fn transport_failure_does_not_claim_access_revocation() {
