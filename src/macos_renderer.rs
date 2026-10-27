@@ -43,7 +43,7 @@ fn acquire_input_with(
     ensure!(!cancelled(), "renderer shutdown already requested");
     let deadline = Instant::now() + timeout;
     slots
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |count| {
             (count < MAX_INPUT_ACQUISITIONS).then_some(count + 1)
         })
         .map_err(|_| anyhow::anyhow!("PDF input acquisition busy; retry after storage responds"))?;
