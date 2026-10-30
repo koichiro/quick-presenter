@@ -2424,14 +2424,23 @@ export component AudienceWindow inherits Window {
             }
         }
         // Keep the QR above reactions and comments so it remains scannable.
-        if root.audience-sticky-qr-visible: Image {
-            width: min(parent.width, parent.height) * 0.16;
+        if root.audience-sticky-qr-visible: Rectangle {
+            property <length> qr-padding: min(parent.width, parent.height) * 0.015;
+            width: min(parent.width, parent.height) * 0.16 + self.qr-padding * 2;
             height: self.width;
             x: min(parent.width, parent.height) * 0.02;
             y: parent.height - self.height - min(parent.width, parent.height) * 0.02;
-            source: root.audience-qr;
-            image-fit: contain;
-            image-rendering: pixelated;
+            background: #60606099;
+            border-radius: self.qr-padding;
+            Image {
+                x: parent.qr-padding;
+                y: parent.qr-padding;
+                width: parent.width - parent.qr-padding * 2;
+                height: self.width;
+                source: root.audience-qr;
+                image-fit: contain;
+                image-rendering: pixelated;
+            }
         }
         if root.black-screen-active: Rectangle { width: parent.width; height: parent.height; background: black; }
 
