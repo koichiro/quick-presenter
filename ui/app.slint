@@ -833,6 +833,7 @@ export component PresenterWindow inherits Window {
     in property <string> audience-alert-guidance;
     in property <string> audience-url;
     in property <string> audience-code;
+    in property <bool> audience-sticky-qr-enabled: false;
     in property <image> audience-qr;
     in property <bool> audience-active: false;
     in property <bool> audience-panel-expanded: false;
@@ -859,6 +860,7 @@ export component PresenterWindow inherits Window {
     in property <bool> audience-flowing-enabled: true;
     in property <bool> audience-bubbles-enabled: false;
     callback audience-set-comment-display(bool, bool);
+    callback audience-set-sticky-qr(bool);
     callback audience-toggle-comments();
     in property <int> audience-reaction-count;
     callback audience-open-url();
@@ -1948,7 +1950,7 @@ export component PresenterWindow inherits Window {
             KeyBinding { keys: @keys(Escape); activated => { root.close-settings(); } }
             Rectangle {
                 width: min(parent.width - 48px, 600px);
-                height: min(parent.height - 48px, 540px);
+                height: min(parent.height - 48px, 660px);
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 background: #202124;
@@ -1974,6 +1976,13 @@ export component PresenterWindow inherits Window {
                         }
                     }
                     Text { text: "Both styles can be enabled. Changes apply immediately."; color: #d9dce0; wrap: word-wrap; }
+                    Text { text: "Experimental · v3.0.0"; color: white; font-size: 18px; }
+                    CommentDisplaySwitch {
+                        text: "Sticky QR code";
+                        checked: root.audience-sticky-qr-enabled;
+                        toggled => { root.audience-set-sticky-qr(!root.audience-sticky-qr-enabled); }
+                    }
+                    Text { text: "Keep a small join QR code at the bottom left during Audience Live. Off by default."; color: #d9dce0; wrap: word-wrap; }
                     Text { text: "Audience Live"; color: white; font-size: 18px; }
                     Text { text: "Import relay settings, or Reset to use the local server. Changes apply to the next start and preserve other settings."; color: #d9dce0; wrap: word-wrap; }
                     if root.audience-active || root.audience-busy: Text { text: "Stop Audience Live before changing relay settings."; color: #ffd18a; wrap: word-wrap; }
@@ -2131,8 +2140,10 @@ export component AudienceWindow inherits Window {
     in property <string> comment-measure-text;
     out property <float> comment-measure-width: comment-measure.preferred-width / 1px;
     callback audience-clear-overlay();
+    in property <bool> audience-sticky-qr-enabled: false;
     in property <image> audience-qr;
     in property <string> audience-url;
+    out property <bool> audience-sticky-qr-visible: root.audience-sticky-qr-enabled && root.audience-url != "" && !root.audience-guide-visible && !root.black-screen-active;
     in property <string> audience-code;
     in property <string> audience-status;
     in property <image> page-image;
@@ -2411,6 +2422,16 @@ export component AudienceWindow inherits Window {
                     }
                 }
             }
+        }
+        // Keep the QR above reactions and comments so it remains scannable.
+        if root.audience-sticky-qr-visible: Image {
+            width: min(parent.width, parent.height) * 0.16;
+            height: self.width;
+            x: min(parent.width, parent.height) * 0.02;
+            y: parent.height - self.height - min(parent.width, parent.height) * 0.02;
+            source: root.audience-qr;
+            image-fit: contain;
+            image-rendering: pixelated;
         }
         if root.black-screen-active: Rectangle { width: parent.width; height: parent.height; background: black; }
 

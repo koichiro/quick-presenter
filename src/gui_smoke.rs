@@ -1139,6 +1139,46 @@ async fn check_audience_join_screen(
         "join screen dismissed without PDF navigation",
         "PDF page skipped or join screen remained",
     );
+    report.check(
+        "Sticky QR defaults to off",
+        !presenter.get_audience_sticky_qr_enabled()
+            && !windows.audience.get_audience_sticky_qr_visible(),
+        "experimental overlay is opt-in",
+        "sticky QR unexpectedly enabled",
+    );
+    presenter.invoke_open_settings();
+    presenter.invoke_audience_set_sticky_qr(true);
+    presenter.invoke_close_settings();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Settings enables sticky QR immediately on PDF pages",
+        presenter.get_audience_sticky_qr_enabled()
+            && windows.audience.get_audience_sticky_qr_visible(),
+        "sticky QR enabled",
+        "sticky QR did not appear",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(true),
+    );
+    settle_presenter_notes_layout(presenter).await?;
+    let blank = windows.audience.window().take_snapshot()?;
+    report.check(
+        "Blackout hides sticky QR and renders every pixel black",
+        !windows.audience.get_audience_sticky_qr_visible()
+            && blank
+                .as_bytes()
+                .chunks_exact(4)
+                .all(|p| p[..3] == [0, 0, 0]),
+        "blackout covers sticky QR",
+        "sticky QR leaked through blackout",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(false),
+    );
     if before.is_some() {
         crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::FirstPage);
         let first = state.borrow().presentation.snapshot();
@@ -1175,6 +1215,29 @@ async fn check_audience_join_screen(
             "first PDF page restored",
             "PDF skipped or guide remained",
         );
+        report.check(
+            "Sticky QR returns after page 0",
+            windows.audience.get_audience_sticky_qr_visible(),
+            "overlay restored on page 1",
+            "overlay missing after join screen",
+        );
+        crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::NextPage);
+        settle_presenter_notes_layout(presenter).await?;
+        report.check(
+            "Sticky QR remains on later PDF pages",
+            windows.audience.get_audience_sticky_qr_visible(),
+            "overlay survived PDF navigation",
+            "overlay disappeared on later pages",
+        );
+        if let Some(path) = std::env::var_os("QP_GUI_SMOKE_STICKY_QR_SNAPSHOT") {
+            let snapshot = windows.audience.window().take_snapshot()?;
+            let mut bytes =
+                format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+            for pixel in snapshot.as_bytes().chunks_exact(4) {
+                bytes.extend_from_slice(&pixel[..3]);
+            }
+            fs::write(path, bytes).context("failed to save sticky QR snapshot")?;
+        }
         if let Some(snapshot) = &before {
             crate::handle_presentation_command(
                 &windows.refs(),
@@ -1238,9 +1301,18 @@ async fn check_audience_join_screen(
             && windows.audience.get_audience_qr().size().width == 0
             && !windows.audience.get_audience_guide_visible()
             && !state.borrow().audience_join_available
+            && !windows.audience.get_audience_sticky_qr_visible()
             && presenter.get_audience_recent_reactions().is_empty(),
         "stale join credentials cleared",
         "stale join information remained",
+    );
+    presenter.invoke_audience_set_sticky_qr(false);
+    report.check(
+        "Settings disables sticky QR",
+        !presenter.get_audience_sticky_qr_enabled()
+            && !windows.audience.get_audience_sticky_qr_enabled(),
+        "preference disabled in both windows",
+        "sticky QR preference remained enabled",
     );
     presenter.invoke_audience_toggle_session();
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -1365,6 +1437,18 @@ async fn check_audience_overlay(
     let audience = &windows.audience;
     let presenter = &windows.presenter;
     let generation = state.borrow().render_generation;
+    // The sticky QR intentionally covers newly spawned bottom-left reactions.
+    // Observe the SVG after it rises clear of that protected scanning area.
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while audience.get_audience_sticky_qr_visible()
+        && audience
+            .get_audience_overlay()
+            .row_data(0)
+            .is_some_and(|frame| frame.y > 0.75)
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
     let first = audience.get_audience_overlay().row_data(0);
     let observed_at = Instant::now();
     let snapshot = audience.window().take_snapshot()?;

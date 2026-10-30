@@ -26,17 +26,25 @@ const RELAY_RECOVERY_GUIDANCE: &str =
 struct LoadedAudienceConfiguration {
     relay: Result<Option<crate::app_config::RelayEndpoint>, &'static str>,
     display: crate::audience_comments::CommentDisplaySettings,
+    audience_display: crate::app_config::AudienceDisplaySettings,
     display_error: Option<&'static str>,
 }
 
 impl LoadedAudienceConfiguration {
     fn load(path: Option<std::path::PathBuf>) -> Self {
         let relay = crate::app_config::load(path.clone());
-        let (display, display_error) = match crate::app_config::load_comment_display(path) {
-            Ok(settings) => (settings, None),
-            Err(error) => (Default::default(), Some(error)),
-        };
+        let (display, mut display_error) =
+            match crate::app_config::load_comment_display(path.clone()) {
+                Ok(settings) => (settings, None),
+                Err(error) => (Default::default(), Some(error)),
+            };
+        let audience_display =
+            crate::app_config::load_audience_display(path).unwrap_or_else(|error| {
+                display_error = Some(error);
+                Default::default()
+            });
         Self {
+            audience_display,
             relay,
             display,
             display_error,
@@ -156,6 +164,7 @@ impl AudienceUi {
                     Err(_) => LoadedAudienceConfiguration {
                         relay: Err("Cannot load Audience configuration."),
                         display: Default::default(),
+                        audience_display: Default::default(),
                         display_error: None,
                     },
                 };
@@ -163,7 +172,11 @@ impl AudienceUi {
                 ui.configuring.set(false);
                 if let Some(window) = window.upgrade() { window.set_audience_can_import(true); }
                 ui.comments.borrow_mut().set_display_settings(result.display);
+                if let Some(audience) = ui.windows.audience.upgrade() {
+                    audience.set_audience_sticky_qr_enabled(result.audience_display.sticky_qr);
+                }
                 if let Some(window) = window.upgrade() {
+                    window.set_audience_sticky_qr_enabled(result.audience_display.sticky_qr);
                     window.set_audience_flowing_enabled(result.display.flowing);
                     window.set_audience_bubbles_enabled(result.display.bubbles);
                 }
@@ -252,6 +265,34 @@ impl AudienceUi {
         windows
             .audience
             .set_audience_bubbles(ui.bubble_model.clone().into());
+        let weak = Rc::downgrade(&ui);
+        presenter.on_audience_set_sticky_qr(move |sticky_qr| {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let Some(window) = ui.windows.presenter.upgrade() else {
+                return;
+            };
+            if ui.configuring.get() {
+                return;
+            }
+            let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
+                .and_then(|path| {
+                    crate::app_config::save_audience_display(
+                        &path,
+                        crate::app_config::AudienceDisplaySettings { sticky_qr },
+                    )
+                });
+            match result {
+                Ok(()) => {
+                    window.set_audience_sticky_qr_enabled(sticky_qr);
+                    if let Some(audience) = ui.windows.audience.upgrade() {
+                        audience.set_audience_sticky_qr_enabled(sticky_qr);
+                    }
+                }
+                Err(error) => window.set_audience_status(error.into()),
+            }
+        });
         let weak = Rc::downgrade(&ui);
         presenter.on_audience_set_comment_display(move |flowing, bubbles| {
             let Some(ui) = weak.upgrade() else {
