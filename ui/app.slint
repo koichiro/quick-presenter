@@ -2425,8 +2425,8 @@ export component AudienceWindow inherits Window {
         }
         // Keep the QR above reactions and comments so it remains scannable.
         if root.audience-sticky-qr-visible: Rectangle {
-            property <length> qr-padding: min(parent.width, parent.height) * 0.015;
-            width: min(parent.width, parent.height) * 0.16 + self.qr-padding * 2;
+            property <length> qr-padding: min(parent.width, parent.height) * 0.012;
+            width: min(parent.width, parent.height) * 0.128 + self.qr-padding * 2;
             height: self.width;
             x: min(parent.width, parent.height) * 0.02;
             y: parent.height - self.height - min(parent.width, parent.height) * 0.02;
