@@ -45,3 +45,22 @@ under `/tmp/quick-presenter-readable-bubbles-final`; the host Rust test log is
 `/tmp/quick-presenter-readable-bubbles/cargo-test-final.log`.
 
 ![Five longer quarter-width comments](../assets/comment-bubbles/quarter-width-long-comments.png)
+
+## Increased line spacing
+
+Body text now uses `line-height-factor: 1.4` to separate Japanese lines clearly.
+Font size, card dimensions, and stack positions are unchanged. Compared with the
+initial compact-text snapshot above, fewer lines fit: the named 69-character
+Japanese comment and anonymous 95-character comment remain fully visible, while
+the named 95-character and 200-character bodies are elided within their cards.
+Full bodies remain available in presenter history.
+
+Formatting, compile, binary build, and the complete host Rust tests pass, with
+two existing ignored tests. The locally signed app passes the XPC render/notes
+and denial gate and **125 focused GUI checks, zero failures**. The final snapshot
+below was visually checked for Japanese line separation and bounded output.
+The same scope limits above apply. Raw GUI artifacts remain under
+`/tmp/quick-presenter-bubble-line-spacing`; the host Rust test log is
+`/tmp/quick-presenter-bubble-line-spacing-tests.log`.
+
+![Long comments with increased line spacing](../assets/comment-bubbles/quarter-width-long-comments-spaced.png)
