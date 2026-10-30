@@ -104,6 +104,9 @@ async fn run_checks(
         wait_for_async_open(&window_refs, &state).await?;
         check_audience_join_screen(&windows, &state, report).await?;
         check_settings_dialog(&windows, &state, report).await?;
+        check_sticky_qr_save_error(&windows, audience_config.path().join("config.toml"), report)
+            .await?;
+        check_qr_failure_and_settings_layout(&windows, &state, report).await?;
         return Ok(());
     }
     #[cfg(target_os = "macos")]
@@ -215,6 +218,9 @@ async fn run_checks(
     check_notes_font_size(&windows, &state, report, "with a PDF open").await?;
     check_audience_join_screen(&windows, &state, report).await?;
     check_settings_dialog(&windows, &state, report).await?;
+    check_sticky_qr_save_error(&windows, audience_config.path().join("config.toml"), report)
+        .await?;
+    check_qr_failure_and_settings_layout(&windows, &state, report).await?;
     report_presenter_progress(
         report,
         &windows,
@@ -1139,6 +1145,46 @@ async fn check_audience_join_screen(
         "join screen dismissed without PDF navigation",
         "PDF page skipped or join screen remained",
     );
+    report.check(
+        "Sticky QR defaults to off",
+        !presenter.get_audience_sticky_qr_enabled()
+            && !windows.audience.get_audience_sticky_qr_visible(),
+        "experimental overlay is opt-in",
+        "sticky QR unexpectedly enabled",
+    );
+    presenter.invoke_open_settings();
+    presenter.invoke_audience_set_sticky_qr(true);
+    presenter.invoke_close_settings();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Settings enables sticky QR immediately on PDF pages",
+        presenter.get_audience_sticky_qr_enabled()
+            && windows.audience.get_audience_sticky_qr_visible(),
+        "sticky QR enabled",
+        "sticky QR did not appear",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(true),
+    );
+    settle_presenter_notes_layout(presenter).await?;
+    let blank = windows.audience.window().take_snapshot()?;
+    report.check(
+        "Blackout hides sticky QR and renders every pixel black",
+        !windows.audience.get_audience_sticky_qr_visible()
+            && blank
+                .as_bytes()
+                .chunks_exact(4)
+                .all(|p| p[..3] == [0, 0, 0]),
+        "blackout covers sticky QR",
+        "sticky QR leaked through blackout",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(false),
+    );
     if before.is_some() {
         crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::FirstPage);
         let first = state.borrow().presentation.snapshot();
@@ -1175,6 +1221,29 @@ async fn check_audience_join_screen(
             "first PDF page restored",
             "PDF skipped or guide remained",
         );
+        report.check(
+            "Sticky QR returns after page 0",
+            windows.audience.get_audience_sticky_qr_visible(),
+            "overlay restored on page 1",
+            "overlay missing after join screen",
+        );
+        crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::NextPage);
+        settle_presenter_notes_layout(presenter).await?;
+        report.check(
+            "Sticky QR remains on later PDF pages",
+            windows.audience.get_audience_sticky_qr_visible(),
+            "overlay survived PDF navigation",
+            "overlay disappeared on later pages",
+        );
+        if let Some(path) = std::env::var_os("QP_GUI_SMOKE_STICKY_QR_SNAPSHOT") {
+            let snapshot = windows.audience.window().take_snapshot()?;
+            let mut bytes =
+                format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+            for pixel in snapshot.as_bytes().chunks_exact(4) {
+                bytes.extend_from_slice(&pixel[..3]);
+            }
+            fs::write(path, bytes).context("failed to save sticky QR snapshot")?;
+        }
         if let Some(snapshot) = &before {
             crate::handle_presentation_command(
                 &windows.refs(),
@@ -1238,9 +1307,18 @@ async fn check_audience_join_screen(
             && windows.audience.get_audience_qr().size().width == 0
             && !windows.audience.get_audience_guide_visible()
             && !state.borrow().audience_join_available
+            && !windows.audience.get_audience_sticky_qr_visible()
             && presenter.get_audience_recent_reactions().is_empty(),
         "stale join credentials cleared",
         "stale join information remained",
+    );
+    presenter.invoke_audience_set_sticky_qr(false);
+    report.check(
+        "Settings disables sticky QR",
+        !presenter.get_audience_sticky_qr_enabled()
+            && !windows.audience.get_audience_sticky_qr_enabled(),
+        "preference disabled in both windows",
+        "sticky QR preference remained enabled",
     );
     presenter.invoke_audience_toggle_session();
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -1365,6 +1443,18 @@ async fn check_audience_overlay(
     let audience = &windows.audience;
     let presenter = &windows.presenter;
     let generation = state.borrow().render_generation;
+    // The sticky QR intentionally covers newly spawned bottom-left reactions.
+    // Observe the SVG after it rises clear of that protected scanning area.
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while audience.get_audience_sticky_qr_visible()
+        && audience
+            .get_audience_overlay()
+            .row_data(0)
+            .is_some_and(|frame| frame.y > 0.75)
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
     let first = audience.get_audience_overlay().row_data(0);
     let observed_at = Instant::now();
     let snapshot = audience.window().take_snapshot()?;
@@ -1906,6 +1996,179 @@ async fn settle_presenter_notes_layout(presenter: &crate::PresenterWindow) -> Re
         .window()
         .dispatch_event(slint::platform::WindowEvent::PointerExited);
     settle_notes_layout().await
+}
+
+async fn check_qr_failure_and_settings_layout(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let enabled = presenter.get_audience_sticky_qr_enabled();
+    let original_url = presenter.get_audience_url();
+    let original_qr = presenter.get_audience_qr();
+    let original_status = presenter.get_audience_status();
+    let original_error = presenter.get_audience_sticky_qr_error();
+    let original_size = presenter.window().size();
+    let join_visible = state.borrow().audience_join_visible;
+    windows.audience.set_audience_sticky_qr_enabled(true);
+    crate::audience_ui::publish_join_qr(presenter, "http://127.0.0.1/join")?;
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    report.check(
+        "Valid QR image enables the sticky overlay",
+        windows.audience.get_audience_sticky_qr_visible(),
+        "valid QR published",
+        "valid QR hidden",
+    );
+    let oversized = "x".repeat(5000);
+    let failed = crate::audience_ui::publish_join_qr(presenter, &oversized).is_err();
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    report.check(
+        "QR generation failure clears stale pixels and hides the sticky backdrop",
+        failed
+            && presenter.get_audience_qr().size().width == 0
+            && windows.audience.get_audience_qr().size().width == 0
+            && presenter.get_audience_url() == oversized
+            && !windows.audience.get_audience_sticky_qr_visible(),
+        "manual URL retained without blank or stale QR",
+        "invalid QR remained visible",
+    );
+    crate::audience_ui::publish_join_qr(presenter, "http://127.0.0.1/retry")?;
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    report.check(
+        "Successful QR retry restores the sticky overlay",
+        windows.audience.get_audience_sticky_qr_visible(),
+        "replacement QR visible",
+        "replacement QR missing",
+    );
+    presenter.set_audience_url(original_url);
+    presenter.set_audience_qr(original_qr);
+    windows.audience.set_audience_sticky_qr_enabled(enabled);
+    crate::audience_ui::set_join_visible(&windows.refs(), state, join_visible);
+
+    presenter
+        .window()
+        .set_size(slint::LogicalSize::new(800.0, 608.0));
+    presenter.set_audience_sticky_qr_error(
+        "Cannot save protected configuration; previous settings are retained.".into(),
+    );
+    presenter.set_audience_status(
+        "Configuration needs attention. Check the file and its permissions before trying again."
+            .into(),
+    );
+    presenter.set_audience_import_preview(
+        "https://relay.example.com/a-long-configuration-destination-for-the-next-session".into(),
+    );
+    presenter.invoke_open_settings();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Settings scrolls at minimum height with errors and import preview while Close stays visible",
+        presenter.get_settings_content_height() > presenter.get_settings_viewport_height()
+            && presenter.get_settings_viewport_height() > 0.0
+            && presenter.get_settings_close_within_dialog(),
+        "overflow is scrollable and Close stays inside the dialog", "settings content or Close is inaccessible",
+    );
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+            position: slint::LogicalPosition::new(400.0, 300.0),
+            delta_x: 0.0,
+            delta_y: -2000.0,
+        });
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Settings scroll input reaches the import controls at minimum height",
+        presenter.get_settings_scroll_position() < 0.0
+            && presenter.get_settings_close_within_dialog(),
+        "content scrolled while Close stayed visible",
+        "scroll input did not expose the remaining controls",
+    );
+    if let Some(path) = std::env::var_os("QP_GUI_SMOKE_SETTINGS_MINIMUM_SNAPSHOT") {
+        let snapshot = presenter.window().take_snapshot()?;
+        let mut bytes =
+            format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+        for pixel in snapshot.as_bytes().chunks_exact(4) {
+            bytes.extend_from_slice(&pixel[..3]);
+        }
+        fs::write(path, bytes)?;
+    }
+    presenter.invoke_close_settings();
+    presenter.set_audience_status(original_status);
+    presenter.set_audience_sticky_qr_error(original_error);
+    presenter.window().set_size(original_size);
+    settle_presenter_notes_layout(presenter).await?;
+    Ok(())
+}
+
+async fn check_sticky_qr_save_error(
+    windows: &AppWindows,
+    config_path: std::path::PathBuf,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let enabled = presenter.get_audience_sticky_qr_enabled();
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    anyhow::ensure!(
+        !presenter.get_audience_url().is_empty(),
+        "save-error check requires a running session"
+    );
+    presenter.invoke_open_settings();
+    let original = fs::read(&config_path)?;
+    // Only the smoke run's temporary configuration is made invalid.
+    fs::write(&config_path, "invalid TOML")?;
+    presenter.invoke_audience_set_sticky_qr(!enabled);
+    let error = presenter.get_audience_sticky_qr_error();
+    delay(Duration::from_millis(350)).await;
+    report.check(
+        "Sticky QR save error survives live session refresh polls",
+        !error.is_empty()
+            && presenter.get_audience_sticky_qr_error() == error
+            && presenter.get_audience_status() != error
+            && presenter.get_audience_sticky_qr_enabled() == enabled
+            && windows.audience.get_audience_sticky_qr_enabled() == enabled,
+        "error retained separately and both switches unchanged",
+        "save error lost or setting changed",
+    );
+    presenter.invoke_close_settings();
+    presenter.invoke_open_settings();
+    report.check(
+        "Reopening Settings retains the sticky QR save error",
+        presenter.get_audience_sticky_qr_error() == error,
+        "error retained until explicit dismissal or successful save",
+        "error cleared on close",
+    );
+    presenter.invoke_audience_dismiss_sticky_qr_error();
+    report.check(
+        "Sticky QR save error can be explicitly dismissed",
+        presenter.get_audience_sticky_qr_error().is_empty(),
+        "error dismissed",
+        "error remained after dismissal",
+    );
+    presenter.invoke_audience_set_sticky_qr(!enabled);
+    let failed_again = !presenter.get_audience_sticky_qr_error().is_empty();
+    fs::write(&config_path, original)?;
+    presenter.invoke_audience_set_sticky_qr(!enabled);
+    report.check(
+        "Successful sticky QR save clears the retained error and applies the setting",
+        failed_again
+            && presenter.get_audience_sticky_qr_error().is_empty()
+            && presenter.get_audience_sticky_qr_enabled() == !enabled
+            && windows.audience.get_audience_sticky_qr_enabled() == !enabled,
+        "retry saved and cleared the error",
+        "successful retry did not recover",
+    );
+    presenter.invoke_audience_set_sticky_qr(enabled);
+    presenter.invoke_close_settings();
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_active() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    Ok(())
 }
 
 async fn check_settings_dialog(

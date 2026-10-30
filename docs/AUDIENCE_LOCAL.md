@@ -51,6 +51,16 @@ people: two browser tabs count twice. Backgrounded mobile browsers may be
 disconnected by heartbeat timeout. They can reconnect from the page while the
 session remains active, or scan the new QR after a restart.
 
+### Experimental sticky QR code (v3.0.0)
+
+In Settings, enable **Sticky QR code** under **Experimental · v3.0.0** to
+keep a small join QR at the bottom left of the audience window on PDF pages.
+It is off by default, takes effect immediately, and persists across restarts.
+The regular Page 0 join screen stays unchanged. Blackout hides the QR, and
+stopping Audience Live clears it. Restarting the session uses the new join QR.
+The preference is stored as `sticky_qr` in the `[audience_display]` section of
+`config.toml`; relay imports and resets preserve it.
+
 ## Network and security boundaries
 
 - The listener binds only the selected IPv4 address. IPv6 is not supported yet.

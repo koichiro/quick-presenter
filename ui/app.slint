@@ -833,6 +833,7 @@ export component PresenterWindow inherits Window {
     in property <string> audience-alert-guidance;
     in property <string> audience-url;
     in property <string> audience-code;
+    in property <bool> audience-sticky-qr-enabled: false;
     in property <image> audience-qr;
     in property <bool> audience-active: false;
     in property <bool> audience-panel-expanded: false;
@@ -859,6 +860,9 @@ export component PresenterWindow inherits Window {
     in property <bool> audience-flowing-enabled: true;
     in property <bool> audience-bubbles-enabled: false;
     callback audience-set-comment-display(bool, bool);
+    callback audience-set-sticky-qr(bool);
+    in property <string> audience-sticky-qr-error;
+    callback audience-dismiss-sticky-qr-error();
     callback audience-toggle-comments();
     in property <int> audience-reaction-count;
     callback audience-open-url();
@@ -871,6 +875,11 @@ export component PresenterWindow inherits Window {
     in property <bool> audience-can-import: true;
     in property <bool> audience-recovery-pending: false;
     in-out property <bool> settings-visible: false;
+    out property <length> settings-scroll-position: settings-scroll.content-y;
+    out property <length> settings-content-height: settings-scroll.content-height;
+    out property <length> settings-viewport-height: settings-scroll.visible-height;
+    out property <bool> settings-close-within-dialog: settings-close.y >= 0px && settings-close.y + settings-close.height <= settings-layout.height;
+
     callback audience-next-address();
     callback audience-refresh-addresses();
     in property <image> current-page-image;
@@ -1948,63 +1957,84 @@ export component PresenterWindow inherits Window {
             KeyBinding { keys: @keys(Escape); activated => { root.close-settings(); } }
             Rectangle {
                 width: min(parent.width - 48px, 600px);
-                height: min(parent.height - 48px, 540px);
+                height: min(parent.height - 48px, 660px);
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 background: #202124;
                 border-color: #5f6368;
                 border-width: 1px;
-                VerticalBox {
+                settings-layout := VerticalBox {
                     padding: 24px;
                     spacing: 12px;
                     Text { text: "Settings"; color: white; font-size: 24px; }
-                    Text { text: "Comment display"; color: white; font-size: 18px; }
-                    VerticalBox {
-                        spacing: 4px;
-                        padding: 0px;
-                        CommentDisplaySwitch {
-                            text: "Flowing comments";
-                            checked: root.audience-flowing-enabled;
-                            toggled => { root.audience-set-comment-display(!root.audience-flowing-enabled, root.audience-bubbles-enabled); }
-                        }
-                        CommentDisplaySwitch {
-                            text: "Bubble comments";
-                            checked: root.audience-bubbles-enabled;
-                            toggled => { root.audience-set-comment-display(root.audience-flowing-enabled, !root.audience-bubbles-enabled); }
+                    settings-scroll := ScrollView {
+                        vertical-stretch: 1;
+                        content-width: self.visible-width;
+                        content-height: settings-content.preferred-height;
+                        settings-content := VerticalBox {
+                            width: settings-scroll.visible-width;
+                            height: self.preferred-height;
+                            padding: 0px;
+                            spacing: 12px;
+                            Text { text: "Comment display"; color: white; font-size: 18px; }
+                            VerticalBox {
+                                spacing: 4px;
+                                padding: 0px;
+                                CommentDisplaySwitch {
+                                    text: "Flowing comments";
+                                    checked: root.audience-flowing-enabled;
+                                    toggled => { root.audience-set-comment-display(!root.audience-flowing-enabled, root.audience-bubbles-enabled); }
+                                }
+                                CommentDisplaySwitch {
+                                    text: "Bubble comments";
+                                    checked: root.audience-bubbles-enabled;
+                                    toggled => { root.audience-set-comment-display(root.audience-flowing-enabled, !root.audience-bubbles-enabled); }
+                                }
+                            }
+                            Text { text: "Both styles can be enabled. Changes apply immediately."; color: #d9dce0; wrap: word-wrap; }
+                            Text { text: "Experimental · v3.0.0"; color: white; font-size: 18px; }
+                            CommentDisplaySwitch {
+                                text: "Sticky QR code";
+                                checked: root.audience-sticky-qr-enabled;
+                                toggled => { root.audience-set-sticky-qr(!root.audience-sticky-qr-enabled); }
+                            }
+                            Text { text: "Keep a small join QR code at the bottom left during Audience Live. Off by default."; color: #d9dce0; wrap: word-wrap; }
+                            if root.audience-sticky-qr-error != "": HorizontalBox {
+                                Text { text: root.audience-sticky-qr-error; color: #ffd18a; wrap: word-wrap; horizontal-stretch: 1; }
+                                Button { text: "Dismiss"; clicked => { root.audience-dismiss-sticky-qr-error(); } }
+                            }
+                            Text { text: "Audience Live"; color: white; font-size: 18px; }
+                            Text { text: "Import relay settings, or Reset to use the local server. Changes apply to the next start and preserve other settings."; color: #d9dce0; wrap: word-wrap; }
+                            if root.audience-active || root.audience-busy: Text { text: "Stop Audience Live before changing relay settings."; color: #ffd18a; wrap: word-wrap; }
+                            if root.audience-recovery-pending: Text {
+                                text: "Relay recovery is pending. Close Settings, retry Audience Live on, then stop it before changing settings.";
+                                color: #ffd18a;
+                                wrap: word-wrap;
+                            }
+                            Text { text: root.audience-status; color: #d9dce0; wrap: word-wrap; }
+                            if root.audience-import-preview == "": HorizontalBox {
+                                Button {
+                                    text: "Import settings...";
+                                    enabled: root.audience-can-import && !root.audience-active && !root.audience-busy && !root.audience-recovery-pending;
+                                    clicked => { root.audience-import-configuration(); }
+                                }
+                                Button {
+                                    text: "Reset";
+                                    enabled: root.audience-can-import && !root.audience-active && !root.audience-busy && !root.audience-recovery-pending;
+                                    clicked => { root.audience-reset-configuration(); }
+                                }
+                            }
+                            if root.audience-import-preview != "": VerticalBox {
+                                Text { text: "Destination: " + root.audience-import-preview; color: white; wrap: word-wrap; }
+                                Text { text: "Apply for the next start? Import does not start a session."; color: #d9dce0; wrap: word-wrap; }
+                                HorizontalBox {
+                                    Button { text: "Cancel import"; clicked => { root.audience-confirm-import(false); } }
+                                    Button { text: "Import"; clicked => { root.audience-confirm-import(true); } }
+                                }
+                            }
                         }
                     }
-                    Text { text: "Both styles can be enabled. Changes apply immediately."; color: #d9dce0; wrap: word-wrap; }
-                    Text { text: "Audience Live"; color: white; font-size: 18px; }
-                    Text { text: "Import relay settings, or Reset to use the local server. Changes apply to the next start and preserve other settings."; color: #d9dce0; wrap: word-wrap; }
-                    if root.audience-active || root.audience-busy: Text { text: "Stop Audience Live before changing relay settings."; color: #ffd18a; wrap: word-wrap; }
-                    if root.audience-recovery-pending: Text {
-                        text: "Relay recovery is pending. Close Settings, retry Audience Live on, then stop it before changing settings.";
-                        color: #ffd18a;
-                        wrap: word-wrap;
-                    }
-                    Text { text: root.audience-status; color: #d9dce0; wrap: word-wrap; }
-                    if root.audience-import-preview == "": HorizontalBox {
-                        Button {
-                            text: "Import settings...";
-                            enabled: root.audience-can-import && !root.audience-active && !root.audience-busy && !root.audience-recovery-pending;
-                            clicked => { root.audience-import-configuration(); }
-                        }
-                        Button {
-                            text: "Reset";
-                            enabled: root.audience-can-import && !root.audience-active && !root.audience-busy && !root.audience-recovery-pending;
-                            clicked => { root.audience-reset-configuration(); }
-                        }
-                    }
-                    if root.audience-import-preview != "": VerticalBox {
-                        Text { text: "Destination: " + root.audience-import-preview; color: white; wrap: word-wrap; }
-                        Text { text: "Apply for the next start? Import does not start a session."; color: #d9dce0; wrap: word-wrap; }
-                        HorizontalBox {
-                            Button { text: "Cancel import"; clicked => { root.audience-confirm-import(false); } }
-                            Button { text: "Import"; clicked => { root.audience-confirm-import(true); } }
-                        }
-                    }
-                    Rectangle { vertical-stretch: 1; }
-                    Button { text: "Close"; clicked => { root.close-settings(); } }
+                    settings-close := Button { text: "Close"; clicked => { root.close-settings(); } }
                 }
             }
         }
@@ -2131,8 +2161,10 @@ export component AudienceWindow inherits Window {
     in property <string> comment-measure-text;
     out property <float> comment-measure-width: comment-measure.preferred-width / 1px;
     callback audience-clear-overlay();
+    in property <bool> audience-sticky-qr-enabled: false;
     in property <image> audience-qr;
     in property <string> audience-url;
+    out property <bool> audience-sticky-qr-visible: root.audience-sticky-qr-enabled && root.audience-url != "" && root.audience-qr.width > 0 && !root.audience-guide-visible && !root.black-screen-active;
     in property <string> audience-code;
     in property <string> audience-status;
     in property <image> page-image;
@@ -2410,6 +2442,25 @@ export component AudienceWindow inherits Window {
                         vertical-alignment: top;
                     }
                 }
+            }
+        }
+        // Keep the QR above reactions and comments so it remains scannable.
+        if root.audience-sticky-qr-visible: Rectangle {
+            property <length> qr-padding: min(parent.width, parent.height) * 0.012;
+            width: min(parent.width, parent.height) * 0.128 + self.qr-padding * 2;
+            height: self.width;
+            x: min(parent.width, parent.height) * 0.02;
+            y: parent.height - self.height - min(parent.width, parent.height) * 0.02;
+            background: #60606099;
+            border-radius: self.qr-padding;
+            Image {
+                x: parent.qr-padding;
+                y: parent.qr-padding;
+                width: parent.width - parent.qr-padding * 2;
+                height: self.width;
+                source: root.audience-qr;
+                image-fit: contain;
+                image-rendering: pixelated;
             }
         }
         if root.black-screen-active: Rectangle { width: parent.width; height: parent.height; background: black; }

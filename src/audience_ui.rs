@@ -26,17 +26,28 @@ const RELAY_RECOVERY_GUIDANCE: &str =
 struct LoadedAudienceConfiguration {
     relay: Result<Option<crate::app_config::RelayEndpoint>, &'static str>,
     display: crate::audience_comments::CommentDisplaySettings,
-    display_error: Option<&'static str>,
+    audience_display: crate::app_config::AudienceDisplaySettings,
+    display_error: Option<String>,
 }
 
 impl LoadedAudienceConfiguration {
     fn load(path: Option<std::path::PathBuf>) -> Self {
         let relay = crate::app_config::load(path.clone());
-        let (display, display_error) = match crate::app_config::load_comment_display(path) {
-            Ok(settings) => (settings, None),
-            Err(error) => (Default::default(), Some(error)),
-        };
+        let (display, mut display_error) =
+            match crate::app_config::load_comment_display(path.clone()) {
+                Ok(settings) => (settings, None),
+                Err(error) => (Default::default(), Some(error.to_owned())),
+            };
+        let audience_display =
+            crate::app_config::load_audience_display(path).unwrap_or_else(|error| {
+                display_error = Some(match display_error.take() {
+                    Some(previous) if previous != error => format!("{previous} {error}"),
+                    _ => error.to_owned(),
+                });
+                Default::default()
+            });
         Self {
+            audience_display,
             relay,
             display,
             display_error,
@@ -156,6 +167,7 @@ impl AudienceUi {
                     Err(_) => LoadedAudienceConfiguration {
                         relay: Err("Cannot load Audience configuration."),
                         display: Default::default(),
+                        audience_display: Default::default(),
                         display_error: None,
                     },
                 };
@@ -163,7 +175,11 @@ impl AudienceUi {
                 ui.configuring.set(false);
                 if let Some(window) = window.upgrade() { window.set_audience_can_import(true); }
                 ui.comments.borrow_mut().set_display_settings(result.display);
+                if let Some(audience) = ui.windows.audience.upgrade() {
+                    audience.set_audience_sticky_qr_enabled(result.audience_display.sticky_qr);
+                }
                 if let Some(window) = window.upgrade() {
+                    window.set_audience_sticky_qr_enabled(result.audience_display.sticky_qr);
                     window.set_audience_flowing_enabled(result.display.flowing);
                     window.set_audience_bubbles_enabled(result.display.bubbles);
                 }
@@ -172,7 +188,7 @@ impl AudienceUi {
                         *ui.relay_config.borrow_mut() =
                             endpoint.map(crate::audience_relay_http::ManagedRelay::new);
                         if let Some(window) = window.upgrade() {
-                            window.set_audience_status(result.display_error.unwrap_or("").into());
+                            window.set_audience_status(result.display_error.unwrap_or_default().into());
                             window.set_audience_address(ui.address_label().into());
                             window.set_audience_can_start(ui.can_start());
                         }
@@ -253,6 +269,41 @@ impl AudienceUi {
             .audience
             .set_audience_bubbles(ui.bubble_model.clone().into());
         let weak = Rc::downgrade(&ui);
+        presenter.on_audience_set_sticky_qr(move |sticky_qr| {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            let Some(window) = ui.windows.presenter.upgrade() else {
+                return;
+            };
+            if ui.configuring.get() {
+                return;
+            }
+            let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
+                .and_then(|path| {
+                    crate::app_config::save_audience_display(
+                        &path,
+                        crate::app_config::AudienceDisplaySettings { sticky_qr },
+                    )
+                });
+            match result {
+                Ok(()) => {
+                    window.set_audience_sticky_qr_error("".into());
+                    window.set_audience_sticky_qr_enabled(sticky_qr);
+                    if let Some(audience) = ui.windows.audience.upgrade() {
+                        audience.set_audience_sticky_qr_enabled(sticky_qr);
+                    }
+                }
+                Err(error) => window.set_audience_sticky_qr_error(error.into()),
+            }
+        });
+        let weak = Rc::downgrade(&ui);
+        let window = presenter.as_weak();
+        presenter.on_audience_dismiss_sticky_qr_error(move || {
+            if let Some(window) = window.upgrade() {
+                window.set_audience_sticky_qr_error("".into());
+            }
+        });
         presenter.on_audience_set_comment_display(move |flowing, bubbles| {
             let Some(ui) = weak.upgrade() else {
                 return;
@@ -833,17 +884,13 @@ impl AudienceUi {
                     .into(),
                 );
                 if *self.last_url.borrow() != url {
-                    match qr_image(&url) {
-                        Ok(image) => {
-                            window.set_audience_qr(image);
-                            window.set_audience_url(url.clone().into());
-                            *self.last_url.borrow_mut() = url;
-                        }
+                    match publish_join_qr(&window, &url) {
+                        Ok(()) => *self.last_url.borrow_mut() = url,
                         Err(error) => {
+                            self.last_url.borrow_mut().clear();
                             window.set_audience_status(
                                 format!("QR generation failed: {error}").into(),
                             );
-                            window.set_audience_url(url.into());
                         }
                     }
                 }
@@ -950,6 +997,17 @@ fn clear_join_metadata(windows: &AppWindowRefs) {
     }
 }
 
+/// Preserve manual joining while never retaining a QR from an earlier URL.
+pub(crate) fn publish_join_qr(
+    window: &PresenterWindow,
+    url: &str,
+) -> Result<(), qrcode::types::QrError> {
+    let result = qr_image(url);
+    window.set_audience_url(url.into());
+    window.set_audience_qr(result.as_ref().cloned().unwrap_or_default());
+    result.map(|_| ())
+}
+
 pub(crate) fn qr_image(url: &str) -> Result<slint::Image, qrcode::types::QrError> {
     let qr = qrcode::QrCode::new(url)?;
     let scale = 4;
@@ -994,8 +1052,39 @@ mod configuration_change_tests {
         assert!(matches!(loaded.relay, Ok(None)));
         assert_eq!(loaded.display, Default::default());
         assert_eq!(
-            loaded.display_error,
+            loaded.display_error.as_deref(),
             Some("Invalid comment display settings.")
+        );
+    }
+
+    #[test]
+    fn invalid_display_sections_report_both_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[comment_display]\nflowing='invalid'\n[audience_display]\nsticky_qr='invalid'\n",
+        )
+        .unwrap();
+        let loaded = LoadedAudienceConfiguration::load(Some(path));
+        assert!(matches!(loaded.relay, Ok(None)));
+        assert_eq!(loaded.display, Default::default());
+        assert_eq!(loaded.audience_display, Default::default());
+        assert_eq!(
+            loaded.display_error.as_deref(),
+            Some("Invalid comment display settings. Invalid audience display settings.")
+        );
+    }
+
+    #[test]
+    fn invalid_audience_display_is_reported_without_a_comment_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[audience_display]\nsticky_qr='invalid'\n").unwrap();
+        let loaded = LoadedAudienceConfiguration::load(Some(path));
+        assert_eq!(
+            loaded.display_error.as_deref(),
+            Some("Invalid audience display settings.")
         );
     }
 

@@ -177,6 +177,47 @@ pub fn load_comment_display(
     }
 }
 
+/// Experimental audience overlay preferences; omitted fields remain opt-in.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct AudienceDisplaySettings {
+    pub sticky_qr: bool,
+}
+
+pub fn load_audience_display(
+    explicit: Option<PathBuf>,
+) -> Result<AudienceDisplaySettings, &'static str> {
+    let path = import_destination(explicit)?;
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Default::default()),
+        Err(_) => return Err("Cannot open audience display settings."),
+    };
+    let mut text = String::new();
+    file.take(16385)
+        .read_to_string(&mut text)
+        .map_err(|_| "Cannot read audience display settings.")?;
+    if text.len() > 16384 {
+        return Err("Configuration is too large.");
+    }
+    let mut table: toml::Table = toml::from_str(&text).map_err(|_| "Invalid configuration.")?;
+    match table.remove("audience_display") {
+        Some(value) => value
+            .try_into()
+            .map_err(|_| "Invalid audience display settings."),
+        None => Ok(Default::default()),
+    }
+}
+
+pub fn save_audience_display(
+    path: &std::path::Path,
+    settings: AudienceDisplaySettings,
+) -> Result<(), &'static str> {
+    let table = toml::Table::try_from(settings)
+        .map_err(|_| "Cannot serialize audience display settings.")?;
+    save_section(path, "audience_display", table)
+}
+
 pub fn save_comment_display(
     path: &std::path::Path,
     settings: crate::audience_comments::CommentDisplaySettings,
@@ -216,6 +257,28 @@ fn save_section(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn sticky_qr_is_opt_in_and_survives_other_settings_updates() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        assert!(!load_audience_display(Some(path.clone())).unwrap().sticky_qr);
+        reset_relay(&path).unwrap();
+        assert!(!load_audience_display(Some(path.clone())).unwrap().sticky_qr);
+        for sticky_qr in [true, false] {
+            let settings = AudienceDisplaySettings { sticky_qr };
+            save_audience_display(&path, settings).unwrap();
+            save_comment_display(&path, Default::default()).unwrap();
+            reset_relay(&path).unwrap();
+            assert_eq!(load_audience_display(Some(path.clone())).unwrap(), settings);
+            assert!(load(Some(path.clone())).unwrap().is_none());
+        }
+        std::fs::write(&path, "[audience_display]\nsticky_qr='invalid'\n").unwrap();
+        assert!(load_audience_display(Some(path.clone())).is_err());
+        std::fs::write(&path, "invalid TOML").unwrap();
+        assert!(save_audience_display(&path, Default::default()).is_err());
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "invalid TOML");
+    }
+
     fn remote(origin: &str) -> String {
         format!(
             "[audience]\ntransport='remote'\nrelay='{origin}'\ncreate_token='{}'\n",
