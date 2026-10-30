@@ -2384,25 +2384,29 @@ export component AudienceWindow inherits Window {
                     height: 120px * bubble-stack.canvas-scale;
                     border-radius: 16px * bubble-stack.canvas-scale;
                     background: #60606080;
+                    clip: true;
                     property <float> scale: bubble-stack.canvas-scale;
-                    VerticalLayout {
-                        padding: 12px * bubble-card.scale;
-                        spacing: 4px * bubble-card.scale;
-                        if bubble.name != "": Text {
-                            text: bubble.name;
-                            color: #eeeeee;
-                            font-size: 14px * bubble-card.scale;
-                            height: 20px * bubble-card.scale;
-                            overflow: elide;
-                        }
-                        Text {
-                            text: bubble.text;
-                            color: white;
-                            font-size: 22px * bubble-card.scale;
-                            wrap: word-wrap;
-                            overflow: elide;
-                            vertical-alignment: center;
-                        }
+                    if bubble.name != "": Text {
+                        x: 10px * bubble-card.scale;
+                        y: 10px * bubble-card.scale;
+                        width: parent.width - 20px * bubble-card.scale;
+                        height: 16px * bubble-card.scale;
+                        text: bubble.name;
+                        color: #eeeeee;
+                        font-size: 11px * bubble-card.scale;
+                        overflow: elide;
+                    }
+                    Text {
+                        x: 10px * bubble-card.scale;
+                        y: (bubble.name != "" ? 29px : 10px) * bubble-card.scale;
+                        width: parent.width - 20px * bubble-card.scale;
+                        height: parent.height - self.y - 10px * bubble-card.scale;
+                        text: bubble.text;
+                        color: white;
+                        font-size: 14px * bubble-card.scale;
+                        wrap: word-wrap;
+                        overflow: elide;
+                        vertical-alignment: top;
                     }
                 }
             }

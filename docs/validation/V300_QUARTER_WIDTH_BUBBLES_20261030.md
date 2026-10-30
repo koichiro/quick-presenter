@@ -20,3 +20,28 @@ third. The right margin, card height, five-card stack, and opacity are unchanged
 Raw reports and the temporary app remain under `/tmp/quick-presenter-quarter-bubbles`.
 This focused run does not qualify native fullscreen, Windows/Linux, or release
 packages.
+
+## Longer comments
+
+Body text is reduced from 22 to 14 logical pixels, author labels from 14 to 11,
+and inner padding from 12 to 10. Width, right margin, card height, and stack
+spacing remain unchanged. Explicit author/body bounds replace the unconstrained
+vertical layout; each card also clips its contents. This prevents a 200-character
+body from extending over the following card.
+
+The focused GUI run now sends five additional real comments: named Japanese
+bodies of 69 and 95 characters, an anonymous 95-character body, a named
+200-character body, and an English question. Both 95-character Japanese bodies
+are fully visible in the demo-PDF snapshot; the 200-character body is elided
+within its card. Full bodies and separate authors remain in the bubble model,
+and the full 200-character body remains in presenter history.
+
+The final focused run passes **125 checks, zero failures**. Formatting, compile,
+binary build, and the complete host Rust tests pass; two existing tests remain
+ignored. The sandboxed test attempt could not create local sockets; the host
+rerun passes. The final signed app also passes the XPC render/notes and denial
+gate. The same scope limits above apply. Final GUI reports and snapshots remain
+under `/tmp/quick-presenter-readable-bubbles-final`; the host Rust test log is
+`/tmp/quick-presenter-readable-bubbles/cargo-test-final.log`.
+
+![Five longer quarter-width comments](../assets/comment-bubbles/quarter-width-long-comments.png)

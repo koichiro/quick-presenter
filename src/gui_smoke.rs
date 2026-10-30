@@ -1662,6 +1662,46 @@ async fn check_live_comments(
         delay(Duration::from_secs(3)).await;
     }
     save_comment_smoke_snapshot(audience, state, "five-bubbles-combined").await?;
+    presenter.invoke_audience_set_comment_display(false, true);
+    let long_comments = [
+        ("Alice", "こんにちは！今日の発表を楽しみにしていました。図と具体例がとても分かりやすく、初めて聞く内容でも理解できました。次のスライドも楽しみです。".to_owned()),
+        ("Bob", "実際の運用では、参加者が増えたときのコメント表示や読みやすさが気になります。今回のように右側へまとめて表示できると、資料の内容を追いながら他の方の感想も読めるので、とても使いやすそうですね。".to_owned()),
+        ("", "名前を入力しないコメントも、本文を広く使って表示できます。文字の折り返しと余白のバランスが自然で、少し長めの質問や感想も最後まで読みやすくなるとうれしいです。発表資料と一緒に確認しています。".to_owned()),
+        ("Carol", "長いコメントの表示を確認しています。".repeat(12).chars().take(200).collect()),
+        ("Dave", "Thanks for the presentation! The examples make the design easy to understand. How does this work with longer audience questions while keeping the slide readable?".to_owned()),
+    ];
+    for (index, (handle, body)) in long_comments.iter().enumerate() {
+        submit_audience_smoke_event(
+            url,
+            serde_json::json!({"protocol":"qp.audience","version":"1","type":"comment","request_id":format!("long-bubble-{index}"),"body":body,"handle":handle}),
+        )?;
+    }
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !audience
+        .get_audience_bubbles()
+        .iter()
+        .any(|b| b.text == long_comments[4].1)
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    delay(Duration::from_millis(300)).await;
+    let stacked = audience.get_audience_bubbles().iter().collect::<Vec<_>>();
+    report.check(
+        "Five long comments retain full bodies and separate authors",
+        stacked.len() == long_comments.len()
+            && stacked
+                .iter()
+                .zip(&long_comments)
+                .all(|(bubble, (name, body))| bubble.name == *name && bubble.text == *body)
+            && long_comments[3].1.chars().count() == 200
+            && presenter
+                .get_audience_comment_history()
+                .contains(&long_comments[3].1),
+        "named, anonymous, Japanese, English, and 200-character comments retained",
+        format!("bubbles={stacked:?}"),
+    );
+    save_comment_smoke_snapshot(audience, state, "five-long-bubbles").await?;
     presenter.invoke_audience_toggle_comments();
     report.check(
         "Pause clears bubble comments immediately",
