@@ -106,6 +106,7 @@ async fn run_checks(
         check_settings_dialog(&windows, &state, report).await?;
         check_sticky_qr_save_error(&windows, audience_config.path().join("config.toml"), report)
             .await?;
+        check_qr_failure_and_settings_layout(&windows, &state, report).await?;
         return Ok(());
     }
     #[cfg(target_os = "macos")]
@@ -219,6 +220,7 @@ async fn run_checks(
     check_settings_dialog(&windows, &state, report).await?;
     check_sticky_qr_save_error(&windows, audience_config.path().join("config.toml"), report)
         .await?;
+    check_qr_failure_and_settings_layout(&windows, &state, report).await?;
     report_presenter_progress(
         report,
         &windows,
@@ -1994,6 +1996,108 @@ async fn settle_presenter_notes_layout(presenter: &crate::PresenterWindow) -> Re
         .window()
         .dispatch_event(slint::platform::WindowEvent::PointerExited);
     settle_notes_layout().await
+}
+
+async fn check_qr_failure_and_settings_layout(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let enabled = presenter.get_audience_sticky_qr_enabled();
+    let original_url = presenter.get_audience_url();
+    let original_qr = presenter.get_audience_qr();
+    let original_status = presenter.get_audience_status();
+    let original_error = presenter.get_audience_sticky_qr_error();
+    let original_size = presenter.window().size();
+    let join_visible = state.borrow().audience_join_visible;
+    windows.audience.set_audience_sticky_qr_enabled(true);
+    crate::audience_ui::publish_join_qr(presenter, "http://127.0.0.1/join")?;
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    report.check(
+        "Valid QR image enables the sticky overlay",
+        windows.audience.get_audience_sticky_qr_visible(),
+        "valid QR published",
+        "valid QR hidden",
+    );
+    let oversized = "x".repeat(5000);
+    let failed = crate::audience_ui::publish_join_qr(presenter, &oversized).is_err();
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    report.check(
+        "QR generation failure clears stale pixels and hides the sticky backdrop",
+        failed
+            && presenter.get_audience_qr().size().width == 0
+            && windows.audience.get_audience_qr().size().width == 0
+            && presenter.get_audience_url() == oversized
+            && !windows.audience.get_audience_sticky_qr_visible(),
+        "manual URL retained without blank or stale QR",
+        "invalid QR remained visible",
+    );
+    crate::audience_ui::publish_join_qr(presenter, "http://127.0.0.1/retry")?;
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    report.check(
+        "Successful QR retry restores the sticky overlay",
+        windows.audience.get_audience_sticky_qr_visible(),
+        "replacement QR visible",
+        "replacement QR missing",
+    );
+    presenter.set_audience_url(original_url);
+    presenter.set_audience_qr(original_qr);
+    windows.audience.set_audience_sticky_qr_enabled(enabled);
+    crate::audience_ui::set_join_visible(&windows.refs(), state, join_visible);
+
+    presenter
+        .window()
+        .set_size(slint::LogicalSize::new(800.0, 608.0));
+    presenter.set_audience_sticky_qr_error(
+        "Cannot save protected configuration; previous settings are retained.".into(),
+    );
+    presenter.set_audience_status(
+        "Configuration needs attention. Check the file and its permissions before trying again."
+            .into(),
+    );
+    presenter.set_audience_import_preview(
+        "https://relay.example.com/a-long-configuration-destination-for-the-next-session".into(),
+    );
+    presenter.invoke_open_settings();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Settings scrolls at minimum height with errors and import preview while Close stays visible",
+        presenter.get_settings_content_height() > presenter.get_settings_viewport_height()
+            && presenter.get_settings_viewport_height() > 0.0
+            && presenter.get_settings_close_within_dialog(),
+        "overflow is scrollable and Close stays inside the dialog", "settings content or Close is inaccessible",
+    );
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+            position: slint::LogicalPosition::new(400.0, 300.0),
+            delta_x: 0.0,
+            delta_y: -2000.0,
+        });
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Settings scroll input reaches the import controls at minimum height",
+        presenter.get_settings_scroll_position() < 0.0
+            && presenter.get_settings_close_within_dialog(),
+        "content scrolled while Close stayed visible",
+        "scroll input did not expose the remaining controls",
+    );
+    if let Some(path) = std::env::var_os("QP_GUI_SMOKE_SETTINGS_MINIMUM_SNAPSHOT") {
+        let snapshot = presenter.window().take_snapshot()?;
+        let mut bytes =
+            format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+        for pixel in snapshot.as_bytes().chunks_exact(4) {
+            bytes.extend_from_slice(&pixel[..3]);
+        }
+        fs::write(path, bytes)?;
+    }
+    presenter.invoke_close_settings();
+    presenter.set_audience_status(original_status);
+    presenter.set_audience_sticky_qr_error(original_error);
+    presenter.window().set_size(original_size);
+    settle_presenter_notes_layout(presenter).await?;
+    Ok(())
 }
 
 async fn check_sticky_qr_save_error(

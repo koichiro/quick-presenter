@@ -27,7 +27,7 @@ struct LoadedAudienceConfiguration {
     relay: Result<Option<crate::app_config::RelayEndpoint>, &'static str>,
     display: crate::audience_comments::CommentDisplaySettings,
     audience_display: crate::app_config::AudienceDisplaySettings,
-    display_error: Option<&'static str>,
+    display_error: Option<String>,
 }
 
 impl LoadedAudienceConfiguration {
@@ -36,11 +36,14 @@ impl LoadedAudienceConfiguration {
         let (display, mut display_error) =
             match crate::app_config::load_comment_display(path.clone()) {
                 Ok(settings) => (settings, None),
-                Err(error) => (Default::default(), Some(error)),
+                Err(error) => (Default::default(), Some(error.to_owned())),
             };
         let audience_display =
             crate::app_config::load_audience_display(path).unwrap_or_else(|error| {
-                display_error = Some(error);
+                display_error = Some(match display_error.take() {
+                    Some(previous) if previous != error => format!("{previous} {error}"),
+                    _ => error.to_owned(),
+                });
                 Default::default()
             });
         Self {
@@ -185,7 +188,7 @@ impl AudienceUi {
                         *ui.relay_config.borrow_mut() =
                             endpoint.map(crate::audience_relay_http::ManagedRelay::new);
                         if let Some(window) = window.upgrade() {
-                            window.set_audience_status(result.display_error.unwrap_or("").into());
+                            window.set_audience_status(result.display_error.unwrap_or_default().into());
                             window.set_audience_address(ui.address_label().into());
                             window.set_audience_can_start(ui.can_start());
                         }
@@ -881,17 +884,13 @@ impl AudienceUi {
                     .into(),
                 );
                 if *self.last_url.borrow() != url {
-                    match qr_image(&url) {
-                        Ok(image) => {
-                            window.set_audience_qr(image);
-                            window.set_audience_url(url.clone().into());
-                            *self.last_url.borrow_mut() = url;
-                        }
+                    match publish_join_qr(&window, &url) {
+                        Ok(()) => *self.last_url.borrow_mut() = url,
                         Err(error) => {
+                            self.last_url.borrow_mut().clear();
                             window.set_audience_status(
                                 format!("QR generation failed: {error}").into(),
                             );
-                            window.set_audience_url(url.into());
                         }
                     }
                 }
@@ -998,6 +997,17 @@ fn clear_join_metadata(windows: &AppWindowRefs) {
     }
 }
 
+/// Preserve manual joining while never retaining a QR from an earlier URL.
+pub(crate) fn publish_join_qr(
+    window: &PresenterWindow,
+    url: &str,
+) -> Result<(), qrcode::types::QrError> {
+    let result = qr_image(url);
+    window.set_audience_url(url.into());
+    window.set_audience_qr(result.as_ref().cloned().unwrap_or_default());
+    result.map(|_| ())
+}
+
 pub(crate) fn qr_image(url: &str) -> Result<slint::Image, qrcode::types::QrError> {
     let qr = qrcode::QrCode::new(url)?;
     let scale = 4;
@@ -1042,8 +1052,39 @@ mod configuration_change_tests {
         assert!(matches!(loaded.relay, Ok(None)));
         assert_eq!(loaded.display, Default::default());
         assert_eq!(
-            loaded.display_error,
+            loaded.display_error.as_deref(),
             Some("Invalid comment display settings.")
+        );
+    }
+
+    #[test]
+    fn invalid_display_sections_report_both_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "[comment_display]\nflowing='invalid'\n[audience_display]\nsticky_qr='invalid'\n",
+        )
+        .unwrap();
+        let loaded = LoadedAudienceConfiguration::load(Some(path));
+        assert!(matches!(loaded.relay, Ok(None)));
+        assert_eq!(loaded.display, Default::default());
+        assert_eq!(loaded.audience_display, Default::default());
+        assert_eq!(
+            loaded.display_error.as_deref(),
+            Some("Invalid comment display settings. Invalid audience display settings.")
+        );
+    }
+
+    #[test]
+    fn invalid_audience_display_is_reported_without_a_comment_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[audience_display]\nsticky_qr='invalid'\n").unwrap();
+        let loaded = LoadedAudienceConfiguration::load(Some(path));
+        assert_eq!(
+            loaded.display_error.as_deref(),
+            Some("Invalid audience display settings.")
         );
     }
 
