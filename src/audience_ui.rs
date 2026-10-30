@@ -285,15 +285,22 @@ impl AudienceUi {
                 });
             match result {
                 Ok(()) => {
+                    window.set_audience_sticky_qr_error("".into());
                     window.set_audience_sticky_qr_enabled(sticky_qr);
                     if let Some(audience) = ui.windows.audience.upgrade() {
                         audience.set_audience_sticky_qr_enabled(sticky_qr);
                     }
                 }
-                Err(error) => window.set_audience_status(error.into()),
+                Err(error) => window.set_audience_sticky_qr_error(error.into()),
             }
         });
         let weak = Rc::downgrade(&ui);
+        let window = presenter.as_weak();
+        presenter.on_audience_dismiss_sticky_qr_error(move || {
+            if let Some(window) = window.upgrade() {
+                window.set_audience_sticky_qr_error("".into());
+            }
+        });
         presenter.on_audience_set_comment_display(move |flowing, bubbles| {
             let Some(ui) = weak.upgrade() else {
                 return;

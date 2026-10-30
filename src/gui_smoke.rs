@@ -104,6 +104,8 @@ async fn run_checks(
         wait_for_async_open(&window_refs, &state).await?;
         check_audience_join_screen(&windows, &state, report).await?;
         check_settings_dialog(&windows, &state, report).await?;
+        check_sticky_qr_save_error(&windows, audience_config.path().join("config.toml"), report)
+            .await?;
         return Ok(());
     }
     #[cfg(target_os = "macos")]
@@ -215,6 +217,8 @@ async fn run_checks(
     check_notes_font_size(&windows, &state, report, "with a PDF open").await?;
     check_audience_join_screen(&windows, &state, report).await?;
     check_settings_dialog(&windows, &state, report).await?;
+    check_sticky_qr_save_error(&windows, audience_config.path().join("config.toml"), report)
+        .await?;
     report_presenter_progress(
         report,
         &windows,
@@ -1990,6 +1994,77 @@ async fn settle_presenter_notes_layout(presenter: &crate::PresenterWindow) -> Re
         .window()
         .dispatch_event(slint::platform::WindowEvent::PointerExited);
     settle_notes_layout().await
+}
+
+async fn check_sticky_qr_save_error(
+    windows: &AppWindows,
+    config_path: std::path::PathBuf,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let enabled = presenter.get_audience_sticky_qr_enabled();
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    anyhow::ensure!(
+        !presenter.get_audience_url().is_empty(),
+        "save-error check requires a running session"
+    );
+    presenter.invoke_open_settings();
+    let original = fs::read(&config_path)?;
+    // Only the smoke run's temporary configuration is made invalid.
+    fs::write(&config_path, "invalid TOML")?;
+    presenter.invoke_audience_set_sticky_qr(!enabled);
+    let error = presenter.get_audience_sticky_qr_error();
+    delay(Duration::from_millis(350)).await;
+    report.check(
+        "Sticky QR save error survives live session refresh polls",
+        !error.is_empty()
+            && presenter.get_audience_sticky_qr_error() == error
+            && presenter.get_audience_status() != error
+            && presenter.get_audience_sticky_qr_enabled() == enabled
+            && windows.audience.get_audience_sticky_qr_enabled() == enabled,
+        "error retained separately and both switches unchanged",
+        "save error lost or setting changed",
+    );
+    presenter.invoke_close_settings();
+    presenter.invoke_open_settings();
+    report.check(
+        "Reopening Settings retains the sticky QR save error",
+        presenter.get_audience_sticky_qr_error() == error,
+        "error retained until explicit dismissal or successful save",
+        "error cleared on close",
+    );
+    presenter.invoke_audience_dismiss_sticky_qr_error();
+    report.check(
+        "Sticky QR save error can be explicitly dismissed",
+        presenter.get_audience_sticky_qr_error().is_empty(),
+        "error dismissed",
+        "error remained after dismissal",
+    );
+    presenter.invoke_audience_set_sticky_qr(!enabled);
+    let failed_again = !presenter.get_audience_sticky_qr_error().is_empty();
+    fs::write(&config_path, original)?;
+    presenter.invoke_audience_set_sticky_qr(!enabled);
+    report.check(
+        "Successful sticky QR save clears the retained error and applies the setting",
+        failed_again
+            && presenter.get_audience_sticky_qr_error().is_empty()
+            && presenter.get_audience_sticky_qr_enabled() == !enabled
+            && windows.audience.get_audience_sticky_qr_enabled() == !enabled,
+        "retry saved and cleared the error",
+        "successful retry did not recover",
+    );
+    presenter.invoke_audience_set_sticky_qr(enabled);
+    presenter.invoke_close_settings();
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_active() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    Ok(())
 }
 
 async fn check_settings_dialog(

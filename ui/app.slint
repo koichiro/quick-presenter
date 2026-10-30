@@ -861,6 +861,8 @@ export component PresenterWindow inherits Window {
     in property <bool> audience-bubbles-enabled: false;
     callback audience-set-comment-display(bool, bool);
     callback audience-set-sticky-qr(bool);
+    in property <string> audience-sticky-qr-error;
+    callback audience-dismiss-sticky-qr-error();
     callback audience-toggle-comments();
     in property <int> audience-reaction-count;
     callback audience-open-url();
@@ -1983,6 +1985,10 @@ export component PresenterWindow inherits Window {
                         toggled => { root.audience-set-sticky-qr(!root.audience-sticky-qr-enabled); }
                     }
                     Text { text: "Keep a small join QR code at the bottom left during Audience Live. Off by default."; color: #d9dce0; wrap: word-wrap; }
+                    if root.audience-sticky-qr-error != "": HorizontalBox {
+                        Text { text: root.audience-sticky-qr-error; color: #ffd18a; wrap: word-wrap; horizontal-stretch: 1; }
+                        Button { text: "Dismiss"; clicked => { root.audience-dismiss-sticky-qr-error(); } }
+                    }
                     Text { text: "Audience Live"; color: white; font-size: 18px; }
                     Text { text: "Import relay settings, or Reset to use the local server. Changes apply to the next start and preserve other settings."; color: #d9dce0; wrap: word-wrap; }
                     if root.audience-active || root.audience-busy: Text { text: "Stop Audience Live before changing relay settings."; color: #ffd18a; wrap: word-wrap; }
