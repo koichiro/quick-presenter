@@ -118,7 +118,15 @@ room creation can also mean that a previous presenter session is still active or
 that new sessions are restricted. qp suggests stopping the previous presenter or
 asking the relay administrator to check access/end the old session. It does not
 automatically terminate another session or infer the cause from server text. An
-explicit retry preserves the creation key until a terminal response confirms
+**Open account** button also appears below this alert. For the official relay,
+it opens `https://account-staging.quickpresenter.com/` when configured with
+`https://relay-staging.quickpresenter.com/`, and `https://account.quickpresenter.com/`
+when configured with `https://relay.quickpresenter.com/`. It opens the account
+page in the default browser without passing relay credentials or activating a
+ticket. After activation, press
+ON again; opening the account page does not retry the connection automatically.
+The button is disabled for other relay origins. An explicit retry preserves the
+creation key until a terminal response confirms
 replacement is safe. During managed
 startup, a creation 410 or presenter handshake 404/410 confirms an ended/missing
 room: the same ON action tries one fresh room and presents its new QR. If that

@@ -831,6 +831,8 @@ export component PresenterWindow inherits Window {
     in property <string> audience-status: "Stopped";
     in property <string> audience-alert-title;
     in property <string> audience-alert-guidance;
+    in property <bool> audience-account-available: false;
+    in property <bool> audience-account-visible: false;
     in property <string> audience-url;
     in property <string> audience-code;
     in property <bool> audience-sticky-qr-enabled: false;
@@ -866,6 +868,7 @@ export component PresenterWindow inherits Window {
     callback audience-toggle-comments();
     in property <int> audience-reaction-count;
     callback audience-open-url();
+    callback audience-open-account();
     callback audience-copy-url();
     callback audience-toggle-session();
     callback audience-import-configuration();
@@ -1763,7 +1766,15 @@ export component PresenterWindow inherits Window {
                 width: audience-panel.width;
                 height: root.audience-panel-expanded ? 36px : 0px;
                 visible: root.audience-panel-expanded;
+                if root.audience-alert-title != "" && root.audience-account-visible: Button {
+                    text: "Open account";
+                    enabled: root.audience-account-available;
+                    width: 160px;
+                    height: parent.height;
+                    clicked => { root.audience-open-account(); }
+                }
                 audience-url-field := Rectangle {
+                    visible: !root.audience-account-visible || root.audience-alert-title == "";
                     x: 0px;
                     y: 0px;
                     width: max(0px, parent.width - 44px);
@@ -1789,6 +1800,7 @@ export component PresenterWindow inherits Window {
                     }
                 }
                 audience-url-copy := AudienceIconButton {
+                    visible: !root.audience-account-visible || root.audience-alert-title == "";
                     width: 36px;
                     height: 32px;
                     x: parent.width - self.width;
