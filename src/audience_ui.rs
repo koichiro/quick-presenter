@@ -23,6 +23,16 @@ use std::{
 const RELAY_RECOVERY_GUIDANCE: &str =
     "Close Settings, retry Audience Live on, then stop it before importing or resetting settings.";
 
+fn account_url_for_relay(origin: &url::Url) -> Option<&'static str> {
+    match origin.as_str() {
+        "https://relay-staging.quickpresenter.com/" => {
+            Some("https://account-staging.quickpresenter.com/")
+        }
+        "https://relay.quickpresenter.com/" => Some("https://account.quickpresenter.com/"),
+        _ => None,
+    }
+}
+
 struct LoadedAudienceConfiguration {
     relay: Result<Option<crate::app_config::RelayEndpoint>, &'static str>,
     display: crate::audience_comments::CommentDisplaySettings,
@@ -432,6 +442,8 @@ impl AudienceUi {
                         );
                         window.set_audience_alert_title("".into());
                         window.set_audience_alert_guidance("".into());
+                        window.set_audience_account_available(false);
+                        window.set_audience_account_visible(false);
                     }
                     Err(message) => window.set_audience_status(message.into()),
                 }
@@ -461,6 +473,8 @@ impl AudienceUi {
                     *ui.config_error.borrow_mut() = None;
                     window.set_audience_alert_title("".into());
                     window.set_audience_alert_guidance("".into());
+                    window.set_audience_account_available(false);
+                    window.set_audience_account_visible(false);
                     window.invoke_audience_refresh_addresses();
                     window.set_audience_address(ui.address_label().into());
                     window.set_audience_can_start(ui.can_start());
@@ -567,6 +581,8 @@ impl AudienceUi {
                         window.set_audience_status("Starting…".into());
                         window.set_audience_alert_title("".into());
                         window.set_audience_alert_guidance("".into());
+                        window.set_audience_account_available(false);
+                        window.set_audience_account_visible(false);
                     }
                     let weak = Rc::downgrade(&ui);
                     let window = window.clone();
@@ -625,6 +641,38 @@ impl AudienceUi {
                         );
                         window.set_audience_status(
                             "Cannot open your browser. Copy the join URL instead.".into(),
+                        );
+                    });
+                }
+            });
+        });
+        let weak = Rc::downgrade(&ui);
+        let window = presenter.as_weak();
+        presenter.on_audience_open_account(move || {
+            let Some(ui) = weak.upgrade() else {
+                return;
+            };
+            if !window.upgrade().is_some_and(|window| {
+                window.get_audience_account_available()
+                    && !window.get_audience_alert_title().is_empty()
+            }) {
+                return;
+            }
+            let Some(url) = ui
+                .relay_config
+                .borrow()
+                .as_ref()
+                .and_then(|relay| account_url_for_relay(&relay.endpoint.origin))
+            else {
+                return;
+            };
+            let window = window.clone();
+            std::thread::spawn(move || {
+                if let Err(error) = crate::browser::open_join_url(url) {
+                    tracing::warn!(error = %error, "Account browser activation failed");
+                    let _ = window.upgrade_in_event_loop(move |window| {
+                        window.set_status_text(
+                            format!("Cannot open your browser. Open {url} manually.").into(),
                         );
                     });
                 }
@@ -911,6 +959,13 @@ impl AudienceUi {
                 let message: String = match snapshot.status {
                     SessionStatus::Failed(error) => {
                         let alert = crate::audience_alert::for_failure(&error);
+                        window.set_audience_account_visible(error == "Relay denied room creation.");
+                        window.set_audience_account_available(
+                            error == "Relay denied room creation."
+                                && self.relay_config.borrow().as_ref().is_some_and(|relay| {
+                                    account_url_for_relay(&relay.endpoint.origin).is_some()
+                                }),
+                        );
                         window.set_audience_alert_title(alert.title.into());
                         window.set_audience_alert_guidance(alert.guidance.into());
                         alert.title.into()
@@ -1038,6 +1093,45 @@ pub(crate) fn qr_image(url: &str) -> Result<slint::Image, qrcode::types::QrError
 mod configuration_change_tests {
     use super::*;
     use crate::{app_config::RelayEndpoint, audience_relay_http::ManagedRelay};
+
+    #[test]
+    fn account_link_selects_the_matching_official_environment() {
+        for (relay, account) in [
+            (
+                "https://relay-staging.quickpresenter.com/",
+                "https://account-staging.quickpresenter.com/",
+            ),
+            (
+                "https://relay.quickpresenter.com/",
+                "https://account.quickpresenter.com/",
+            ),
+        ] {
+            assert_eq!(
+                account_url_for_relay(&url::Url::parse(relay).unwrap()),
+                Some(account)
+            );
+        }
+    }
+
+    #[test]
+    fn account_link_is_unavailable_for_other_relay_origins() {
+        for origin in [
+            "https://relay.example/",
+            "http://127.0.0.1/",
+            "https://relay-staging.quickpresenter.com.example/",
+            "https://relay-staging.quickpresenter.com:8443/",
+            "https://user:secret@relay-staging.quickpresenter.com/",
+            "https://relay.quickpresenter.com.example/",
+            "https://relay.quickpresenter.com:8443/",
+            "https://user:secret@relay.quickpresenter.com/",
+            "http://relay.quickpresenter.com/",
+        ] {
+            assert_eq!(
+                account_url_for_relay(&url::Url::parse(origin).unwrap()),
+                None
+            );
+        }
+    }
 
     #[test]
     fn invalid_display_settings_do_not_block_a_valid_local_transport() {
