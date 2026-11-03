@@ -71,9 +71,53 @@ fn restrict_private_file_permissions(path: &Path) -> std::io::Result<()> {
     fs::set_permissions(path, fs::Permissions::from_mode(0o600))
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, target_os = "windows")))]
 fn restrict_private_file_permissions(_path: &Path) -> std::io::Result<()> {
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn restrict_private_file_permissions(path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::{
+        Foundation::LocalFree,
+        Security::{
+            Authorization::{
+                ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+            },
+            SetFileSecurityW, DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
+        },
+    };
+    // Protected DACL: owner rights and SYSTEM only, before any bytes are written.
+    let sddl: Vec<u16> = "D:P(A;;FA;;;SY)(A;;FA;;;OW)"
+        .encode_utf16()
+        .chain([0])
+        .collect();
+    let path: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    let mut descriptor = std::ptr::null_mut();
+    unsafe {
+        if ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl.as_ptr(),
+            SDDL_REVISION_1,
+            &mut descriptor,
+            std::ptr::null_mut(),
+        ) == 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
+        let result = SetFileSecurityW(
+            path.as_ptr(),
+            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+            descriptor,
+        );
+        let error = std::io::Error::last_os_error();
+        LocalFree(descriptor);
+        if result == 0 {
+            Err(error)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 fn temporary_sibling_path(path: &Path) -> PathBuf {

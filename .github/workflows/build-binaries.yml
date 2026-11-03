@@ -160,6 +160,10 @@ jobs:
         if: runner.os == 'macOS'
         run: python -m unittest tests/test_macos_documents.py
 
+      - name: Test Windows settings file permissions
+        if: runner.os == 'Windows'
+        run: cargo test --locked --test settings_storage_windows
+
       - name: Test renderer process boundary
         run: cargo test --test renderer_process
 
