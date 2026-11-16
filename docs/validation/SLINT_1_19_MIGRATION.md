@@ -29,6 +29,10 @@ input/intent changes, and sandboxed URL-drop hooks are still required.
 License and SBOM collection discover Cargo dependencies dynamically; the backend
 is now a registry dependency and winit remains a modified local dependency.
 Earlier validation documents describe their historical vendored builds.
+A file-by-file comparison against the published 1.18.1 crate found local changes
+only in the two Cargo manifests, `event_loop.rs`, `lib.rs`, `muda.rs`,
+`startup_notify.rs`, and `winitwindowadapter.rs`; all belong to the behaviors
+listed above. No additional backend patches were discarded.
 
 ## Linux activation token timing
 
@@ -67,3 +71,19 @@ Native checks are still pending for the upgraded dependency set:
 
 Historical procedures remain in `ISSUE304_LINUX_DESKTOP.md`,
 `ISSUE400_HIDDEN_SLIDE.md`, and `PR397_MACOS_STARTUP_RESTORATION.md`.
+
+## Local results (2026-11-17)
+
+The migration is based on the updated `v3.0.0` branch, retaining its dependency
+security updates and Windows settings ACL hardening.
+
+- `cargo fmt --check`: passed.
+- `cargo check --locked`: passed on macOS arm64 with Rust 1.100.0.
+- `cargo test --locked`: passed (including the new exit/role forwarding probe).
+- `scripts/check_linux_cross_docker.sh`: passed with Rust 1.96 for
+  `x86_64-unknown-linux-gnu`, including generated `app-linux.slint`.
+- `python3 -m unittest tests/test_release_sbom.py`: 21 passed.
+- `cargo tree --locked -i winit`: all paths resolve to the unchanged local
+  `vendor/winit` 0.30.13 override; Slint's backend resolves to registry 1.19.0.
+
+The existing manifest warning for unused `futures` remains outside this migration.
