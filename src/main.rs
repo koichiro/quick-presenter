@@ -262,7 +262,6 @@ fn main() -> Result<()> {
     initialize_audience_window_size(&windows.refs());
     let window_refs = show_initial_windows(&windows)?;
     set_application_icon();
-    remove_macos_native_about_menu_item();
     let _audience_chrome_sync_timer = start_audience_chrome_sync(window_refs.clone());
     let _render_sizing_timer = start_render_sizing_updates(window_refs.clone(), state.clone());
     window_controller::start_audience_placement(window_refs.clone());
@@ -531,16 +530,6 @@ fn set_application_icon_now() {
 #[cfg(not(target_os = "macos"))]
 fn set_application_icon() {}
 
-#[cfg(target_os = "macos")]
-fn remove_macos_native_about_menu_item() {
-    // Avoid mutating the native App menu at runtime. On macOS this can raise
-    // Objective-C exceptions across the winit event loop boundary when the app
-    // later changes the audience window geometry.
-}
-
-#[cfg(not(target_os = "macos"))]
-fn remove_macos_native_about_menu_item() {}
-
 #[allow(dead_code)]
 #[cfg(test)]
 struct RenderedPages {
@@ -582,7 +571,7 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let app = &windows.presenter;
     let display_swap_active = Rc::new(DisplaySwapController::default());
 
-    wire_presenter_close_request(windows);
+    wire_application_menu_and_close_requests(windows);
 
     let window_refs = refs.clone();
     let state_for_open = state.clone();
@@ -867,17 +856,43 @@ fn handle_display_swap(
     }
 }
 
-fn wire_presenter_close_request(windows: &AppWindows) {
+fn request_app_quit(windows: &AppWindowRefs) {
+    window_controller::capture_audience_placement(windows);
+    if let Err(error) = slint::quit_event_loop() {
+        warn!(error = ?error, "failed to quit event loop");
+        if let Some(presenter) = windows.presenter.upgrade() {
+            presenter.set_status_text("Could not quit. Please try again.".into());
+        }
+    }
+}
+
+fn wire_application_menu_and_close_requests(windows: &AppWindows) {
+    let refs = windows.refs();
+    windows
+        .presenter
+        .on_quit_requested(move || request_app_quit(&refs));
+    let refs = windows.refs();
+    windows
+        .audience
+        .on_quit_requested(move || request_app_quit(&refs));
+    let refs = windows.refs();
+    windows.audience.on_open_settings(move || {
+        if let Some(presenter) = refs.presenter.upgrade() {
+            presenter.invoke_open_settings();
+            window_controller::show_presenter_window(&refs);
+        }
+    });
+    let refs = windows.refs();
+    windows.audience.on_show_about(move || {
+        if let Some(presenter) = refs.presenter.upgrade() {
+            presenter.set_about_visible(true);
+            window_controller::show_presenter_window(&refs);
+        }
+    });
     let refs = windows.refs();
     windows.presenter.window().on_close_requested(move || {
-        window_controller::capture_audience_placement(&refs);
-        match slint::quit_event_loop() {
-            Ok(()) => CloseRequestResponse::KeepWindowShown,
-            Err(err) => {
-                warn!(error = ?err, "failed to quit event loop from presenter close request");
-                CloseRequestResponse::KeepWindowShown
-            }
-        }
+        request_app_quit(&refs);
+        CloseRequestResponse::KeepWindowShown
     });
 }
 
@@ -2631,6 +2646,101 @@ fn update_presenter_time_labels(presenter: &Weak<PresenterWindow>, timer: &Prese
 mod tests {
     use super::*;
     use anyhow::anyhow;
+
+    #[test]
+    fn quit_callback_and_presenter_close_share_recoverable_event_loop_exit() {
+        use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+        use slint::platform::{EventLoopProxy, Platform, WindowAdapter, WindowEvent};
+        use std::sync::{
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Arc,
+        };
+
+        #[derive(Clone, Default)]
+        struct ExitProbe {
+            requests: Arc<AtomicUsize>,
+            fail: Arc<AtomicBool>,
+        }
+        impl EventLoopProxy for ExitProbe {
+            fn quit_event_loop(&self) -> std::result::Result<(), slint::EventLoopError> {
+                self.requests.fetch_add(1, Ordering::SeqCst);
+                if self.fail.load(Ordering::SeqCst) {
+                    Err(slint::EventLoopError::EventLoopTerminated)
+                } else {
+                    Ok(())
+                }
+            }
+            fn invoke_from_event_loop(
+                &self,
+                _event: Box<dyn FnOnce() + Send>,
+            ) -> std::result::Result<(), slint::EventLoopError> {
+                unreachable!("this test only requests exit")
+            }
+        }
+        struct QuitPlatform(ExitProbe);
+        impl Platform for QuitPlatform {
+            fn create_window_adapter(
+                &self,
+            ) -> std::result::Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
+                Ok(MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer))
+            }
+            fn new_event_loop_proxy(&self) -> Option<Box<dyn EventLoopProxy>> {
+                Some(Box::new(self.0.clone()))
+            }
+        }
+
+        let probe = ExitProbe::default();
+        slint::platform::set_platform(Box::new(QuitPlatform(probe.clone()))).unwrap();
+        // Construct software windows directly, bypassing native AppKit setup.
+        let windows = AppWindows {
+            presenter: PresenterWindow::new().unwrap(),
+            audience: AudienceWindow::new().unwrap(),
+            placement: Rc::default(),
+        };
+        wire_application_menu_and_close_requests(&windows);
+        windows.presenter.show().unwrap();
+        windows.presenter.invoke_quit_requested();
+        assert_eq!(probe.requests.load(Ordering::SeqCst), 1);
+        windows
+            .presenter
+            .window()
+            .dispatch_event(WindowEvent::CloseRequested);
+        assert_eq!(probe.requests.load(Ordering::SeqCst), 2);
+        assert!(windows.presenter.window().is_visible());
+
+        probe.fail.store(true, Ordering::SeqCst);
+        windows.presenter.invoke_quit_requested();
+        assert_eq!(probe.requests.load(Ordering::SeqCst), 3);
+        assert_eq!(
+            windows.presenter.get_status_text(),
+            "Could not quit. Please try again."
+        );
+        assert!(windows.presenter.window().is_visible());
+        windows
+            .presenter
+            .window()
+            .dispatch_event(WindowEvent::CloseRequested);
+        assert_eq!(probe.requests.load(Ordering::SeqCst), 4);
+        assert!(windows.presenter.window().is_visible());
+        probe.fail.store(false, Ordering::SeqCst);
+        windows.presenter.invoke_quit_requested();
+        assert_eq!(probe.requests.load(Ordering::SeqCst), 5);
+        windows.audience.invoke_quit_requested();
+        assert_eq!(probe.requests.load(Ordering::SeqCst), 6);
+        probe.fail.store(true, Ordering::SeqCst);
+        windows.audience.invoke_quit_requested();
+        assert_eq!(probe.requests.load(Ordering::SeqCst), 7);
+        assert!(windows.presenter.window().is_visible());
+        windows.presenter.hide().unwrap();
+        windows.audience.invoke_open_settings();
+        assert!(windows.presenter.get_settings_visible());
+        assert!(windows.presenter.window().is_visible());
+        windows.presenter.invoke_close_settings();
+        windows.presenter.hide().unwrap();
+        windows.audience.invoke_show_about();
+        assert!(windows.presenter.get_about_visible());
+        assert!(windows.presenter.window().is_visible());
+    }
 
     #[test]
     fn fitted_audience_window_content_size_ignores_titlebar_compensation() {

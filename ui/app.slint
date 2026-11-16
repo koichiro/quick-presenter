@@ -964,7 +964,7 @@ export component PresenterWindow inherits Window {
     in property <string> about-pdfium-license-summary: "";
     in property <[ThumbnailItem]> thumbnails: [];
     in property <int> current-page-index: 0;
-    property <bool> about-visible: false;
+    in-out property <bool> about-visible: false;
     property <int> active-menu-index: -1;
     property <length> inline-menu-height: root.use-native-menu-bar ? 0px : 28px;
     property <length> presenter-main-height: max(0px, root.height - root.inline-menu-height - 96px - root.audience-panel-height);
@@ -993,6 +993,7 @@ export component PresenterWindow inherits Window {
     callback keyboard-first-page();
     callback keyboard-last-page();
     callback notes-navigation-key(KeyEvent) -> bool;
+    callback quit-requested();
     callback swap-displays();
     callback jump-to-page(int);
     callback request-thumbnail-range(int, int);
@@ -1024,7 +1025,13 @@ export component PresenterWindow inherits Window {
             title: "Application";
             MenuItem {
                 title: "Settings...";
+                role: preferences;
                 activated => { root.open-settings(); }
+            }
+            MenuItem {
+                title: "Quit Quick Presenter";
+                role: quit;
+                activated => { root.quit-requested(); }
             }
         }
         Menu {
@@ -1181,6 +1188,7 @@ export component PresenterWindow inherits Window {
 
             MenuItem {
                 title: "About Quick Presenter";
+                role: about;
                 activated => {
                     root.about-visible = true;
                 }
@@ -2194,6 +2202,33 @@ export component AudienceWindow inherits Window {
     callback keyboard-first-page();
     callback keyboard-last-page();
     callback swap-displays();
+
+    in property <bool> use-native-app-menu: false;
+    callback open-settings();
+    callback show-about();
+    callback quit-requested();
+
+    // Keep native application actions connected while the audience has focus.
+    if root.use-native-app-menu: MenuBar {
+        Menu {
+            title: "Application";
+            MenuItem {
+                title: "Settings...";
+                role: preferences;
+                activated => { root.open-settings(); }
+            }
+            MenuItem {
+                title: "About Quick Presenter";
+                role: about;
+                activated => { root.show-about(); }
+            }
+            MenuItem {
+                title: "Quit Quick Presenter";
+                role: quit;
+                activated => { root.quit-requested(); }
+            }
+        }
+    }
 
     title: "Quick Presenter - Audience";
     preferred-width: root.audience-window-width;
