@@ -883,13 +883,8 @@ impl AudienceUi {
                             }
                             AudienceEvent::Comment { body, handle } => {
                                 let text = crate::audience_events::comment_display(body, handle);
-                                let width = if let Some(audience) = self.windows.audience.upgrade()
-                                {
-                                    audience.set_comment_measure_text(text.into());
-                                    audience.get_comment_measure_width()
-                                } else {
-                                    f32::NAN
-                                };
+                                window.set_comment_measure_text(text.into());
+                                let width = window.get_comment_measure_width();
                                 self.comments.borrow_mut().receive(
                                     &accepted,
                                     width,

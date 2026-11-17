@@ -123,3 +123,24 @@ helper handshake, so it does not establish full PDF GUI success; native Ubuntu
 CI must complete the installed-package smoke. `cargo fmt --check`,
 `cargo check --locked`, and `cargo test --locked` (635 passed, 2 ignored) passed
 locally after the harness change.
+
+## Native Linux step-4 execution (2026-11-17)
+
+See [the native Linux results](SLINT_1_19_LINUX_RESULTS.md) for the exact HEAD,
+host, commands, per-target counts, raw evidence and remaining package/desktop
+boundaries. Rust tests passed (629 passed, 2 ignored); X11/Xvfb GUI smoke passed
+215 checks. Native Wayland comment-width assertions failed in both full and
+focused smoke. These observations do not claim a green installed-package Ubuntu
+CI rerun or completion of the manual step-5 desktop checks.
+
+## Native Linux step-5 follow-up (2026-11-17)
+
+The [Linux step-5 report](SLINT_1_19_LINUX_STEP5.md) records the native Wayland
+comment-width regression, its persistent-presenter measurement workaround,
+630 passing Rust tests (2 ignored), and 215 passing GUI checks on each tested
+Wayland/XWayland configuration. The separate [About readability follow-up](SLINT_1_19_LINUX_ABOUT.md)
+records the layout repair and completed normal/minimum-size desktop checks.
+These changes are transferred on `codex/slint-1-19-linux-validation`, based on
+`deee3b6`, for integration and review. Raw evidence remains local and uncommitted.
+Physical multiple-monitor/mixed-DPI acceptance and the pre-existing Linux
+Bring-to-Front focus limitation remain explicitly outside the passing results.
