@@ -2336,27 +2336,34 @@ async fn resize_presenter_notes(
     wait_for_presenter_notes_resize(presenter, Some(size)).await
 }
 
+async fn sample_presenter_notes_layout(presenter: &crate::PresenterWindow) -> NotesResizeSnapshot {
+    // Rendering callbacks can stop for occluded Wayland windows. Keep the
+    // input/layout pass running while native configuration is in flight.
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::PointerExited);
+    presenter.window().request_redraw();
+    delay(Duration::from_millis(10)).await;
+    NotesResizeSnapshot::capture(presenter)
+}
+
 async fn wait_for_presenter_notes_resize(
     presenter: &crate::PresenterWindow,
     requested: Option<slint::LogicalSize>,
 ) -> Result<()> {
+    settle_presenter_notes_layout(presenter).await?;
+    // Cold font/renderer initialization can block the first input/render pass
+    // longer than the settling deadline. Start observing stability after that
+    // first sample, so a correct layout gets a full quiet-period check.
+    let mut previous = sample_presenter_notes_layout(presenter).await;
     let started = Instant::now();
-    let mut previous = None;
     let mut unchanged_since = started;
     let mut last_request = started;
     let mut retries = 0;
-    settle_presenter_notes_layout(presenter).await?;
     loop {
-        // Rendering callbacks can stop for occluded Wayland windows. Keep the
-        // input/layout pass running while native configuration is in flight.
-        presenter
-            .window()
-            .dispatch_event(slint::platform::WindowEvent::PointerExited);
-        presenter.window().request_redraw();
-        delay(Duration::from_millis(10)).await;
-        let snapshot = NotesResizeSnapshot::capture(presenter);
+        let snapshot = sample_presenter_notes_layout(presenter).await;
         let now = Instant::now();
-        if previous.as_ref() != Some(&snapshot) {
+        if previous != snapshot {
             unchanged_since = now;
         }
         let logical = snapshot
@@ -2391,7 +2398,7 @@ async fn wait_for_presenter_notes_resize(
             }
             return Ok(());
         }
-        previous = Some(snapshot);
+        previous = snapshot;
         if started.elapsed() >= Duration::from_secs(5) {
             bail!(
                 "presenter notes did not settle after resize to {requested:?} ({retries} geometry retries): layout={:?}",

@@ -87,3 +87,39 @@ security updates and Windows settings ACL hardening.
   `vendor/winit` 0.30.13 override; Slint's backend resolves to registry 1.19.0.
 
 The existing manifest warning for unused `futures` remains outside this migration.
+
+## Step 4 execution and OS handoffs (2026-11-17)
+
+The earlier local results above are historical. Fresh Mac execution, retries,
+PDFium versions, concurrent working-tree changes, native GUI evidence and the
+Ubuntu CI resize timeout investigation are recorded separately:
+
+- [Mac step-4 execution report](SLINT_1_19_MACOS_STEP4.md).
+- [Self-contained native Windows Codex assignment](SLINT_1_19_WINDOWS_CODEX.md).
+- [Self-contained native Linux Codex assignment](SLINT_1_19_LINUX_CODEX.md).
+
+The OS assignments request native execution and saved evidence; they do not
+assert that Windows/Linux have already been validated or authorize release.
+
+## Installed Linux GUI smoke follow-up
+
+The first PR build passed compilation, unit tests, packaging, and headless PDF
+opening, then failed the installed Debian GUI smoke's first notes resize.
+Its final geometry and 12px placeholder font were correct. The five-second
+settling deadline had already expired before the first layout observation.
+
+The failure was reproduced under Xvfb with software OpenGL and a 0.25-CPU limit:
+the first observation arrived at 12.6 seconds and immediately failed with the
+same 800x608 geometry. The harness now samples the initial input/render pass
+before starting its settling clock. This keeps cold renderer/font setup out of
+the observation budget. Exact snapshot equality, the 200ms quiet period, the
+five-second deadline, geometry retry behavior, and font-fitting checks remain
+unchanged. Production layout and PDF playback code are unaffected.
+
+With the fix, the same throttled startup passed the notes resize and the first
+77 GUI checks. The CPU limit was removed after the first 25 seconds for the rest
+of the run. This emulated x86_64 Docker environment then failed the renderer
+helper handshake, so it does not establish full PDF GUI success; native Ubuntu
+CI must complete the installed-package smoke. `cargo fmt --check`,
+`cargo check --locked`, and `cargo test --locked` (635 passed, 2 ignored) passed
+locally after the harness change.
