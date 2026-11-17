@@ -149,3 +149,17 @@ These changes are transferred on `codex/slint-1-19-linux-validation`, based on
 `deee3b6`, for integration and review. Raw evidence remains local and uncommitted.
 Physical multiple-monitor/mixed-DPI acceptance and the pre-existing Linux
 Bring-to-Front focus limitation remain explicitly outside the passing results.
+
+## Native Windows validation and integration (2026-11-17)
+
+The [Windows step-4 record](SLINT_1_19_WINDOWS_RESULTS.md) retains the initial
+font-fixture failures and the measured-fixture correction. The
+[Windows step-5 record](SLINT_1_19_WINDOWS_STEP5.md) records the work-area
+correction, 610 passing Rust tests (2 ignored), 208 passing GUI checks, native
+125% DPI observations and distinct process-configured 100% checks. Physical
+second-monitor and cross-monitor DPI checks remain unperformed.
+
+Windows transfer `f7d48cd` was integrated as `8711bf8`; Linux transfer `fd67ef1`
+was integrated as `013a26a`. The [closeout record](SLINT_1_19_CLOSEOUT.md)
+identifies the combined-source checks and merge boundary. The winit override,
+PDFium pin and renderer ownership/sandbox boundaries remain unchanged.

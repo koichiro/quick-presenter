@@ -9,9 +9,12 @@ The known pre-PDF notes-resize timeout did not recur at the execution HEAD.
 
 The ambient Wayland full smoke failed **213 passed / 2 failed** on comment
 font-width measurement. A focused native Wayland reproduction failed
-**142 passed / 2 failed** at the same assertions. This remains unresolved;
-its attribution to the migration is unconfirmed. Consequently, this is not an
-all-platform GUI approval or a claim that the installed Ubuntu CI failure is closed.
+**142 passed / 2 failed** at the same assertions. Those are historical step-4
+failures: the [step-5 follow-up](SLINT_1_19_LINUX_STEP5.md) subsequently isolated
+the Slint 1.19 regression and verified the workaround with **215 passed / 0
+failed** in the tested Wayland and XWayland configurations. This original
+step-4 execution is not an all-platform GUI approval or evidence that the
+installed Ubuntu CI failure was closed by that execution.
 
 ## Host and execution identity
 

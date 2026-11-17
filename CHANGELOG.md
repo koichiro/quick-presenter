@@ -18,6 +18,9 @@
   window on Wayland.
 - Make the About license descriptions scrollable so their complete text and
   the Close button remain accessible in smaller windows.
+- Fit the Windows presenter to the monitor's taskbar-free work area, including
+  at 125% DPI and when expanding Audience Live, while keeping notes and controls
+  usable.
 
 ## [2.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0) — 2026-10-24
 

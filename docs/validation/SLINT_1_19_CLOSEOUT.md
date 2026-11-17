@@ -8,10 +8,12 @@ migration targets `v3.0.0` through
 Slint and slint-build remain pinned to 1.19.0, Slint edition remains 1.18,
 and the winit 0.30.13 override remains unchanged.
 
-Closeout is in progress. The Windows source/report transfer, combined-source
-validation, current-head review/CI, and merge must finish before this record
-can declare source integration complete. Earlier green CI and desktop results
-must not be relabeled as validation of a later combined source.
+The Mac, Windows and Linux source/report transfers are integrated. Merge is
+gated by combined-source validation, current-head CI and CodeRabbit review;
+the linked PR is authoritative for the final merged revision and check runs.
+Earlier green CI and desktop results are not relabeled as validation of a
+later combined source. This is source-migration acceptance, not a new public
+release or a claim of unperformed hardware/distribution checks.
 
 ## Source and evidence inventory
 
@@ -22,9 +24,10 @@ must not be relabeled as validation of a later combined source.
 | `deee3b6` | Start GUI settling deadline after the first layout observation | Already in migration branch |
 | `3aa6f49` | Mac step-4/step-5 results and OS execution assignments | Committed during closeout |
 | Linux `fd67ef1`, integrated as `013a26a` | Persistent comment measurement, About readability and Linux reports | Integrated during closeout |
-| Windows step-4/step-5 working-tree patches | Measured font-fit fixtures and work-area/DPI correction | Awaiting transfer |
+| Windows `f7d48cd`, integrated as `8711bf8` | Measured font-fit fixtures, work-area/DPI correction and Windows reports | Integrated during closeout |
 
-The Linux transfer branch is `codex/slint-1-19-linux-validation`.
+The transfer branches are `codex/slint-1-19-linux-validation` and
+`codex/slint-1-19-windows-validation`.
 Raw logs, private settings backups, screenshots and disposable documents remain
 in each host's ignored `artifacts/` storage. Repository reports identify their
 actual local source and command scope; copying a report does not re-run it.
@@ -42,7 +45,8 @@ actual local source and command scope; copying a report does not re-run it.
   tested Wayland/XWayland GUI configurations passed 215 checks each. Native
   launch tokens, recreation, menus, notes, reload, exit/restoration and
   normal/minimum-size About readability were exercised.
-- Windows host report (awaiting repository transfer): the work-area fix passed
+- [Windows step 4](SLINT_1_19_WINDOWS_RESULTS.md) and
+  [Windows step 5](SLINT_1_19_WINDOWS_STEP5.md): the work-area fix passed
   fmt/check, 610 Rust tests (2 ignored) and 208 GUI checks. Native 125% DPI and
   process-configured 100% conditions are distinct. Initial fixed placement and
   expanded minimum height could exceed the taskbar-adjusted work area; the
@@ -70,10 +74,30 @@ status is not a pass.
 
 ## Final combined-source validation
 
-Pending Windows integration. Required checks are `cargo fmt --check`,
-`cargo check --all-targets --locked`, `cargo test --locked`, the existing
-macOS Store-feature check, current-head CI/package checks and CodeRabbit
-review. Record exact source and results here once they complete.
+The combined implementation is `8711bf8`. Required checks are
+`cargo fmt --check`, `cargo check --all-targets --locked`, `cargo test --locked`,
+the existing macOS Store-feature check, current-head CI/package checks and
+CodeRabbit review. The latter two are required on the final PR head before
+merge; prior-head successes alone are insufficient.
+
+On native macOS arm64 with Rust 1.100.0 and pinned PDFium 8111, this combined
+implementation passed:
+
+- `cargo fmt --check`.
+- `cargo check --all-targets --locked`.
+- `cargo test --locked`: **637 passed, 0 failed, 2 ignored**.
+- `cargo check --locked --features macos-store-control --lib --bins`.
+- SBOM and CLI packaging Python suites: **27 passed**.
+
+Raw final Rust output is local to
+`artifacts/slint-1-19-closeout/macos-final-test.log`. The manifest's existing
+unused-`futures` warning remains outside this migration.
+
+CodeRabbit's integration review requested a link from the historical Linux
+step-4 Wayland failures to the later passing step-5 results. The link was added
+without replacing the original failures. Current-head review and CI/package
+results are retained in [PR checks](https://github.com/koichiro/quick-presenter/pull/548/checks)
+and the PR discussion; all required checks must pass before merge.
 
 The intermediate Mac source at `013a26a` (Linux changes integrated, Windows
 changes not yet transferred) passed fmt, all-target check, and the complete
