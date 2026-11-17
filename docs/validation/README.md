@@ -28,6 +28,10 @@ state take precedence over historical candidate investigations below.
 
 ## Artifact and runtime results
 
+The [Slint 1.19.0 main backport](SLINT_1_19_MAIN_BACKPORT.md) records the later
+source update, its adaptations to main, and its own validation boundary.
+It does not replace the v2.5.0 package qualification above.
+
 | Record | Exact scope |
 | --- | --- |
 | [Final post-#523 packages](V250_FINAL_PACKAGES_20261024.md) | f4c0180 source/package/SBOM identities, final all-OS CI and current-machine qualification; see its completion boundary. |

@@ -744,7 +744,7 @@ export component PresenterWindow inherits Window {
     in property <string> about-pdfium-license-summary: "";
     in property <[ThumbnailItem]> thumbnails: [];
     in property <int> current-page-index: 0;
-    property <bool> about-visible: false;
+    in-out property <bool> about-visible: false;
     property <int> active-menu-index: -1;
     property <length> inline-menu-height: root.use-native-menu-bar ? 0px : 28px;
     property <length> presenter-main-height: max(0px, root.height - root.inline-menu-height - 96px);
@@ -774,6 +774,7 @@ export component PresenterWindow inherits Window {
     callback keyboard-first-page();
     callback keyboard-last-page();
     callback notes-navigation-key(KeyEvent) -> bool;
+    callback quit-requested();
     callback swap-displays();
     callback jump-to-page(int);
     callback request-thumbnail-range(int, int);
@@ -783,12 +784,21 @@ export component PresenterWindow inherits Window {
     preferred-width: 1024px;
     preferred-height: 720px;
     min-width: 800px;
-    min-height: 560px;
+    out property <length> presenter-minimum-height: 560px;
+    min-height: root.presenter-minimum-height;
     background: #202124;
     forward-focus: presenter-focus;
 
     // BEGIN_NATIVE_MENU_BAR
     if root.use-native-menu-bar: MenuBar {
+        Menu {
+            title: "Application";
+            MenuItem {
+                title: "Quit Quick Presenter";
+                role: quit;
+                activated => { root.quit-requested(); }
+            }
+        }
         Menu {
             title: "File";
 
@@ -943,6 +953,7 @@ export component PresenterWindow inherits Window {
 
             MenuItem {
                 title: "About Quick Presenter";
+                role: about;
                 activated => {
                     root.about-visible = true;
                 }
@@ -1499,7 +1510,7 @@ export component PresenterWindow inherits Window {
 
         Rectangle {
             width: min(parent.width - 48px, 560px);
-            height: min(parent.height - 48px, 420px);
+            height: min(parent.height - 48px, 560px);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             background: #202124;
@@ -1548,35 +1559,46 @@ export component PresenterWindow inherits Window {
                     background: #3c4043;
                 }
 
-                Text {
-                    text: "Application License";
-                    color: #f1f3f4;
-                    font-weight: 700;
-                    height: 24px;
-                    vertical-alignment: center;
-                }
-
-                Text {
-                    text: root.about-license-id + "\n" + root.about-license-summary;
-                    color: #d9dce0;
-                    wrap: word-wrap;
-                    height: 54px;
-                }
-
-                Text {
-                    text: "Bundled Components";
-                    color: #f1f3f4;
-                    font-weight: 700;
-                    height: 24px;
-                    vertical-alignment: center;
-                }
-
-                Text {
-                    text: root.about-pdfium-version-label + "\n" + root.about-pdfium-license-summary;
-                    color: #d9dce0;
-                    wrap: word-wrap;
+                ScrollView {
                     vertical-stretch: 1;
-                    overflow: clip;
+                    content-width: self.visible-width;
+                    content-height: about-content.preferred-height;
+                    about-content := VerticalBox {
+                        width: parent.visible-width;
+                        height: self.preferred-height;
+                        padding: 0px;
+                        spacing: 12px;
+                        Text {
+                            text: "Application License";
+                            color: #f1f3f4;
+                            font-weight: 700;
+                            height: 24px;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: root.about-license-id + "\n" + root.about-license-summary;
+                            color: #d9dce0;
+                            wrap: word-wrap;
+                            height: self.preferred-height;
+                        }
+
+                        Text {
+                            text: "Bundled Components";
+                            color: #f1f3f4;
+                            font-weight: 700;
+                            height: 24px;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: root.about-pdfium-version-label + "\n" + root.about-pdfium-license-summary;
+                            color: #d9dce0;
+                            wrap: word-wrap;
+                            height: self.preferred-height;
+                        }
+
+                    }
                 }
 
                 HorizontalBox {
@@ -1612,6 +1634,27 @@ export component SlideWindow inherits Window {
     callback keyboard-first-page();
     callback keyboard-last-page();
     callback swap-displays();
+
+    in property <bool> use-native-app-menu: false;
+    callback show-about();
+    callback quit-requested();
+
+    // Keep native application actions connected while the slide window has focus.
+    if root.use-native-app-menu: MenuBar {
+        Menu {
+            title: "Application";
+            MenuItem {
+                title: "About Quick Presenter";
+                role: about;
+                activated => { root.show-about(); }
+            }
+            MenuItem {
+                title: "Quit Quick Presenter";
+                role: quit;
+                activated => { root.quit-requested(); }
+            }
+        }
+    }
 
     title: "Quick Presenter - Slide";
     preferred-width: root.slide-window-width;
