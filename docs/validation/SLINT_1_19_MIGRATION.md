@@ -1,5 +1,10 @@
 # Slint 1.19.0 migration
 
+The [closeout record](SLINT_1_19_CLOSEOUT.md) tracks integration of the native
+validation fixes and the final combined-source checks. Historical pending
+statements below retain their original execution scope; the closeout record
+identifies what has since completed and what remains unverified.
+
 ## Scope
 
 The runtime and build compiler are pinned to 1.19.0. `build.rs` explicitly selects
