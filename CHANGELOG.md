@@ -4,10 +4,23 @@
 
 ### Changed
 
+- Upgrade Slint and its build compiler to 1.19.0 while retaining Slint edition
+  1.18. Replace the custom Slint backend with upstream menu identity,
+  hidden-window redraw, window icon, and Linux activation-token fixes.
 - Rename the audience-facing Slide Window to **Audience Window** throughout
   menus, the native window title, Rust/Slint window APIs, and current
   specifications. Existing startup settings and Control Protocol v1 remain
   compatible; presentation behavior and keyboard shortcuts are unchanged.
+
+### Fixed
+
+- Keep flowing-comment measurements current after recreating the audience
+  window on Wayland.
+- Make the About license descriptions scrollable so their complete text and
+  the Close button remain accessible in smaller windows.
+- Fit the Windows presenter to the monitor's taskbar-free work area, including
+  at 125% DPI and when expanding Audience Live, while keeping notes and controls
+  usable.
 
 ## [2.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0) — 2026-10-24
 

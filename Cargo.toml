@@ -51,7 +51,7 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rfd = "0.18"
 futures = "0.3"
-slint = { version = "1.18.1", features = ["raw-window-handle-06", "unstable-winit-030"] }
+slint = { version = "=1.19.0", features = ["raw-window-handle-06", "unstable-winit-030"] }
 pdfium-render = "=0.9.1"
 
 [target.'cfg(unix)'.dependencies]
@@ -62,14 +62,13 @@ zbus = "5.16"
 futures-lite = "2.6"
 
 [build-dependencies]
-slint-build = "1.18.1"
+slint-build = "=1.19.0"
 winresource = { version = "0.1.31", default-features = false }
 
 [dev-dependencies]
 tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
 
 [patch.crates-io]
-i-slint-backend-winit = { path = "vendor/i-slint-backend-winit" }
 winit = { path = "vendor/winit" }
 
 # The Windows renderer tests copy the complete test binary into a fresh
@@ -101,6 +100,7 @@ raw-window-handle = "0.6"
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
     "Win32_Storage_FileSystem",
     "Win32_Storage_Packaging_Appx",
     "Win32_Security",

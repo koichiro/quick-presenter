@@ -2328,6 +2328,22 @@ impl NotesResizeSnapshot {
     }
 }
 
+fn notes_layout_diagnostics(presenter: &crate::PresenterWindow) -> String {
+    let layout = NotesResizeSnapshot::capture(presenter);
+    let scale = presenter.window().scale_factor();
+    let expected = crate::notes::fit_notes_font_size(
+        layout.has_notes,
+        layout.viewport_width,
+        layout.viewport_height,
+        &layout.measured_heights,
+    );
+    format!(
+        "scale={scale}, logical={:?}, bottom_padding={}, expected_font={expected}, layout={layout:?}",
+        layout.window_size.to_logical(scale),
+        crate::notes::NOTES_BOTTOM_PADDING,
+    )
+}
+
 async fn resize_presenter_notes(
     presenter: &crate::PresenterWindow,
     size: slint::LogicalSize,
@@ -2336,27 +2352,34 @@ async fn resize_presenter_notes(
     wait_for_presenter_notes_resize(presenter, Some(size)).await
 }
 
+async fn sample_presenter_notes_layout(presenter: &crate::PresenterWindow) -> NotesResizeSnapshot {
+    // Rendering callbacks can stop for occluded Wayland windows. Keep the
+    // input/layout pass running while native configuration is in flight.
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::PointerExited);
+    presenter.window().request_redraw();
+    delay(Duration::from_millis(10)).await;
+    NotesResizeSnapshot::capture(presenter)
+}
+
 async fn wait_for_presenter_notes_resize(
     presenter: &crate::PresenterWindow,
     requested: Option<slint::LogicalSize>,
 ) -> Result<()> {
+    settle_presenter_notes_layout(presenter).await?;
+    // Cold font/renderer initialization can block the first input/render pass
+    // longer than the settling deadline. Start observing stability after that
+    // first sample, so a correct layout gets a full quiet-period check.
+    let mut previous = sample_presenter_notes_layout(presenter).await;
     let started = Instant::now();
-    let mut previous = None;
     let mut unchanged_since = started;
     let mut last_request = started;
     let mut retries = 0;
-    settle_presenter_notes_layout(presenter).await?;
     loop {
-        // Rendering callbacks can stop for occluded Wayland windows. Keep the
-        // input/layout pass running while native configuration is in flight.
-        presenter
-            .window()
-            .dispatch_event(slint::platform::WindowEvent::PointerExited);
-        presenter.window().request_redraw();
-        delay(Duration::from_millis(10)).await;
-        let snapshot = NotesResizeSnapshot::capture(presenter);
+        let snapshot = sample_presenter_notes_layout(presenter).await;
         let now = Instant::now();
-        if previous.as_ref() != Some(&snapshot) {
+        if previous != snapshot {
             unchanged_since = now;
         }
         let logical = snapshot
@@ -2391,7 +2414,7 @@ async fn wait_for_presenter_notes_resize(
             }
             return Ok(());
         }
-        previous = Some(snapshot);
+        previous = snapshot;
         if started.elapsed() >= Duration::from_secs(5) {
             bail!(
                 "presenter notes did not settle after resize to {requested:?} ({retries} geometry retries): layout={:?}",
@@ -2532,11 +2555,39 @@ async fn check_notes_font_size(
     presenter.set_notes_scroll_y(
         presenter.get_notes_visible_height() - presenter.get_notes_content_height(),
     );
-    presenter.set_notes_text("語\n".repeat(8).into());
-    settle_presenter_notes_layout(presenter).await?;
+    // Native font metrics differ: eight fixed repeats can already require
+    // scrolling at 12px on Windows. Choose the fixture from measurements only,
+    // without consulting the selected size or replacing the production callback.
+    // An 18px fit and 24px overflow preserve the strict intermediate-size check.
+    let mut fixture_repeats = 1;
+    loop {
+        presenter.set_notes_text("語\n".repeat(fixture_repeats).into());
+        settle_presenter_notes_layout(presenter).await?;
+        let heights: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();
+        let viewport = presenter.get_notes_visible_height();
+        if heights.len() == 13
+            && heights
+                .iter()
+                .all(|height| height.is_finite() && *height > 0.0)
+            && heights[6] + crate::notes::NOTES_BOTTOM_PADDING <= viewport
+            && heights[12] + crate::notes::NOTES_BOTTOM_PADDING > viewport
+        {
+            break;
+        }
+        anyhow::ensure!(
+            fixture_repeats < 32,
+            "could not construct intermediate notes fixture: {}",
+            notes_layout_diagnostics(presenter)
+        );
+        fixture_repeats += 1;
+    }
     let small_size = presenter.get_notes_font_size();
     let heights: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();
     let selected = (small_size as usize).saturating_sub(12);
+    let small_diagnostics = format!(
+        "fixture_repeats={fixture_repeats}, {}",
+        notes_layout_diagnostics(presenter)
+    );
     report.check(
         format!("shrinking content clamps the previous end-of-note scroll offset ({context})"),
         presenter.get_notes_scroll_y() == 0.0,
@@ -2547,19 +2598,16 @@ async fn check_notes_font_size(
         format!("multi-line notes use the largest fitting measured size ({context})"),
         small_size > 12.0
             && small_size < 24.0
-            && heights
-                .get(selected)
-                .is_some_and(|height| *height + 10.0 <= presenter.get_notes_visible_height())
-            && heights
-                .iter()
-                .skip(selected + 1)
-                .all(|height| *height + 10.0 > presenter.get_notes_visible_height())
+            && small_size.fract() == 0.0
+            && heights.get(selected).is_some_and(|height| {
+                *height + crate::notes::NOTES_BOTTOM_PADDING <= presenter.get_notes_visible_height()
+            })
+            && heights.iter().skip(selected + 1).all(|height| {
+                *height + crate::notes::NOTES_BOTTOM_PADDING > presenter.get_notes_visible_height()
+            })
             && presenter.get_notes_content_height() <= presenter.get_notes_visible_height(),
-        "an intermediate size fits and every larger candidate overflows",
-        format!(
-            "size={small_size}, measurements={heights:?}, viewport={}",
-            presenter.get_notes_visible_height()
-        ),
+        small_diagnostics.clone(),
+        small_diagnostics,
     );
     // Keep the width fixed so the slide preview does not consume the extra
     // vertical room. The collapsed footer makes this a 608 -> 640px resize,
@@ -2574,24 +2622,29 @@ async fn check_notes_font_size(
     let resized_height = presenter.get_notes_visible_height();
     let resized_measurements: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();
     let resized_selected = (resized_size as usize).saturating_sub(12);
+    let resized_diagnostics = notes_layout_diagnostics(presenter);
     report.check(
-        format!("resize events select the largest size fitting the settled notes viewport ({context})"),
+        format!(
+            "resize events select the largest size fitting the settled notes viewport ({context})"
+        ),
         (12.0..=24.0).contains(&resized_size)
             && resized_size.fract() == 0.0
             && resized_measurements.len() == 13
-            && resized_measurements.iter().all(|height| height.is_finite() && *height > 0.0)
-            && resized_measurements.get(resized_selected).is_some_and(|height| {
-                *height + crate::notes::NOTES_BOTTOM_PADDING <= resized_height
-            })
-            && resized_measurements.iter().skip(resized_selected + 1).all(|height| {
-                *height + crate::notes::NOTES_BOTTOM_PADDING > resized_height
-            })
+            && resized_measurements
+                .iter()
+                .all(|height| height.is_finite() && *height > 0.0)
+            && resized_measurements
+                .get(resized_selected)
+                .is_some_and(|height| {
+                    *height + crate::notes::NOTES_BOTTOM_PADDING <= resized_height
+                })
+            && resized_measurements
+                .iter()
+                .skip(resized_selected + 1)
+                .all(|height| *height + crate::notes::NOTES_BOTTOM_PADDING > resized_height)
             && presenter.get_notes_content_height() <= resized_height,
-        format!("font={resized_size}px fits the settled {resized_height}px viewport"),
-        format!(
-            "before={small_size}, after={resized_size}, viewport={resized_height}, measurements={resized_measurements:?}, window={:?}",
-            presenter.window().size()
-        ),
+        resized_diagnostics.clone(),
+        resized_diagnostics,
     );
 
     // Change only the preview's aspect ratio to release notes space without
@@ -2601,8 +2654,13 @@ async fn check_notes_font_size(
     let constrained_height = presenter.get_notes_visible_height();
     let constrained_size = presenter.get_notes_font_size();
     let controlled_window = presenter.window().size();
+    let constrained_diagnostics = notes_layout_diagnostics(presenter);
     presenter.set_current_page_aspect_ratio(4.0);
     settle_presenter_notes_layout(presenter).await?;
+    let growth_diagnostics = format!(
+        "before: {constrained_diagnostics}; after: {}",
+        notes_layout_diagnostics(presenter)
+    );
     report.check(
         format!("increasing available notes space automatically enlarges text ({context})"),
         presenter.window().size() == controlled_window
@@ -2610,8 +2668,8 @@ async fn check_notes_font_size(
             && presenter.get_notes_font_size() > constrained_size
             && presenter.get_notes_font_size() == 24.0
             && presenter.get_notes_content_height() <= presenter.get_notes_visible_height(),
-        format!("viewport {constrained_height} -> {}px, font {constrained_size} -> 24px", presenter.get_notes_visible_height()),
-        format!("viewport {constrained_height} -> {}px, font {constrained_size} -> {}px, window {controlled_window:?} -> {:?}", presenter.get_notes_visible_height(), presenter.get_notes_font_size(), presenter.window().size()),
+        growth_diagnostics.clone(),
+        growth_diagnostics,
     );
     resize_presenter_notes(
         presenter,

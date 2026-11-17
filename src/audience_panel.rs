@@ -20,12 +20,25 @@ impl AudiencePanelGeometry {
         if presenter.get_audience_panel_expanded() == expanded {
             return;
         }
+        #[cfg(target_os = "windows")]
+        crate::windows_window::fit_presenter_to_work_area(presenter);
         let window = presenter.window();
         let current = window.size();
         let scale = window.scale_factor();
         let hidden_height =
             ((presenter.get_audience_expanded_height() - 48.0) * scale).round() as u32;
         presenter.set_audience_panel_expanded(expanded);
+        let limit_height = |height: u32| {
+            let available = presenter.get_presenter_work_area_height();
+            if available > 0.0 {
+                let minimum = (presenter.get_presenter_minimum_height() * scale).ceil() as u32;
+                height
+                    .max(minimum)
+                    .min(((available * scale).floor() as u32).max(minimum))
+            } else {
+                height
+            }
+        };
 
         // Let the OS retain ownership of maximized/fullscreen geometry.
         if window.is_maximized() || window.is_fullscreen() {
@@ -46,11 +59,11 @@ impl AudiencePanelGeometry {
         } else {
             let target = PhysicalSize::new(
                 current.width,
-                if expanded {
+                limit_height(if expanded {
                     current.height.saturating_add(hidden_height)
                 } else {
                     current.height.saturating_sub(hidden_height).max(1)
-                },
+                }),
             );
             self.sizes = Some(PanelSizes {
                 expanded: if expanded { target } else { current },
@@ -67,6 +80,8 @@ impl AudiencePanelGeometry {
                 f64::from(presenter.get_presenter_minimum_height()),
             )));
         });
-        window.set_size(target);
+        window.set_size(PhysicalSize::new(target.width, limit_height(target.height)));
+        #[cfg(target_os = "windows")]
+        crate::windows_window::fit_presenter_to_work_area(presenter);
     }
 }

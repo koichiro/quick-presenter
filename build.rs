@@ -13,7 +13,8 @@ fn main() {
         } else {
             std::path::PathBuf::from("ui/app.slint")
         };
-    slint_build::compile(slint_source).unwrap();
+    let config = slint_build::CompilerConfiguration::new().with_edition((1, 18));
+    slint_build::compile_with_config(slint_source, config).unwrap();
 
     println!("cargo:rerun-if-changed=assets/icons/windows/quick-presenter.ico");
     println!("cargo:rerun-if-changed=ui/app.slint");

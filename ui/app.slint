@@ -826,6 +826,17 @@ component ThumbnailPane inherits Rectangle {
 }
 
 export component PresenterWindow inherits Window {
+    in property <string> comment-measure-text;
+    out property <float> comment-measure-width: comment-measure.preferred-width / 1px;
+    // Keep font measurement on the persistent presenter. Slint 1.19 can retain
+    // stale text metrics after recreating an audience window on Wayland.
+    comment-measure := Text {
+        visible: false;
+        text: root.comment-measure-text;
+        font-size: 32px;
+        font-weight: 700;
+        wrap: no-wrap;
+    }
     icon: @image-url("../assets/icons/png/quick-presenter-icon-256.png");
     in property <string> audience-address;
     in property <string> audience-status: "Stopped";
@@ -846,10 +857,18 @@ export component PresenterWindow inherits Window {
     out property <length> audience-panel-height: root.audience-panel-expanded ? root.audience-expanded-height : 48px;
     // Infer the equivalent expanded height while collapsed so resizing the
     // window by the hidden footer height keeps slides and notes unchanged.
-    out property <length> audience-expanded-height: root.audience-panel-expanded
+    // Zero leaves compositor-managed and software-test geometry unchanged.
+    in property <length> presenter-work-area-height: 0px;
+    // Reserve the main panes (464px) and surrounding controls/spacing (96px).
+    // The history can scroll; keep its disclosure and URL rows usable.
+    property <length> audience-expanded-height-limit: root.presenter-work-area-height > 0px
+        ? max(150px, root.presenter-work-area-height - 560px) : 360px;
+    out property <length> audience-expanded-height: min(root.audience-expanded-height-limit, root.audience-panel-expanded
         ? clamp(round((root.height - root.inline-menu-height) / 1px * 0.28) * 1px, 282px, 360px)
-        : clamp(round((root.height - root.inline-menu-height - 48px) / 1px * (0.28 / 0.72)) * 1px, 282px, 360px);
-    out property <length> presenter-minimum-height: root.audience-panel-expanded ? 842px : 608px;
+        : clamp(round((root.height - root.inline-menu-height - 48px) / 1px * (0.28 / 0.72)) * 1px, 282px, 360px));
+    out property <length> presenter-minimum-height: root.audience-panel-expanded
+        ? (root.presenter-work-area-height > 0px ? min(842px, max(710px, root.presenter-work-area-height)) : 842px)
+        : 608px;
     out property <bool> audience-history-visible: audience-panel.visible;
     out property <bool> audience-url-visible: audience-url-row.visible;
     out property <length> audience-footer-bottom: root.audience-panel-expanded ? root.audience-url-bottom : root.audience-toggle-bottom;
@@ -964,7 +983,7 @@ export component PresenterWindow inherits Window {
     in property <string> about-pdfium-license-summary: "";
     in property <[ThumbnailItem]> thumbnails: [];
     in property <int> current-page-index: 0;
-    property <bool> about-visible: false;
+    in-out property <bool> about-visible: false;
     property <int> active-menu-index: -1;
     property <length> inline-menu-height: root.use-native-menu-bar ? 0px : 28px;
     property <length> presenter-main-height: max(0px, root.height - root.inline-menu-height - 96px - root.audience-panel-height);
@@ -993,6 +1012,7 @@ export component PresenterWindow inherits Window {
     callback keyboard-first-page();
     callback keyboard-last-page();
     callback notes-navigation-key(KeyEvent) -> bool;
+    callback quit-requested();
     callback swap-displays();
     callback jump-to-page(int);
     callback request-thumbnail-range(int, int);
@@ -1024,7 +1044,13 @@ export component PresenterWindow inherits Window {
             title: "Application";
             MenuItem {
                 title: "Settings...";
+                role: preferences;
                 activated => { root.open-settings(); }
+            }
+            MenuItem {
+                title: "Quit Quick Presenter";
+                role: quit;
+                activated => { root.quit-requested(); }
             }
         }
         Menu {
@@ -1181,6 +1207,7 @@ export component PresenterWindow inherits Window {
 
             MenuItem {
                 title: "About Quick Presenter";
+                role: about;
                 activated => {
                     root.about-visible = true;
                 }
@@ -2067,7 +2094,7 @@ export component PresenterWindow inherits Window {
 
         Rectangle {
             width: min(parent.width - 48px, 560px);
-            height: min(parent.height - 48px, 420px);
+            height: min(parent.height - 48px, 560px);
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             background: #202124;
@@ -2116,35 +2143,46 @@ export component PresenterWindow inherits Window {
                     background: #3c4043;
                 }
 
-                Text {
-                    text: "Application License";
-                    color: #f1f3f4;
-                    font-weight: 700;
-                    height: 24px;
-                    vertical-alignment: center;
-                }
-
-                Text {
-                    text: root.about-license-id + "\n" + root.about-license-summary;
-                    color: #d9dce0;
-                    wrap: word-wrap;
-                    height: 54px;
-                }
-
-                Text {
-                    text: "Bundled Components";
-                    color: #f1f3f4;
-                    font-weight: 700;
-                    height: 24px;
-                    vertical-alignment: center;
-                }
-
-                Text {
-                    text: root.about-pdfium-version-label + "\n" + root.about-pdfium-license-summary;
-                    color: #d9dce0;
-                    wrap: word-wrap;
+                ScrollView {
                     vertical-stretch: 1;
-                    overflow: clip;
+                    content-width: self.visible-width;
+                    content-height: about-content.preferred-height;
+                    about-content := VerticalBox {
+                        width: parent.visible-width;
+                        height: self.preferred-height;
+                        padding: 0px;
+                        spacing: 12px;
+                        Text {
+                            text: "Application License";
+                            color: #f1f3f4;
+                            font-weight: 700;
+                            height: 24px;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: root.about-license-id + "\n" + root.about-license-summary;
+                            color: #d9dce0;
+                            wrap: word-wrap;
+                            height: self.preferred-height;
+                        }
+
+                        Text {
+                            text: "Bundled Components";
+                            color: #f1f3f4;
+                            font-weight: 700;
+                            height: 24px;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: root.about-pdfium-version-label + "\n" + root.about-pdfium-license-summary;
+                            color: #d9dce0;
+                            wrap: word-wrap;
+                            height: self.preferred-height;
+                        }
+
+                    }
                 }
 
                 HorizontalBox {
@@ -2170,8 +2208,6 @@ export component AudienceWindow inherits Window {
     in property <[ReactionOverlayItem]> audience-overlay;
     in property <[CommentOverlayItem]> audience-comments;
     in property <[BubbleOverlayItem]> audience-bubbles;
-    in property <string> comment-measure-text;
-    out property <float> comment-measure-width: comment-measure.preferred-width / 1px;
     callback audience-clear-overlay();
     in property <bool> audience-sticky-qr-enabled: false;
     in property <image> audience-qr;
@@ -2194,6 +2230,33 @@ export component AudienceWindow inherits Window {
     callback keyboard-first-page();
     callback keyboard-last-page();
     callback swap-displays();
+
+    in property <bool> use-native-app-menu: false;
+    callback open-settings();
+    callback show-about();
+    callback quit-requested();
+
+    // Keep native application actions connected while the audience has focus.
+    if root.use-native-app-menu: MenuBar {
+        Menu {
+            title: "Application";
+            MenuItem {
+                title: "Settings...";
+                role: preferences;
+                activated => { root.open-settings(); }
+            }
+            MenuItem {
+                title: "About Quick Presenter";
+                role: about;
+                activated => { root.show-about(); }
+            }
+            MenuItem {
+                title: "Quit Quick Presenter";
+                role: quit;
+                activated => { root.quit-requested(); }
+            }
+        }
+    }
 
     title: "Quick Presenter - Audience";
     preferred-width: root.audience-window-width;
@@ -2385,13 +2448,6 @@ export component AudienceWindow inherits Window {
                     reaction.kind == 3 ? @image-url("../assets/audience/reactions/laugh.svg") :
                     @image-url("../assets/audience/reactions/question.svg");
             }
-        }
-        comment-measure := Text {
-            visible: false;
-            text: root.comment-measure-text;
-            font-size: 32px;
-            font-weight: 700;
-            wrap: no-wrap;
         }
         if !root.black-screen-active: Rectangle {
             property <float> canvas-scale: min(parent.width / 1280px, parent.height / 720px);

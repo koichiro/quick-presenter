@@ -7,6 +7,11 @@ start with [README](../../README.md) or [release usage](../RELEASE.md).
 
 ## v3.0.0 integration
 
+The [Slint 1.19 migration record](SLINT_1_19_MIGRATION.md) links the migration,
+native macOS/Windows/Linux validation, integration results and explicit
+single-display/distribution boundaries. It does not replace release-package
+qualification.
+
 [Post-merge macOS GUI smoke](V300_MACOS_GUI_SMOKE_20261024.md) records the
 unbundled fullscreen limitation, Audience Live footer-aware notes fixture fix,
 and local signed-app validation after incorporating v2.5.0.

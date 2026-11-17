@@ -654,6 +654,7 @@ impl AppWindows {
         let (presenter, audience) = crate::macos_window::create_app_windows()?;
         #[cfg(not(target_os = "macos"))]
         let (presenter, audience) = (PresenterWindow::new()?, AudienceWindow::new()?);
+        audience.set_use_native_app_menu(cfg!(target_os = "macos"));
         // Linux fallback fonts already have generous natural line metrics.
         presenter
             .global::<NotesTypography>()
