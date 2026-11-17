@@ -321,6 +321,20 @@ fn show_initial_windows(windows: &AppWindows) -> Result<AppWindowRefs> {
     apply_macos_audience_window_chrome(&refs);
     sync_audience_chrome(&refs);
     windows.presenter.show()?;
+    #[cfg(target_os = "windows")]
+    {
+        let presenter = windows.presenter.as_weak();
+        slint::spawn_local(async move {
+            if let Some(presenter) = presenter.upgrade() {
+                // show() may defer native creation until the event loop starts.
+                use slint::winit_030::WinitWindowAccessor;
+                match presenter.window().winit_window().await {
+                    Ok(_) => windows_window::fit_presenter_to_work_area(&presenter),
+                    Err(error) => warn!(%error, "could not fit initial presenter work area"),
+                }
+            }
+        })?;
+    }
     Ok(refs)
 }
 

@@ -857,10 +857,18 @@ export component PresenterWindow inherits Window {
     out property <length> audience-panel-height: root.audience-panel-expanded ? root.audience-expanded-height : 48px;
     // Infer the equivalent expanded height while collapsed so resizing the
     // window by the hidden footer height keeps slides and notes unchanged.
-    out property <length> audience-expanded-height: root.audience-panel-expanded
+    // Zero leaves compositor-managed and software-test geometry unchanged.
+    in property <length> presenter-work-area-height: 0px;
+    // Reserve the main panes (464px) and surrounding controls/spacing (96px).
+    // The history can scroll; keep its disclosure and URL rows usable.
+    property <length> audience-expanded-height-limit: root.presenter-work-area-height > 0px
+        ? max(150px, root.presenter-work-area-height - 560px) : 360px;
+    out property <length> audience-expanded-height: min(root.audience-expanded-height-limit, root.audience-panel-expanded
         ? clamp(round((root.height - root.inline-menu-height) / 1px * 0.28) * 1px, 282px, 360px)
-        : clamp(round((root.height - root.inline-menu-height - 48px) / 1px * (0.28 / 0.72)) * 1px, 282px, 360px);
-    out property <length> presenter-minimum-height: root.audience-panel-expanded ? 842px : 608px;
+        : clamp(round((root.height - root.inline-menu-height - 48px) / 1px * (0.28 / 0.72)) * 1px, 282px, 360px));
+    out property <length> presenter-minimum-height: root.audience-panel-expanded
+        ? (root.presenter-work-area-height > 0px ? min(842px, max(710px, root.presenter-work-area-height)) : 842px)
+        : 608px;
     out property <bool> audience-history-visible: audience-panel.visible;
     out property <bool> audience-url-visible: audience-url-row.visible;
     out property <length> audience-footer-bottom: root.audience-panel-expanded ? root.audience-url-bottom : root.audience-toggle-bottom;
