@@ -5,5 +5,19 @@
     "baseline": "chromium/8111",
     "candidate": "chromium/8165",
     "rationale": "Reviewed all 18 changed renders quantitatively and representative old/new/amplified-difference images (demo pages 1, 3, 6, 12). Every channel differs by at most 1/255; fewer than 0.1% of pixels change in each image. Page dimensions, text and speaker notes are identical. This is acceptable gradient rounding drift, consistent with upstream incremental affine stepping in DrawAxialShading (2f8880782ee79e24466642ccb7309c0a74ccc483). This record accepts only the exact native libraries, fixture inputs, build profile, licenses and page hashes in this fingerprint; it does not approve other platforms or signed packages."
+  },
+  {
+    "fingerprint": "80a9a887385b7ecfd275a54426109b3b0510efbd72688f0f7b198ef2eed86eac",
+    "platform": "Linux x64",
+    "baseline": "chromium/8111",
+    "candidate": "chromium/8165",
+    "rationale": "Reviewed all 18 changed demo renders: maximum channel delta 1/255 and changed pixel fraction below 0.1%; both old and new demo RGBA hashes are byte-identical to the separately reviewed macOS ARM64 output. Full text, notes, dimensions, deterministic rendering and lifecycle checks match; 495 Rust tests pass with each native build. Accept this exact gradient rounding evidence only. The PowerPoint fixture differs across operating systems but is unchanged between PDFium versions on this host. No latency regression or license/build-profile change was observed."
+  },
+  {
+    "fingerprint": "a84bde2fafec5ede2c3d71566be0d4f56d97836a64fe054fb8d57883951327a3",
+    "platform": "Windows x64",
+    "baseline": "chromium/8111",
+    "candidate": "chromium/8165",
+    "rationale": "Reviewed all 18 changed demo renders: maximum channel delta 1/255 and changed pixel fraction below 0.1%; both old and new demo RGBA hashes are byte-identical to the separately reviewed macOS ARM64 output. Full text, notes, dimensions, repeated/backward rendering, invalid inputs and lifecycle checks match; 476 Rust tests pass with each native build. Accept only this exact gradient rounding evidence. No latency regression or license/build-profile change was observed."
   }
 ]

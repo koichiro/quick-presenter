@@ -30,8 +30,10 @@ Only repository fixtures are processed; PDF content is not embedded in the JSON.
 ## Criteria
 
 The script always runs `cargo fmt --check`, `cargo check --locked --all-targets`,
-and a debug binary build, followed by `cargo test --locked` separately against
-each selected native library. It exercises the actual Quick Presenter helper
+and `cargo test --locked` separately against each selected native library.
+Integration tests build the debug executable; its hash is captured after the
+test build and must remain identical for both native runs. This avoids testing
+an executable different from the one recorded in the report. It exercises the actual Quick Presenter helper
 protocol and PDF implementation rather than a separate PDF wrapper.
 
 Every unencrypted PDF in `tests/fixtures/` and the README demo is opened and all

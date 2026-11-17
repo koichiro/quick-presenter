@@ -327,10 +327,8 @@ def main():
         report["dirty"] = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT))
         command(["cargo", "fmt", "--check"], output / "fmt.log")
         command(["cargo", "check", "--locked", "--all-targets"], output / "check.log")
-        command(["cargo", "build", "--locked", "--bin", "quick-presenter"], output / "build.log")
         target = json.loads(subprocess.check_output(["cargo", "metadata", "--no-deps", "--format-version=1"], cwd=ROOT))['target_directory']
         binary = Path(target) / "debug" / ("quick-presenter.exe" if os.name == "nt" else "quick-presenter")
-        report["binary_sha256"] = digest(binary.read_bytes())
         for label, path in [("baseline", args.baseline_manifest), ("candidate", args.candidate_manifest)]:
             manifest = fetch_pdfium.load_manifest(path)
             (output / f"{label}-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
@@ -343,6 +341,12 @@ def main():
             environment["PDFIUM_DYNAMIC_LIB_PATH"] = str(library)
             environment["QUICK_PRESENTER_ALLOW_PDFIUM_OVERRIDE"] = "1"
             command(["cargo", "test", "--locked"], output / f"{label}-test.log", environment)
+            # Integration tests build the executable. Hash it after cargo test,
+            # which may replace an earlier dev-profile executable in this path.
+            binary_sha256 = digest(binary.read_bytes())
+            require(report.get("binary_sha256", binary_sha256) == binary_sha256,
+                    "executable changed between baseline and candidate")
+            report["binary_sha256"] = binary_sha256
             # A bad override must fail, proving this executable honors library selection.
             negative = Helper(binary, output / "missing-library", output / f"{label}-negative.stderr")
             try:
@@ -367,8 +371,8 @@ def main():
         report["unreviewed_decision"] = report["decision"]
         if args.review_record:
             apply_review(report, json.loads(args.review_record.read_text()))
-    except (Exception, SystemExit) as error:
-        report.update(decision="FAIL", error=str(error))
+    except (Exception, SystemExit, KeyboardInterrupt) as error:
+        report.update(decision="FAIL", error=str(error) or type(error).__name__)
     finally:
         (output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(f"{report['decision']}: {output / 'report.json'}")

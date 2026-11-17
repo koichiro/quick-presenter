@@ -1,8 +1,12 @@
 """Protect the upgrade decision against false passes."""
 import importlib.util
+import io
+import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -19,6 +23,21 @@ def sample():
 
 
 class DecisionTests(unittest.TestCase):
+    def test_interrupted_run_writes_a_failure_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "run"
+            arguments = ["check_pdfium_upgrade", "--baseline-manifest", "unused.json",
+                         "--output", str(output)]
+            with patch.object(sys, "argv", arguments), \
+                    patch.object(sys, "stdout", io.StringIO()), \
+                    patch.object(upgrade.platform, "platform", return_value="test-host"), \
+                    patch.object(upgrade.subprocess, "check_output", side_effect=["commit", ""]), \
+                    patch.object(upgrade, "command", side_effect=KeyboardInterrupt):
+                self.assertEqual(upgrade.main(), 1)
+            report = json.loads((output / "report.json").read_text())
+            self.assertEqual(report["decision"], "FAIL")
+            self.assertEqual(report["error"], "KeyboardInterrupt")
+
     def test_identical_results_pass(self):
         self.assertEqual(upgrade.compare(sample(), sample()), ([], []))
 
