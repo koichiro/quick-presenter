@@ -1158,6 +1158,8 @@ mod environment_tests {
             "HOME",
             "LD_PRELOAD",
             "LD_LIBRARY_PATH",
+            "XDG_ACTIVATION_TOKEN",
+            "DESKTOP_STARTUP_ID",
             "QUICK_PRESENTER_SANDBOX_FAKE_SECRET",
             "QUICK_PRESENTER_HELPER_TEST_FAKE_SECRET",
         ] {

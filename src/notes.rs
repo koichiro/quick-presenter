@@ -162,6 +162,33 @@ mod tests {
     }
 
     #[test]
+    fn windows_multiline_measurements_respect_padding_at_every_size_boundary() {
+        // Captured from the native Windows smoke fixture at both 100% and 125%.
+        // Its old expectations (>12px at 203px and 24px at 350px) cannot fit.
+        let heights = [
+            180.0, 195.0, 210.0, 225.0, 240.0, 255.0, 270.0, 285.0, 300.0, 315.0, 330.0, 345.0,
+            360.0,
+        ];
+        for viewport in [180.0, 199.0, 203.0] {
+            assert_eq!(fit_notes_font_size(true, 348.0, viewport, &heights), 12);
+        }
+        for viewport in [346.0, 350.0] {
+            assert_eq!(fit_notes_font_size(true, 348.0, viewport, &heights), 22);
+        }
+        for (index, height) in heights.iter().enumerate() {
+            let size = MIN_NOTES_FONT_SIZE + index as u16;
+            let threshold = height + NOTES_BOTTOM_PADDING;
+            assert_eq!(fit_notes_font_size(true, 348.0, threshold, &heights), size);
+            if index > 0 {
+                assert_eq!(
+                    fit_notes_font_size(true, 348.0, threshold - 0.01, &heights),
+                    size - 1
+                );
+            }
+        }
+    }
+
+    #[test]
     fn overflowing_notes_keep_the_minimum_readable_size() {
         assert_eq!(fit_notes_font_size(true, 300.0, 200.0, &[1000.0; 13]), 12);
     }

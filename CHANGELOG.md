@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Backport Slint and slint-build 1.19.0 from the v3.0.0 development branch,
+  retaining Slint edition 1.18 and the independent winit patch. Replace the
+  vendored Slint backend with upstream native menu identity, hidden-window
+  redraw, early window icon, and Linux activation-token fixes.
+
+### Fixed
+
+- Route native Quit and Command-Q through the same recoverable shutdown path
+  as closing the presenter, including when the Slide Window has focus.
+- Keep About license descriptions scrollable and its Close button accessible.
+- Fit the initial Windows presenter inside the monitor's taskbar-free work area.
+
 ## [2.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0) — 2026-10-24
 
 ### Added
