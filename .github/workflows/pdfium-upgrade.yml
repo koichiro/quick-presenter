@@ -1,0 +1,68 @@
+name: PDFium upgrade compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/pdfium_manifest.json'
+      - 'scripts/fetch_pdfium.py'
+      - 'scripts/check_pdfium_upgrade.py'
+      - 'tests/test_pdfium_upgrade.py'
+      - 'scripts/pdfium_upgrade_reviews.json'
+      - '.github/workflows/pdfium-upgrade.yml'
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: 'Git ref containing the previously accepted PDFium manifest'
+        required: true
+        default: 'main'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1-mesa-dev libfontconfig1-dev libgl1-mesa-dev libudev-dev libwayland-dev libx11-dev libxcb1-dev libxkbcommon-dev pkg-config
+      - name: Save baseline manifest
+        shell: python
+        env:
+          BASELINE_REF: ${{ github.event.pull_request.base.sha || inputs.baseline_ref }}
+        run: |
+          import os, pathlib, subprocess
+          ref = os.environ['BASELINE_REF']
+          data = subprocess.check_output(['git', 'show', f'{ref}:scripts/pdfium_manifest.json'])
+          pathlib.Path('baseline-pdfium.json').write_bytes(data)
+      - name: Test upgrade gate decisions and downloads
+        run: python -m unittest tests/test_pdfium_upgrade.py tests/test_fetch_pdfium.py
+      - name: Compare baseline and candidate
+        run: python scripts/check_pdfium_upgrade.py --baseline-manifest baseline-pdfium.json --review-record scripts/pdfium_upgrade_reviews.json --output artifacts/pdfium-upgrade-ci
+      - name: Upload decision and evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pdfium-upgrade-${{ matrix.os }}
+          path: artifacts/pdfium-upgrade-ci
+          retention-days: 14
