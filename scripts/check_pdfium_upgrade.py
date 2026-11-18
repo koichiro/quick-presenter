@@ -370,7 +370,7 @@ def main():
         report["review_fingerprint"] = review_fingerprint(report)
         report["unreviewed_decision"] = report["decision"]
         if args.review_record:
-            apply_review(report, json.loads(args.review_record.read_text()))
+            apply_review(report, json.loads(args.review_record.read_text(encoding="utf-8")))
     except (Exception, SystemExit, KeyboardInterrupt) as error:
         report.update(decision="FAIL", error=str(error) or type(error).__name__)
     finally:
