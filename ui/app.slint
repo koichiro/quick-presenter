@@ -2065,10 +2065,10 @@ export component PresenterWindow inherits Window {
                             }
                             if root.audience-import-preview != "": VerticalBox {
                                 Text { text: "Destination: " + root.audience-import-preview; color: white; wrap: word-wrap; }
-                                Text { text: "Apply for the next start? Import does not start a session."; color: #d9dce0; wrap: word-wrap; }
+                                Text { text: "Apply these settings for the next start. Applying settings does not start a session."; color: #d9dce0; wrap: word-wrap; }
                                 HorizontalBox {
-                                    Button { text: "Cancel import"; clicked => { root.audience-confirm-import(false); } }
-                                    Button { text: "Import"; clicked => { root.audience-confirm-import(true); } }
+                                    Button { text: "Cancel"; clicked => { root.audience-confirm-import(false); } }
+                                    Button { text: "Apply"; clicked => { root.audience-confirm-import(true); } }
                                 }
                             }
                         }

@@ -48,8 +48,8 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
    **Application** on Windows/Linux). While stopped, choose **Import settings...**
    in Settings and select `download.toml`. Verify
    the preview shows `https://relay.example/` without displaying its credential.
-   Use Cancel import, then repeat with Escape or Close; the destination must remain byte-for-byte unchanged.
-2. Select the same file and confirm **Import**. The application must remain
+   Use Cancel, then repeat with Escape or Close; the destination must remain byte-for-byte unchanged.
+2. Select the same file and confirm **Apply**. The application must remain
    responsive after the native file picker closes. Verify the success message and
    that no session starts. Close Settings and verify **Audience Live on** is
    available in the presenter window without restarting qp. Reopen Settings.
