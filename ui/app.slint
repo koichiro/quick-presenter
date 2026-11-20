@@ -2418,7 +2418,7 @@ export component AudienceWindow inherits Window {
                 Text { text: root.audience-code == "" ? "Page 0 · Join this session" : "Page 0 · Session " + root.audience-code; color: #d9dce0; font-size: 22px; horizontal-alignment: center; }
                 Image { source: root.audience-qr; image-fit: contain; image-rendering: pixelated; min-height: 100px; vertical-stretch: 1; }
                 Text { text: root.audience-url == "" ? root.audience-status : root.audience-url; color: white; font-size: 18px; wrap: word-wrap; horizontal-alignment: center; }
-                Text { text: "Scan the QR code on the same Wi-Fi or LAN."; color: #d9dce0; font-size: 20px; horizontal-alignment: center; }
+                Text { text: "Scan the QR code."; color: #d9dce0; font-size: 20px; horizontal-alignment: center; }
             }
         }
         if !root.black-screen-active: Rectangle {
