@@ -207,7 +207,8 @@ disabled during an active session or configuration loading; persistence failures
 retain the current in-memory endpoint. Invalid existing TOML is not overwritten.
 A finished failed relay start may still own a pending creation identity. Import
 and Reset stay disabled until that identity is released by the session lifecycle;
-the file-picker entry, import confirmation and reset callbacks also guard it.
+the import callback checks before and after the file picker, and Reset also
+guards it.
 Settings directs the user to close Settings, retry Audience Live on and stop it.
 These guards never invoke cleanup or discard the relay, so retry and application
 exit retain the existing recovery owner.
@@ -216,9 +217,10 @@ window. Each function has one primary UI location; menu shortcuts may provide
 another entry point.
 
 **Import settings...** is available in Settings while Audience Live is stopped
-and configuration loading has completed. The native picker validates a bounded TOML configuration and displays the relay origin
-for confirmation without displaying its credential. Import merges only the
-Audience fields into the default configuration or the explicit `--config` path;
+and configuration loading has completed. After file selection, the application
+validates a bounded TOML configuration and
+automatically saves and applies it without an additional confirmation step.
+Credentials are never displayed. Import merges only the Audience fields into the default configuration or the explicit `--config` path;
 unrelated TOML values are preserved. Invalid source/destination files leave the
 previous settings intact. The atomic writer restricts Unix files to mode 0600 and
 Windows files to a protected owner/SYSTEM DACL before writing secret bytes.
@@ -233,9 +235,10 @@ cannot replace an active session or bypass pending startup configuration loading
 See [native import validation](AUDIENCE_CONFIG_IMPORT_VALIDATION.md) for the
 isolated Windows/macOS checklist and credential-safe evidence requirements.
 
-Settings traps presentation shortcuts while open. Escape or Close discards a
-pending import preview and restores presenter focus; confirming an import keeps
-Settings open to show the result. Close Settings before using the presenter
-controls to start Audience Live. The vendored menu adapter places the declared
+Settings traps presentation shortcuts while open. Escape or Close restores
+presenter focus without undoing an applied import. Canceling the native file
+picker leaves settings unchanged. A completed import keeps Settings open to show
+the result. Close Settings before using the presenter controls to start Audience
+Live. The vendored menu adapter places the declared
 Application actions in the existing macOS app-name menu during menu construction,
 with the same tracked dispatch as the other menu actions.

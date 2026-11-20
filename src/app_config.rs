@@ -105,9 +105,9 @@ fn parse(text: &str) -> Result<Option<RelayEndpoint>, &'static str> {
     }
 }
 
-/// Preview an imported download without requiring its original permissions.
+/// Read and validate an imported download without requiring its original permissions.
 /// The destination is protected separately before credential bytes are written.
-pub fn preview_import(path: &std::path::Path) -> Result<RelayEndpoint, &'static str> {
+pub fn read_import(path: &std::path::Path) -> Result<RelayEndpoint, &'static str> {
     let file = File::open(path).map_err(|_| "Cannot open configuration import.")?;
     if !file
         .metadata()
@@ -124,6 +124,16 @@ pub fn preview_import(path: &std::path::Path) -> Result<RelayEndpoint, &'static 
         return Err("Configuration import is too large.");
     }
     parse(&text)?.ok_or("Import requires a remote Audience configuration.")
+}
+
+/// Validate and persist an import before returning the endpoint to activate.
+pub fn import_file(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+) -> Result<RelayEndpoint, &'static str> {
+    let endpoint = read_import(source)?;
+    save_import(destination, &endpoint)?;
+    Ok(endpoint)
 }
 
 pub fn import_destination(explicit: Option<PathBuf>) -> Result<PathBuf, &'static str> {
@@ -321,8 +331,7 @@ mod tests {
         let destination = dir.path().join("config.toml");
         std::fs::write(&source, remote("https://relay.example")).unwrap();
         std::fs::write(&destination, "[presentation]\nkeep = 'unchanged'\n").unwrap();
-        let endpoint = preview_import(&source).unwrap();
-        save_import(&destination, &endpoint).unwrap();
+        let endpoint = import_file(&source, &destination).unwrap();
         let saved = std::fs::read_to_string(&destination).unwrap();
         assert!(saved.contains("unchanged"));
         assert_eq!(
@@ -342,10 +351,11 @@ mod tests {
             );
         }
         std::fs::write(&source, "invalid?").unwrap();
-        assert!(preview_import(&source).is_err());
+        assert!(import_file(&source, &destination).is_err());
         assert_eq!(std::fs::read_to_string(&destination).unwrap(), saved);
+        std::fs::write(&source, remote("https://other.example")).unwrap();
         std::fs::write(&destination, "invalid?").unwrap();
-        assert!(save_import(&destination, &endpoint).is_err());
+        assert!(import_file(&source, &destination).is_err());
         assert_eq!(std::fs::read_to_string(&destination).unwrap(), "invalid?");
     }
 
@@ -409,11 +419,11 @@ mod tests {
     fn import_rejects_oversized_local_and_non_file_sources() {
         let dir = tempfile::tempdir().unwrap();
         let source = dir.path().join("download.toml");
-        assert!(preview_import(dir.path()).is_err());
+        assert!(read_import(dir.path()).is_err());
         std::fs::write(&source, " ".repeat(16385)).unwrap();
-        assert!(preview_import(&source).is_err());
+        assert!(read_import(&source).is_err());
         std::fs::write(&source, "[audience]\ntransport='local'").unwrap();
-        assert!(preview_import(&source).is_err());
+        assert!(read_import(&source).is_err());
         assert_eq!(import_destination(Some(source.clone())).unwrap(), source);
     }
 

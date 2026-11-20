@@ -112,7 +112,6 @@ pub struct AudienceUi {
     relay_config: RefCell<Option<crate::audience_relay_http::ManagedRelay>>,
     config_timer: Timer,
     config_path: RefCell<Option<std::path::PathBuf>>,
-    pending_import: RefCell<Option<crate::app_config::RelayEndpoint>>,
     configuring: std::cell::Cell<bool>,
     config_error: RefCell<Option<&'static str>>,
     stopping: RefCell<bool>,
@@ -252,7 +251,6 @@ impl AudienceUi {
             relay_config: RefCell::new(relay_config),
             config_timer: Timer::default(),
             config_path: RefCell::new(None),
-            pending_import: RefCell::new(None),
             configuring: std::cell::Cell::new(false),
             config_error: RefCell::new(None),
             stopping: RefCell::new(false),
@@ -400,53 +398,36 @@ impl AudienceUi {
             else {
                 return;
             };
-            if let Some(window) = ui.windows.presenter.upgrade() {
-                match crate::app_config::preview_import(&path) {
-                    Ok(endpoint) => {
-                        window.set_audience_import_preview(endpoint.origin.as_str().into());
-                        window.set_audience_can_start(false);
-                        *ui.pending_import.borrow_mut() = Some(endpoint);
-                    }
-                    Err(message) => window.set_audience_status(message.into()),
-                }
-            }
-        });
-        let weak = Rc::downgrade(&ui);
-        presenter.on_audience_confirm_import(move |apply| {
-            let Some(ui) = weak.upgrade() else {
-                return;
-            };
-            let endpoint = ui.pending_import.borrow_mut().take();
             let Some(window) = ui.windows.presenter.upgrade() else {
                 return;
             };
-            window.set_audience_import_preview("".into());
-            if let Some(endpoint) = endpoint.filter(|_| apply) {
-                if let Err(message) = ensure_relay_replaceable(ui.relay_config.borrow().as_ref()) {
-                    window.set_audience_status(message.into());
-                    window.set_audience_can_start(ui.can_start());
-                    return;
+            // The native picker can run the event loop; recheck before persisting.
+            if ui.session.borrow().is_some() || ui.configuring.get() {
+                return;
+            }
+            if let Err(message) = ensure_relay_replaceable(ui.relay_config.borrow().as_ref()) {
+                window.set_audience_status(message.into());
+                return;
+            }
+            let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
+                .and_then(|destination| {
+                    crate::app_config::import_file(&path, &destination)
+                });
+            match result {
+                Ok(endpoint) => {
+                    *ui.relay_config.borrow_mut() =
+                        Some(crate::audience_relay_http::ManagedRelay::new(endpoint));
+                    *ui.config_error.borrow_mut() = None;
+                    window.set_audience_address(ui.address_label().into());
+                    window.set_audience_status(
+                        "Settings imported and applied for the next start. Close Settings and turn Audience Live on when ready.".into(),
+                    );
+                    window.set_audience_alert_title("".into());
+                    window.set_audience_alert_guidance("".into());
+                    window.set_audience_account_available(false);
+                    window.set_audience_account_visible(false);
                 }
-                let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
-                    .and_then(|destination| {
-                        crate::app_config::save_import(&destination, &endpoint)
-                    });
-                match result {
-                    Ok(()) => {
-                        *ui.relay_config.borrow_mut() =
-                            Some(crate::audience_relay_http::ManagedRelay::new(endpoint));
-                        *ui.config_error.borrow_mut() = None;
-                        window.set_audience_address(ui.address_label().into());
-                        window.set_audience_status(
-                            "Configuration imported. Close Settings and turn Audience Live on when ready.".into(),
-                        );
-                        window.set_audience_alert_title("".into());
-                        window.set_audience_alert_guidance("".into());
-                        window.set_audience_account_available(false);
-                        window.set_audience_account_visible(false);
-                    }
-                    Err(message) => window.set_audience_status(message.into()),
-                }
+                Err(message) => window.set_audience_status(message.into()),
             }
             window.set_audience_can_start(ui.can_start());
         });
@@ -457,7 +438,6 @@ impl AudienceUi {
             if !window.get_settings_visible()
                 || ui.session.borrow().is_some()
                 || ui.configuring.get()
-                || ui.pending_import.borrow().is_some()
             {
                 return;
             }
@@ -535,11 +515,7 @@ impl AudienceUi {
             let Some(ui) = weak.upgrade() else {
                 return;
             };
-            if *ui.stopping.borrow()
-                || ui.configuring.get()
-                || ui.pending_import.borrow().is_some()
-                || ui.config_error.borrow().is_some()
-            {
+            if *ui.stopping.borrow() || ui.configuring.get() || ui.config_error.borrow().is_some() {
                 return;
             }
             if let Some(session) = ui.session.borrow().as_ref() {

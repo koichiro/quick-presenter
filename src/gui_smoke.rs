@@ -2056,17 +2056,15 @@ async fn check_qr_failure_and_settings_layout(
         "Configuration needs attention. Check the file and its permissions before trying again."
             .into(),
     );
-    presenter.set_audience_import_preview(
-        "https://relay.example.com/a-long-configuration-destination-for-the-next-session".into(),
-    );
     presenter.invoke_open_settings();
     settle_presenter_notes_layout(presenter).await?;
     report.check(
-        "Settings scrolls at minimum height with errors and import preview while Close stays visible",
+        "Settings scrolls at minimum height with errors while Close stays visible",
         presenter.get_settings_content_height() > presenter.get_settings_viewport_height()
             && presenter.get_settings_viewport_height() > 0.0
             && presenter.get_settings_close_within_dialog(),
-        "overflow is scrollable and Close stays inside the dialog", "settings content or Close is inaccessible",
+        "overflow is scrollable and Close stays inside the dialog",
+        "settings content or Close is inaccessible",
     );
     presenter
         .window()
@@ -2241,14 +2239,13 @@ async fn check_settings_dialog(
         "Space/Return in Settings did not turn the page",
         "Settings forwarded a navigation key to the presentation",
     );
-    presenter.set_audience_import_preview("https://relay.example/".into());
     presenter.invoke_close_settings();
     settle_notes_layout().await?;
     report.check(
-        "Closing Settings clears pending import preview",
-        !presenter.get_settings_visible() && presenter.get_audience_import_preview().is_empty(),
-        "settings closed and preview was discarded",
-        "settings or preview remained open",
+        "Closing Settings restores the presenter",
+        !presenter.get_settings_visible(),
+        "settings closed",
+        "settings remained open",
     );
     Ok(())
 }
