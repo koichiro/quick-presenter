@@ -46,13 +46,14 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
    and Settings has no connection-check, start, stop or pause button.
    Choose **Settings...** from the application menu (the app-name menu on macOS,
    **Application** on Windows/Linux). While stopped, choose **Import settings...**
-   in Settings and select `download.toml`. Verify
-   the preview shows `https://relay.example/` without displaying its credential.
-   Use Cancel, then repeat with Escape or Close; the destination must remain byte-for-byte unchanged.
-2. Select the same file and confirm **Apply**. The application must remain
-   responsive after the native file picker closes. Verify the success message and
-   that no session starts. Close Settings and verify **Audience Live on** is
-   available in the presenter window without restarting qp. Reopen Settings.
+   in Settings and cancel the native file picker. The destination must remain
+   byte-for-byte unchanged.
+2. Select `download.toml` via **Import settings...**. Verify that settings are
+   saved and applied immediately, with no Apply/Cancel confirmation screen and
+   without displaying the credential. The application must remain responsive
+   after the native file picker closes. Verify the success message and that no
+   session starts. Closing Settings with Escape or Close must retain the import.
+   Verify **Audience Live on** is available in the presenter window without restarting qp. Reopen Settings.
    While Settings is open, Space/Return must not change the presentation page.
 3. Inspect the isolated destination locally. The `presentation.keep` value must
    remain `unchanged`; Audience settings must match the fixture. Do not paste
@@ -77,7 +78,7 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
 7. Make the destination invalid or unwritable and attempt a valid import. Verify
    it refuses safely, leaves existing contents intact and allows correction/retry.
 8. Repeat with spaces and non-ASCII characters in source and destination paths.
-   Confirm the native picker, preview, persistence and restart work.
+   Confirm the native picker, automatic application, persistence and restart work.
 
 ## Reset to local server
 
@@ -90,8 +91,7 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
   Live on; verify the local LAN join URL/QR, audience events and normal stop.
 - Restart using the same configuration and verify local mode persists without
   another Reset. Import a relay configuration again and verify remote start.
-- While active/starting/stopping, verify Import and Reset are disabled. During
-  import preview, cancel or finish the preview before Reset becomes available.
+- While active/starting/stopping, verify Import and Reset are disabled.
 - With an invalid/unwritable destination, Reset must show a redacted error and
   preserve both the file and current relay endpoint. Correct the file/access and
   retry. No normal user credentials should be used in validation.
@@ -106,7 +106,7 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
 - Close Settings and retry **Audience Live on**. Verify it reuses the same creation
   identity instead of creating a second room. Stop the recovered session, then
   verify Import and Reset become available again.
-- Exercise rejected import-confirm/reset callbacks as well as their disabled
+- Exercise rejected import/reset callbacks as well as their disabled
   controls; they must not write configuration, clear the identity or initiate
   cleanup. Normal application-exit cleanup must still own the previous relay.
 
@@ -131,9 +131,9 @@ the isolated import fixture. The example-origin fixture above is not suitable.
 
 Repeat the import/cancel/invalid-file/restart checks with an isolated `--config`
 path. Confirm the saved file mode is 0600 and unrelated TOML values survive. The
-preview is application UI so the native picker is not followed by a nested native
-confirmation dialog. The initial import implementation was validated on macOS and Windows before
-the actions moved into Settings. Repeat menu navigation, focus, cancel and import
+native picker is followed by automatic application, without a separate
+confirmation dialog. The initial import implementation was validated on macOS
+and Windows before the actions moved into Settings. Repeat menu navigation, focus, cancel and import
 checks for the revised UI; earlier platform results do not validate its new entry
 point.
 
@@ -141,7 +141,7 @@ point.
 
 The GUI smoke run checks that Settings opens without starting Audience Live,
 Space/Return do not navigate the presentation while Settings has focus, and
-closing Settings discards the import preview. Set
+closing Settings restores the presenter. Set
 `QP_GUI_SMOKE_SETTINGS_SNAPSHOT` to an output `.ppm` path to retain the rendered
 Settings view during an isolated smoke run. The snapshot contains the selected
 fixture PDF; use synthetic input when sharing it.
