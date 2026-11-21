@@ -73,12 +73,13 @@ are restricted to the test app or its switcher icons. Temporary full-desktop
 captures were removed after inspection/cropping.
 
 The integration patch is
-[`linux-comment-measurement-fix.patch`](../../artifacts/slint-1-19-linux-step5-20261117-1550/linux-comment-measurement-fix.patch)
+`linux-comment-measurement-fix.patch` (a local historical artifact)
 (SHA-256 `a5e6aedf9b9f1258f704ca997eb3a85995ff6adc016f5d802586a1ceec574f78`).
 It includes only the three source/test files above, not earlier documentation
 edits. It was produced before the later authorized source/report transfer described
-below. Other operating systems must
-apply/review this delta and rerun the relevant menu/layout/comment checks before
+below. The integrated source is available in
+[fd67ef1](https://github.com/koichiro/quick-presenter/commit/fd67ef12f76464d2d63c4c1ee78cf30f8c51b2f9).
+Other operating systems must review the integrated delta and rerun the relevant menu/layout/comment checks before
 combining their results with this Linux fix.
 
 Rebuilt payload SHA-256:

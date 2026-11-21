@@ -90,7 +90,9 @@ that no longer exists, open a synthetic test PDF to exercise playback separately
 - Reset must not start a room or local server. Close Settings and turn Audience
   Live on; verify the local LAN join URL/QR, audience events and normal stop.
 - Restart using the same configuration and verify local mode persists without
-  another Reset. Import a relay configuration again and verify remote start.
+  another Reset. For remote-start validation, import settings for a controlled,
+  working relay with a disposable credential. The `relay.example` fixture above
+  validates import only and cannot establish a real connection.
 - While active/starting/stopping, verify Import and Reset are disabled.
 - With an invalid/unwritable destination, Reset must show a redacted error and
   preserve both the file and current relay endpoint. Correct the file/access and

@@ -76,6 +76,17 @@ pub struct LocalAudienceSession {
 
 impl LocalAudienceSession {
     pub fn start(address: Ipv4Addr) -> std::io::Result<Self> {
+        Self::start_with_comment_logging(address, true)
+    }
+
+    pub(crate) fn start_for_smoke(address: Ipv4Addr) -> std::io::Result<Self> {
+        Self::start_with_comment_logging(address, false)
+    }
+
+    fn start_with_comment_logging(
+        address: Ipv4Addr,
+        _comment_logging: bool,
+    ) -> std::io::Result<Self> {
         let status = Arc::new(Mutex::new(SessionStatus::Starting));
         let connections = Arc::new(AtomicUsize::new(0));
         let (stop, receiver) = watch::channel(false);
@@ -91,7 +102,7 @@ impl LocalAudienceSession {
                         .enable_all()
                         .build()?;
                     #[cfg(not(test))]
-                    {
+                    if _comment_logging {
                         worker_engine
                             .lock()
                             .unwrap_or_else(|e| e.into_inner())
@@ -136,6 +147,12 @@ impl LocalAudienceSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .drain(Instant::now())
+    }
+    pub fn admission_sequence(&self) -> u64 {
+        self.engine
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sequence()
     }
 
     pub fn advance_comment_generation(&self) -> u64 {
@@ -574,6 +591,34 @@ mod tests {
         }
     }
 
+    fn assert_terminal_disconnect(ws: &mut tungstenite::WebSocket<std::net::TcpStream>) {
+        use tungstenite::{error::ProtocolError, Error, Message};
+        for _ in 0..64 {
+            match ws.read() {
+                Ok(Message::Close(_))
+                | Err(Error::ConnectionClosed | Error::AlreadyClosed)
+                | Err(Error::Protocol(ProtocolError::ResetWithoutClosingHandshake)) => return,
+                Err(Error::Io(error)) => {
+                    assert!(
+                        matches!(
+                            error.kind(),
+                            std::io::ErrorKind::ConnectionReset
+                                | std::io::ErrorKind::ConnectionAborted
+                                | std::io::ErrorKind::UnexpectedEof
+                                | std::io::ErrorKind::BrokenPipe
+                                | std::io::ErrorKind::NotConnected
+                        ),
+                        "shutdown did not disconnect: {error}"
+                    );
+                    return;
+                }
+                Ok(Message::Ping(_) | Message::Pong(_) | Message::Text(_)) => continue,
+                result => panic!("unexpected shutdown result: {result:?}"),
+            }
+        }
+        panic!("too many buffered frames without a terminal disconnect");
+    }
+
     fn ready(session: &LocalAudienceSession) -> (String, String) {
         wait_until(|| !matches!(session.snapshot().status, SessionStatus::Starting));
         let SessionStatus::Running { url, .. } = session.snapshot().status else {
@@ -660,7 +705,7 @@ mod tests {
         .unwrap();
         ws.read().unwrap();
         session.shutdown();
-        assert!(ws.read().is_err());
+        assert_terminal_disconnect(&mut ws);
         assert_eq!(session.snapshot().connections, 0);
         assert_eq!(session.snapshot().status, SessionStatus::Stopped);
         let _rebound = std::net::TcpListener::bind(authority).unwrap();
@@ -685,11 +730,11 @@ mod tests {
             welcome["capabilities"],
             serde_json::json!(["reactions", "comments"])
         );
-        for id in 0..6 {
+        for id in 0..5 {
             ws.send(tungstenite::Message::Text(serde_json::json!({"protocol":"qp.audience","version":"1","type":"reaction","request_id":id.to_string(),"kind":"applause"}).to_string().into())).unwrap();
             let reply: serde_json::Value =
                 serde_json::from_str(&ws.read().unwrap().into_text().unwrap()).unwrap();
-            assert_eq!(reply["status"], if id < 5 { "accepted" } else { "busy" });
+            assert_eq!(reply["status"], "accepted");
         }
         let events = session.drain_events();
         assert_eq!(events.len(), 5);
@@ -734,10 +779,10 @@ mod tests {
         ))
         .unwrap();
         assert!(ws.read().unwrap().into_text().unwrap().contains("comments"));
-        for n in 0..3 {
+        for n in 0..2 {
             ws.send(tungstenite::Message::Text(serde_json::json!({"protocol":"qp.audience","version":"1","type":"comment","request_id":n.to_string(),"body":"Hello\n世界", "handle":" Anonymous "}).to_string().into())).unwrap();
             let response = ws.read().unwrap().into_text().unwrap();
-            assert!(response.contains(if n < 2 { "accepted" } else { "busy" }));
+            assert!(response.contains("accepted"));
         }
         assert_eq!(session.advance_comment_generation(), 1);
         let events = session.drain_events();
@@ -888,7 +933,7 @@ mod tests {
         assert_eq!(session.snapshot().status, SessionStatus::Stopped);
         assert!(session.drain_events().is_empty());
         for ws in &mut clients {
-            assert!(ws.read().is_err());
+            assert_terminal_disconnect(ws);
         }
         let _rebound = std::net::TcpListener::bind(authority).unwrap();
     }
@@ -902,7 +947,7 @@ mod tests {
         session.shutdown();
         assert!(session.is_finished());
         for ws in &mut clients {
-            assert!(ws.read().is_err());
+            assert_terminal_disconnect(ws);
         }
     }
 

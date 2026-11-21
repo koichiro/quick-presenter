@@ -235,10 +235,27 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
         );
     }
 
+    // A manual resize to the other cached size must still allocate the footer.
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::ScaleFactorChanged { scale_factor: 1.0 });
+    presenter.set_presenter_work_area_height(0.0);
+    presenter.set_use_native_menu_bar(true);
+    presenter.set_audience_panel_expanded(true);
+    window.set_size(slint::LogicalSize::new(800.0, 842.0));
+    let expanded_size = presenter.window().size();
+    let mut geometry = audience_panel::AudiencePanelGeometry::default();
+    geometry.set_expanded(&presenter, false);
+    window.set_size(expanded_size);
+    let body_before = presenter.get_notes_area_bottom();
+    geometry.set_expanded(&presenter, true);
+    assert!(presenter.window().size().height > expanded_size.height + 200);
+    assert!((presenter.get_notes_area_bottom() - body_before).abs() <= 1.5);
+
     // Work-area-constrained disclosure may reduce the history allocation, but
     // must keep navigation, previews, notes and the URL row inside the client.
     presenter.set_use_native_menu_bar(true);
-    for (scale_factor, available_height) in [(1.0, 948.0), (1.25, 758.0)] {
+    for (scale_factor, available_height) in [(1.0, 948.0), (1.25, 758.0), (1.0, 600.0)] {
         presenter
             .window()
             .dispatch_event(slint::platform::WindowEvent::ScaleFactorChanged { scale_factor });
@@ -247,7 +264,7 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
             presenter.set_current_page_aspect_ratio(aspect);
             presenter.set_next_page_aspect_ratio(aspect);
             presenter.set_audience_panel_expanded(false);
-            window.set_size(slint::LogicalSize::new(800.0, 608.0));
+            window.set_size(slint::LogicalSize::new(800.0, available_height.min(608.0)));
             let mut geometry = audience_panel::AudiencePanelGeometry::default();
             for expanded in [true, false, true, false] {
                 geometry.set_expanded(&presenter, expanded);
@@ -269,7 +286,7 @@ fn presenter_panes_resize_without_losing_notes_or_overlapping_the_footer() {
                 if expanded {
                     assert!(presenter.get_audience_history_visible_height() >= 24.0);
                 } else {
-                    assert!((logical.height - 608.0).abs() <= 1.0);
+                    assert!((logical.height - available_height.min(608.0)).abs() <= 1.0);
                 }
             }
         }

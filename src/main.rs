@@ -191,6 +191,7 @@ fn main() -> Result<()> {
     let StartupRequest::Run(startup_options) = startup_request else {
         unreachable!("help requests return before app startup");
     };
+    settings_storage::validate_profile_directory()?;
     let diagnostics = init_diagnostics(startup_options.log_file_path.clone())?;
     let startup_persistence = startup_state::StartupPersistence::for_options(
         &startup_options,
@@ -275,7 +276,9 @@ fn main() -> Result<()> {
     }
 
     let event_loop_result = slint::run_event_loop();
-    audience_ui.shutdown();
+    if let Err(error) = audience_ui.shutdown() {
+        warn!(%error, "Audience Live shutdown did not complete cleanly");
+    }
     audience_log::shutdown();
     if event_loop_result.is_ok() {
         window_controller::capture_audience_placement(&windows.refs());
@@ -1072,6 +1075,36 @@ fn handle_presentation_command(
             return;
         }
     }
+    apply_pdf_presentation_command(windows, state, command);
+}
+
+fn handle_control_presentation_command(
+    windows: &AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+    command: PresentationCommand,
+) {
+    // Control Protocol v1 addresses PDF pages, independently of the join screen.
+    if state.borrow().audience_join_visible
+        && matches!(
+            command,
+            PresentationCommand::NextPage
+                | PresentationCommand::PreviousPage
+                | PresentationCommand::FirstPage
+                | PresentationCommand::LastPage
+                | PresentationCommand::JumpToPage(_)
+                | PresentationCommand::Close
+        )
+    {
+        audience_ui::set_join_visible(windows, state, false);
+    }
+    apply_pdf_presentation_command(windows, state, command);
+}
+
+fn apply_pdf_presentation_command(
+    windows: &AppWindowRefs,
+    state: &Rc<RefCell<AppState>>,
+    command: PresentationCommand,
+) {
     if command == PresentationCommand::Close {
         apply_session_command(&mut state.borrow_mut(), command, Instant::now());
         #[cfg(target_os = "macos")]
@@ -2754,6 +2787,82 @@ mod tests {
         windows.audience.invoke_show_about();
         assert!(windows.presenter.get_about_visible());
         assert!(windows.presenter.window().is_visible());
+
+        // Exercise the actual GUI/control dispatchers on software windows. The
+        // local audience worker uses loopback and smoke logging is disabled.
+        let state = Rc::new(RefCell::new(AppState::default()));
+        let session = begin_open_pdf_state(&mut state.borrow_mut(), "/synthetic/deck.pdf".into());
+        commit_render_opened_state(
+            &mut state.borrow_mut(),
+            session,
+            "Synthetic".into(),
+            4,
+            "Ready".into(),
+        )
+        .unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let ui = audience_ui::AudienceUi::install_for_smoke(
+            &windows,
+            state.clone(),
+            directory.path().join("config.toml"),
+        );
+        windows.presenter.invoke_audience_toggle_session();
+        assert!(windows.presenter.get_audience_active());
+        assert!(
+            !windows.presenter.get_audience_busy(),
+            "OFF must remain available during startup"
+        );
+        state.borrow_mut().audience_join_available = true;
+        for (start, command, expected) in [
+            (0, PresentationCommand::NextPage, 1),
+            (2, PresentationCommand::PreviousPage, 1),
+            (0, PresentationCommand::PreviousPage, 0),
+            (2, PresentationCommand::JumpToPage(3), 3),
+        ] {
+            apply_session_command(
+                &mut state.borrow_mut(),
+                PresentationCommand::JumpToPage(start),
+                Instant::now(),
+            );
+            audience_ui::set_join_visible(&windows.refs(), &state, true);
+            handle_control_presentation_command(&windows.refs(), &state, command);
+            assert_eq!(
+                state
+                    .borrow()
+                    .presentation
+                    .snapshot()
+                    .unwrap()
+                    .current_index,
+                expected
+            );
+            assert!(!state.borrow().audience_join_visible);
+        }
+        apply_session_command(
+            &mut state.borrow_mut(),
+            PresentationCommand::FirstPage,
+            Instant::now(),
+        );
+        audience_ui::set_join_visible(&windows.refs(), &state, true);
+        handle_presentation_command(&windows.refs(), &state, PresentationCommand::NextPage);
+        assert_eq!(
+            state
+                .borrow()
+                .presentation
+                .snapshot()
+                .unwrap()
+                .current_index,
+            0
+        );
+        assert!(
+            !state.borrow().audience_join_visible,
+            "GUI Next still dismisses page 0 first"
+        );
+        windows.presenter.invoke_audience_toggle_session();
+        assert!(
+            windows.presenter.get_audience_busy(),
+            "Disable repeated OFF only during termination"
+        );
+        ui.shutdown().unwrap();
     }
 
     #[test]

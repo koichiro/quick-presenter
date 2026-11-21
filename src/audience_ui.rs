@@ -68,7 +68,7 @@ impl LoadedAudienceConfiguration {
 fn ensure_relay_replaceable(
     relay: Option<&crate::audience_relay_http::ManagedRelay>,
 ) -> Result<(), &'static str> {
-    if relay.is_some_and(|relay| relay.has_attempt()) {
+    if relay.is_some_and(|relay| relay.requires_recovery()) {
         Err(RELAY_RECOVERY_GUIDANCE)
     } else {
         Ok(())
@@ -103,6 +103,7 @@ impl AudiencePanelVisibility {
 }
 
 pub struct AudienceUi {
+    smoke: Cell<bool>,
     panel_visibility: Cell<AudiencePanelVisibility>,
     panel_geometry: RefCell<crate::audience_panel::AudiencePanelGeometry>,
     session: RefCell<Option<AudienceSession>>,
@@ -230,6 +231,7 @@ impl AudienceUi {
             None,
         );
         *ui.config_path.borrow_mut() = Some(config_path);
+        ui.smoke.set(true);
         ui
     }
 
@@ -242,6 +244,7 @@ impl AudienceUi {
     ) -> Rc<Self> {
         let presenter = &windows.presenter;
         let ui = Rc::new(Self {
+            smoke: Cell::new(false),
             panel_visibility: Cell::new(AudiencePanelVisibility::default()),
             panel_geometry: RefCell::new(crate::audience_panel::AudiencePanelGeometry::default()),
             session: RefCell::new(None),
@@ -267,6 +270,20 @@ impl AudienceUi {
             weak_self: RefCell::new(std::rc::Weak::new()),
         });
         *ui.weak_self.borrow_mut() = Rc::downgrade(&ui);
+        let weak = Rc::downgrade(&ui);
+        use slint::winit_030::WinitWindowAccessor;
+        presenter.window().on_winit_window_event(move |_, event| {
+            if let slint::winit_030::winit::event::WindowEvent::Resized(size) = event {
+                if let Some(ui) = weak.upgrade() {
+                    // AppKit can acknowledge inside set_size while geometry is borrowed.
+                    // That synchronous case is observed immediately after set_size returns.
+                    if let Ok(mut geometry) = ui.panel_geometry.try_borrow_mut() {
+                        geometry.observe_size(slint::PhysicalSize::new(size.width, size.height));
+                    }
+                }
+            }
+            slint::winit_030::EventResult::Propagate
+        });
         windows
             .audience
             .set_audience_overlay(ui.overlay_model.clone().into());
@@ -312,6 +329,12 @@ impl AudienceUi {
                 window.set_audience_sticky_qr_error("".into());
             }
         });
+        let window = presenter.as_weak();
+        presenter.on_audience_dismiss_comment_display_error(move || {
+            if let Some(window) = window.upgrade() {
+                window.set_audience_comment_display_error("".into());
+            }
+        });
         presenter.on_audience_set_comment_display(move |flowing, bubbles| {
             let Some(ui) = weak.upgrade() else {
                 return;
@@ -327,13 +350,21 @@ impl AudienceUi {
                 .and_then(|path| crate::app_config::save_comment_display(&path, settings));
             match result {
                 Ok(()) => {
-                    ui.comments.borrow_mut().set_display_settings(settings);
+                    let sequence = ui
+                        .session
+                        .borrow()
+                        .as_ref()
+                        .map_or(0, AudienceSession::admission_sequence);
+                    ui.comments
+                        .borrow_mut()
+                        .set_display_settings_after(settings, sequence);
+                    window.set_audience_comment_display_error("".into());
                     window.set_audience_flowing_enabled(flowing);
                     window.set_audience_bubbles_enabled(bubbles);
                     ui.start_overlay_animation();
                 }
                 Err(error) => {
-                    window.set_audience_status(error.into());
+                    window.set_audience_comment_display_error(error.into());
                 }
             }
         });
@@ -415,8 +446,10 @@ impl AudienceUi {
                 });
             match result {
                 Ok(endpoint) => {
-                    *ui.relay_config.borrow_mut() =
-                        Some(crate::audience_relay_http::ManagedRelay::new(endpoint));
+                    let replacement = ui.relay_config.borrow().as_ref()
+                        .map(|relay| relay.with_endpoint(endpoint.clone()))
+                        .unwrap_or_else(|| crate::audience_relay_http::ManagedRelay::new(endpoint));
+                    *ui.relay_config.borrow_mut() = Some(replacement);
                     *ui.config_error.borrow_mut() = None;
                     window.set_audience_address(ui.address_label().into());
                     window.set_audience_status(
@@ -542,7 +575,12 @@ impl AudienceUi {
                 .get(*ui.address_index.borrow())
                 .copied();
             let relay = ui.relay_config.borrow().clone();
-            match AudienceSession::start(address, relay) {
+            let started = if ui.smoke.get() {
+                AudienceSession::start_for_smoke(address)
+            } else {
+                AudienceSession::start(address, relay)
+            };
+            match started {
                 Ok(session) => {
                     if let Some(window) = window.upgrade() {
                         ui.clear_reactions(&window);
@@ -553,7 +591,7 @@ impl AudienceUi {
                     state.borrow_mut().audience_join_available = true;
                     if let Some(window) = window.upgrade() {
                         ui.set_active(&window, true);
-                        window.set_audience_busy(true);
+                        window.set_audience_busy(false);
                         window.set_audience_status("Starting…".into());
                         window.set_audience_alert_title("".into());
                         window.set_audience_alert_guidance("".into());
@@ -580,7 +618,10 @@ impl AudienceUi {
                 }
                 Err(error) => {
                     if let Some(window) = window.upgrade() {
-                        let alert = crate::audience_alert::for_failure(&error.to_string());
+                        let alert = crate::audience_alert::for_transport_failure(
+                            &error.to_string(),
+                            ui.relay_config.borrow().is_some(),
+                        );
                         window.set_audience_status(alert.title.into());
                         window.set_audience_alert_title(alert.title.into());
                         window.set_audience_alert_guidance(alert.guidance.into());
@@ -815,6 +856,9 @@ impl AudienceUi {
         let Some(window) = window.upgrade() else {
             return;
         };
+        self.panel_geometry
+            .borrow_mut()
+            .observe_size(window.window().size());
         let snapshot = self
             .session
             .borrow()
@@ -929,7 +973,10 @@ impl AudienceUi {
                 let failed = matches!(&snapshot.status, SessionStatus::Failed(_));
                 let message: String = match snapshot.status {
                     SessionStatus::Failed(error) => {
-                        let alert = crate::audience_alert::for_failure(&error);
+                        let alert = crate::audience_alert::for_transport_failure(
+                            &error,
+                            self.relay_config.borrow().is_some(),
+                        );
                         window.set_audience_account_visible(error == "Relay denied room creation.");
                         window.set_audience_account_available(
                             error == "Relay denied room creation."
@@ -965,7 +1012,7 @@ impl AudienceUi {
         }
     }
 
-    pub fn shutdown(&self) {
+    pub fn shutdown(&self) -> Result<(), String> {
         self.clipboard.borrow_mut().release();
         self.clear_overlay();
         self.comments.borrow_mut().reset();
@@ -974,20 +1021,30 @@ impl AudienceUi {
         self.overlay_timer.stop();
         self.timer.stop();
         self.config_timer.stop();
+        let mut error = None;
         if let Some(mut session) = self.session.borrow_mut().take() {
             session.shutdown();
+            if let SessionStatus::Failed(message) = session.snapshot().status {
+                error = Some(message);
+            }
         }
         // A failed start may retain an ambiguous creation identity for manual retry.
         // Application exit also attempts bounded cleanup of that identity.
         if let Some(settings) = self.relay_config.borrow().clone() {
-            if settings.has_attempt() {
-                if let Ok(mut session) =
-                    crate::audience_relay::RemoteAudienceSession::start_managed(settings)
-                {
-                    session.shutdown();
+            if settings.requires_recovery() {
+                match crate::audience_relay::RemoteAudienceSession::start_cleanup(settings) {
+                    Ok(mut session) => {
+                        session.shutdown();
+                        error = match session.snapshot().status {
+                            SessionStatus::Failed(message) => Some(message),
+                            _ => None,
+                        };
+                    }
+                    Err(_) => error = Some("Cannot start relay cleanup.".into()),
                 }
             }
         }
+        error.map_or(Ok(()), Err)
     }
 }
 
@@ -1226,6 +1283,7 @@ mod configuration_change_tests {
         assert!(ensure_relay_replaceable(None).is_ok());
         assert!(ensure_relay_replaceable(Some(&relay)).is_ok());
         let attempt = relay.attempt().unwrap();
+        relay.mark_request_started();
         // A failed creation can retain only its request identity, without room metadata.
         assert!(attempt.room.is_none());
         let shared = relay.clone();

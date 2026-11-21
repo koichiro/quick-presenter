@@ -760,7 +760,6 @@ component ThumbnailPane inherits Rectangle {
 
     background: transparent;
     clip: true;
-    private property <length> scrollbar-gutter-width: 12px;
     private property <length> tile-height: 98px;
     private property <length> current-item-y: scroll-view.content-y + root.current-page-index * root.tile-height;
     private property <int> visible-start-index: max(0, round(-scroll-view.content-y / root.tile-height));
@@ -806,12 +805,12 @@ component ThumbnailPane inherits Rectangle {
     }
 
     scroll-view := ScrollView {
-        width: parent.width + root.scrollbar-gutter-width;
+        width: parent.width;
         height: parent.height;
-        content-width: parent.width;
+        content-width: self.visible-width;
 
         VerticalBox {
-            width: root.width;
+            width: scroll-view.visible-width;
             spacing: 6px;
 
             for thumbnail in root.thumbnails: ThumbnailTile {
@@ -867,8 +866,8 @@ export component PresenterWindow inherits Window {
         ? clamp(round((root.height - root.inline-menu-height) / 1px * 0.28) * 1px, 282px, 360px)
         : clamp(round((root.height - root.inline-menu-height - 48px) / 1px * (0.28 / 0.72)) * 1px, 282px, 360px));
     out property <length> presenter-minimum-height: root.audience-panel-expanded
-        ? (root.presenter-work-area-height > 0px ? min(842px, max(710px, root.presenter-work-area-height)) : 842px)
-        : 608px;
+        ? (root.presenter-work-area-height > 0px ? min(842px, max(560px, root.presenter-work-area-height)) : 842px)
+        : (root.presenter-work-area-height > 0px ? min(608px, max(560px, root.presenter-work-area-height)) : 608px);
     out property <bool> audience-history-visible: audience-panel.visible;
     out property <bool> audience-url-visible: audience-url-row.visible;
     out property <length> audience-footer-bottom: root.audience-panel-expanded ? root.audience-url-bottom : root.audience-toggle-bottom;
@@ -884,6 +883,8 @@ export component PresenterWindow inherits Window {
     callback audience-set-sticky-qr(bool);
     in property <string> audience-sticky-qr-error;
     callback audience-dismiss-sticky-qr-error();
+    in property <string> audience-comment-display-error;
+    callback audience-dismiss-comment-display-error();
     callback audience-toggle-comments();
     in property <int> audience-reaction-count;
     callback audience-open-url();
@@ -1775,11 +1776,16 @@ export component PresenterWindow inherits Window {
                     background: #30251a;
                     border-color: #f0b45a;
                     border-width: 2px;
-                    VerticalBox {
-                        padding: 14px; spacing: 8px;
-                        Text { text: "⚠ " + root.audience-alert-title; color: #ffd18a; font-size: 18px; font-weight: 700; wrap: word-wrap; }
-                        Text { text: root.audience-alert-guidance; color: white; font-size: 14px; wrap: word-wrap; }
-                        Rectangle { vertical-stretch: 1; }
+                    alert-scroll := ScrollView {
+                        width: parent.width; height: parent.height;
+                        content-width: self.visible-width;
+                        content-height: alert-content.preferred-height;
+                        alert-content := VerticalBox {
+                            width: alert-scroll.visible-width;
+                            padding: 14px; spacing: 8px;
+                            Text { text: "⚠ " + root.audience-alert-title; color: #ffd18a; font-size: 18px; font-weight: 700; wrap: word-wrap; }
+                            Text { text: root.audience-alert-guidance; color: white; font-size: 14px; wrap: word-wrap; }
+                        }
                     }
                 }
             }
@@ -1816,10 +1822,32 @@ export component PresenterWindow inherits Window {
                         font-size: 12px;
                         color: #8ab4f8;
                         vertical-alignment: center;
-                        TouchArea {
+                        join-link := FocusScope {
+                            width: parent.width; height: parent.height;
                             enabled: root.audience-url != "";
-                            mouse-cursor: pointer;
-                            clicked => { root.audience-open-url(); }
+                            accessible-role: button;
+                            accessible-label: "Open audience join page";
+                            accessible-enabled: self.enabled;
+                            accessible-action-default => { root.audience-open-url(); }
+                            key-pressed(event) => {
+                                if event.text == Key.Return || event.text == Key.Space {
+                                    root.audience-open-url();
+                                    return accept;
+                                }
+                                return reject;
+                            }
+                            Rectangle {
+                                width: parent.width; height: parent.height;
+                                background: transparent;
+                                border-width: 1px;
+                                border-color: join-link.has-focus ? #8ab4f8 : transparent;
+                            }
+                            TouchArea {
+                                width: parent.width; height: parent.height;
+                                enabled: root.audience-url != "";
+                                mouse-cursor: pointer;
+                                clicked => { join-link.focus(); root.audience-open-url(); }
+                            }
                         }
                     }
                 }
@@ -2028,6 +2056,10 @@ export component PresenterWindow inherits Window {
                                 }
                             }
                             Text { text: "Both styles can be enabled. Changes apply immediately."; color: #d9dce0; wrap: word-wrap; }
+                            if root.audience-comment-display-error != "": HorizontalBox {
+                                Text { text: root.audience-comment-display-error; color: #ffd18a; wrap: word-wrap; horizontal-stretch: 1; }
+                                Button { text: "Dismiss"; clicked => { root.audience-dismiss-comment-display-error(); } }
+                            }
                             Text { text: "Experimental · v3.0.0"; color: white; font-size: 18px; }
                             CommentDisplaySwitch {
                                 text: "Sticky QR code";

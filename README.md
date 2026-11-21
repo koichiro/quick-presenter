@@ -214,6 +214,20 @@ input events.
 
 ## Development priorities
 
+For isolated desktop validation, set `QP_PROFILE_DIR` to an absolute path in a
+new private directory before launching the GUI executable. Startup restoration,
+recent files, default TOML settings, diagnostic logs, and audience comment logs
+then use that directory (logs are under `logs/`). Create the directory with
+owner-only access; never point it at an existing user's profile. An explicit
+`--config`, `--log-file`, or `QP_RECENT_FILES_PATH` still selects its explicit
+destination, so keep those paths inside the validation directory as well.
+
+This development override does not change the application identity or control
+endpoint. On Unix, use a separate owner-only `XDG_RUNTIME_DIR` for the validation
+GUI and its `qp` CLI. On Windows, run only one GUI per OS user so control requests
+cannot target a different instance. It does not turn an unsigned development
+build into a qualified signed or Store-installed package.
+
 `main` is the v3.0.0 development stream; `v2.5` preserves the maintenance
 line at `a930165` before the v3 integration. Target maintenance fixes at `v2.5`
 and forward-port applicable fixes to `main`. The former `v3.0.0` branch is no

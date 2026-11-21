@@ -1,8 +1,8 @@
 //! Bounded, off-thread JSON Lines logging, separate from diagnostic messages.
 use crate::{audience_events::AudienceEvent, diagnostics::RotatingLogWriter};
 use std::{
-    io::Write,
-    path::PathBuf,
+    io::{Read, Write},
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc, Arc, Mutex, OnceLock,
@@ -16,6 +16,53 @@ pub(crate) struct CommentLogger {
     failed: Arc<AtomicBool>,
 }
 static LOGGER: OnceLock<Arc<CommentLogger>> = OnceLock::new();
+
+fn repair_incomplete_record(path: &Path, limit: u64) -> anyhow::Result<()> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    let file = match options.open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    anyhow::ensure!(
+        file.metadata()?.is_file(),
+        "Comment log must be a regular file"
+    );
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        anyhow::ensure!(
+            file.metadata()?.file_attributes()
+                & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT
+                == 0,
+            "Comment log must not be a reparse point"
+        );
+    }
+    if file.metadata()?.len() > limit {
+        return Ok(());
+    } // The writer will rotate it.
+    let mut bytes = Vec::new();
+    (&file).take(limit + 1).read_to_end(&mut bytes)?;
+    if !bytes.is_empty() && bytes.last() != Some(&b'\n') {
+        let complete = bytes
+            .iter()
+            .rposition(|byte| *byte == b'\n')
+            .map_or(0, |index| index + 1);
+        file.set_len(complete as u64)?;
+    }
+    Ok(())
+}
 #[cfg(not(test))]
 pub(crate) fn logger() -> Arc<CommentLogger> {
     LOGGER
@@ -47,6 +94,7 @@ impl CommentLogger {
                     if let Some(parent) = path.parent() {
                         std::fs::create_dir_all(parent)?;
                     }
+                    repair_incomplete_record(&path, limit)?;
                     let mut writer = RotatingLogWriter::new(&path, limit)?;
                     for line in receiver {
                         writer.write_all(line.as_bytes())?;
@@ -122,6 +170,41 @@ mod tests {
         AudienceEvent::Comment {
             body: "Hello\n世界".into(),
             handle: " Original\tName ".into(),
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn repair_rejects_symlink_without_modifying_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("target.jsonl");
+        let link = dir.path().join("comments.jsonl");
+        let original = b"unfinished record";
+        std::fs::write(&target, original).unwrap();
+        // Requires Developer Mode or the Windows symbolic-link privilege.
+        std::os::windows::fs::symlink_file(&target, &link).unwrap();
+        assert!(repair_incomplete_record(&link, 100_000).is_err());
+        assert_eq!(std::fs::read(target).unwrap(), original);
+    }
+
+    #[test]
+    fn restart_discards_only_an_unterminated_tail_before_appending() {
+        let dir = tempfile::tempdir().unwrap();
+        for prefix in ["{\"old\":true}\n", ""] {
+            let path = dir.path().join("comments.jsonl");
+            std::fs::write(&path, format!("{prefix}{{\"partial\":")).unwrap();
+            let logger = CommentLogger::start(Some(path.clone()), 100_000);
+            assert!(logger.submit("session", 1, 7, &comment()));
+            logger.shutdown();
+            assert!(!logger.failed());
+            let text = std::fs::read_to_string(path).unwrap();
+            assert!(text.starts_with(prefix));
+            let records: Vec<serde_json::Value> = text
+                .lines()
+                .map(|line| serde_json::from_str(line).unwrap())
+                .collect();
+            assert_eq!(records.len(), if prefix.is_empty() { 1 } else { 2 });
+            assert_eq!(records.last().unwrap()["body"], "Hello\n世界");
         }
     }
 

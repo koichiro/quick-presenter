@@ -64,7 +64,24 @@ pub(crate) fn strict_json(bytes: &[u8]) -> Result<Value, &'static str> {
     if bytes.len() > MAX_BYTES {
         return Err("Relay message exceeds size limit.");
     }
-    serde_json::from_slice::<Unique>(bytes)
-        .map(|v| v.0)
-        .map_err(|_| "Malformed relay JSON.")
+    let value = serde_json::from_slice::<Unique>(bytes)
+        .map_err(|_| "Malformed relay JSON.")?
+        .0;
+    if !value.is_object() {
+        return Err("Relay message must be a JSON object.");
+    }
+    Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn protocol_requires_an_object_but_allows_nested_arrays() {
+        assert!(strict_json(br#"{"values":["one","two"]}"#).is_ok());
+        for bytes in [br#"["one","two"]"#.as_slice(), b"null", b"42", b"true"] {
+            assert!(strict_json(bytes).is_err());
+        }
+    }
 }

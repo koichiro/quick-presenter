@@ -57,11 +57,12 @@ Fixtures use in-memory placement records and do not modify user settings.
 
 The `macOS audience window regression` CI job runs these checks on every pull
 request and main push, and uploads the report even on failure. Run them locally
-with a working WindowServer session and development PDFium library:
+with a working WindowServer session. First run `python3 scripts/fetch_pdfium.py`
+to obtain the required `pdfium/` directory, then follow the
+[signed-bundle procedure](GUI_SMOKE_CHECKLIST.md#semi-automated-path):
 
 ```sh
-cargo build --locked
-target/debug/quick-presenter \
+"/path/to/Quick Presenter.app/Contents/MacOS/quick-presenter" \
   --gui-smoke tests/fixtures/marp-speaker-notes.pdf \
   --gui-smoke-report /tmp/macos-audience-regression.txt
 ```

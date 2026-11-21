@@ -169,24 +169,60 @@ fn sync_directory(path: &Path) {
     }
 }
 
-#[cfg(target_os = "macos")]
+pub(crate) fn validate_profile_directory() -> Result<()> {
+    if let Some(path) = env::var_os("QP_PROFILE_DIR") {
+        validate_profile_path(Path::new(&path))?;
+    }
+    Ok(())
+}
+
+fn validate_profile_path(path: &Path) -> Result<()> {
+    anyhow::ensure!(
+        path.is_absolute(),
+        "QP_PROFILE_DIR must be an absolute path"
+    );
+    Ok(())
+}
+
 pub(crate) fn platform_config_dir() -> Option<PathBuf> {
+    env::var_os("QP_PROFILE_DIR")
+        .map(PathBuf::from)
+        .or_else(default_platform_config_dir)
+}
+
+#[cfg(target_os = "macos")]
+fn default_platform_config_dir() -> Option<PathBuf> {
     env::var_os("HOME")
         .map(PathBuf::from)
         .map(|home| home.join("Library/Application Support/Quick Presenter"))
 }
 
 #[cfg(target_os = "windows")]
-pub(crate) fn platform_config_dir() -> Option<PathBuf> {
+fn default_platform_config_dir() -> Option<PathBuf> {
     env::var_os("APPDATA")
         .map(PathBuf::from)
         .map(|appdata| appdata.join("Quick Presenter"))
 }
 
 #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-pub(crate) fn platform_config_dir() -> Option<PathBuf> {
+fn default_platform_config_dir() -> Option<PathBuf> {
     env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
         .map(|config| config.join("quick-presenter"))
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+
+    #[test]
+    fn profile_requires_an_absolute_path_before_any_settings_are_written() {
+        assert!(validate_profile_path(Path::new("")).is_err());
+        assert!(validate_profile_path(Path::new("relative/profile")).is_err());
+        let directory = tempfile::tempdir().unwrap();
+        let profile = directory.path().join("new-profile");
+        assert!(validate_profile_path(&profile).is_ok());
+        assert!(!profile.exists());
+    }
 }
