@@ -214,10 +214,15 @@ input events.
 
 ## Development priorities
 
-Audience Live development uses the `v3.0.0` branch. Optional local audience
-sessions and interaction complement presentation playback; see
-[Local Audience Sessions](docs/AUDIENCE_LOCAL.md) and the
-[experimental relay client](docs/AUDIENCE_RELAY.md).
+`main` is the v3.0.0 development stream; `v2.5` preserves the maintenance
+line at `a930165` before the v3 integration. Target maintenance fixes at `v2.5`
+and forward-port applicable fixes to `main`. The former `v3.0.0` branch is no
+longer the integration target.
+
+Audience Live adds optional local and relay sessions alongside PDF playback.
+See [Local Audience Sessions](docs/AUDIENCE_LOCAL.md),
+[relay configuration](docs/AUDIENCE_RELAY.md), and the
+[v3.0.0 RC1 release checklist](docs/releases/V3_0_0_RC1.md).
 
 ## Contributing
 

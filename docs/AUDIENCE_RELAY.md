@@ -30,7 +30,11 @@ user-private directory with restrictive ACLs. Never commit or log a real credent
 No default file, no `[audience]` section, or `[audience]` with only
 `transport = "local"` selects local hosting. Invalid configurations report an
 Audience error without falling back to local hosting or interrupting PDF playback.
-Restart after configuration edits; no settings GUI or hot reload is provided.
+Import an operator-provided TOML file through **Settings... > Import settings...**
+while Audience Live is stopped. The import is saved and applied immediately
+without restarting or starting a session. **Reset** returns to local hosting.
+Manual edits to the file still require a restart; there is no file hot reload.
+See [import validation](AUDIENCE_CONFIG_IMPORT_VALIDATION.md).
 
 For debugging, replace the default configuration entirely:
 

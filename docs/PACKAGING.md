@@ -114,6 +114,11 @@ relevant parser/rendering/security changes, compatibility evidence, and any
 reason for deferring adoption. Checksums authenticate the selected artifact;
 they are not evidence that the native library is free of vulnerabilities.
 
+Before merging a PDFium manifest update, run the baseline/candidate gate in
+[PDFium Upgrade Validation](PDFIUM_UPGRADE_VALIDATION.md). The dedicated
+`PDFium upgrade compatibility` workflow runs the same gate on macOS, Linux,
+and Windows. A host-only pass is insufficient for a cross-platform acceptance.
+
 ## Source Code for Binary Releases
 
 Quick Presenter is licensed under `GPL-3.0-only`. Paid distribution is

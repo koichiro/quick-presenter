@@ -8,6 +8,13 @@ Quick Presenter only opens PDF slide decks. It is not a slide editor and does
 not import Keynote, PowerPoint, Google Slides, Marp, or Beamer source files
 directly. Export the final deck to PDF before presenting.
 
+## Current release: v3.0.0 RC1
+
+`main` is the v3 development stream. `v2.5` retains the pre-integration main
+HEAD `a930165` for maintenance releases. Use the
+[v3.0.0 RC1 checklist](releases/V3_0_0_RC1.md) for the current candidate;
+the v2.5.0 evidence below is historical and does not qualify v3 packages.
+
 ## Release Validation
 
 Routine pull requests are validated by the lightweight `CI` workflow. The full

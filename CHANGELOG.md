@@ -1,6 +1,19 @@
 # Changelog
 
-## 3.0.0 — Unreleased
+## 3.0.0-rc.1 — Unreleased
+
+### Added
+
+- Introduce optional **Audience Live** sessions with a QR code and join URL,
+  five reactions, live comments, participant count, and a presenter history.
+  PDF playback continues independently of audience connectivity.
+- Support local LAN hosting and remote relays using Relay Protocol 1, including
+  HTTP room creation, presenter authentication, bounded recovery, and explicit
+  room termination. Relay access requires an operator-provided configuration.
+- Import relay configuration through Settings and apply it without restarting;
+  reset to local hosting and open the relay account recovery page when needed.
+- Display comments as flowing text and stacked bubbles, with independent
+  settings, pause/resume controls, bounded queues, and local comment logs.
 
 ### Changed
 
@@ -21,6 +34,18 @@
 - Fit the Windows presenter to the monitor's taskbar-free work area, including
   at 125% DPI and when expanding Audience Live, while keeping notes and controls
   usable.
+
+### Security and distribution
+
+- Update bundled PDFium to **chromium/8165** with reproducible compatibility
+  gates; see [the upgrade record](docs/validation/PDFIUM_8165_UPGRADE.md).
+- RC1 is a prerelease candidate, identified by tag `v3.0.0-rc.1` and its source
+  revision. Cargo and native package versions remain `3.0.0` for the existing
+  Store packaging pipelines. See the [RC1 checklist](docs/releases/V3_0_0_RC1.md)
+  for candidate identity, validation status, and publication requirements.
+- Control Protocol v1 remains compatible. Official Relay staging and production
+  qualification are tracked separately; this candidate does not assert service
+  availability or final Store approval.
 
 ## [2.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0) — 2026-10-24
 

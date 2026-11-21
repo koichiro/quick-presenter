@@ -13,7 +13,7 @@ artifact is `quick-presenter-windows-x64`; use the artifact from the exact PR ru
 for GUI validation. The matrix also runs the configuration import tests. Local
 source-build commands below are an alternative and provide the full test suite.
 
-Check out the pull request against `v3.0.0`, obtain PDFium using the documented
+Check out the pull request against `main`, obtain PDFium using the documented
 project setup, then run:
 
 ```powershell
