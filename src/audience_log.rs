@@ -92,7 +92,7 @@ impl CommentLogger {
                     let path =
                         path.ok_or_else(|| anyhow::anyhow!("Comment log directory unavailable"))?;
                     if let Some(parent) = path.parent() {
-                        std::fs::create_dir_all(parent)?;
+                        crate::settings_storage::create_private_dir_all(parent)?;
                     }
                     repair_incomplete_record(&path, limit)?;
                     let mut writer = RotatingLogWriter::new(&path, limit)?;

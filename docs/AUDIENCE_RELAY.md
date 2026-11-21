@@ -66,6 +66,10 @@ only a configuration fingerprint, operation key, ambiguity flag and pending end
 intent, with no bearer tokens, room credentials or join URLs. Owner-only atomic
 writes and a per-configuration process lock protect it. Damaged, mismatched or
 unwritable recovery data blocks relay requests while PDF playback remains usable.
+New application settings folders are created owner-only on Unix, regardless of
+which settings or logging path creates them first. Existing folder permissions
+are retained. If recovery rejects a writable configuration folder or parent that
+you own, protect that folder with `chmod 700` and retry.
 Confirmed cleanup clears the identity; a confirmed terminal room permits one
 bounded replacement. A pending explicit end is completed before connection and
 returns to OFF, without automatically creating another room. After that cleanup

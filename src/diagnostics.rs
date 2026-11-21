@@ -71,7 +71,7 @@ pub fn default_log_file_path() -> Option<PathBuf> {
 
 fn init_file_tracing(path: &Path, explicit_log_path: bool) -> Result<WorkerGuard> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).with_context(|| {
+        crate::settings_storage::create_private_dir_all(parent).with_context(|| {
             format!(
                 "failed to create diagnostic log directory: {}",
                 parent.display()

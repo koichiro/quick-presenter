@@ -80,7 +80,7 @@ impl Access {
 
     fn save(&self) -> Result<()> {
         let path = store_path()?;
-        fs::create_dir_all(
+        crate::settings_storage::create_private_dir_all(
             path.parent()
                 .context("PDF access settings parent unavailable")?,
         )?;

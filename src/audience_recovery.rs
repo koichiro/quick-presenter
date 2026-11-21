@@ -12,6 +12,12 @@ const READ_ERROR: &str =
 pub(crate) const WRITE_ERROR: &str =
     "Cannot save Audience recovery data. Check the configuration directory and retry.";
 
+#[cfg(unix)]
+const DIRECTORY_ERROR: &str = "Audience recovery needs protected, user-owned settings. Check ownership; run chmod 700 on writable folders you own, then retry.";
+#[cfg(not(unix))]
+const DIRECTORY_ERROR: &str =
+    "Audience recovery requires a protected, user-owned configuration directory.";
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Record {
@@ -72,14 +78,7 @@ impl Journal {
             .parent()
             .filter(|p| !p.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
-        let mut builder = std::fs::DirBuilder::new();
-        builder.recursive(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            builder.mode(0o700);
-        }
-        builder.create(parent).map_err(|_| READ_ERROR)?;
+        crate::settings_storage::create_private_dir_all(parent).map_err(|_| READ_ERROR)?;
         // Anchor the selected filename once; later cwd/directory aliases must
         // not redirect the journal or create a second lock for that filename.
         let config = parent
@@ -91,9 +90,7 @@ impl Journal {
         }
         let directory =
             crate::audience_recovery_dir::Directory::open(config.parent().ok_or(READ_ERROR)?)
-                .map_err(|_| {
-                    "Audience recovery requires a protected, user-owned configuration directory."
-                })?;
+                .map_err(|_| DIRECTORY_ERROR)?;
         let mut name = config.as_os_str().to_os_string();
         name.push(".audience-session.json");
         let path = PathBuf::from(name);
@@ -251,6 +248,89 @@ mod tests {
             may_exist: true,
             end_requested: true,
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn profile_creators_under_shared_umask_preserve_recovery_access() {
+        use std::os::unix::fs::PermissionsExt;
+        const CHILD: &str = "QP_PRIVATE_DIRECTORY_TEST_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", "audience_recovery::tests::profile_creators_under_shared_umask_preserve_recovery_access", "--test-threads=1", "--nocapture"])
+                .env(CHILD, "1").output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        // This exact test runs alone in a child, never changing the parent's umask.
+        unsafe {
+            libc::umask(0o002);
+        }
+        for route in [
+            "comment-display",
+            "audience-display",
+            "startup",
+            "recent",
+            "diagnostics",
+        ] {
+            let profile = root.path().join(route);
+            let config = profile.join("config.toml");
+            match route {
+                "comment-display" => {
+                    crate::app_config::save_comment_display(&config, Default::default()).unwrap()
+                }
+                "audience-display" => {
+                    crate::app_config::save_audience_display(&config, Default::default()).unwrap()
+                }
+                "startup" => {
+                    crate::startup_state::StartupStore::new(profile.join("startup-state.json"))
+                        .save(&Default::default())
+                        .unwrap()
+                }
+                "recent" => crate::recent::RecentFileStore::new(profile.join("recent-files.txt"))
+                    .save(&crate::recent::RecentFiles::new())
+                    .unwrap(),
+                "diagnostics" => {
+                    let _log =
+                        crate::diagnostics::init_diagnostics(Some(profile.join("logs/test.log")))
+                            .unwrap();
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                std::fs::metadata(&profile).unwrap().permissions().mode() & 0o777,
+                0o700,
+                "{route}"
+            );
+            let (journal, _) = Journal::open(&config, &endpoint()).unwrap();
+            journal
+                .save_configuration(&config, Some(&endpoint()))
+                .unwrap();
+            journal.validate_configuration(&endpoint()).unwrap();
+        }
+        let existing = root.path().join("existing");
+        std::fs::create_dir(&existing).unwrap();
+        std::fs::set_permissions(&existing, std::fs::Permissions::from_mode(0o775)).unwrap();
+        crate::settings_storage::create_private_dir_all(&existing).unwrap();
+        assert_eq!(
+            std::fs::metadata(&existing).unwrap().permissions().mode() & 0o777,
+            0o775
+        );
+        let error = Journal::open(&existing.join("config.toml"), &endpoint())
+            .err()
+            .unwrap();
+        assert!(error.contains("chmod 700"));
+        assert_eq!(
+            std::fs::metadata(&existing).unwrap().permissions().mode() & 0o777,
+            0o775
+        );
     }
 
     #[test]

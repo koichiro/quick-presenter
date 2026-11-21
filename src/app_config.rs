@@ -294,7 +294,8 @@ fn save_section(
     }
     let text = merge_section(read_bounded(path), section, value)?;
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|_| "Cannot create configuration directory.")?;
+        crate::settings_storage::create_private_dir_all(parent)
+            .map_err(|_| "Cannot create configuration directory.")?;
     }
     crate::settings_storage::write_atomic(path, text.as_bytes())
         .map_err(|_| "Cannot save protected configuration; previous settings are retained.")
