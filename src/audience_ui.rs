@@ -270,6 +270,20 @@ impl AudienceUi {
             weak_self: RefCell::new(std::rc::Weak::new()),
         });
         *ui.weak_self.borrow_mut() = Rc::downgrade(&ui);
+        let weak = Rc::downgrade(&ui);
+        use slint::winit_030::WinitWindowAccessor;
+        presenter.window().on_winit_window_event(move |_, event| {
+            if let slint::winit_030::winit::event::WindowEvent::Resized(size) = event {
+                if let Some(ui) = weak.upgrade() {
+                    // AppKit can acknowledge inside set_size while geometry is borrowed.
+                    // That synchronous case is observed immediately after set_size returns.
+                    if let Ok(mut geometry) = ui.panel_geometry.try_borrow_mut() {
+                        geometry.observe_size(slint::PhysicalSize::new(size.width, size.height));
+                    }
+                }
+            }
+            slint::winit_030::EventResult::Propagate
+        });
         windows
             .audience
             .set_audience_overlay(ui.overlay_model.clone().into());
