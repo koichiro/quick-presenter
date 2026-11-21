@@ -255,6 +255,10 @@ pub struct RemoteAudienceSession {
     engine: Arc<Mutex<AudienceEngine>>,
     stop: watch::Sender<bool>,
     end_requested: Arc<AtomicBool>,
+    managed: Option<crate::audience_relay_http::ManagedRelay>,
+    end_save_started: Arc<AtomicBool>,
+    end_save_pending: Arc<AtomicBool>,
+    end_save_error: Arc<Mutex<Option<&'static str>>>,
     display: watch::Sender<Display>,
     worker: Option<JoinHandle<()>>,
 }
@@ -277,6 +281,7 @@ impl RemoteAudienceSession {
         managed: Option<crate::audience_relay_http::ManagedRelay>,
         cleanup_only: bool,
     ) -> std::io::Result<Self> {
+        let recovery_owner = managed.clone();
         let status = Arc::new(Mutex::new(SessionStatus::Starting));
         let connections = Arc::new(AtomicUsize::new(0));
         let engine = Arc::new(Mutex::new(AudienceEngine::new(Instant::now())));
@@ -293,7 +298,7 @@ impl RemoteAudienceSession {
                 let config = path.as_ref().map(RelayConfig::load).transpose()?;
                 let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|_| "Cannot start relay worker.")?;
                 #[cfg(not(test))] { engine.lock().unwrap_or_else(|e| e.into_inner()).logger = Some(crate::audience_log::logger()); }
-                runtime.block_on(async {
+                let result = runtime.block_on(async {
                     if *stopped.borrow() {
                         if let Some(settings) = managed.as_ref() {
                             if settings.has_attempt() || settings.end_requested.load(Ordering::Acquire) {
@@ -313,6 +318,7 @@ impl RemoteAudienceSession {
                                 _ = stopped.changed() => None,
                                 result = crate::audience_relay_http::create(&client, &settings) => Some(result),
                             };
+                            let creation_terminal = matches!(&room, Some(Err(crate::audience_relay_http::ROOM_EXPIRED)));
                             let outcome = match room {
                                 Some(Ok(room)) => tokio::select! {
                                     biased;
@@ -323,7 +329,7 @@ impl RemoteAudienceSession {
                                 None => Ok(()),
                             };
                             if matches!(outcome, Err(crate::audience_relay_http::ROOM_EXPIRED)) {
-                                settings.clear()?;
+                                if !creation_terminal { settings.clear_terminal().await?; }
                                 // Only a confirmed terminal room permits a fresh creation identity.
                                 // Keep one ON action bounded, including servers that immediately expire rooms.
                                 if !replaced_terminal_room && !*stopped.borrow() {
@@ -340,7 +346,11 @@ impl RemoteAudienceSession {
                             result = run(config.ok_or("Missing relay configuration.")?, status.clone(), connections.clone(), engine.clone(), updates) => result,
                         }
                     }
-                })
+                });
+                // Bounded async cancellation must not join stalled filesystem jobs.
+                // Their owned settings keep the recovery lock until they settle.
+                runtime.shutdown_background();
+                result
             }));
             connections.store(0, Ordering::Relaxed);
             engine.lock().unwrap_or_else(|e| e.into_inner()).stop();
@@ -356,6 +366,10 @@ impl RemoteAudienceSession {
             engine,
             stop,
             end_requested,
+            managed: recovery_owner,
+            end_save_started: Arc::new(AtomicBool::new(false)),
+            end_save_pending: Arc::new(AtomicBool::new(false)),
+            end_save_error: Arc::new(Mutex::new(None)),
             display,
             worker: Some(worker),
         })
@@ -399,9 +413,63 @@ impl RemoteAudienceSession {
             .as_ref()
             .is_some_and(|l| l.failed())
     }
-    pub fn request_end(&self) {
+    pub fn request_end(&self) -> Result<(), &'static str> {
+        // Fence immediately, but do not stop transport or accept the end before
+        // the intent is durable. The UI labels this phase as saving, not ended.
+        self.engine.lock().unwrap_or_else(|e| e.into_inner()).stop();
         self.end_requested.store(true, Ordering::Release);
-        self.request_stop();
+        let Some(settings) = self.managed.clone() else {
+            self.request_stop();
+            return Ok(());
+        };
+        if self.end_save_started.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
+        self.end_save_pending.store(true, Ordering::Release);
+        *self
+            .end_save_error
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = None;
+        let started = self.end_save_started.clone();
+        let pending = self.end_save_pending.clone();
+        let error = self.end_save_error.clone();
+        let stop = self.stop.clone();
+        let result = std::thread::Builder::new()
+            .name("audience-end-save".into())
+            .spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    settings.persist_intent()
+                }))
+                .unwrap_or(Err(crate::audience_recovery::WRITE_ERROR));
+                drop(settings);
+                *error.lock().unwrap_or_else(|e| e.into_inner()) = result.err();
+                if result.is_err() {
+                    started.store(false, Ordering::Release);
+                }
+                pending.store(false, Ordering::Release);
+                if result.is_ok() {
+                    stop.send_replace(true);
+                }
+            });
+        if result.is_err() {
+            self.end_save_pending.store(false, Ordering::Release);
+            self.end_save_started.store(false, Ordering::Release);
+            *self
+                .end_save_error
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(crate::audience_recovery::WRITE_ERROR);
+            return Err(crate::audience_recovery::WRITE_ERROR);
+        }
+        Ok(())
+    }
+    pub fn end_request_pending(&self) -> bool {
+        self.end_save_pending.load(Ordering::Acquire)
+    }
+    pub fn end_request_error(&self) -> Option<&'static str> {
+        *self
+            .end_save_error
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
     }
     pub fn request_stop(&self) {
         self.engine.lock().unwrap_or_else(|e| e.into_inner()).stop();
@@ -1601,5 +1669,108 @@ mod fixture_tests {
         assert_eq!(resumed.drain_events().len(), 1);
         resumed.shutdown();
         let _ = audience.close(None);
+    }
+}
+
+#[cfg(test)]
+mod durable_end_tests {
+    use super::*;
+    use crate::{
+        app_config::RelayEndpoint,
+        audience_events::{Admission, ReactionKind},
+        audience_relay_http::ManagedRelay,
+    };
+
+    fn owner(settings: ManagedRelay) -> (RemoteAudienceSession, watch::Receiver<bool>) {
+        let (stop, receiver) = watch::channel(false);
+        let (display, _) = watch::channel(Display::default());
+        (
+            RemoteAudienceSession {
+                status: Arc::new(Mutex::new(SessionStatus::Starting)),
+                connections: Arc::new(AtomicUsize::new(0)),
+                engine: Arc::new(Mutex::new(AudienceEngine::new(std::time::Instant::now()))),
+                stop,
+                end_requested: settings.end_requested.clone(),
+                managed: Some(settings),
+                end_save_started: Arc::new(AtomicBool::new(false)),
+                end_save_pending: Arc::new(AtomicBool::new(false)),
+                end_save_error: Arc::new(Mutex::new(None)),
+                display,
+                worker: None,
+            },
+            receiver,
+        )
+    }
+    fn wait_until(mut predicate: impl FnMut() -> bool) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !predicate() {
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+    fn endpoint() -> RelayEndpoint {
+        RelayEndpoint {
+            origin: url::Url::parse("http://127.0.0.1:1234/").unwrap(),
+            create_token: "A".repeat(43),
+        }
+    }
+    #[test]
+    fn off_fences_events_but_signals_stop_only_after_its_intent_is_durable() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+        let settings = ManagedRelay::for_configuration(endpoint(), config.clone()).unwrap();
+        let key = settings.attempt().unwrap().key;
+        let state = settings.attempt.clone();
+        let held = state.lock().unwrap();
+        let (session, receiver) = owner(settings);
+        session.request_end().unwrap();
+        assert!(session.end_request_pending());
+        assert!(!*receiver.borrow());
+        assert_eq!(
+            session.engine.lock().unwrap().accept(
+                ReactionKind::Heart,
+                1,
+                std::time::Instant::now()
+            ),
+            Admission::Stopped
+        );
+        let stored: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(dir.path().join("config.toml.audience-session.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(stored["end_requested"], false);
+        drop(held);
+        wait_until(|| *receiver.borrow());
+        assert!(!session.end_request_pending());
+        assert!(session.end_request_error().is_none());
+        drop(session);
+        let restored = ManagedRelay::for_configuration(endpoint(), config).unwrap();
+        assert!(restored.end_requested.load(Ordering::Acquire));
+        assert_eq!(restored.attempt.lock().unwrap().as_ref().unwrap().key, key);
+    }
+    #[test]
+    fn failed_end_save_is_reported_without_stop_and_can_be_retried() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+        let settings = ManagedRelay::for_configuration(endpoint(), config).unwrap();
+        settings.attempt().unwrap();
+        let path = dir.path().join("config.toml.audience-session.json");
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        let (session, receiver) = owner(settings);
+        session.request_end().unwrap();
+        wait_until(|| !session.end_request_pending());
+        assert_eq!(
+            session.end_request_error(),
+            Some(crate::audience_recovery::WRITE_ERROR)
+        );
+        assert!(!*receiver.borrow());
+        std::fs::remove_dir(&path).unwrap();
+        session.request_end().unwrap();
+        wait_until(|| *receiver.borrow());
+        assert!(session.end_request_error().is_none());
+        let stored: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(stored["end_requested"], true);
     }
 }

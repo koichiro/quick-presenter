@@ -43,3 +43,4 @@ __pycache__/
 # Private relay recovery identity and per-configuration process lock.
 *.audience-session.json
 *.audience-session.json.lock
+*.audience-session.json.*.tmp

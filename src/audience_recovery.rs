@@ -2,7 +2,7 @@
 use crate::app_config::RelayEndpoint;
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{File, OpenOptions},
+    fs::File,
     io::Read,
     path::{Path, PathBuf},
 };
@@ -24,26 +24,10 @@ pub(crate) struct Record {
 
 pub(crate) struct Journal {
     path: PathBuf,
+    directory: crate::audience_recovery_dir::Directory,
+    config_name: std::ffi::OsString,
     // A separate inode stays locked across atomic journal replacements.
     _lock: File,
-}
-
-fn regular_options(write: bool) -> OpenOptions {
-    let mut options = OpenOptions::new();
-    options.read(true).write(write);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options
-            .mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
-    }
-    #[cfg(windows)]
-    {
-        use std::os::windows::fs::OpenOptionsExt;
-        options.custom_flags(windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT);
-    }
-    options
 }
 
 fn validate_file(file: &File) -> Result<(), &'static str> {
@@ -83,42 +67,62 @@ pub(crate) fn binding(endpoint: &RelayEndpoint) -> String {
 }
 
 impl Journal {
-    pub fn open(
-        config: &Path,
-        endpoint: &RelayEndpoint,
-    ) -> Result<(Self, Option<Record>), &'static str> {
+    fn open_record(config: &Path) -> Result<(Self, Option<Record>), &'static str> {
+        let parent = config
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let mut builder = std::fs::DirBuilder::new();
+        builder.recursive(true);
         #[cfg(unix)]
         {
-            use std::os::unix::fs::MetadataExt;
-            let parent = config
-                .parent()
-                .filter(|p| !p.as_os_str().is_empty())
-                .unwrap_or_else(|| Path::new("."));
-            let metadata = std::fs::metadata(parent).map_err(|_| READ_ERROR)?;
-            if !metadata.is_dir()
-                || metadata.uid() != unsafe { libc::geteuid() }
-                || metadata.mode() & 0o022 != 0
-            {
-                return Err("Audience recovery requires a user-owned configuration directory without group/world write access.");
-            }
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
         }
+        builder.create(parent).map_err(|_| READ_ERROR)?;
+        // Anchor the selected filename once; later cwd/directory aliases must
+        // not redirect the journal or create a second lock for that filename.
+        let config = parent
+            .canonicalize()
+            .map_err(|_| READ_ERROR)?
+            .join(config.file_name().ok_or(READ_ERROR)?);
+        let directory =
+            crate::audience_recovery_dir::Directory::open(config.parent().ok_or(READ_ERROR)?)
+                .map_err(|_| {
+                    "Audience recovery requires a protected, user-owned configuration directory."
+                })?;
         let mut name = config.as_os_str().to_os_string();
         name.push(".audience-session.json");
         let path = PathBuf::from(name);
         let mut lock_name = path.as_os_str().to_os_string();
         lock_name.push(".lock");
-        let lock = regular_options(true)
-            .create(true)
-            .truncate(false)
-            .open(PathBuf::from(lock_name))
+        let lock = directory
+            .lock_file(Path::new(&lock_name).file_name().ok_or(READ_ERROR)?)
             .map_err(|_| {
                 "Cannot lock Audience recovery data. Check the configuration directory."
             })?;
         validate_file(&lock)?;
-        lock.try_lock()
-            .map_err(|_| "Another app is using this Audience configuration.")?;
-        let journal = Self { path, _lock: lock };
+        lock.try_lock().map_err(|error| match error {
+            std::fs::TryLockError::WouldBlock => {
+                "Another app is using this Audience configuration."
+            }
+            _ => "Cannot lock Audience recovery data. Check the configuration directory.",
+        })?;
+        let journal = Self {
+            path,
+            directory,
+            config_name: config.file_name().ok_or(READ_ERROR)?.to_owned(),
+            _lock: lock,
+        };
         let record = journal.read()?;
+        Ok((journal, record))
+    }
+
+    pub fn open(
+        config: &Path,
+        endpoint: &RelayEndpoint,
+    ) -> Result<(Self, Option<Record>), &'static str> {
+        let (journal, record) = Self::open_record(config)?;
         if let Some(record) = &record {
             // A definitive initial rejection permits correcting credentials. An
             // ambiguous request can only be recovered with its original binding.
@@ -128,9 +132,34 @@ impl Journal {
         }
         Ok((journal, record))
     }
+    pub fn for_reset(config: &Path) -> Result<Self, &'static str> {
+        let (journal, record) = Self::open_record(config)?;
+        if record.is_some_and(|r| r.may_exist || r.end_requested) {
+            return Err("Recover the previous Audience session before resetting settings.");
+        }
+        Ok(journal)
+    }
+
+    pub fn validate_configuration(&self, expected: &RelayEndpoint) -> Result<(), &'static str> {
+        let file = self
+            .directory
+            .read_file(&self.config_name, true)
+            .map_err(|_| READ_ERROR)?;
+        let actual = crate::app_config::load_opened(file)?;
+        if actual
+            .as_ref()
+            .is_none_or(|a| a.origin != expected.origin || a.create_token != expected.create_token)
+        {
+            return Err("Audience configuration changed during startup. Reload the configuration and retry.");
+        }
+        Ok(())
+    }
 
     fn read(&self) -> Result<Option<Record>, &'static str> {
-        let file = match regular_options(false).open(&self.path) {
+        let file = match self
+            .directory
+            .read_file(self.path.file_name().ok_or(READ_ERROR)?, false)
+        {
             Ok(file) => file,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(_) => return Err(READ_ERROR),
@@ -160,7 +189,9 @@ impl Journal {
 
     pub fn save(&self, record: &Record) -> Result<(), &'static str> {
         let bytes = serde_json::to_vec(record).map_err(|_| WRITE_ERROR)?;
-        crate::settings_storage::write_atomic(&self.path, &bytes).map_err(|_| WRITE_ERROR)
+        self.directory
+            .write_atomic(self.path.file_name().ok_or(WRITE_ERROR)?, &bytes)
+            .map_err(|_| WRITE_ERROR)
     }
 }
 
@@ -311,6 +342,46 @@ mod tests {
         assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn directory_handle_pins_lock_reads_and_writes_after_an_ancestor_moves() {
+        let dir = tempfile::tempdir().unwrap();
+        let original = dir.path().join("original");
+        std::fs::create_dir_all(original.join("profile")).unwrap();
+        let config = original.join("profile/config.toml");
+        let (journal, _) = Journal::open(&config, &endpoint()).unwrap();
+        let moved = dir.path().join("moved");
+        std::fs::rename(&original, &moved).unwrap();
+        std::fs::create_dir_all(original.join("profile")).unwrap();
+        journal.save(&record(&endpoint())).unwrap();
+        assert!(journal.read().unwrap().unwrap().end_requested);
+        assert!(moved
+            .join("profile/config.toml.audience-session.json")
+            .exists());
+        assert!(!original
+            .join("profile/config.toml.audience-session.json")
+            .exists());
+        assert!(!original
+            .join("profile/config.toml.audience-session.json.lock")
+            .exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn writable_ancestor_is_rejected_even_when_the_leaf_is_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let ancestor = dir.path().join("shared");
+        std::fs::create_dir_all(ancestor.join("private")).unwrap();
+        std::fs::set_permissions(&ancestor, std::fs::Permissions::from_mode(0o777)).unwrap();
+        std::fs::set_permissions(
+            ancestor.join("private"),
+            std::fs::Permissions::from_mode(0o700),
+        )
+        .unwrap();
+        assert!(Journal::open(&ancestor.join("private/config.toml"), &endpoint()).is_err());
+    }
+
     #[cfg(windows)]
     #[test]
     fn windows_symlink_is_rejected_without_modifying_target() {
@@ -321,7 +392,13 @@ mod tests {
         drop(journal);
         let target = dir.path().join("target");
         std::fs::write(&target, b"do not modify").unwrap();
-        std::os::windows::fs::symlink_file(&target, &path).unwrap();
+        if let Err(error) = std::os::windows::fs::symlink_file(&target, &path) {
+            if error.raw_os_error() == Some(1314) {
+                eprintln!("SKIP: Windows symbolic-link privilege is unavailable");
+                return;
+            }
+            panic!("Cannot create symlink fixture: {error}");
+        }
         assert!(Journal::open(&config, &endpoint()).is_err());
         assert_eq!(std::fs::read(target).unwrap(), b"do not modify");
     }

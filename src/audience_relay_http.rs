@@ -27,6 +27,12 @@ pub struct Attempt {
     pub room: Option<RelayConfig>,
     pub may_exist: bool,
 }
+struct CancelIo(Arc<AtomicBool>);
+impl Drop for CancelIo {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
 impl ManagedRelay {
     pub fn new(endpoint: RelayEndpoint) -> Self {
         Self {
@@ -56,6 +62,18 @@ impl ManagedRelay {
         settings.journal = Some(Arc::new(journal));
         Ok(settings)
     }
+    pub fn from_loaded_configuration(
+        endpoint: RelayEndpoint,
+        config: std::path::PathBuf,
+    ) -> Result<Self, &'static str> {
+        let settings = Self::for_configuration(endpoint, config)?;
+        settings
+            .journal
+            .as_ref()
+            .unwrap()
+            .validate_configuration(&settings.endpoint)?;
+        Ok(settings)
+    }
     fn save_locked(
         &self,
         attempt: &Option<Attempt>,
@@ -72,47 +90,74 @@ impl ManagedRelay {
         }
         Ok(())
     }
-    fn persist_intent(&self) -> Result<(), &'static str> {
-        let slot = self.attempt.lock().unwrap_or_else(|e| e.into_inner());
-        self.save_locked(&slot, self.end_requested.load(Ordering::Acquire))
-    }
-    fn finish_cleanup(&self) -> Result<(), &'static str> {
+    fn transition<T>(
+        &self,
+        cancel: Option<&AtomicBool>,
+        action: impl FnOnce(&Self, &mut Option<Attempt>) -> Result<T, &'static str>,
+    ) -> Result<T, &'static str> {
         let mut slot = self.attempt.lock().unwrap_or_else(|e| e.into_inner());
-        // Commit the complete end as one record; partial HTTP success remains recoverable.
+        if cancel.is_some_and(|c| c.load(Ordering::Acquire)) {
+            return Err("Audience recovery operation was cancelled.");
+        }
+        action(self, &mut slot)
+    }
+    async fn io<T: Send + 'static>(
+        &self,
+        action: impl FnOnce(&Self, &mut Option<Attempt>) -> Result<T, &'static str> + Send + 'static,
+    ) -> Result<T, &'static str> {
+        let settings = self.clone();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let _cancel_on_drop = CancelIo(cancel.clone());
+        // The owned clone retains the OS lock until any in-flight write settles.
+        // Queued work checks cancellation under the state lock before changing it.
+        tokio::task::spawn_blocking(move || settings.transition(Some(&cancel), action))
+            .await
+            .map_err(|_| crate::audience_recovery::WRITE_ERROR)?
+    }
+    pub fn persist_intent(&self) -> Result<(), &'static str> {
+        self.transition(None, |s, slot| {
+            s.save_locked(slot, s.end_requested.load(Ordering::Acquire))
+        })
+    }
+    fn finish_locked(&self, slot: &mut Option<Attempt>) -> Result<(), &'static str> {
         self.save_locked(&None, false)?;
         *slot = None;
         self.end_requested.store(false, Ordering::Release);
         Ok(())
     }
-    pub fn attempt(&self) -> Result<Attempt, &'static str> {
-        let mut slot = self.attempt.lock().unwrap_or_else(|e| e.into_inner());
+    fn allocate_locked(&self, slot: &mut Option<Attempt>) -> Result<Attempt, &'static str> {
         if slot.is_none() {
             let mut bytes = [0u8; 32];
             getrandom::fill(&mut bytes).map_err(|_| "Cannot generate relay request identity.")?;
-            let key = bytes.iter().map(|b| format!("{b:02x}")).collect();
             *slot = Some(Attempt {
-                key,
+                key: bytes.iter().map(|b| format!("{b:02x}")).collect(),
                 room: None,
                 may_exist: false,
             });
         }
-        self.save_locked(&slot, self.end_requested.load(Ordering::Acquire))?;
+        self.save_locked(slot, self.end_requested.load(Ordering::Acquire))?;
         Ok(slot.as_ref().unwrap().clone())
+    }
+    #[cfg(test)]
+    pub fn attempt(&self) -> Result<Attempt, &'static str> {
+        self.transition(None, Self::allocate_locked)
     }
     pub fn has_attempt(&self) -> bool {
         self.attempt
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .is_some()
+            .try_lock()
+            .map(|slot| slot.is_some())
+            .unwrap_or(true)
     }
     pub fn requires_recovery(&self) -> bool {
         self.end_requested.load(Ordering::Acquire)
             || self
                 .attempt
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .as_ref()
-                .is_some_and(|a| a.may_exist || a.room.is_some())
+                .try_lock()
+                .map(|slot| {
+                    slot.as_ref()
+                        .is_some_and(|a| a.may_exist || a.room.is_some())
+                })
+                .unwrap_or(true)
     }
     pub fn with_endpoint(&self, endpoint: RelayEndpoint) -> Self {
         Self {
@@ -122,21 +167,34 @@ impl ManagedRelay {
             journal: self.journal.clone(),
         }
     }
-    pub fn mark_request_started(&self) -> Result<bool, &'static str> {
-        let mut slot = self.attempt.lock().unwrap_or_else(|e| e.into_inner());
-        let attempt = slot
+    fn mark_locked(&self, slot: &mut Option<Attempt>) -> Result<bool, &'static str> {
+        let mut prospective = slot.clone();
+        let attempt = prospective
             .as_mut()
-            .expect("creation identity allocated before sending");
+            .ok_or("Missing relay request identity.")?;
         let ambiguous = attempt.may_exist;
         attempt.may_exist = true;
-        self.save_locked(&slot, self.end_requested.load(Ordering::Acquire))?;
+        self.save_locked(&prospective, self.end_requested.load(Ordering::Acquire))?;
+        *slot = prospective;
         Ok(ambiguous)
     }
-    pub fn clear(&self) -> Result<(), &'static str> {
-        let mut slot = self.attempt.lock().unwrap_or_else(|e| e.into_inner());
+    #[cfg(test)]
+    pub fn mark_request_started(&self) -> Result<bool, &'static str> {
+        self.transition(None, Self::mark_locked)
+    }
+    fn clear_locked(&self, slot: &mut Option<Attempt>) -> Result<(), &'static str> {
         self.save_locked(&None, self.end_requested.load(Ordering::Acquire))?;
         *slot = None;
         Ok(())
+    }
+    #[cfg(test)]
+    pub fn clear(&self) -> Result<(), &'static str> {
+        self.transition(None, Self::clear_locked)
+    }
+    pub async fn clear_terminal(&self) -> Result<(), &'static str> {
+        tokio::time::timeout(Duration::from_secs(2), self.io(Self::clear_locked))
+            .await
+            .unwrap_or(Err(crate::audience_recovery::WRITE_ERROR))
     }
 }
 
@@ -154,13 +212,13 @@ pub async fn create(
     client: &reqwest::Client,
     settings: &ManagedRelay,
 ) -> Result<RelayConfig, &'static str> {
-    let attempt = settings.attempt()?;
     let result = tokio::time::timeout(Duration::from_secs(15), async {
+        let attempt = settings.io(ManagedRelay::allocate_locked).await?;
         for index in 0..3 {
             if index > 0 {
                 tokio::time::sleep(Duration::from_millis(200 * index)).await;
             }
-            let previously_ambiguous = settings.mark_request_started()?;
+            let previously_ambiguous = settings.io(ManagedRelay::mark_locked).await?;
             let response = client
                 .post(settings.endpoint.origin.join("api/relay/v1/rooms").unwrap())
                 .bearer_auth(&settings.endpoint.create_token)
@@ -174,17 +232,19 @@ pub async fn create(
             match response.status().as_u16() {
                 200 | 201 => {}
                 status @ (401 | 403) => {
-                    if !previously_ambiguous {
-                        if let Some(attempt) = settings
-                            .attempt
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .as_mut()
-                        {
-                            attempt.may_exist = false;
-                        }
-                    }
-                    settings.persist_intent()?;
+                    settings
+                        .io(move |s, slot| {
+                            let mut prospective = slot.clone();
+                            if !previously_ambiguous {
+                                if let Some(attempt) = prospective.as_mut() {
+                                    attempt.may_exist = false;
+                                }
+                            }
+                            s.save_locked(&prospective, s.end_requested.load(Ordering::Acquire))?;
+                            *slot = prospective;
+                            Ok(())
+                        })
+                        .await?;
                     return Err(if status == 401 {
                         "Relay creation credential was rejected."
                     } else {
@@ -192,7 +252,7 @@ pub async fn create(
                     });
                 }
                 410 => {
-                    settings.clear()?;
+                    settings.io(ManagedRelay::clear_locked).await?;
                     return Err(ROOM_EXPIRED);
                 }
                 503 => continue,
@@ -222,14 +282,15 @@ pub async fn create(
             if join.origin() != settings.endpoint.origin.origin() {
                 return Err("Relay returned a different origin.");
             }
-            if let Some(slot) = settings
-                .attempt
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .as_mut()
-            {
-                slot.room = Some(room.clone());
-            }
+            let cached = room.clone();
+            settings
+                .io(move |_, slot| {
+                    if let Some(slot) = slot.as_mut() {
+                        slot.room = Some(cached);
+                    }
+                    Ok(())
+                })
+                .await?;
             return Ok(room);
         }
         Err("Relay room creation is unavailable. Retry to recover the same room.")
@@ -268,7 +329,9 @@ pub async fn cleanup(
 ) -> Result<(), &'static str> {
     let result = tokio::time::timeout(Duration::from_secs(2), async {
         // Persist explicit end intent before either HTTP endpoint can commit.
-        settings.persist_intent()?;
+        settings
+            .io(|s, slot| s.save_locked(slot, s.end_requested.load(Ordering::Acquire)))
+            .await?;
         let session_end = async {
             // Explicit OFF is independent of best-effort room transport cleanup.
             if settings.end_requested.load(Ordering::Acquire) {
@@ -295,16 +358,13 @@ pub async fn cleanup(
             Ok(())
         };
         let room_end = async {
-            // Recover only an existing identity; never allocate a fresh one here.
-            if !settings.has_attempt() {
+            // Observe presence and cache together under the async state gate;
+            // a conservative UI query must never authorize a fresh cleanup key.
+            let attempt = settings.io(|_, slot| Ok(slot.clone())).await?;
+            let Some(attempt) = attempt else {
                 return Ok(());
-            }
-            let cached = settings
-                .attempt
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .as_ref()
-                .and_then(|a| a.room.clone());
+            };
+            let cached = attempt.room;
             let room = match cached {
                 Some(room) => room,
                 None => match create(client, settings).await {
@@ -318,13 +378,11 @@ pub async fn cleanup(
         // Neither endpoint can prevent the other from being attempted. Both
         // share the same deadline, including a stalled session-end response.
         let (session_result, room_result) = tokio::join!(session_end, room_end);
-        session_result.and(room_result)
+        session_result.and(room_result)?;
+        settings.io(ManagedRelay::finish_locked).await
     })
     .await
     .unwrap_or(Err("Cannot confirm relay room termination."));
-    if result.is_ok() {
-        settings.finish_cleanup()?;
-    }
     result
 }
 
@@ -574,6 +632,162 @@ mod tests {
         assert!(settings.has_attempt());
     }
 
+    #[test]
+    fn failed_pre_request_save_preserves_the_previous_ambiguity_and_key() {
+        for ambiguous in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let settings = ManagedRelay::for_configuration(
+                RelayEndpoint {
+                    origin: url::Url::parse("https://relay.example/").unwrap(),
+                    create_token: "A".repeat(43),
+                },
+                dir.path().join("config.toml"),
+            )
+            .unwrap();
+            let key = settings.attempt().unwrap().key;
+            if ambiguous {
+                settings.mark_request_started().unwrap();
+            }
+            let path = dir.path().join("config.toml.audience-session.json");
+            std::fs::remove_file(&path).unwrap();
+            std::fs::create_dir(&path).unwrap();
+            assert!(settings.mark_request_started().is_err());
+            let state = settings.attempt.lock().unwrap();
+            assert_eq!(state.as_ref().unwrap().may_exist, ambiguous);
+            assert_eq!(state.as_ref().unwrap().key, key);
+        }
+    }
+
+    #[test]
+    fn ui_recovery_queries_do_not_wait_for_the_storage_transition_lock() {
+        let settings = ManagedRelay::new(RelayEndpoint {
+            origin: url::Url::parse("https://relay.example/").unwrap(),
+            create_token: "A".repeat(43),
+        });
+        assert!(!settings.requires_recovery());
+        let state = settings.attempt.clone();
+        let held = state.lock().unwrap();
+        assert!(settings.requires_recovery());
+        assert!(settings.has_attempt());
+        drop(held);
+        assert!(!settings.requires_recovery());
+        assert!(!settings.has_attempt());
+    }
+
+    #[test]
+    fn startup_rechecks_configuration_under_its_recovery_lock() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+        let original = RelayEndpoint {
+            origin: url::Url::parse("https://relay.example/").unwrap(),
+            create_token: "A".repeat(43),
+        };
+        crate::app_config::save_import(&config, &original).unwrap();
+        let read_before_lock = crate::app_config::load(Some(config.clone()))
+            .unwrap()
+            .unwrap();
+        let changed = RelayEndpoint {
+            origin: original.origin.clone(),
+            create_token: "B".repeat(43),
+        };
+        crate::app_config::save_import(&config, &changed).unwrap();
+        assert!(ManagedRelay::from_loaded_configuration(read_before_lock, config.clone()).is_err());
+        let current = ManagedRelay::from_loaded_configuration(changed, config).unwrap();
+        assert!(!current.has_attempt());
+    }
+
+    #[tokio::test]
+    async fn cleanup_budget_covers_queued_initial_and_final_io_without_stale_writes() {
+        for final_write in [false, true] {
+            let s = server().await;
+            let dir = tempfile::tempdir().unwrap();
+            let config = dir.path().join("config.toml");
+            let settings =
+                ManagedRelay::for_configuration(s.settings.endpoint.clone(), config.clone())
+                    .unwrap();
+            settings.attempt().unwrap();
+            if final_write {
+                push(&s, 201, room(&s.settings).to_string());
+                create(&client().unwrap(), &settings).await.unwrap();
+            }
+            settings.end_requested.store(true, Ordering::Release);
+            let state = settings.attempt.clone();
+            let mut held = if final_write {
+                None
+            } else {
+                Some(state.lock().unwrap())
+            };
+            let gate = Arc::new(tokio::sync::Notify::new());
+            if final_write {
+                *s.peer.session_gate.lock().unwrap() = Some(gate.clone());
+            }
+            let owner = settings.clone();
+            let cleanup_task =
+                tokio::spawn(async move { cleanup(&client().unwrap(), &owner).await });
+            if final_write {
+                tokio::time::timeout(Duration::from_secs(1), async {
+                    while s.peer.session_ends.load(Ordering::SeqCst) == 0
+                        || s.peer.ends.load(Ordering::SeqCst) == 0
+                    {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                })
+                .await
+                .unwrap();
+                held = Some(state.lock().unwrap());
+                gate.notify_one();
+            }
+            // UI queries remain nonblocking while disk work owns the state lock.
+            assert!(settings.requires_recovery());
+            let result = tokio::time::timeout(Duration::from_secs(3), cleanup_task)
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(result.is_err());
+            assert_eq!(
+                s.peer.session_ends.load(Ordering::SeqCst),
+                usize::from(final_write)
+            );
+            assert_eq!(s.peer.ends.load(Ordering::SeqCst), usize::from(final_write));
+            assert_eq!(
+                s.peer.requests.lock().unwrap().len(),
+                usize::from(final_write)
+            );
+            let mut held = held.unwrap();
+            // Simulate a newer durable state before releasing a cancelled queued
+            // save/clear. Old work must not clear or overwrite this identity.
+            *held = Some(Attempt {
+                key: "d".repeat(64),
+                room: None,
+                may_exist: true,
+            });
+            settings.save_locked(&held, true).unwrap();
+            drop(settings);
+            assert!(
+                ManagedRelay::for_configuration(s.settings.endpoint.clone(), config.clone())
+                    .is_err()
+            );
+            drop(held);
+            let restored = tokio::time::timeout(Duration::from_secs(3), async {
+                loop {
+                    if let Ok(restored) =
+                        ManagedRelay::for_configuration(s.settings.endpoint.clone(), config.clone())
+                    {
+                        break restored;
+                    }
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert!(restored.end_requested.load(Ordering::Acquire));
+            assert_eq!(
+                restored.attempt.lock().unwrap().as_ref().unwrap().key,
+                "d".repeat(64)
+            );
+        }
+    }
+
     #[tokio::test]
     async fn interrupted_explicit_end_is_restored_and_never_followed_by_a_fresh_creation() {
         for room_end_fails in [false, true] {
@@ -585,6 +799,7 @@ mod tests {
                     .unwrap();
             push(&s, 201, room(&s.settings).to_string());
             create(&client().unwrap(), &first).await.unwrap();
+            let key = first.attempt().unwrap().key;
             first.end_requested.store(true, Ordering::Release);
             if room_end_fails {
                 s.peer.end_results.lock().unwrap().push_back(503);
@@ -592,14 +807,13 @@ mod tests {
                 s.peer.session_results.lock().unwrap().push_back(503);
             }
             assert!(cleanup(&client().unwrap(), &first).await.is_err());
-            let key = first.attempt().unwrap().key;
             drop(first);
             let restored =
                 ManagedRelay::for_configuration(s.settings.endpoint.clone(), config.clone())
                     .unwrap();
             assert!(restored.end_requested.load(Ordering::Acquire));
             assert_eq!(restored.attempt().unwrap().key, key);
-            // The previous room end committed, while utilization end did not.
+            // Either endpoint may have committed while the other failed.
             if room_end_fails {
                 push(&s, 200, room(&s.settings).to_string());
             } else {
@@ -620,7 +834,10 @@ mod tests {
                 worker.snapshot().status,
                 crate::audience::SessionStatus::Stopped
             ));
-            assert_eq!(s.peer.requests.lock().unwrap().len(), 2);
+            let requests = s.peer.requests.lock().unwrap();
+            assert_eq!(requests.len(), 2);
+            assert!(requests.iter().all(|(_, replay)| replay == &key));
+            drop(requests);
             assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 2);
             assert!(!restored.requires_recovery());
             drop(restored);

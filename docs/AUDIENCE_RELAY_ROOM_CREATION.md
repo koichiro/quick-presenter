@@ -156,11 +156,14 @@ The bounded journal is stored beside the selected configuration as
 a SHA-256 fingerprint of origin/creation credential, the operation key, ambiguity
 and pending explicit-end intent; it never stores bearer tokens or room credentials.
 Write and sync the key before creation can commit, and write end intent before
-termination can commit. Reject invalid, oversized, non-regular, shared-permission
+termination can commit. Reject invalid, oversized, non-regular
 or differently bound active records rather than silently creating a fresh key.
-On Unix the directory must be user-owned without group/world write access.
+On Unix, reject shared-permission records; validate the directory chain and use
+the retained directory handle for journal operations. The configuration directory
+must be user-owned without group/world write access.
 Windows writes use the protected owner/SYSTEM ACL from settings storage; the
-configuration directory remains user-controlled. A second process using the same
+configuration directory remains user-controlled; existing Windows read ACLs are
+not claimed to be validated. A second process using the same
 configuration cannot acquire its journal lock. Startup loading performs no network
 IO and does not activate service usage. Recover the same room instead of allocating a replacement. If creation
 returns terminal-room 410, or the presenter handshake confirms a missing/ended
@@ -185,9 +188,15 @@ Failed -> explicit ON -> recover pending creation / reconnect existing room
 
 OFF means end this Audience session, rather than suspend it. Immediately fence
 events, clear overlays and QR metadata, and prevent further user starts until the
-worker finishes. Send `POST /api/relay/v1/rooms/{room_id}/end` using the
+worker finishes. Save end intent off the UI thread before signaling transport stop;
+while the UI says `Saving stop request…`, the end is not yet accepted. A storage
+failure reports that OFF was not saved and leaves OFF retryable without blocking
+PDF controls. Once saved, send `POST /api/relay/v1/rooms/{room_id}/end` using the
 room's presenter Bearer credential. This is different from the operator creation
-credential. Bound termination to two seconds, then close the socket and runtime.
+credential. Bound cleanup, including its initial/final journal persistence, to two
+seconds, then close the socket and runtime. Storage jobs run outside Tokio's task
+thread; a timed-out job retains journal ownership until it settles, and cancelled
+queued work cannot later overwrite a newer operation.
 The next ON starts a new room and gets a new join URL. Pause Comments continues to
 change display policy only; it does not terminate a room.
 

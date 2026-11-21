@@ -54,7 +54,9 @@ then displays its join URL, code and QR. Reactions/comments use the existing
 Audience and overlay engines. Pause immediately clears comment overlays while
 reception/history continue; Resume never replays paused submissions.
 
-OFF clears join metadata/overlays and attempts to end the room with its presenter
+OFF fences events and clears join metadata/overlays. It saves end intent off the
+UI thread before accepting the end; a failed save leaves OFF retryable. Cleanup
+then attempts to end the room with its presenter
 credential. The next ON creates a new room. An interrupted creation or failed
 connection retains its idempotency key in a private recovery journal next to the
 configuration file. Before sending a creation request, qp saves that identity;

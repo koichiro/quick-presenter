@@ -46,7 +46,7 @@ impl LoadedAudienceConfiguration {
             endpoint
                 .map(|endpoint| {
                     crate::app_config::import_destination(path.clone()).and_then(|config| {
-                        crate::audience_relay_http::ManagedRelay::for_configuration(
+                        crate::audience_relay_http::ManagedRelay::from_loaded_configuration(
                             endpoint, config,
                         )
                     })
@@ -101,6 +101,20 @@ fn prepare_relay_import(
     };
     crate::app_config::save_import(&destination, &replacement.endpoint)?;
     Ok(replacement)
+}
+
+fn prepare_relay_reset(
+    config_path: Option<std::path::PathBuf>,
+    current: Option<&crate::audience_relay_http::ManagedRelay>,
+) -> Result<(), &'static str> {
+    ensure_relay_replaceable(current)?;
+    let path = crate::app_config::import_destination(config_path)?;
+    let _ownership = if current.is_none() {
+        Some(crate::audience_recovery::Journal::for_reset(&path)?)
+    } else {
+        None
+    };
+    crate::app_config::reset_relay(&path)
 }
 
 fn join_url_for_copy(status: Option<SessionStatus>, stopping: bool) -> Option<String> {
@@ -504,8 +518,7 @@ impl AudienceUi {
                 window.set_audience_status("Import the original valid configuration before resetting relay settings.".into());
                 return;
             }
-            let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
-                .and_then(|path| crate::app_config::reset_relay(&path));
+            let result = prepare_relay_reset(ui.config_path.borrow().clone(), ui.relay_config.borrow().as_ref());
             match result {
                 Ok(()) => {
                     *ui.relay_config.borrow_mut() = None;
@@ -578,8 +591,8 @@ impl AudienceUi {
                 return;
             }
             if let Some(session) = ui.session.borrow().as_ref() {
-                *ui.stopping.borrow_mut() = true;
-                session.request_end();
+                let requested = session.request_end();
+                *ui.stopping.borrow_mut() = requested.is_ok();
                 state.borrow_mut().audience_join_available = false;
                 set_join_visible(&refs, &state, false);
                 clear_join_metadata(&refs);
@@ -587,8 +600,15 @@ impl AudienceUi {
                     ui.clear_reactions(&window);
                 }
                 if let Some(window) = window.upgrade() {
-                    window.set_audience_busy(true);
-                    window.set_audience_status("Stopping…".into());
+                    window.set_audience_busy(requested.is_ok());
+                    window.set_audience_status(
+                        match requested {
+                            Err(message) => message,
+                            Ok(()) if session.end_request_pending() => "Saving stop request…",
+                            Ok(()) => "Stopping…",
+                        }
+                        .into(),
+                    );
                     window.set_audience_url("".into());
                     window.set_audience_code("".into());
                     window.set_audience_qr(Default::default());
@@ -885,14 +905,34 @@ impl AudienceUi {
         self.panel_geometry
             .borrow_mut()
             .observe_size(window.window().size());
-        let snapshot = self
-            .session
-            .borrow()
-            .as_ref()
-            .map(AudienceSession::snapshot);
-        let Some(snapshot) = snapshot else {
+        let current = self.session.borrow().as_ref().map(|session| {
+            (
+                session.snapshot(),
+                session.end_request_error(),
+                session.is_finished(),
+                session.end_request_pending(),
+            )
+        });
+        let Some((mut snapshot, end_error, finished, saving)) = current else {
             return;
         };
+        if let Some(error) = end_error {
+            if finished {
+                snapshot.status = SessionStatus::Failed(error.into());
+            } else {
+                *self.stopping.borrow_mut() = false;
+                window.set_audience_busy(false);
+                window.set_audience_status(
+                    "The end request was not saved. Retry OFF after checking local storage.".into(),
+                );
+                window.set_audience_alert_title("Audience Live end was not saved".into());
+                window.set_audience_alert_guidance("Check access to the configuration folder and local disk space, then retry OFF. PDF playback is still available.".into());
+                self.reveal_alert(&window);
+                return;
+            }
+        } else if *self.stopping.borrow() && !saving {
+            window.set_audience_status("Stopping…".into());
+        }
         window.set_audience_count(snapshot.connections.min(i32::MAX as usize) as i32);
         match snapshot.status {
             SessionStatus::Running { url, code } => {
@@ -1404,6 +1444,61 @@ mod join_url_copy_tests {
 mod recovery_import_tests {
     use super::*;
     use crate::{app_config::RelayEndpoint, audience_relay_http::ManagedRelay};
+
+    #[test]
+    fn stale_local_reset_does_not_overwrite_an_owned_or_unresolved_remote_configuration() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let endpoint = RelayEndpoint {
+            origin: url::Url::parse("https://relay.example/").unwrap(),
+            create_token: "A".repeat(43),
+        };
+        crate::app_config::save_import(&path, &endpoint).unwrap();
+        let owner = ManagedRelay::for_configuration(endpoint.clone(), path.clone()).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        assert!(prepare_relay_reset(Some(path.clone()), None).is_err());
+        owner.attempt().unwrap();
+        owner.mark_request_started().unwrap();
+        drop(owner);
+        assert!(prepare_relay_reset(Some(path.clone()), None).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+        let recovered = ManagedRelay::for_configuration(endpoint, path.clone()).unwrap();
+        recovered.clear().unwrap();
+        drop(recovered);
+        prepare_relay_reset(Some(path.clone()), None).unwrap();
+        assert!(crate::app_config::load(Some(path)).unwrap().is_none());
+    }
+
+    #[test]
+    fn first_import_creates_a_private_destination_without_starting_a_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("download.toml");
+        let destination = dir.path().join("new/profile/config.toml");
+        let endpoint = RelayEndpoint {
+            origin: url::Url::parse("https://relay.example/").unwrap(),
+            create_token: "A".repeat(43),
+        };
+        crate::app_config::save_import(&source, &endpoint).unwrap();
+        let imported = prepare_relay_import(&source, Some(destination.clone()), None).unwrap();
+        assert!(!imported.has_attempt());
+        assert!(!imported.requires_recovery());
+        assert!(destination.exists());
+        assert!(!destination
+            .with_file_name("config.toml.audience-session.json")
+            .exists());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(destination.parent().unwrap())
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o700
+            );
+        }
+    }
 
     #[test]
     fn import_preflights_recovery_binding_before_overwriting_configuration() {

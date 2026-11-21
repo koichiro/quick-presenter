@@ -73,10 +73,25 @@ impl AudienceSession {
             Self::Remote(s) => s.comment_log_failed(),
         }
     }
-    pub fn request_end(&self) {
+    pub fn request_end(&self) -> Result<(), &'static str> {
         match self {
-            Self::Local(s) => s.request_stop(),
+            Self::Local(s) => {
+                s.request_stop();
+                Ok(())
+            }
             Self::Remote(s) => s.request_end(),
+        }
+    }
+    pub fn end_request_pending(&self) -> bool {
+        match self {
+            Self::Local(_) => false,
+            Self::Remote(s) => s.end_request_pending(),
+        }
+    }
+    pub fn end_request_error(&self) -> Option<&'static str> {
+        match self {
+            Self::Local(_) => None,
+            Self::Remote(s) => s.end_request_error(),
         }
     }
     pub fn is_finished(&self) -> bool {

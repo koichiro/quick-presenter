@@ -68,6 +68,10 @@ fn load_from(
         Err(e) if !required && e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err("Cannot open Audience configuration."),
     };
+    load_opened(file)
+}
+
+pub(crate) fn load_opened(file: File) -> Result<Option<RelayEndpoint>, &'static str> {
     let metadata = file
         .metadata()
         .map_err(|_| "Cannot inspect Audience configuration.")?;
