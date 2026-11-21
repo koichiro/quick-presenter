@@ -449,6 +449,7 @@ impl RemoteAudienceSession {
             self.request_stop();
             return Ok(());
         }
+        let mut completion = self.end_result.lock().unwrap_or_else(|e| e.into_inner());
         if self.end_save_started.swap(true, Ordering::AcqRel) {
             return Ok(());
         }
@@ -456,12 +457,13 @@ impl RemoteAudienceSession {
         settings.creation_blocked.store(true, Ordering::Release);
         self.end_requested.store(true, Ordering::Release);
         self.end_work_pending.store(true, Ordering::Release);
-        *self.end_result.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        *completion = None;
         self.end_save_pending.store(true, Ordering::Release);
         *self
             .end_save_error
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = None;
+        drop(completion);
         let started = self.end_save_started.clone();
         let pending = self.end_save_pending.clone();
         let error = self.end_save_error.clone();
@@ -475,9 +477,10 @@ impl RemoteAudienceSession {
                     settings.persist_intent()
                 }))
                 .unwrap_or(Err(crate::audience_recovery::WRITE_ERROR));
-                *error.lock().unwrap_or_else(|e| e.into_inner()) = result.err();
-                let save_failed = result.is_err();
-                pending.store(false, Ordering::Release);
+                let save_error = result.err();
+                if save_error.is_none() {
+                    pending.store(false, Ordering::Release);
+                }
                 // This owner survives a socket failure or an already-finished
                 // transport worker. Never defer a saved explicit end until ON.
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -496,11 +499,14 @@ impl RemoteAudienceSession {
                     })
                 }))
                 .unwrap_or(Err("Relay cleanup stopped unexpectedly."));
-                *end_result.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
                 drop(settings);
+                let mut completion = end_result.lock().unwrap_or_else(|e| e.into_inner());
+                *completion = Some(result);
+                *error.lock().unwrap_or_else(|e| e.into_inner()) = save_error;
+                pending.store(false, Ordering::Release);
                 work_pending.store(false, Ordering::Release);
-                // Publish all results before allowing a retry to own these fields.
-                if save_failed {
+                // A retry acquires this same gate before owning completion fields.
+                if save_error.is_some() {
                     started.store(false, Ordering::Release);
                 }
             });
