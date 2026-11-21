@@ -25,6 +25,11 @@ fn repair_incomplete_record(path: &Path, limit: u64) -> anyhow::Result<()> {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW);
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OPEN_REPARSE_POINT);
+    }
     let file = match options.open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -34,6 +39,16 @@ fn repair_incomplete_record(path: &Path, limit: u64) -> anyhow::Result<()> {
         file.metadata()?.is_file(),
         "Comment log must be a regular file"
     );
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        anyhow::ensure!(
+            file.metadata()?.file_attributes()
+                & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT
+                == 0,
+            "Comment log must not be a reparse point"
+        );
+    }
     if file.metadata()?.len() > limit {
         return Ok(());
     } // The writer will rotate it.
@@ -156,6 +171,20 @@ mod tests {
             body: "Hello\n世界".into(),
             handle: " Original\tName ".into(),
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn repair_rejects_symlink_without_modifying_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("target.jsonl");
+        let link = dir.path().join("comments.jsonl");
+        let original = b"unfinished record";
+        std::fs::write(&target, original).unwrap();
+        // Requires Developer Mode or the Windows symbolic-link privilege.
+        std::os::windows::fs::symlink_file(&target, &link).unwrap();
+        assert!(repair_incomplete_record(&link, 100_000).is_err());
+        assert_eq!(std::fs::read(target).unwrap(), original);
     }
 
     #[test]

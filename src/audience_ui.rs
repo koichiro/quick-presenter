@@ -842,6 +842,9 @@ impl AudienceUi {
         let Some(window) = window.upgrade() else {
             return;
         };
+        self.panel_geometry
+            .borrow_mut()
+            .observe_size(window.window().size());
         let snapshot = self
             .session
             .borrow()
@@ -1005,20 +1008,16 @@ impl AudienceUi {
         self.timer.stop();
         self.config_timer.stop();
         let mut error = None;
-        let recover_finished = if let Some(mut session) = self.session.borrow_mut().take() {
-            let finished = session.is_finished();
+        if let Some(mut session) = self.session.borrow_mut().take() {
             session.shutdown();
             if let SessionStatus::Failed(message) = session.snapshot().status {
                 error = Some(message);
             }
-            finished
-        } else {
-            true
-        };
+        }
         // A failed start may retain an ambiguous creation identity for manual retry.
         // Application exit also attempts bounded cleanup of that identity.
         if let Some(settings) = self.relay_config.borrow().clone() {
-            if recover_finished && settings.requires_recovery() {
+            if settings.requires_recovery() {
                 match crate::audience_relay::RemoteAudienceSession::start_cleanup(settings) {
                     Ok(mut session) => {
                         session.shutdown();
