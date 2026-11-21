@@ -393,6 +393,9 @@ impl Environment for HostEnvironment {
 }
 
 fn diagnostic_log_file_path(platform: Platform, env: &dyn Environment) -> Option<PathBuf> {
+    if let Some(profile) = env.var_os("QP_PROFILE_DIR") {
+        return Some(PathBuf::from(profile).join("logs").join(LOG_FILE_NAME));
+    }
     match platform {
         Platform::Macos => env
             .var_os("HOME")
@@ -444,6 +447,24 @@ mod tests {
     impl Environment for FakeEnvironment {
         fn var_os(&self, key: &str) -> Option<OsString> {
             self.vars.get(key).cloned()
+        }
+    }
+
+    #[test]
+    fn isolated_profile_keeps_both_log_generations_and_comments_out_of_user_logs() {
+        let env = FakeEnvironment::default()
+            .with_var("QP_PROFILE_DIR", "/test-profile")
+            .with_var("HOME", "/Users/speaker")
+            .with_var("LOCALAPPDATA", "/normal-local-app-data")
+            .with_var("XDG_STATE_HOME", "/normal-state");
+        for platform in [Platform::Macos, Platform::Windows, Platform::Linux] {
+            let log = diagnostic_log_file_path(platform, &env).unwrap();
+            assert_eq!(log, PathBuf::from("/test-profile/logs/quick-presenter.log"));
+            assert_eq!(
+                log.with_file_name("audience-comments.jsonl"),
+                PathBuf::from("/test-profile/logs/audience-comments.jsonl")
+            );
+            assert!(previous_log_path(&log).starts_with("/test-profile/logs"));
         }
     }
 

@@ -191,6 +191,7 @@ fn main() -> Result<()> {
     let StartupRequest::Run(startup_options) = startup_request else {
         unreachable!("help requests return before app startup");
     };
+    settings_storage::validate_profile_directory()?;
     let diagnostics = init_diagnostics(startup_options.log_file_path.clone())?;
     let startup_persistence = startup_state::StartupPersistence::for_options(
         &startup_options,
