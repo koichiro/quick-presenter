@@ -154,7 +154,8 @@ pub fn read_import(path: &std::path::Path) -> Result<RelayEndpoint, &'static str
     parse(&text)?.ok_or("Import requires a remote Audience configuration.")
 }
 
-/// Validate and persist an import before returning the endpoint to activate.
+/// Test the shared parsing/merge boundary without constructing a GUI session.
+#[cfg(test)]
 pub fn import_file(
     source: &std::path::Path,
     destination: &std::path::Path,

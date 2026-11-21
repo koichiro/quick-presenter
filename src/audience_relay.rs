@@ -305,7 +305,7 @@ impl RemoteAudienceSession {
                     }
                     if let Some(settings) = managed {
                         let client = crate::audience_relay_http::client()?;
-                        if settings.end_requested.load(Ordering::Acquire) { crate::audience_relay_http::cleanup(&client, &settings).await?; }
+                        if settings.end_requested.load(Ordering::Acquire) { crate::audience_relay_http::cleanup(&client, &settings).await?; return Ok(()); }
                         let mut replaced_terminal_room = false;
                         loop {
                             let room = tokio::select! {
@@ -323,7 +323,7 @@ impl RemoteAudienceSession {
                                 None => Ok(()),
                             };
                             if matches!(outcome, Err(crate::audience_relay_http::ROOM_EXPIRED)) {
-                                settings.clear();
+                                settings.clear()?;
                                 // Only a confirmed terminal room permits a fresh creation identity.
                                 // Keep one ON action bounded, including servers that immediately expire rooms.
                                 if !replaced_terminal_room && !*stopped.borrow() {

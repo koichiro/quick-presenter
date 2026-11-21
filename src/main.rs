@@ -14,6 +14,7 @@ pub mod audience_events;
 mod audience_log;
 pub mod audience_overlay;
 mod audience_panel;
+mod audience_recovery;
 pub mod audience_relay;
 mod audience_relay_http;
 mod audience_session;

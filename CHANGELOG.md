@@ -27,6 +27,10 @@
 
 ### Fixed
 
+- Preserve relay creation identity and pending termination across process crashes,
+  so explicit retry can recover the same room without competing for a new one.
+  Keep recovery data private and stop relay requests when it cannot be saved.
+
 - Keep flowing-comment measurements current after recreating the audience
   window on Wayland.
 - Make the About license descriptions scrollable so their complete text and

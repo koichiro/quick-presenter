@@ -19,6 +19,7 @@ pub struct ManagedRelay {
     pub endpoint: RelayEndpoint,
     pub attempt: Arc<Mutex<Option<Attempt>>>,
     pub end_requested: Arc<AtomicBool>,
+    journal: Option<Arc<crate::audience_recovery::Journal>>,
 }
 #[derive(Clone)]
 pub struct Attempt {
@@ -32,7 +33,56 @@ impl ManagedRelay {
             endpoint,
             attempt: Arc::new(Mutex::new(None)),
             end_requested: Arc::new(AtomicBool::new(false)),
+            journal: None,
         }
+    }
+    pub fn for_configuration(
+        endpoint: RelayEndpoint,
+        config: std::path::PathBuf,
+    ) -> Result<Self, &'static str> {
+        let (journal, record) = crate::audience_recovery::Journal::open(&config, &endpoint)?;
+        let mut settings = Self::new(endpoint);
+        if let Some(record) = record {
+            *settings.attempt.lock().unwrap_or_else(|e| e.into_inner()) =
+                record.key.map(|key| Attempt {
+                    key,
+                    room: None,
+                    may_exist: record.may_exist,
+                });
+            settings
+                .end_requested
+                .store(record.end_requested, Ordering::Release);
+        }
+        settings.journal = Some(Arc::new(journal));
+        Ok(settings)
+    }
+    fn save_locked(
+        &self,
+        attempt: &Option<Attempt>,
+        end_requested: bool,
+    ) -> Result<(), &'static str> {
+        if let Some(journal) = &self.journal {
+            journal.save(&crate::audience_recovery::Record {
+                version: 1,
+                binding: crate::audience_recovery::binding(&self.endpoint),
+                key: attempt.as_ref().map(|a| a.key.clone()),
+                may_exist: attempt.as_ref().is_some_and(|a| a.may_exist),
+                end_requested,
+            })?;
+        }
+        Ok(())
+    }
+    fn persist_intent(&self) -> Result<(), &'static str> {
+        let slot = self.attempt.lock().unwrap_or_else(|e| e.into_inner());
+        self.save_locked(&slot, self.end_requested.load(Ordering::Acquire))
+    }
+    fn finish_cleanup(&self) -> Result<(), &'static str> {
+        let mut slot = self.attempt.lock().unwrap_or_else(|e| e.into_inner());
+        // Commit the complete end as one record; partial HTTP success remains recoverable.
+        self.save_locked(&None, false)?;
+        *slot = None;
+        self.end_requested.store(false, Ordering::Release);
+        Ok(())
     }
     pub fn attempt(&self) -> Result<Attempt, &'static str> {
         let mut slot = self.attempt.lock().unwrap_or_else(|e| e.into_inner());
@@ -46,6 +96,7 @@ impl ManagedRelay {
                 may_exist: false,
             });
         }
+        self.save_locked(&slot, self.end_requested.load(Ordering::Acquire))?;
         Ok(slot.as_ref().unwrap().clone())
     }
     pub fn has_attempt(&self) -> bool {
@@ -68,19 +119,24 @@ impl ManagedRelay {
             endpoint,
             attempt: self.attempt.clone(),
             end_requested: self.end_requested.clone(),
+            journal: self.journal.clone(),
         }
     }
-    pub fn mark_request_started(&self) -> bool {
+    pub fn mark_request_started(&self) -> Result<bool, &'static str> {
         let mut slot = self.attempt.lock().unwrap_or_else(|e| e.into_inner());
         let attempt = slot
             .as_mut()
             .expect("creation identity allocated before sending");
         let ambiguous = attempt.may_exist;
         attempt.may_exist = true;
-        ambiguous
+        self.save_locked(&slot, self.end_requested.load(Ordering::Acquire))?;
+        Ok(ambiguous)
     }
-    pub fn clear(&self) {
-        *self.attempt.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    pub fn clear(&self) -> Result<(), &'static str> {
+        let mut slot = self.attempt.lock().unwrap_or_else(|e| e.into_inner());
+        self.save_locked(&None, self.end_requested.load(Ordering::Acquire))?;
+        *slot = None;
+        Ok(())
     }
 }
 
@@ -104,7 +160,7 @@ pub async fn create(
             if index > 0 {
                 tokio::time::sleep(Duration::from_millis(200 * index)).await;
             }
-            let previously_ambiguous = settings.mark_request_started();
+            let previously_ambiguous = settings.mark_request_started()?;
             let response = client
                 .post(settings.endpoint.origin.join("api/relay/v1/rooms").unwrap())
                 .bearer_auth(&settings.endpoint.create_token)
@@ -128,6 +184,7 @@ pub async fn create(
                             attempt.may_exist = false;
                         }
                     }
+                    settings.persist_intent()?;
                     return Err(if status == 401 {
                         "Relay creation credential was rejected."
                     } else {
@@ -135,7 +192,7 @@ pub async fn create(
                     });
                 }
                 410 => {
-                    settings.clear();
+                    settings.clear()?;
                     return Err(ROOM_EXPIRED);
                 }
                 503 => continue,
@@ -210,6 +267,8 @@ pub async fn cleanup(
     settings: &ManagedRelay,
 ) -> Result<(), &'static str> {
     let result = tokio::time::timeout(Duration::from_secs(2), async {
+        // Persist explicit end intent before either HTTP endpoint can commit.
+        settings.persist_intent()?;
         let session_end = async {
             // Explicit OFF is independent of best-effort room transport cleanup.
             if settings.end_requested.load(Ordering::Acquire) {
@@ -232,7 +291,6 @@ pub async fn cleanup(
                         "Cannot confirm session termination. Retry to check the same session.",
                     );
                 }
-                settings.end_requested.store(false, Ordering::Release);
             }
             Ok(())
         };
@@ -265,7 +323,7 @@ pub async fn cleanup(
     .await
     .unwrap_or(Err("Cannot confirm relay room termination."));
     if result.is_ok() {
-        settings.clear();
+        settings.finish_cleanup()?;
     }
     result
 }
@@ -297,6 +355,7 @@ mod tests {
         ends: Arc<AtomicUsize>,
         session_ends: Arc<AtomicUsize>,
         session_results: Arc<Mutex<VecDeque<u16>>>,
+        end_results: Arc<Mutex<VecDeque<u16>>>,
         session_gate: Arc<Mutex<Option<Arc<tokio::sync::Notify>>>>,
         handshakes: Arc<Mutex<VecDeque<u16>>>,
         creation_gate: Arc<Mutex<Option<Arc<tokio::sync::Notify>>>>,
@@ -326,6 +385,7 @@ mod tests {
             ends: Arc::new(AtomicUsize::new(0)),
             session_ends: Arc::new(AtomicUsize::new(0)),
             session_results: Arc::new(Mutex::new(VecDeque::new())),
+            end_results: Arc::new(Mutex::new(VecDeque::new())),
             session_gate: Arc::new(Mutex::new(None)),
             handshakes: Arc::new(Mutex::new(VecDeque::new())),
             creation_gate: Arc::new(Mutex::new(None)),
@@ -370,7 +430,7 @@ mod tests {
                         return StatusCode::UNAUTHORIZED;
                     }
                     peer.ends.fetch_add(1, Ordering::SeqCst);
-                    StatusCode::OK
+                    StatusCode::from_u16(peer.end_results.lock().unwrap().pop_front().unwrap_or(200)).unwrap()
                 }),
             )
             .route("/api/relay/{version}/rooms/fresh/end", post(|State(peer): State<Peer>, headers: HeaderMap| async move {
@@ -419,6 +479,158 @@ mod tests {
         let origin = settings.endpoint.origin.as_str().trim_end_matches('/');
         json!({"room_id":"test","code":"TEST","join_url":format!("{origin}/join/test#k={}", "C".repeat(43)),"presenter_url":format!("{}/presenter/test",origin.replacen("http:","ws:",1)),"presenter_token":"B".repeat(43)})
     }
+
+    #[tokio::test]
+    async fn cold_restart_replays_the_original_key_instead_of_competing_for_an_active_room() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = RelayEndpoint {
+            origin: url::Url::parse(&format!("http://{}/", listener.local_addr().unwrap()))
+                .unwrap(),
+            create_token: "A".repeat(43),
+        };
+        let room_body = room(&ManagedRelay::new(endpoint.clone())).to_string();
+        let active_key = Arc::new(Mutex::new(None::<String>));
+        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+        let created = Arc::new(AtomicUsize::new(0));
+        let app = Router::new().route(
+            "/api/relay/v1/rooms",
+            post({
+                let active_key = active_key.clone();
+                let requests = requests.clone();
+                let created = created.clone();
+                let config = config.clone();
+                move |body: Bytes| {
+                    let active_key = active_key.clone();
+                    let requests = requests.clone();
+                    let created = created.clone();
+                    let config = config.clone();
+                    let room_body = room_body.clone();
+                    async move {
+                        let body: Value = serde_json::from_slice(&body).unwrap();
+                        assert_eq!(body.as_object().unwrap().len(), 1); // No service clock or PDF data.
+                        let key = body["idempotency_key"].as_str().unwrap().to_owned();
+                        requests.lock().unwrap().push(key.clone());
+                        let mut active = active_key.lock().unwrap();
+                        if active.as_ref().is_some_and(|old| old != &key) {
+                            return (StatusCode::FORBIDDEN, "{}".to_owned());
+                        }
+                        // Recovery identity must be durable before the server can commit.
+                        let path = config.with_file_name("config.toml.audience-session.json");
+                        let journal: Value =
+                            serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+                        assert_eq!(journal["key"], key);
+                        assert_eq!(journal["may_exist"], true);
+                        let status = if active.is_none() {
+                            *active = Some(key);
+                            created.fetch_add(1, Ordering::SeqCst);
+                            StatusCode::CREATED
+                        } else {
+                            StatusCode::OK
+                        };
+                        (status, room_body)
+                    }
+                }
+            }),
+        );
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let first = ManagedRelay::for_configuration(endpoint.clone(), config.clone()).unwrap();
+        let original = create(&client().unwrap(), &first).await.unwrap();
+        let key = first.attempt().unwrap().key;
+        drop(first); // No cleanup: reconstruct the client after process loss.
+        let lost_identity = ManagedRelay::new(endpoint.clone());
+        assert_eq!(
+            create(&client().unwrap(), &lost_identity).await.err(),
+            Some("Relay denied room creation.")
+        );
+        let restored = ManagedRelay::for_configuration(endpoint, config).unwrap();
+        assert!(restored.requires_recovery());
+        let recovered = create(&client().unwrap(), &restored).await.unwrap();
+        assert_eq!(recovered.room_id, original.room_id);
+        assert_eq!(recovered.presenter_token, original.presenter_token);
+        assert_eq!(restored.attempt().unwrap().key, key);
+        assert_eq!(created.load(Ordering::SeqCst), 1);
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests[0], requests[2]);
+        assert_ne!(requests[0], requests[1]);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn journal_write_failure_prevents_any_room_creation_request() {
+        let s = server().await;
+        let dir = tempfile::tempdir().unwrap();
+        let settings = ManagedRelay::for_configuration(
+            s.settings.endpoint.clone(),
+            dir.path().join("config.toml"),
+        )
+        .unwrap();
+        std::fs::create_dir(dir.path().join("config.toml.audience-session.json")).unwrap();
+        assert!(create(&client().unwrap(), &settings).await.is_err());
+        assert!(s.peer.requests.lock().unwrap().is_empty());
+        assert!(settings.has_attempt());
+    }
+
+    #[tokio::test]
+    async fn interrupted_explicit_end_is_restored_and_never_followed_by_a_fresh_creation() {
+        for room_end_fails in [false, true] {
+            let s = server().await;
+            let dir = tempfile::tempdir().unwrap();
+            let config = dir.path().join("config.toml");
+            let first =
+                ManagedRelay::for_configuration(s.settings.endpoint.clone(), config.clone())
+                    .unwrap();
+            push(&s, 201, room(&s.settings).to_string());
+            create(&client().unwrap(), &first).await.unwrap();
+            first.end_requested.store(true, Ordering::Release);
+            if room_end_fails {
+                s.peer.end_results.lock().unwrap().push_back(503);
+            } else {
+                s.peer.session_results.lock().unwrap().push_back(503);
+            }
+            assert!(cleanup(&client().unwrap(), &first).await.is_err());
+            let key = first.attempt().unwrap().key;
+            drop(first);
+            let restored =
+                ManagedRelay::for_configuration(s.settings.endpoint.clone(), config.clone())
+                    .unwrap();
+            assert!(restored.end_requested.load(Ordering::Acquire));
+            assert_eq!(restored.attempt().unwrap().key, key);
+            // The previous room end committed, while utilization end did not.
+            if room_end_fails {
+                push(&s, 200, room(&s.settings).to_string());
+            } else {
+                push(&s, 410, "{}".into());
+            }
+            let mut worker =
+                crate::audience_relay::RemoteAudienceSession::start_managed(restored.clone())
+                    .unwrap();
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while !worker.is_finished() {
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap();
+            worker.shutdown();
+            assert!(matches!(
+                worker.snapshot().status,
+                crate::audience::SessionStatus::Stopped
+            ));
+            assert_eq!(s.peer.requests.lock().unwrap().len(), 2);
+            assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 2);
+            assert!(!restored.requires_recovery());
+            drop(restored);
+            drop(worker);
+            let stopped =
+                ManagedRelay::for_configuration(s.settings.endpoint.clone(), config).unwrap();
+            assert!(!stopped.has_attempt());
+            assert!(!stopped.end_requested.load(Ordering::Acquire));
+        }
+    }
     fn push(server: &Server, status: u16, body: String) {
         server
             .peer
@@ -444,7 +656,7 @@ mod tests {
         room.validate().unwrap();
         settings.attempt.lock().unwrap().as_mut().unwrap().room = Some(room);
         assert_eq!(clone.attempt().unwrap().room.unwrap().room_id, "test");
-        clone.clear();
+        clone.clear().unwrap();
         assert!(!settings.has_attempt());
         assert_ne!(settings.attempt().unwrap().key, attempt.key);
         assert!(clone.attempt().unwrap().room.is_none());
@@ -495,7 +707,7 @@ mod tests {
     async fn exit_cleanup_does_not_allocate_a_fresh_key_after_a_terminal_room() {
         let s = server().await;
         let key = s.settings.attempt().unwrap().key;
-        s.settings.mark_request_started();
+        s.settings.mark_request_started().unwrap();
         push(&s, 410, "{}".into());
         push(&s, 201, room(&s.settings).to_string());
         let mut cleanup =

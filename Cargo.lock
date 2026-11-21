@@ -4066,6 +4066,7 @@ dependencies = [
  "raw-window-handle",
  "reqwest",
  "rfd",
+ "ring",
  "serde",
  "serde_json",
  "slint",

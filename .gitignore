@@ -39,3 +39,7 @@ __pycache__/
 /docs/validation/**/gui-smoke.md
 /docs/research/speaker-notes/smoke-open.txt
 /docs/research/speaker-notes/pdfium-api.txt
+
+# Private relay recovery identity and per-configuration process lock.
+*.audience-session.json
+*.audience-session.json.lock

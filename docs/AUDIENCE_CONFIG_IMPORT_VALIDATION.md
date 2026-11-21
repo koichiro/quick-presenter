@@ -126,8 +126,17 @@ the isolated import fixture. The example-origin fixture above is not suitable.
 - Stop, wait for confirmed termination, then start again and verify the new QR.
   Test interrupted/lost creation and stop responses using the existing controlled
   relay test procedures; unknown outcomes must retain their retry identity.
-- Restart qp while the old room remains. Verify existing-session refusal/recovery
-  guidance; a generic refusal must not be presented as proof that a room exists.
+- Force-quit only the disposable app while its room remains. Restart with the same
+  profile/configuration and explicitly turn Audience Live on. Verify it restores
+  the saved key and recovers the same room without waiting for old-room expiration.
+  Importing or loading settings alone must not issue a request or activate usage.
+- Interrupt an explicit end after its request can commit; restart and retry.
+  Verify the pending end is recovered without automatically creating a room.
+- Reject damaged/unwritable recovery data and a second app using the same config.
+  A mismatched active journal must reject import before overwriting settings;
+  importing the original configuration must recover that identity without edits.
+- A room created by an older app without a saved key cannot be retroactively
+  recovered; report that limitation separately from updated-candidate results.
 
 ## macOS comparison
 

@@ -56,9 +56,22 @@ reception/history continue; Resume never replays paused submissions.
 
 OFF clears join metadata/overlays and attempts to end the room with its presenter
 credential. The next ON creates a new room. An interrupted creation or failed
-connection keeps its idempotency key in memory; manual retry recovers/revalidates
-that room. Requests have bounded deadlines and retries. Failed termination can
-leave a room until relay expiration. Application restart does not restore a room.
+connection retains its idempotency key in a private recovery journal next to the
+configuration file. Before sending a creation request, qp saves that identity;
+a later explicit ON, including after a process crash, replays it to recover the
+same room. Loading settings never connects automatically. The journal contains
+only a configuration fingerprint, operation key, ambiguity flag and pending end
+intent, with no bearer tokens, room credentials or join URLs. Owner-only atomic
+writes and a per-configuration process lock protect it. Damaged, mismatched or
+unwritable recovery data blocks relay requests while PDF playback remains usable.
+Confirmed cleanup clears the identity; a confirmed terminal room permits one
+bounded replacement. A pending explicit end is completed before connection and
+returns to OFF, without automatically creating another room.
+
+Requests have bounded deadlines and retries. Failed termination can leave a room
+until relay expiration. Rooms created by older versions without a saved identity
+cannot be restored retroactively; service expiration can still be needed in that
+case. Remote termination during an outage is not guaranteed.
 Networking runs on the existing dedicated worker and does not block live Slint/PDF
 processing; no network runtime starts while OFF. Exit performs bounded cleanup
 after the GUI event loop returns.

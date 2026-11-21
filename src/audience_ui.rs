@@ -34,7 +34,7 @@ fn account_url_for_relay(origin: &url::Url) -> Option<&'static str> {
 }
 
 struct LoadedAudienceConfiguration {
-    relay: Result<Option<crate::app_config::RelayEndpoint>, &'static str>,
+    relay: Result<Option<crate::audience_relay_http::ManagedRelay>, &'static str>,
     display: crate::audience_comments::CommentDisplaySettings,
     audience_display: crate::app_config::AudienceDisplaySettings,
     display_error: Option<String>,
@@ -42,7 +42,17 @@ struct LoadedAudienceConfiguration {
 
 impl LoadedAudienceConfiguration {
     fn load(path: Option<std::path::PathBuf>) -> Self {
-        let relay = crate::app_config::load(path.clone());
+        let relay = crate::app_config::load(path.clone()).and_then(|endpoint| {
+            endpoint
+                .map(|endpoint| {
+                    crate::app_config::import_destination(path.clone()).and_then(|config| {
+                        crate::audience_relay_http::ManagedRelay::for_configuration(
+                            endpoint, config,
+                        )
+                    })
+                })
+                .transpose()
+        });
         let (display, mut display_error) =
             match crate::app_config::load_comment_display(path.clone()) {
                 Ok(settings) => (settings, None),
@@ -73,6 +83,24 @@ fn ensure_relay_replaceable(
     } else {
         Ok(())
     }
+}
+
+fn prepare_relay_import(
+    source: &std::path::Path,
+    config_path: Option<std::path::PathBuf>,
+    current: Option<&crate::audience_relay_http::ManagedRelay>,
+) -> Result<crate::audience_relay_http::ManagedRelay, &'static str> {
+    ensure_relay_replaceable(current)?;
+    let destination = crate::app_config::import_destination(config_path)?;
+    let endpoint = crate::app_config::read_import(source)?;
+    // Validate recovery binding and acquire ownership before replacing settings.
+    let replacement = if let Some(current) = current {
+        current.with_endpoint(endpoint)
+    } else {
+        crate::audience_relay_http::ManagedRelay::for_configuration(endpoint, destination.clone())?
+    };
+    crate::app_config::save_import(&destination, &replacement.endpoint)?;
+    Ok(replacement)
 }
 
 fn join_url_for_copy(status: Option<SessionStatus>, stopping: bool) -> Option<String> {
@@ -196,7 +224,7 @@ impl AudienceUi {
                 match result.relay {
                     Ok(endpoint) => {
                         *ui.relay_config.borrow_mut() =
-                            endpoint.map(crate::audience_relay_http::ManagedRelay::new);
+                            endpoint;
                         if let Some(window) = window.upgrade() {
                             window.set_audience_status(result.display_error.unwrap_or_default().into());
                             window.set_audience_address(ui.address_label().into());
@@ -440,15 +468,9 @@ impl AudienceUi {
                 window.set_audience_status(message.into());
                 return;
             }
-            let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
-                .and_then(|destination| {
-                    crate::app_config::import_file(&path, &destination)
-                });
+            let result = prepare_relay_import(&path, ui.config_path.borrow().clone(), ui.relay_config.borrow().as_ref());
             match result {
-                Ok(endpoint) => {
-                    let replacement = ui.relay_config.borrow().as_ref()
-                        .map(|relay| relay.with_endpoint(endpoint.clone()))
-                        .unwrap_or_else(|| crate::audience_relay_http::ManagedRelay::new(endpoint));
+                Ok(replacement) => {
                     *ui.relay_config.borrow_mut() = Some(replacement);
                     *ui.config_error.borrow_mut() = None;
                     window.set_audience_address(ui.address_label().into());
@@ -476,6 +498,10 @@ impl AudienceUi {
             }
             if let Err(message) = ensure_relay_replaceable(ui.relay_config.borrow().as_ref()) {
                 window.set_audience_status(message.into());
+                return;
+            }
+            if ui.config_error.borrow().is_some() {
+                window.set_audience_status("Import the original valid configuration before resetting relay settings.".into());
                 return;
             }
             let result = crate::app_config::import_destination(ui.config_path.borrow().clone())
@@ -1283,7 +1309,7 @@ mod configuration_change_tests {
         assert!(ensure_relay_replaceable(None).is_ok());
         assert!(ensure_relay_replaceable(Some(&relay)).is_ok());
         let attempt = relay.attempt().unwrap();
-        relay.mark_request_started();
+        relay.mark_request_started().unwrap();
         // A failed creation can retain only its request identity, without room metadata.
         assert!(attempt.room.is_none());
         let shared = relay.clone();
@@ -1296,7 +1322,7 @@ mod configuration_change_tests {
             assert_eq!(shared.attempt().unwrap().key, attempt.key);
         }
         // The session lifecycle, not a settings action, releases the retained identity.
-        shared.clear();
+        shared.clear().unwrap();
         assert!(ensure_relay_replaceable(Some(&relay)).is_ok());
     }
 }
@@ -1371,5 +1397,41 @@ mod join_url_copy_tests {
         ] {
             assert_eq!(join_url_for_copy(status, false), None);
         }
+    }
+}
+
+#[cfg(test)]
+mod recovery_import_tests {
+    use super::*;
+    use crate::{app_config::RelayEndpoint, audience_relay_http::ManagedRelay};
+
+    #[test]
+    fn import_preflights_recovery_binding_before_overwriting_configuration() {
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("config.toml");
+        let source = dir.path().join("download.toml");
+        let original = RelayEndpoint {
+            origin: url::Url::parse("https://relay.example/").unwrap(),
+            create_token: "A".repeat(43),
+        };
+        crate::app_config::save_import(&destination, &original).unwrap();
+        let owner = ManagedRelay::for_configuration(original.clone(), destination.clone()).unwrap();
+        let key = owner.attempt().unwrap().key;
+        owner.mark_request_started().unwrap();
+        let original_bytes = std::fs::read(&destination).unwrap();
+        let wrong = RelayEndpoint {
+            origin: original.origin.clone(),
+            create_token: "B".repeat(43),
+        };
+        crate::app_config::save_import(&source, &wrong).unwrap();
+        assert!(prepare_relay_import(&source, Some(destination.clone()), None).is_err()); // Locked.
+        assert_eq!(std::fs::read(&destination).unwrap(), original_bytes);
+        drop(owner);
+        assert!(prepare_relay_import(&source, Some(destination.clone()), None).is_err()); // Bound.
+        assert_eq!(std::fs::read(&destination).unwrap(), original_bytes);
+        crate::app_config::save_import(&source, &original).unwrap();
+        let recovered = prepare_relay_import(&source, Some(destination), None).unwrap();
+        assert!(recovered.requires_recovery());
+        assert_eq!(recovered.attempt().unwrap().key, key);
     }
 }
