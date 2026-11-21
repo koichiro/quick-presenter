@@ -476,28 +476,33 @@ impl RemoteAudienceSession {
                 }))
                 .unwrap_or(Err(crate::audience_recovery::WRITE_ERROR));
                 *error.lock().unwrap_or_else(|e| e.into_inner()) = result.err();
-                if result.is_err() {
-                    started.store(false, Ordering::Release);
-                }
+                let save_failed = result.is_err();
                 pending.store(false, Ordering::Release);
                 // This owner survives a socket failure or an already-finished
                 // transport worker. Never defer a saved explicit end until ON.
-                let result = result.and_then(|()| {
-                    stop.send_replace(true);
-                    let runtime = tokio::runtime::Builder::new_current_thread()
-                        .enable_all()
-                        .build()
-                        .map_err(|_| "Cannot start relay cleanup.")?;
-                    let result = runtime.block_on(async {
-                        let client = crate::audience_relay_http::client()?;
-                        crate::audience_relay_http::cleanup(&client, &settings).await
-                    });
-                    runtime.shutdown_background();
-                    result
-                });
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    result.and_then(|()| {
+                        stop.send_replace(true);
+                        let runtime = tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                            .map_err(|_| "Cannot start relay cleanup.")?;
+                        let result = runtime.block_on(async {
+                            let client = crate::audience_relay_http::client()?;
+                            crate::audience_relay_http::cleanup(&client, &settings).await
+                        });
+                        runtime.shutdown_background();
+                        result
+                    })
+                }))
+                .unwrap_or(Err("Relay cleanup stopped unexpectedly."));
                 *end_result.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
                 drop(settings);
                 work_pending.store(false, Ordering::Release);
+                // Publish all results before allowing a retry to own these fields.
+                if save_failed {
+                    started.store(false, Ordering::Release);
+                }
             });
         if result.is_err() {
             self.end_work_pending.store(false, Ordering::Release);
