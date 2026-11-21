@@ -12,6 +12,8 @@ use std::{
     time::Duration,
 };
 
+const END_PENDING: &str = "Audience end request is being saved.";
+const NO_REQUEST: &str = "No relay creation request needs recovery.";
 pub(crate) const ROOM_EXPIRED: &str = "Relay room expired. Start again to create a new room.";
 
 #[derive(Clone)]
@@ -19,6 +21,7 @@ pub struct ManagedRelay {
     pub endpoint: RelayEndpoint,
     pub attempt: Arc<Mutex<Option<Attempt>>>,
     pub end_requested: Arc<AtomicBool>,
+    pub creation_blocked: Arc<AtomicBool>,
     journal: Option<Arc<crate::audience_recovery::Journal>>,
 }
 #[derive(Clone)]
@@ -26,6 +29,7 @@ pub struct Attempt {
     pub key: String,
     pub room: Option<RelayConfig>,
     pub may_exist: bool,
+    pub rejection: Option<&'static str>,
 }
 struct CancelIo(Arc<AtomicBool>);
 impl Drop for CancelIo {
@@ -39,6 +43,7 @@ impl ManagedRelay {
             endpoint,
             attempt: Arc::new(Mutex::new(None)),
             end_requested: Arc::new(AtomicBool::new(false)),
+            creation_blocked: Arc::new(AtomicBool::new(false)),
             journal: None,
         }
     }
@@ -54,9 +59,13 @@ impl ManagedRelay {
                     key,
                     room: None,
                     may_exist: record.may_exist,
+                    rejection: None,
                 });
             settings
                 .end_requested
+                .store(record.end_requested, Ordering::Release);
+            settings
+                .creation_blocked
                 .store(record.end_requested, Ordering::Release);
         }
         settings.journal = Some(Arc::new(journal));
@@ -125,6 +134,32 @@ impl ManagedRelay {
         self.end_requested.store(false, Ordering::Release);
         Ok(())
     }
+    fn prepare_locked(
+        &self,
+        slot: &mut Option<Attempt>,
+        cleanup: bool,
+    ) -> Result<Attempt, &'static str> {
+        if !cleanup && self.creation_blocked.load(Ordering::Acquire) {
+            return Err(END_PENDING);
+        }
+        if let Some(rejection) = slot.as_ref().and_then(|a| a.rejection) {
+            let mut prospective = slot.clone();
+            if let Some(a) = prospective.as_mut() {
+                a.may_exist = false;
+                a.rejection = None;
+            }
+            self.save_locked(&prospective, self.end_requested.load(Ordering::Acquire))?;
+            *slot = prospective;
+            return Err(if cleanup { NO_REQUEST } else { rejection });
+        }
+        if cleanup {
+            return slot
+                .clone()
+                .filter(|a| a.may_exist || a.room.is_some())
+                .ok_or(NO_REQUEST);
+        }
+        self.allocate_locked(slot)
+    }
     fn allocate_locked(&self, slot: &mut Option<Attempt>) -> Result<Attempt, &'static str> {
         if slot.is_none() {
             let mut bytes = [0u8; 32];
@@ -133,6 +168,7 @@ impl ManagedRelay {
                 key: bytes.iter().map(|b| format!("{b:02x}")).collect(),
                 room: None,
                 may_exist: false,
+                rejection: None,
             });
         }
         self.save_locked(slot, self.end_requested.load(Ordering::Acquire))?;
@@ -164,7 +200,20 @@ impl ManagedRelay {
             endpoint,
             attempt: self.attempt.clone(),
             end_requested: self.end_requested.clone(),
+            creation_blocked: self.creation_blocked.clone(),
             journal: self.journal.clone(),
+        }
+    }
+    pub fn save_configuration(
+        &self,
+        destination: &std::path::Path,
+        reset: bool,
+    ) -> Result<(), &'static str> {
+        match &self.journal {
+            Some(journal) => journal
+                .save_configuration(destination, if reset { None } else { Some(&self.endpoint) }),
+            None if reset => crate::app_config::reset_relay(destination),
+            None => crate::app_config::save_import(destination, &self.endpoint),
         }
     }
     fn mark_locked(&self, slot: &mut Option<Attempt>) -> Result<bool, &'static str> {
@@ -212,13 +261,33 @@ pub async fn create(
     client: &reqwest::Client,
     settings: &ManagedRelay,
 ) -> Result<RelayConfig, &'static str> {
+    create_inner(client, settings, false).await
+}
+
+async fn create_inner(
+    client: &reqwest::Client,
+    settings: &ManagedRelay,
+    cleanup: bool,
+) -> Result<RelayConfig, &'static str> {
     let result = tokio::time::timeout(Duration::from_secs(15), async {
-        let attempt = settings.io(ManagedRelay::allocate_locked).await?;
+        let attempt = settings
+            .io(move |s, slot| s.prepare_locked(slot, cleanup))
+            .await?;
         for index in 0..3 {
             if index > 0 {
                 tokio::time::sleep(Duration::from_millis(200 * index)).await;
             }
-            let previously_ambiguous = settings.io(ManagedRelay::mark_locked).await?;
+            let previously_ambiguous = settings
+                .io(move |s, slot| {
+                    if !cleanup && s.creation_blocked.load(Ordering::Acquire) {
+                        return Err(END_PENDING);
+                    }
+                    s.mark_locked(slot)
+                })
+                .await?;
+            if !cleanup && settings.creation_blocked.load(Ordering::Acquire) {
+                return Err(END_PENDING);
+            }
             let response = client
                 .post(settings.endpoint.origin.join("api/relay/v1/rooms").unwrap())
                 .bearer_auth(&settings.endpoint.create_token)
@@ -232,12 +301,24 @@ pub async fn create(
             match response.status().as_u16() {
                 200 | 201 => {}
                 status @ (401 | 403) => {
+                    let rejected = if status == 401 {
+                        "Relay creation credential was rejected."
+                    } else {
+                        "Relay denied room creation."
+                    };
                     settings
                         .io(move |s, slot| {
+                            // Retain a proven rejection separately if its durable update fails.
+                            if !previously_ambiguous {
+                                if let Some(a) = slot.as_mut() {
+                                    a.rejection = Some(rejected);
+                                }
+                            }
                             let mut prospective = slot.clone();
                             if !previously_ambiguous {
-                                if let Some(attempt) = prospective.as_mut() {
-                                    attempt.may_exist = false;
+                                if let Some(a) = prospective.as_mut() {
+                                    a.may_exist = false;
+                                    a.rejection = None;
                                 }
                             }
                             s.save_locked(&prospective, s.end_requested.load(Ordering::Acquire))?;
@@ -364,12 +445,15 @@ pub async fn cleanup(
             let Some(attempt) = attempt else {
                 return Ok(());
             };
+            if !attempt.may_exist && attempt.room.is_none() {
+                return Ok(());
+            }
             let cached = attempt.room;
             let room = match cached {
                 Some(room) => room,
-                None => match create(client, settings).await {
+                None => match create_inner(client, settings, true).await {
                     Ok(room) => room,
-                    Err(ROOM_EXPIRED) => return Ok(()),
+                    Err(ROOM_EXPIRED | NO_REQUEST) => return Ok(()),
                     Err(error) => return Err(error),
                 },
             };
@@ -387,7 +471,7 @@ pub async fn cleanup(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use axum::{
         body::Bytes,
@@ -407,30 +491,31 @@ mod tests {
     };
 
     #[derive(Clone)]
-    struct Peer {
-        responses: Arc<Mutex<VecDeque<(u16, String)>>>,
-        requests: Arc<Mutex<Vec<(String, String)>>>,
-        ends: Arc<AtomicUsize>,
-        session_ends: Arc<AtomicUsize>,
-        session_results: Arc<Mutex<VecDeque<u16>>>,
-        end_results: Arc<Mutex<VecDeque<u16>>>,
-        session_gate: Arc<Mutex<Option<Arc<tokio::sync::Notify>>>>,
-        handshakes: Arc<Mutex<VecDeque<u16>>>,
-        creation_gate: Arc<Mutex<Option<Arc<tokio::sync::Notify>>>>,
-        display_gate: Arc<Mutex<Option<Arc<tokio::sync::Notify>>>>,
-        display_seen: Arc<AtomicBool>,
+    pub(crate) struct Peer {
+        pub(crate) responses: Arc<Mutex<VecDeque<(u16, String)>>>,
+        pub(crate) requests: Arc<Mutex<Vec<(String, String)>>>,
+        pub(crate) ends: Arc<AtomicUsize>,
+        pub(crate) session_ends: Arc<AtomicUsize>,
+        pub(crate) session_results: Arc<Mutex<VecDeque<u16>>>,
+        pub(crate) end_results: Arc<Mutex<VecDeque<u16>>>,
+        pub(crate) session_gate: Arc<Mutex<Option<Arc<tokio::sync::Notify>>>>,
+        pub(crate) handshakes: Arc<Mutex<VecDeque<u16>>>,
+        pub(crate) creation_gate: Arc<Mutex<Option<Arc<tokio::sync::Notify>>>>,
+        pub(crate) display_gate: Arc<Mutex<Option<Arc<tokio::sync::Notify>>>>,
+        pub(crate) display_seen: Arc<AtomicBool>,
+        pub(crate) disconnect: Arc<tokio::sync::Notify>,
     }
-    struct Server {
-        settings: ManagedRelay,
-        peer: Peer,
-        task: tokio::task::JoinHandle<()>,
+    pub(crate) struct Server {
+        pub(crate) settings: ManagedRelay,
+        pub(crate) peer: Peer,
+        pub(crate) task: tokio::task::JoinHandle<()>,
     }
     impl Drop for Server {
         fn drop(&mut self) {
             self.task.abort();
         }
     }
-    async fn server() -> Server {
+    pub(crate) async fn server() -> Server {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let origin = format!("http://{}", listener.local_addr().unwrap());
         let settings = ManagedRelay::new(RelayEndpoint {
@@ -449,6 +534,7 @@ mod tests {
             creation_gate: Arc::new(Mutex::new(None)),
             display_gate: Arc::new(Mutex::new(None)),
             display_seen: Arc::new(AtomicBool::new(false)),
+            disconnect: Arc::new(tokio::sync::Notify::new()),
         };
         let app = Router::new()
             .route("/api/relay/v1/session/end", post(|State(peer): State<Peer>, headers: HeaderMap| async move {
@@ -508,7 +594,10 @@ mod tests {
                     let welcome = json!({"protocol":"qp.presenter","version":crate::audience_relay::VERSION,"type":"presenter_welcome","presenter_epoch":"1","display_epoch":"0","audience_connections":0});
                     if socket.send(WsMessage::Text(welcome.to_string().into())).await.is_ok() {
                         let mut revision = 0u64;
-                        while let Some(Ok(message)) = socket.recv().await {
+                        while let Some(Ok(message)) = tokio::select! {
+                            _ = peer.disconnect.notified() => None,
+                            message = socket.recv() => message,
+                        } {
                             let WsMessage::Text(text) = message else { continue; };
                             let message: Value = serde_json::from_str(&text).unwrap();
                             if message["type"] == "display" {
@@ -533,9 +622,145 @@ mod tests {
             task,
         }
     }
-    fn room(settings: &ManagedRelay) -> Value {
+    pub(crate) fn room(settings: &ManagedRelay) -> Value {
         let origin = settings.endpoint.origin.as_str().trim_end_matches('/');
         json!({"room_id":"test","code":"TEST","join_url":format!("{origin}/join/test#k={}", "C".repeat(43)),"presenter_url":format!("{}/presenter/test",origin.replacen("http:","ws:",1)),"presenter_token":"B".repeat(43)})
+    }
+
+    async fn wait_until(mut check: impl FnMut() -> bool) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !check() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn off_during_a_terminal_reply_cannot_replace_the_room_while_saving() {
+        let s = server().await;
+        let gate = Arc::new(tokio::sync::Notify::new());
+        *s.peer.creation_gate.lock().unwrap() = Some(gate.clone());
+        push(&s, 410, "{}".into());
+        let mut session =
+            crate::audience_relay::RemoteAudienceSession::start_managed(s.settings.clone())
+                .unwrap();
+        wait_until(|| !s.peer.requests.lock().unwrap().is_empty()).await;
+        let held = s.settings.attempt.lock().unwrap();
+        session.request_end().unwrap();
+        assert!(s.settings.creation_blocked.load(Ordering::Acquire));
+        gate.notify_one();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(session.end_request_pending());
+        assert!(!session.is_finished());
+        assert_eq!(s.peer.requests.lock().unwrap().len(), 1);
+        drop(held);
+        wait_until(|| session.is_finished()).await;
+        assert!(matches!(
+            session.snapshot().status,
+            crate::audience::SessionStatus::Stopped
+        ));
+        assert_eq!(s.peer.requests.lock().unwrap().len(), 1);
+        assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 1);
+        session.shutdown();
+    }
+
+    #[tokio::test]
+    async fn off_owner_completes_after_the_socket_dies_while_intent_is_saving() {
+        let s = server().await;
+        push(&s, 201, room(&s.settings).to_string());
+        let mut session =
+            crate::audience_relay::RemoteAudienceSession::start_managed(s.settings.clone())
+                .unwrap();
+        wait_until(|| {
+            matches!(
+                session.snapshot().status,
+                crate::audience::SessionStatus::Running { .. }
+            )
+        })
+        .await;
+        let held = s.settings.attempt.lock().unwrap();
+        session.request_end().unwrap();
+        s.peer.disconnect.notify_one();
+        wait_until(|| {
+            matches!(
+                session.snapshot().status,
+                crate::audience::SessionStatus::Failed(_)
+            )
+        })
+        .await;
+        assert!(session.end_request_pending());
+        assert!(!session.is_finished());
+        assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 0);
+        drop(held);
+        wait_until(|| session.is_finished()).await;
+        assert!(matches!(
+            session.snapshot().status,
+            crate::audience::SessionStatus::Stopped
+        ));
+        assert_eq!(s.peer.requests.lock().unwrap().len(), 1);
+        assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 1);
+        assert_eq!(s.peer.ends.load(Ordering::SeqCst), 1);
+        assert!(!s.settings.requires_recovery());
+        session.shutdown();
+    }
+
+    #[tokio::test]
+    async fn cleanup_never_creates_for_an_allocated_but_unsent_or_rejected_key() {
+        for rejected in [false, true] {
+            let s = server().await;
+            s.settings.attempt().unwrap();
+            if rejected {
+                push(&s, 403, "{}".into());
+                assert!(create(&client().unwrap(), &s.settings).await.is_err());
+            }
+            s.settings.end_requested.store(true, Ordering::Release);
+            let before = s.peer.requests.lock().unwrap().len();
+            cleanup(&client().unwrap(), &s.settings).await.unwrap();
+            assert_eq!(s.peer.requests.lock().unwrap().len(), before);
+            assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 1);
+            assert!(!s.settings.has_attempt());
+        }
+    }
+
+    #[tokio::test]
+    async fn definitive_rejection_survives_a_failed_journal_update_without_another_post() {
+        let s = server().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+        let settings =
+            ManagedRelay::for_configuration(s.settings.endpoint.clone(), config).unwrap();
+        let gate = Arc::new(tokio::sync::Notify::new());
+        *s.peer.creation_gate.lock().unwrap() = Some(gate.clone());
+        push(&s, 403, "{}".into());
+        let owner = settings.clone();
+        let work = tokio::spawn(async move { create(&client().unwrap(), &owner).await });
+        wait_until(|| !s.peer.requests.lock().unwrap().is_empty()).await;
+        let path = dir.path().join("config.toml.audience-session.json");
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        gate.notify_one();
+        assert_eq!(
+            work.await.unwrap().err(),
+            Some(crate::audience_recovery::WRITE_ERROR)
+        );
+        assert!(settings.requires_recovery());
+        assert!(settings
+            .attempt
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .rejection
+            .is_some());
+        std::fs::remove_dir(path).unwrap();
+        assert_eq!(
+            create(&client().unwrap(), &settings).await.err(),
+            Some("Relay denied room creation.")
+        );
+        assert!(!settings.requires_recovery());
+        assert_eq!(s.peer.requests.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]
@@ -760,6 +985,7 @@ mod tests {
                 key: "d".repeat(64),
                 room: None,
                 may_exist: true,
+                rejection: None,
             });
             settings.save_locked(&held, true).unwrap();
             drop(settings);
@@ -1249,6 +1475,7 @@ mod tests {
     async fn cleanup_of_a_confirmed_terminal_creation_succeeds_without_replacement() {
         let s = server().await;
         let key = s.settings.attempt().unwrap().key;
+        s.settings.mark_request_started().unwrap();
         push(&s, 410, "{}".into());
         cleanup(&client().unwrap(), &s.settings).await.unwrap();
         assert!(!s.settings.has_attempt());

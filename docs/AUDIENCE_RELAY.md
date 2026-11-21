@@ -68,7 +68,8 @@ writes and a per-configuration process lock protect it. Damaged, mismatched or
 unwritable recovery data blocks relay requests while PDF playback remains usable.
 Confirmed cleanup clears the identity; a confirmed terminal room permits one
 bounded replacement. A pending explicit end is completed before connection and
-returns to OFF, without automatically creating another room.
+returns to OFF, without automatically creating another room. After that cleanup
+completes, a second explicit ON creates a new room.
 
 Requests have bounded deadlines and retries. Failed termination can leave a room
 until relay expiration. Rooms created by older versions without a saved identity

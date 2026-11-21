@@ -6,6 +6,8 @@ pub(crate) struct Directory {
     file: File,
     #[cfg(not(unix))]
     path: std::path::PathBuf,
+    #[cfg(windows)]
+    file: File,
 }
 
 #[cfg(unix)]
@@ -17,9 +19,13 @@ impl Directory {
             path::Component,
         };
         let uid = unsafe { libc::geteuid() };
+        #[cfg(target_os = "linux")]
+        let traverse = libc::O_PATH;
+        #[cfg(not(target_os = "linux"))]
+        let traverse = libc::O_RDONLY;
         let mut current = std::fs::OpenOptions::new()
             .read(true)
-            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
+            .custom_flags(traverse | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open("/")?;
         let root = current.metadata()?;
         if root.uid() != 0 && root.uid() != uid
@@ -36,13 +42,19 @@ impl Directory {
                 _ => Some(Err(io::Error::from(io::ErrorKind::InvalidInput))),
             })
             .collect::<io::Result<Vec<_>>>()?;
-        for name in parts {
+        let count = parts.len();
+        for (index, name) in parts.into_iter().enumerate() {
+            let access = if index + 1 == count {
+                libc::O_RDONLY
+            } else {
+                traverse
+            };
             let name = name_cstring(name)?;
             let fd = unsafe {
                 libc::openat(
                     current.as_raw_fd(),
                     name.as_ptr(),
-                    libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+                    access | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
                 )
             };
             if fd < 0 {
@@ -62,6 +74,14 @@ impl Directory {
             return Err(io::ErrorKind::PermissionDenied.into());
         }
         Ok(Self { file: current })
+    }
+
+    pub fn matches(&self, path: &Path) -> io::Result<bool> {
+        use std::os::unix::fs::MetadataExt;
+        let current = Self::open(&path.canonicalize()?)?;
+        let left = self.file.metadata()?;
+        let right = current.file.metadata()?;
+        Ok(left.dev() == right.dev() && left.ino() == right.ino())
     }
 
     fn open_at(&self, name: &OsStr, flags: i32) -> io::Result<File> {
@@ -150,9 +170,29 @@ impl Directory {
     pub fn open(path: &Path) -> io::Result<Self> {
         Ok(Self {
             path: path.to_owned(),
+            #[cfg(windows)]
+            file: windows_directory(path)?,
         })
     }
+    #[cfg(windows)]
+    fn checked_directory(&self) -> io::Result<File> {
+        let file = windows_directory(&self.path)?;
+        if !same_windows_directory(&self.file, &file)? {
+            return Err(io::ErrorKind::PermissionDenied.into());
+        }
+        Ok(file)
+    }
+    pub fn matches(&self, path: &Path) -> io::Result<bool> {
+        #[cfg(windows)]
+        {
+            return same_windows_directory(&self.file, &windows_directory(path)?);
+        }
+        #[cfg(not(windows))]
+        Ok(self.path.canonicalize()? == path.canonicalize()?)
+    }
     pub fn lock_file(&self, name: &OsStr) -> io::Result<File> {
+        #[cfg(windows)]
+        let _directory = self.checked_directory()?;
         let mut options = std::fs::OpenOptions::new();
         options.read(true).write(true).create(true).truncate(false);
         #[cfg(windows)]
@@ -165,6 +205,8 @@ impl Directory {
         options.open(self.path.join(name))
     }
     pub fn read_file(&self, name: &OsStr, follow: bool) -> io::Result<File> {
+        #[cfg(windows)]
+        let _directory = self.checked_directory()?;
         let mut options = std::fs::OpenOptions::new();
         options.read(true);
         #[cfg(windows)]
@@ -181,7 +223,47 @@ impl Directory {
         options.open(self.path.join(name))
     }
     pub fn write_atomic(&self, name: &OsStr, bytes: &[u8]) -> io::Result<()> {
+        #[cfg(windows)]
+        let _directory = self.checked_directory()?;
         crate::settings_storage::write_atomic(&self.path.join(name), bytes)
             .map_err(|_| io::Error::other("Cannot save recovery record"))
     }
+}
+
+#[cfg(windows)]
+fn windows_directory(path: &Path) -> io::Result<File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::*;
+    // Deny deletion/renaming of the leaf while this recovery owner is alive.
+    std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+}
+
+#[cfg(windows)]
+fn same_windows_directory(left: &File, right: &File) -> io::Result<bool> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY,
+        FILE_ATTRIBUTE_REPARSE_POINT,
+    };
+    fn identity(file: &File) -> io::Result<(u32, u32, u32)> {
+        let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        if info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0
+            || info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        {
+            return Err(io::ErrorKind::InvalidInput.into());
+        }
+        Ok((
+            info.dwVolumeSerialNumber,
+            info.nFileIndexHigh,
+            info.nFileIndexLow,
+        ))
+    }
+    Ok(identity(left)? == identity(right)?)
 }

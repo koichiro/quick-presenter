@@ -86,6 +86,9 @@ impl Journal {
             .canonicalize()
             .map_err(|_| READ_ERROR)?
             .join(config.file_name().ok_or(READ_ERROR)?);
+        if std::fs::symlink_metadata(&config).is_ok_and(|m| m.file_type().is_symlink()) {
+            return Err("Audience configuration destination must not be a symbolic link.");
+        }
         let directory =
             crate::audience_recovery_dir::Directory::open(config.parent().ok_or(READ_ERROR)?)
                 .map_err(|_| {
@@ -143,7 +146,7 @@ impl Journal {
     pub fn validate_configuration(&self, expected: &RelayEndpoint) -> Result<(), &'static str> {
         let file = self
             .directory
-            .read_file(&self.config_name, true)
+            .read_file(&self.config_name, false)
             .map_err(|_| READ_ERROR)?;
         let actual = crate::app_config::load_opened(file)?;
         if actual
@@ -153,6 +156,41 @@ impl Journal {
             return Err("Audience configuration changed during startup. Reload the configuration and retry.");
         }
         Ok(())
+    }
+
+    pub fn save_configuration(
+        &self,
+        destination: &Path,
+        endpoint: Option<&RelayEndpoint>,
+    ) -> Result<(), &'static str> {
+        let parent = destination
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        if destination.file_name() != Some(self.config_name.as_os_str())
+            || !self.directory.matches(parent).map_err(|_| WRITE_ERROR)?
+        {
+            return Err("Audience configuration directory changed. Restart with the original configuration.");
+        }
+        let text = self
+            .directory
+            .read_file(&self.config_name, false)
+            .and_then(|file| {
+                if !file.metadata()?.is_file() {
+                    return Err(std::io::ErrorKind::InvalidInput.into());
+                }
+                let mut text = String::new();
+                file.take(16385).read_to_string(&mut text)?;
+                Ok(text)
+            });
+        let text = crate::app_config::merge_section(
+            text,
+            "audience",
+            crate::app_config::audience_fields(endpoint),
+        )?;
+        self.directory
+            .write_atomic(&self.config_name, text.as_bytes())
+            .map_err(|_| WRITE_ERROR)
     }
 
     fn read(&self) -> Result<Option<Record>, &'static str> {
@@ -364,6 +402,59 @@ mod tests {
         assert!(!original
             .join("profile/config.toml.audience-session.json.lock")
             .exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn moved_configuration_cannot_split_import_from_its_recovery_owner() {
+        let dir = tempfile::tempdir().unwrap();
+        let original = dir.path().join("original");
+        std::fs::create_dir(&original).unwrap();
+        let config = original.join("config.toml");
+        crate::app_config::save_import(&config, &endpoint()).unwrap();
+        let (journal, _) = Journal::open(&config, &endpoint()).unwrap();
+        let moved = dir.path().join("moved");
+        std::fs::rename(&original, &moved).unwrap();
+        std::fs::create_dir(&original).unwrap();
+        std::fs::write(&config, "replacement").unwrap();
+        let old = std::fs::read(moved.join("config.toml")).unwrap();
+        assert!(journal.save_configuration(&config, None).is_err());
+        assert_eq!(std::fs::read(&config).unwrap(), b"replacement");
+        assert_eq!(std::fs::read(moved.join("config.toml")).unwrap(), old);
+        assert!(!original
+            .join("config.toml.audience-session.json.lock")
+            .exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn final_configuration_symlinks_cannot_create_a_second_recovery_owner() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+        crate::app_config::save_import(&config, &endpoint()).unwrap();
+        let (_journal, _) = Journal::open(&config, &endpoint()).unwrap();
+        let alias = dir.path().join("alias.toml");
+        std::os::unix::fs::symlink(&config, &alias).unwrap();
+        assert!(Journal::open(&alias, &endpoint()).is_err());
+        assert!(!dir
+            .path()
+            .join("alias.toml.audience-session.json.lock")
+            .exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn searchable_unreadable_intermediate_directory_is_supported() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let ancestor = dir.path().join("searchable");
+        let leaf = ancestor.join("private");
+        std::fs::create_dir_all(&leaf).unwrap();
+        std::fs::set_permissions(&ancestor, std::fs::Permissions::from_mode(0o711)).unwrap();
+        std::fs::set_permissions(&leaf, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let (journal, _) = Journal::open(&leaf.join("config.toml"), &endpoint()).unwrap();
+        journal.save(&record(&endpoint())).unwrap();
+        std::fs::set_permissions(&ancestor, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
 
     #[cfg(unix)]

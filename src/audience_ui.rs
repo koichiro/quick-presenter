@@ -99,7 +99,7 @@ fn prepare_relay_import(
     } else {
         crate::audience_relay_http::ManagedRelay::for_configuration(endpoint, destination.clone())?
     };
-    crate::app_config::save_import(&destination, &replacement.endpoint)?;
+    replacement.save_configuration(&destination, false)?;
     Ok(replacement)
 }
 
@@ -109,12 +109,12 @@ fn prepare_relay_reset(
 ) -> Result<(), &'static str> {
     ensure_relay_replaceable(current)?;
     let path = crate::app_config::import_destination(config_path)?;
-    let _ownership = if current.is_none() {
-        Some(crate::audience_recovery::Journal::for_reset(&path)?)
+    if let Some(current) = current {
+        current.save_configuration(&path, true)
     } else {
-        None
-    };
-    crate::app_config::reset_relay(&path)
+        let ownership = crate::audience_recovery::Journal::for_reset(&path)?;
+        ownership.save_configuration(&path, None)
+    }
 }
 
 fn join_url_for_copy(status: Option<SessionStatus>, stopping: bool) -> Option<String> {
@@ -1090,6 +1090,14 @@ impl AudienceUi {
         let mut error = None;
         if let Some(mut session) = self.session.borrow_mut().take() {
             session.shutdown();
+            if let crate::audience_session::AudienceSession::Remote(remote) = &session {
+                if remote.end_operation_pending() {
+                    return Err(
+                        "Audience end is still being saved. Keep the same configuration and retry."
+                            .into(),
+                    );
+                }
+            }
             if let SessionStatus::Failed(message) = session.snapshot().status {
                 error = Some(message);
             }
