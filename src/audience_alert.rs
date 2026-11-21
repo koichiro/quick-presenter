@@ -18,6 +18,10 @@ pub fn for_transport_failure(error: &str, remote: bool) -> AudienceAlert {
 
 pub fn for_failure(error: &str) -> AudienceAlert {
     match error {
+        crate::audience_recovery::WRITE_ERROR => AudienceAlert {
+            title: "Audience Live recovery could not be saved",
+            guidance: "Check access to your configuration folder and local disk space, then retry with the same configuration. PDF playback is still available.",
+        },
         "Relay creation credential was rejected." => AudienceAlert {
             title: "Audience Live access was not allowed",
             guidance: "Open Settings and import the corrected configuration, then turn Audience Live ON again. If recovery is pending, check the same room with your server administrator before replacing settings. PDF playback is still available.",
@@ -67,6 +71,14 @@ pub fn for_failure(error: &str) -> AudienceAlert {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn recovery_write_failure_points_to_local_storage_without_reissuing_credentials() {
+        let alert = for_failure(crate::audience_recovery::WRITE_ERROR);
+        assert!(alert.guidance.contains("configuration folder"));
+        assert!(alert.guidance.contains("same configuration"));
+        assert!(!alert.guidance.contains("administrator"));
+    }
+
     #[test]
     fn local_listener_failure_does_not_direct_the_presenter_to_a_relay() {
         let alert = for_transport_failure("untrusted detail", false);

@@ -152,7 +152,7 @@ impl StartupStore {
             bail!("startup settings exceed the size limit");
         }
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent)?;
+            crate::settings_storage::create_private_dir_all(parent)?;
         }
         write_atomic(&self.path, &bytes)
     }

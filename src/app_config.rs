@@ -68,6 +68,10 @@ fn load_from(
         Err(e) if !required && e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err("Cannot open Audience configuration."),
     };
+    load_opened(file)
+}
+
+pub(crate) fn load_opened(file: File) -> Result<Option<RelayEndpoint>, &'static str> {
     let metadata = file
         .metadata()
         .map_err(|_| "Cannot inspect Audience configuration.")?;
@@ -154,7 +158,8 @@ pub fn read_import(path: &std::path::Path) -> Result<RelayEndpoint, &'static str
     parse(&text)?.ok_or("Import requires a remote Audience configuration.")
 }
 
-/// Validate and persist an import before returning the endpoint to activate.
+/// Test the shared parsing/merge boundary without constructing a GUI session.
+#[cfg(test)]
 pub fn import_file(
     source: &std::path::Path,
     destination: &std::path::Path,
@@ -172,11 +177,25 @@ pub fn import_destination(explicit: Option<PathBuf>) -> Result<PathBuf, &'static
 
 /// Merge only Audience fields; an invalid existing file is never overwritten.
 pub fn save_import(path: &std::path::Path, endpoint: &RelayEndpoint) -> Result<(), &'static str> {
+    save_audience(path, audience_fields(Some(endpoint)))
+}
+
+pub(crate) fn audience_fields(endpoint: Option<&RelayEndpoint>) -> toml::Table {
     let mut audience = toml::Table::new();
-    audience.insert("transport".into(), "remote".into());
-    audience.insert("relay".into(), endpoint.origin.as_str().into());
-    audience.insert("create_token".into(), endpoint.create_token.clone().into());
-    save_audience(path, audience)
+    audience.insert(
+        "transport".into(),
+        if endpoint.is_some() {
+            "remote"
+        } else {
+            "local"
+        }
+        .into(),
+    );
+    if let Some(endpoint) = endpoint {
+        audience.insert("relay".into(), endpoint.origin.as_str().into());
+        audience.insert("create_token".into(), endpoint.create_token.clone().into());
+    }
+    audience
 }
 
 /// Remove relay credentials and persist local transport without changing other settings.
@@ -273,7 +292,21 @@ fn save_section(
     if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
         return Err("Configuration destination must not be a symbolic link.");
     }
-    let mut current: toml::Table = match read_bounded(path) {
+    let text = merge_section(read_bounded(path), section, value)?;
+    if let Some(parent) = path.parent() {
+        crate::settings_storage::create_private_dir_all(parent)
+            .map_err(|_| "Cannot create configuration directory.")?;
+    }
+    crate::settings_storage::write_atomic(path, text.as_bytes())
+        .map_err(|_| "Cannot save protected configuration; previous settings are retained.")
+}
+
+pub(crate) fn merge_section(
+    text: io::Result<String>,
+    section: &str,
+    value: toml::Table,
+) -> Result<String, &'static str> {
+    let mut current: toml::Table = match text {
         Ok(text) if text.len() <= 16384 => toml::from_str(&text)
             .map_err(|_| "Existing configuration is invalid; it was not changed.")?,
         Ok(_) => return Err("Existing configuration is too large; it was not changed."),
@@ -285,11 +318,7 @@ fn save_section(
     if text.len() > 16384 {
         return Err("Merged configuration is too large.");
     }
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|_| "Cannot create configuration directory.")?;
-    }
-    crate::settings_storage::write_atomic(path, text.as_bytes())
-        .map_err(|_| "Cannot save protected configuration; previous settings are retained.")
+    Ok(text)
 }
 
 #[cfg(test)]

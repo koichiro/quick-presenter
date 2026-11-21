@@ -255,6 +255,13 @@ pub struct RemoteAudienceSession {
     engine: Arc<Mutex<AudienceEngine>>,
     stop: watch::Sender<bool>,
     end_requested: Arc<AtomicBool>,
+    managed: Option<crate::audience_relay_http::ManagedRelay>,
+    end_save_started: Arc<AtomicBool>,
+    end_save_pending: Arc<AtomicBool>,
+    end_save_error: Arc<Mutex<Option<&'static str>>>,
+    off_owned: Arc<AtomicBool>,
+    end_work_pending: Arc<AtomicBool>,
+    end_result: Arc<Mutex<Option<Result<(), &'static str>>>>,
     display: watch::Sender<Display>,
     worker: Option<JoinHandle<()>>,
 }
@@ -277,6 +284,17 @@ impl RemoteAudienceSession {
         managed: Option<crate::audience_relay_http::ManagedRelay>,
         cleanup_only: bool,
     ) -> std::io::Result<Self> {
+        if let Some(settings) = managed.as_ref() {
+            if !settings.end_requested.load(Ordering::Acquire) && !cleanup_only {
+                settings.creation_blocked.store(false, Ordering::Release);
+            }
+        }
+        let off_owned = Arc::new(AtomicBool::new(false));
+        let worker_off_owned = off_owned.clone();
+        let initial_end = managed
+            .as_ref()
+            .is_some_and(|s| s.end_requested.load(Ordering::Acquire));
+        let recovery_owner = managed.clone();
         let status = Arc::new(Mutex::new(SessionStatus::Starting));
         let connections = Arc::new(AtomicUsize::new(0));
         let engine = Arc::new(Mutex::new(AudienceEngine::new(Instant::now())));
@@ -293,10 +311,10 @@ impl RemoteAudienceSession {
                 let config = path.as_ref().map(RelayConfig::load).transpose()?;
                 let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|_| "Cannot start relay worker.")?;
                 #[cfg(not(test))] { engine.lock().unwrap_or_else(|e| e.into_inner()).logger = Some(crate::audience_log::logger()); }
-                runtime.block_on(async {
+                let result = runtime.block_on(async {
                     if *stopped.borrow() {
                         if let Some(settings) = managed.as_ref() {
-                            if settings.has_attempt() || settings.end_requested.load(Ordering::Acquire) {
+                            if !worker_off_owned.load(Ordering::Acquire) && (settings.has_attempt() || settings.end_requested.load(Ordering::Acquire)) {
                                 let client = crate::audience_relay_http::client()?;
                                 crate::audience_relay_http::cleanup(&client, settings).await?;
                             }
@@ -305,14 +323,16 @@ impl RemoteAudienceSession {
                     }
                     if let Some(settings) = managed {
                         let client = crate::audience_relay_http::client()?;
-                        if settings.end_requested.load(Ordering::Acquire) { crate::audience_relay_http::cleanup(&client, &settings).await?; }
+                        if initial_end { crate::audience_relay_http::cleanup(&client, &settings).await?; return Ok(()); }
                         let mut replaced_terminal_room = false;
                         loop {
+                            if worker_off_owned.load(Ordering::Acquire) { return Ok(()); }
                             let room = tokio::select! {
                                 biased;
                                 _ = stopped.changed() => None,
                                 result = crate::audience_relay_http::create(&client, &settings) => Some(result),
                             };
+                            let creation_terminal = matches!(&room, Some(Err(crate::audience_relay_http::ROOM_EXPIRED)));
                             let outcome = match room {
                                 Some(Ok(room)) => tokio::select! {
                                     biased;
@@ -323,15 +343,15 @@ impl RemoteAudienceSession {
                                 None => Ok(()),
                             };
                             if matches!(outcome, Err(crate::audience_relay_http::ROOM_EXPIRED)) {
-                                settings.clear();
+                                if !creation_terminal { settings.clear_terminal().await?; }
                                 // Only a confirmed terminal room permits a fresh creation identity.
                                 // Keep one ON action bounded, including servers that immediately expire rooms.
-                                if !replaced_terminal_room && !*stopped.borrow() {
+                                if !replaced_terminal_room && !*stopped.borrow() && !settings.creation_blocked.load(Ordering::Acquire) {
                                     replaced_terminal_room = true;
                                     continue;
                                 }
                             }
-                            if *stopped.borrow() && (settings.has_attempt() || settings.end_requested.load(Ordering::Acquire)) { crate::audience_relay_http::cleanup(&client, &settings).await?; }
+                            if !worker_off_owned.load(Ordering::Acquire) && *stopped.borrow() && (settings.has_attempt() || settings.end_requested.load(Ordering::Acquire)) { crate::audience_relay_http::cleanup(&client, &settings).await?; }
                             break outcome;
                         }
                     } else {
@@ -340,7 +360,11 @@ impl RemoteAudienceSession {
                             result = run(config.ok_or("Missing relay configuration.")?, status.clone(), connections.clone(), engine.clone(), updates) => result,
                         }
                     }
-                })
+                });
+                // Bounded async cancellation must not join stalled filesystem jobs.
+                // Their owned settings keep the recovery lock until they settle.
+                runtime.shutdown_background();
+                result
             }));
             connections.store(0, Ordering::Relaxed);
             engine.lock().unwrap_or_else(|e| e.into_inner()).stop();
@@ -356,17 +380,29 @@ impl RemoteAudienceSession {
             engine,
             stop,
             end_requested,
+            managed: recovery_owner,
+            end_save_started: Arc::new(AtomicBool::new(false)),
+            end_save_pending: Arc::new(AtomicBool::new(false)),
+            end_save_error: Arc::new(Mutex::new(None)),
+            off_owned,
+            end_work_pending: Arc::new(AtomicBool::new(false)),
+            end_result: Arc::new(Mutex::new(None)),
             display,
             worker: Some(worker),
         })
     }
     pub fn snapshot(&self) -> SessionSnapshot {
+        let end_result = *self.end_result.lock().unwrap_or_else(|e| e.into_inner());
         SessionSnapshot {
-            status: self
-                .status
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .clone(),
+            status: match end_result {
+                Some(Ok(())) => SessionStatus::Stopped,
+                Some(Err(e)) => SessionStatus::Failed(e.into()),
+                None => self
+                    .status
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone(),
+            },
             connections: self.connections.load(Ordering::Relaxed),
         }
     }
@@ -399,21 +435,120 @@ impl RemoteAudienceSession {
             .as_ref()
             .is_some_and(|l| l.failed())
     }
-    pub fn request_end(&self) {
+    pub fn request_end(&self) -> Result<(), &'static str> {
+        // Fence immediately, but do not stop transport or accept the end before
+        // the intent is durable. The UI labels this phase as saving, not ended.
+        self.engine.lock().unwrap_or_else(|e| e.into_inner()).stop();
+        let Some(settings) = self.managed.clone() else {
+            self.end_requested.store(true, Ordering::Release);
+            self.request_stop();
+            return Ok(());
+        };
+        // A cleanup-only restart already has a worker owning this end.
+        if self.end_requested.load(Ordering::Acquire) && !self.off_owned.load(Ordering::Acquire) {
+            self.request_stop();
+            return Ok(());
+        }
+        let mut completion = self.end_result.lock().unwrap_or_else(|e| e.into_inner());
+        if self.end_save_started.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
+        self.off_owned.store(true, Ordering::Release);
+        settings.creation_blocked.store(true, Ordering::Release);
         self.end_requested.store(true, Ordering::Release);
-        self.request_stop();
+        self.end_work_pending.store(true, Ordering::Release);
+        *completion = None;
+        self.end_save_pending.store(true, Ordering::Release);
+        *self
+            .end_save_error
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = None;
+        drop(completion);
+        let started = self.end_save_started.clone();
+        let pending = self.end_save_pending.clone();
+        let error = self.end_save_error.clone();
+        let stop = self.stop.clone();
+        let work_pending = self.end_work_pending.clone();
+        let end_result = self.end_result.clone();
+        let result = std::thread::Builder::new()
+            .name("audience-end-save".into())
+            .spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    settings.persist_intent()
+                }))
+                .unwrap_or(Err(crate::audience_recovery::WRITE_ERROR));
+                let save_error = result.err();
+                if save_error.is_none() {
+                    pending.store(false, Ordering::Release);
+                }
+                // This owner survives a socket failure or an already-finished
+                // transport worker. Never defer a saved explicit end until ON.
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    result.and_then(|()| {
+                        stop.send_replace(true);
+                        let runtime = tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                            .map_err(|_| "Cannot start relay cleanup.")?;
+                        let result = runtime.block_on(async {
+                            let client = crate::audience_relay_http::client()?;
+                            crate::audience_relay_http::cleanup(&client, &settings).await
+                        });
+                        runtime.shutdown_background();
+                        result
+                    })
+                }))
+                .unwrap_or(Err("Relay cleanup stopped unexpectedly."));
+                drop(settings);
+                let mut completion = end_result.lock().unwrap_or_else(|e| e.into_inner());
+                *completion = Some(result);
+                *error.lock().unwrap_or_else(|e| e.into_inner()) = save_error;
+                pending.store(false, Ordering::Release);
+                work_pending.store(false, Ordering::Release);
+                // A retry acquires this same gate before owning completion fields.
+                if save_error.is_some() {
+                    started.store(false, Ordering::Release);
+                }
+            });
+        if result.is_err() {
+            self.end_work_pending.store(false, Ordering::Release);
+            self.end_save_pending.store(false, Ordering::Release);
+            self.end_save_started.store(false, Ordering::Release);
+            *self
+                .end_save_error
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(crate::audience_recovery::WRITE_ERROR);
+            return Err(crate::audience_recovery::WRITE_ERROR);
+        }
+        Ok(())
+    }
+    pub fn end_request_pending(&self) -> bool {
+        self.end_save_pending.load(Ordering::Acquire)
+    }
+    pub fn end_request_error(&self) -> Option<&'static str> {
+        *self
+            .end_save_error
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
     }
     pub fn request_stop(&self) {
         self.engine.lock().unwrap_or_else(|e| e.into_inner()).stop();
         self.stop.send_replace(true);
     }
     pub fn is_finished(&self) -> bool {
-        self.worker.as_ref().is_none_or(JoinHandle::is_finished)
+        self.worker.as_ref().is_none_or(JoinHandle::is_finished) && !self.end_operation_pending()
+    }
+    pub fn end_operation_pending(&self) -> bool {
+        self.end_work_pending.load(Ordering::Acquire)
     }
     pub fn shutdown(&mut self) {
         self.request_stop();
         if let Some(w) = self.worker.take() {
             let _ = w.join();
+        }
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while self.end_operation_pending() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(5));
         }
     }
 }
@@ -1601,5 +1736,120 @@ mod fixture_tests {
         assert_eq!(resumed.drain_events().len(), 1);
         resumed.shutdown();
         let _ = audience.close(None);
+    }
+}
+
+#[cfg(test)]
+mod durable_end_tests {
+    use super::*;
+    use crate::{
+        audience_events::{Admission, ReactionKind},
+        audience_relay_http::ManagedRelay,
+    };
+
+    fn owner(settings: ManagedRelay) -> (RemoteAudienceSession, watch::Receiver<bool>) {
+        let (stop, receiver) = watch::channel(false);
+        let (display, _) = watch::channel(Display::default());
+        (
+            RemoteAudienceSession {
+                status: Arc::new(Mutex::new(SessionStatus::Starting)),
+                connections: Arc::new(AtomicUsize::new(0)),
+                engine: Arc::new(Mutex::new(AudienceEngine::new(std::time::Instant::now()))),
+                stop,
+                end_requested: settings.end_requested.clone(),
+                managed: Some(settings),
+                end_save_started: Arc::new(AtomicBool::new(false)),
+                end_save_pending: Arc::new(AtomicBool::new(false)),
+                end_save_error: Arc::new(Mutex::new(None)),
+                off_owned: Arc::new(AtomicBool::new(false)),
+                end_work_pending: Arc::new(AtomicBool::new(false)),
+                end_result: Arc::new(Mutex::new(None)),
+                display,
+                worker: None,
+            },
+            receiver,
+        )
+    }
+    async fn wait_until(mut predicate: impl FnMut() -> bool) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while !predicate() {
+            assert!(std::time::Instant::now() < deadline);
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+    #[tokio::test]
+    async fn off_fences_events_but_signals_stop_only_after_its_intent_is_durable() {
+        let server = crate::audience_relay_http::tests::server().await;
+        server.peer.session_results.lock().unwrap().push_back(503);
+        let endpoint = server.settings.endpoint.clone();
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+        let settings = ManagedRelay::for_configuration(endpoint.clone(), config.clone()).unwrap();
+        let key = settings.attempt().unwrap().key;
+        let state = settings.attempt.clone();
+        let held = state.lock().unwrap();
+        let (session, receiver) = owner(settings);
+        session.request_end().unwrap();
+        assert!(session.end_request_pending());
+        assert!(!*receiver.borrow());
+        assert_eq!(
+            session.engine.lock().unwrap().accept(
+                ReactionKind::Heart,
+                1,
+                std::time::Instant::now()
+            ),
+            Admission::Stopped
+        );
+        let stored: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(dir.path().join("config.toml.audience-session.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(stored["end_requested"], false);
+        drop(held);
+        wait_until(|| *receiver.borrow()).await;
+        assert!(!session.end_request_pending());
+        assert!(session.end_request_error().is_none());
+        wait_until(|| session.is_finished()).await;
+        assert_eq!(server.peer.session_ends.load(Ordering::SeqCst), 1);
+        assert!(server.peer.requests.lock().unwrap().is_empty());
+        drop(session);
+        let restored = ManagedRelay::for_configuration(endpoint, config).unwrap();
+        assert!(restored.end_requested.load(Ordering::Acquire));
+        assert_eq!(restored.attempt.lock().unwrap().as_ref().unwrap().key, key);
+    }
+    #[tokio::test]
+    async fn failed_end_save_is_reported_without_stop_and_can_be_retried() {
+        let server = crate::audience_relay_http::tests::server().await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+        let settings =
+            ManagedRelay::for_configuration(server.settings.endpoint.clone(), config).unwrap();
+        settings.attempt().unwrap();
+        let path = dir.path().join("config.toml.audience-session.json");
+        std::fs::remove_file(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+        let (session, receiver) = owner(settings);
+        session.request_end().unwrap();
+        wait_until(|| !session.end_request_pending()).await;
+        assert_eq!(
+            session.end_request_error(),
+            Some(crate::audience_recovery::WRITE_ERROR)
+        );
+        assert!(!*receiver.borrow());
+        assert_eq!(server.peer.session_ends.load(Ordering::SeqCst), 0);
+        std::fs::remove_dir(&path).unwrap();
+        session.request_end().unwrap();
+        wait_until(|| *receiver.borrow()).await;
+        assert!(session.end_request_error().is_none());
+        // The independent end owner also works without a transport worker.
+        wait_until(|| session.is_finished()).await;
+        assert_eq!(server.peer.session_ends.load(Ordering::SeqCst), 1);
+        assert!(server.peer.requests.lock().unwrap().is_empty());
+        let stored: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(dir.path().join("config.toml.audience-session.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(stored["end_requested"], false);
+        assert!(stored["key"].is_null());
     }
 }

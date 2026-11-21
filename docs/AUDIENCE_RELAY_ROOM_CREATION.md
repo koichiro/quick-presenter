@@ -127,7 +127,7 @@ custom proxy and private-CA configuration are outside this milestone.
 
 1. ON starts the remote worker and publishes `Starting…`. There is no network
    runtime, HTTP request, or heartbeat while Audience Live is OFF.
-2. Generate a cryptographically random idempotency key for this start operation.
+2. Generate and durably save a cryptographically random idempotency key for this start operation, or restore the pending key from the configuration-bound recovery journal.
    Submit `POST /api/relay/v1/rooms` with `Authorization: Bearer <create_token>`,
    JSON content type, and `{ "idempotency_key": "..." }`.
 3. Accept 201 for a new room and 200 for an idempotent recovery. Validate a bounded
@@ -148,9 +148,24 @@ retry automatically. Do not display server response bodies or denial details
 verbatim. Distinguish authentication, invalid configuration, unavailable relay,
 unsupported protocol, room expiration, and cancellation with safe messages.
 
-A timeout does not prove that creation failed. Keep the operation key and any
-validated room credentials in application memory across manual retry of a failed
-start. Recover the same room instead of allocating a replacement. If creation
+A timeout does not prove that creation failed. Keep the operation key in a
+private journal across explicit retries and process restarts. Validated room
+credentials remain in memory; after restart retrieve them with the same key.
+The bounded journal is stored beside the selected configuration as
+`config.toml.audience-session.json` with a separate process-lock file. It records
+a SHA-256 fingerprint of origin/creation credential, the operation key, ambiguity
+and pending explicit-end intent; it never stores bearer tokens or room credentials.
+Write and sync the key before creation can commit, and write end intent before
+termination can commit. Reject invalid, oversized, non-regular
+or differently bound active records rather than silently creating a fresh key.
+On Unix, reject shared-permission records; validate the directory chain and use
+the retained directory handle for journal operations. The configuration directory
+must be user-owned without group/world write access.
+Windows writes use the protected owner/SYSTEM ACL from settings storage; the
+configuration directory remains user-controlled; existing Windows read ACLs are
+not claimed to be validated. A second process using the same
+configuration cannot acquire its journal lock. Startup loading performs no network
+IO and does not activate service usage. Recover the same room instead of allocating a replacement. If creation
 returns terminal-room 410, or the presenter handshake confirms a missing/ended
 room with 404/410, the same ON action clears the old identity and tries one new
 room. A second terminal response stops with an alert; there is no creation loop.
@@ -173,9 +188,15 @@ Failed -> explicit ON -> recover pending creation / reconnect existing room
 
 OFF means end this Audience session, rather than suspend it. Immediately fence
 events, clear overlays and QR metadata, and prevent further user starts until the
-worker finishes. Send `POST /api/relay/v1/rooms/{room_id}/end` using the
+worker finishes. Save end intent off the UI thread before signaling transport stop;
+while the UI says `Saving stop request…`, the end is not yet accepted. A storage
+failure reports that OFF was not saved and leaves OFF retryable without blocking
+PDF controls. Once saved, send `POST /api/relay/v1/rooms/{room_id}/end` using the
 room's presenter Bearer credential. This is different from the operator creation
-credential. Bound termination to two seconds, then close the socket and runtime.
+credential. Bound cleanup, including its initial/final journal persistence, to two
+seconds, then close the socket and runtime. Storage jobs run outside Tokio's task
+thread; a timed-out job retains journal ownership until it settles, and cancelled
+queued work cannot later overwrite a newer operation.
 The next ON starts a new room and gets a new join URL. Pause Comments continues to
 change display policy only; it does not terminate a room.
 
@@ -190,9 +211,12 @@ an HTTP request.
 Application exit uses the same best-effort, bounded cleanup after the GUI event
 loop returns. It may wait for the worker within that cleanup budget; no worker
 waits for a UI callback. Normal OFF is asynchronous and keeps the live UI responsive. Process crashes and hard
-kills rely on relay expiration. This milestone does not persist room credentials
-or idempotency keys, resume rooms after application restart, or guarantee remote
-termination during outages. An explicit stop invalidates its operation generation
+kills release the local journal lock. The next explicit ON restores the same key
+and revalidates the room through the existing idempotent creation API. An
+interrupted explicit end is retried as cleanup only and never followed by an
+automatic creation. Room credentials are not persisted; remote termination during
+outages is not guaranteed. A room created by an older version without a saved key
+can still require relay expiration before a replacement is allowed. An explicit stop invalidates its operation generation
 so late replies cannot reactivate the UI or become a later session's room.
 
 ## Implementation sequence and acceptance

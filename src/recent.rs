@@ -126,7 +126,7 @@ impl RecentFileStore {
 
     pub fn save(&self, recent_files: &RecentFiles) -> Result<()> {
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).with_context(|| {
+            crate::settings_storage::create_private_dir_all(parent).with_context(|| {
                 format!(
                     "failed to create recent files directory: {}",
                     parent.display()

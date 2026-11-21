@@ -9,6 +9,18 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+/// Create missing settings directories privately without chmoding existing paths.
+pub(crate) fn create_private_dir_all(path: &Path) -> std::io::Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        builder.mode(0o700);
+    }
+    builder.create(path)
+}
+
 pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let temp_path = temporary_sibling_path(path);
