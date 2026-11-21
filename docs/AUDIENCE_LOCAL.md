@@ -1,6 +1,6 @@
 # Local Audience Sessions
 
-Audience Live targets v3.0.0 and is developed on the `v3.0.0` branch.
+Audience Live targets v3.0.0 and is developed on `main`.
 
 The initial Audience Live implementation lets audience browsers join a local
 session hosted by Quick Presenter. It supports session start/stop, a join QR

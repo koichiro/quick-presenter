@@ -7,7 +7,9 @@ This document records the configuration and lifecycle contract.
 
 Configure a relay once in a user-owned TOML file, then use the existing Audience
 Live ON/OFF control. qp creates a room, connects its presenter socket, and displays
-the returned join URL, session code, and QR code. No relay settings GUI is needed.
+the returned join URL, session code, and QR code. Settings can import and apply
+an operator-provided TOML file immediately while stopped; manual file edits
+require restart. See [import validation](AUDIENCE_CONFIG_IMPORT_VALIDATION.md).
 PDF playback must remain usable through configuration and network failures.
 
 The earlier client consumed a pre-created room JSON file selected by an
@@ -34,7 +36,8 @@ The default file is `config.toml` in the directory already resolved by
 | Linux | `$XDG_CONFIG_HOME/quick-presenter/config.toml`, otherwise `~/.config/quick-presenter/config.toml` |
 
 The file is separate from existing UI settings and recent-file storage. qp does
-not generate credentials or rewrite this file. The normal user configuration is:
+not generate credentials. Settings import/reset writes the selected configuration
+file while preserving unrelated settings. The normal user configuration is:
 
 ```toml
 [audience]
