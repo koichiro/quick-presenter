@@ -108,6 +108,8 @@ impl AudiencePanelGeometry {
         self.pending_from = (current != requested).then_some(current);
         self.last_requested = Some(requested);
         window.set_size(requested);
+        // Some backends acknowledge synchronously; others report the size later.
+        self.observe_size(window.size());
         #[cfg(target_os = "windows")]
         crate::windows_window::fit_presenter_to_work_area(presenter);
     }
