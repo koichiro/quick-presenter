@@ -281,7 +281,7 @@ Use this slide to explain why Quick Presenter exists even though every operating
 
 <div class="grid two">
   <div class="panel"><strong>Presenter window</strong><p>Current slide, next preview, notes, elapsed time, clock, and page count.</p></div>
-  <div class="panel"><strong>Slide window</strong><p>A clean output surface for projectors, displays, and screen sharing.</p></div>
+  <div class="panel"><strong>Audience Window</strong><p>A clean output surface for projectors, displays, and screen sharing.</p></div>
   <div class="panel"><strong>Keyboard first</strong><p>Move through slides with keys, menus, buttons, and common presenter remotes.</p></div>
   <div class="panel"><strong>PDF only</strong><p>No editing tools during a talk, no document management workflow, no distractions.</p></div>
 </div>
@@ -299,7 +299,7 @@ This is a good slide for README presenter screenshots because it has enough stru
 <div class="timeline">
   <div class="step"><div class="number">1</div><div><strong>Open the PDF</strong><span>Use the final PDF exported from Keynote, PowerPoint, Marp, or Beamer.</span></div></div>
   <div class="step"><div class="number">2</div><div><strong>Check speaker notes</strong><span>Keep private notes aligned with the current slide in the presenter window.</span></div></div>
-  <div class="step"><div class="number">3</div><div><strong>Share the slide window</strong><span>Send only the clean audience view to a projector or online meeting.</span></div></div>
+  <div class="step"><div class="number">3</div><div><strong>Share the audience window</strong><span>Send only the clean audience view to a projector or online meeting.</span></div></div>
 </div>
 
 <!--
@@ -329,7 +329,7 @@ It shows the same audience-facing workflow without exposing presenter-only UI.
 
 <div class="kicker">Online meetings</div>
 
-## Share the slide window. Keep the presenter window private.
+## Share the audience window. Keep the presenter window private.
 
 <div class="grid">
   <div class="panel"><strong>Zoom</strong><p>Share only the audience-facing window and keep notes on your own display.</p></div>

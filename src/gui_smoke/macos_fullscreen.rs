@@ -48,8 +48,8 @@ pub(super) struct Transitions {
 }
 
 impl Transitions {
-    pub(super) fn new(slide: &crate::SlideWindow) -> Result<Self> {
-        let handle = slide.window().window_handle();
+    pub(super) fn new(audience: &crate::AudienceWindow) -> Result<Self> {
+        let handle = audience.window().window_handle();
         let handle = handle.window_handle()?;
         let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
             anyhow::bail!("fullscreen smoke requires an AppKit window");

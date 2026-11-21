@@ -2,7 +2,7 @@
 
 ## Current display-aware policy
 
-The slide window's physical client width selects the current-slide render width.
+The audience window's physical client width selects the current-slide render width.
 At or below 1600 px, it stays at 1600; above that floor it rounds upward in
 128 px buckets, capped at 2560. Preview and thumbnail widths remain 600 and
 180 px. The Rust window adapter reads Slint's physical size directly, without

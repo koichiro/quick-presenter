@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quick Presenter Audience</title>
+  <style>
+    html { background: #202124; }
+    body { background: #202124; color: white; font-family: system-ui; font-size: 18px;
+      max-inline-size: 36rem; margin-block: 3rem; margin-inline: auto; padding: 1.5rem; }
+    p { line-height: 1.6; }
+    button { font: inherit; padding: .7rem; min-inline-size: 48px; min-block-size: 48px; }
+    button:disabled { opacity: .45; }
+    .reaction-list { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .reaction-list button { font-size: 2rem; }
+    input, textarea { box-sizing: border-box; display: block; inline-size: 100%;
+      font: inherit; margin: .4rem 0 1rem; padding: .5rem; }
+    .composer { display: flex; align-items: flex-end; gap: .5rem; margin: .4rem 0; }
+    .composer textarea { flex: 1; min-inline-size: 0; min-block-size: 5rem; margin: 0; }
+    .composer button { flex-shrink: 0; }
+    #comment-help { font-size: .85rem; color: #c7cbd1; margin: .5rem 0 1rem; }
+  </style>
+</head>
+<body>
+  <h1>Quick Presenter</h1>
+  <h2>Audience Live</h2>
+  <p id="connection-status" role="status">Connecting…</p>
+  <section class="reaction-list" aria-label="Reactions">
+    <button type="button" disabled data-kind="thumbs_up" aria-label="Thumbs up">👍</button>
+    <button type="button" disabled data-kind="heart" aria-label="Heart">❤️</button>
+    <button type="button" disabled data-kind="applause" aria-label="Applause">👏</button>
+    <button type="button" disabled data-kind="laugh" aria-label="Laugh">😂</button>
+    <button type="button" disabled data-kind="question" aria-label="Question">❓</button>
+  </section>
+  <form>
+    <label for="nickname">Name</label>
+    <input id="nickname" name="nickname" value="Anonymous" autocomplete="nickname">
+    <label for="message">Comment (up to 200 characters)</label>
+    <div class="composer">
+      <textarea id="message" name="message" required aria-describedby="comment-help"></textarea>
+      <button id="send-comment" type="submit" disabled>Send</button>
+    </div>
+    <p id="comment-help">Enter to send · Shift+Enter for a new line</p>
+  </form>
+  <p id="feedback" role="status">Send a reaction to the presenter.</p>
+  <button id="retry" type="button" hidden>Reconnect</button>
+  <script type="module" src="/assets/audience.js"></script>
+</body>
+</html>

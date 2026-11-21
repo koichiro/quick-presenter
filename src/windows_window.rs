@@ -9,8 +9,8 @@ use windows_sys::Win32::{
     Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
 };
 
-const SLIDE_CHROME_BACKGROUND: COLORREF = colorref(0x11, 0x13, 0x15);
-const SLIDE_CHROME_TEXT: COLORREF = colorref(0x9a, 0xa0, 0xa6);
+const AUDIENCE_CHROME_BACKGROUND: COLORREF = colorref(0x11, 0x13, 0x15);
+const AUDIENCE_CHROME_TEXT: COLORREF = colorref(0x9a, 0xa0, 0xa6);
 
 #[derive(Debug, PartialEq)]
 struct WorkAreaFit {
@@ -44,7 +44,7 @@ fn fit_geometry(
     Some(fit)
 }
 
-/// Keep startup geometry inside the current monitor's taskbar-free area.
+/// Keep startup/disclosure geometry inside the current monitor's taskbar-free area.
 pub fn fit_presenter_to_work_area(presenter: &crate::PresenterWindow) {
     let window = presenter.window();
     let Some(hwnd) = hwnd_from_slint_window(window) else {
@@ -89,6 +89,10 @@ pub fn fit_presenter_to_work_area(presenter: &crate::PresenterWindow) {
         outer.width.saturating_sub(inner.width),
         outer.height.saturating_sub(inner.height),
     ];
+    let available_height = (i64::from(work[3]) - i64::from(work[1]) - i64::from(frame[1])).max(0);
+    // Integral logical pixels avoid a fractional minimum rounding one physical
+    // pixel beyond the taskbar boundary during Slint's deferred layout pass.
+    presenter.set_presenter_work_area_height((available_height as f32 / scale).floor());
     let minimum = [
         (800.0 * scale).ceil() as u32,
         (presenter.get_presenter_minimum_height() * scale).ceil() as u32,
@@ -140,14 +144,14 @@ pub fn fit_presenter_to_work_area(presenter: &crate::PresenterWindow) {
     }
 }
 
-pub fn apply_slide_chrome(window: &Window) {
+pub fn apply_audience_chrome(window: &Window) {
     let Some(hwnd) = hwnd_from_slint_window(window) else {
         return;
     };
 
-    set_dwm_color(hwnd, DWMWA_CAPTION_COLOR, SLIDE_CHROME_BACKGROUND);
-    set_dwm_color(hwnd, DWMWA_BORDER_COLOR, SLIDE_CHROME_BACKGROUND);
-    set_dwm_color(hwnd, DWMWA_TEXT_COLOR, SLIDE_CHROME_TEXT);
+    set_dwm_color(hwnd, DWMWA_CAPTION_COLOR, AUDIENCE_CHROME_BACKGROUND);
+    set_dwm_color(hwnd, DWMWA_BORDER_COLOR, AUDIENCE_CHROME_BACKGROUND);
+    set_dwm_color(hwnd, DWMWA_TEXT_COLOR, AUDIENCE_CHROME_TEXT);
 }
 
 const fn colorref(red: u8, green: u8, blue: u8) -> COLORREF {
@@ -177,7 +181,7 @@ fn set_dwm_color(hwnd: HWND, attribute: i32, color: COLORREF) {
     if result < 0 {
         debug!(
             hresult = result,
-            attribute, "failed to apply Windows slide window chrome color"
+            attribute, "failed to apply Windows audience window chrome color"
         );
     }
 }
@@ -190,7 +194,7 @@ mod tests {
     fn work_area_fit_includes_taskbar_frame_and_dpi_scaled_minimum() {
         for (scale, frame) in [(1.0, [16, 56]), (1.25, [18, 72])] {
             let size = [(1024.0 * scale) as u32, (768.0 * scale) as u32];
-            let minimum = [(800.0 * scale) as u32, (560.0 * scale) as u32];
+            let minimum = [(800.0 * scale) as u32, (608.0 * scale) as u32];
             let plan = fit_geometry([0, 0, 1920, 1032], [100, 100], size, frame, minimum).unwrap();
             for axis in 0..2 {
                 assert!(plan.inner_size[axis] >= minimum[axis]);

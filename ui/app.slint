@@ -1,3 +1,7 @@
+export struct BubbleOverlayItem { name: string, text: string, y: float }
+export struct CommentOverlayItem { text: string, x: float, y: float, width: float }
+export struct ReactionOverlayItem { kind: int, x: float, y: float, opacity: float }
+
 import { Button, VerticalBox, HorizontalBox, ScrollView } from "std-widgets.slint";
 
 export struct ThumbnailItem {
@@ -348,6 +352,132 @@ component NavigationButton inherits Button {
     }
 }
 
+// Controlled by Rust so failed preference saves cannot leave a misleading state.
+component CommentDisplaySwitch inherits FocusScope {
+    in property <string> text;
+    in property <bool> checked;
+    callback toggled();
+    height: 40px;
+    accessible-role: switch;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-checkable: true;
+    accessible-checked: root.checked;
+    accessible-action-default => { if root.enabled { root.focus(); root.toggled(); } }
+    key-pressed(event) => {
+        if (event.text == Key.Space || event.text == Key.Return) {
+            root.toggled();
+            return accept;
+        }
+        return reject;
+    }
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        border-radius: 6px;
+        border-width: root.has-focus ? 2px : 0px;
+        border-color: #8ab4f8;
+        background: transparent;
+    }
+    Text {
+        x: 8px;
+        height: parent.height;
+        width: max(0px, parent.width - 110px);
+        text: root.text;
+        color: #f1f3f4;
+        font-size: 14px;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    Text {
+        x: parent.width - 100px;
+        width: 40px;
+        height: parent.height;
+        text: root.checked ? "ON" : "OFF";
+        color: #d9dce0;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    Rectangle {
+        x: parent.width - self.width - 8px;
+        y: (parent.height - self.height) / 2;
+        width: 44px;
+        height: 26px;
+        border-radius: 13px;
+        background: root.checked ? #0a84ff : #62666c;
+        animate background { duration: 150ms; }
+        Rectangle {
+            x: root.checked ? parent.width - self.width - 2px : 2px;
+            y: 2px;
+            width: 22px;
+            height: 22px;
+            border-radius: 11px;
+            background: white;
+            animate x { duration: 150ms; easing: ease-out; }
+        }
+    }
+    TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.focus(); root.toggled(); }
+    }
+}
+
+// An unfilled icon button with explicit focus and accessibility behavior.
+component AudienceIconButton inherits FocusScope {
+    in property <image> icon;
+    in property <string> action-name;
+    in property <string> tooltip-text;
+    callback clicked();
+
+    min-width: 36px;
+    max-width: 36px;
+    height: 32px;
+    accessible-role: button;
+    accessible-enabled: root.enabled;
+    accessible-label: root.action-name;
+    accessible-action-default => { root.focus(); root.clicked(); }
+
+    key-pressed(event) => {
+        if (event.text == Key.Space || event.text == Key.Return) {
+            root.clicked();
+            return accept;
+        }
+        return reject;
+    }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: transparent;
+        border-width: 1px;
+        border-radius: 4px;
+        border-color: #8ab4f8;
+        visible: root.has-focus && root.enabled;
+    }
+    Image {
+        source: root.icon;
+        width: 20px;
+        height: 20px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        colorize: root.enabled ? #f1f3f4 : #666b70;
+    }
+    TouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => {
+            root.focus();
+            root.clicked();
+        }
+    }
+    Tooltip {
+        text: @markdown("\{root.tooltip-text}");
+    }
+}
+
 component KeyboardBindingsPanel inherits Rectangle {
     background: #111315;
     border-color: #3c4043;
@@ -629,6 +759,7 @@ component ThumbnailPane inherits Rectangle {
     callback request-thumbnail-range(int, int);
 
     background: transparent;
+    clip: true;
     private property <length> scrollbar-gutter-width: 12px;
     private property <length> tile-height: 98px;
     private property <length> current-item-y: scroll-view.content-y + root.current-page-index * root.tile-height;
@@ -695,7 +826,82 @@ component ThumbnailPane inherits Rectangle {
 }
 
 export component PresenterWindow inherits Window {
+    in property <string> comment-measure-text;
+    out property <float> comment-measure-width: comment-measure.preferred-width / 1px;
+    // Keep font measurement on the persistent presenter. Slint 1.19 can retain
+    // stale text metrics after recreating an audience window on Wayland.
+    comment-measure := Text {
+        visible: false;
+        text: root.comment-measure-text;
+        font-size: 32px;
+        font-weight: 700;
+        wrap: no-wrap;
+    }
     icon: @image-url("../assets/icons/png/quick-presenter-icon-256.png");
+    in property <string> audience-address;
+    in property <string> audience-status: "Stopped";
+    in property <string> audience-alert-title;
+    in property <string> audience-alert-guidance;
+    in property <bool> audience-account-available: false;
+    in property <bool> audience-account-visible: false;
+    in property <string> audience-url;
+    in property <string> audience-code;
+    in property <bool> audience-sticky-qr-enabled: false;
+    in property <image> audience-qr;
+    in property <bool> audience-active: false;
+    in property <bool> audience-panel-expanded: false;
+    callback audience-toggle-panel();
+    in property <bool> audience-can-start: false;
+    in property <int> audience-count: 0;
+    in property <bool> audience-guide-visible: false;
+    out property <length> audience-panel-height: root.audience-panel-expanded ? root.audience-expanded-height : 48px;
+    // Infer the equivalent expanded height while collapsed so resizing the
+    // window by the hidden footer height keeps slides and notes unchanged.
+    // Zero leaves compositor-managed and software-test geometry unchanged.
+    in property <length> presenter-work-area-height: 0px;
+    // Reserve the main panes (464px) and surrounding controls/spacing (96px).
+    // The history can scroll; keep its disclosure and URL rows usable.
+    property <length> audience-expanded-height-limit: root.presenter-work-area-height > 0px
+        ? max(150px, root.presenter-work-area-height - 560px) : 360px;
+    out property <length> audience-expanded-height: min(root.audience-expanded-height-limit, root.audience-panel-expanded
+        ? clamp(round((root.height - root.inline-menu-height) / 1px * 0.28) * 1px, 282px, 360px)
+        : clamp(round((root.height - root.inline-menu-height - 48px) / 1px * (0.28 / 0.72)) * 1px, 282px, 360px));
+    out property <length> presenter-minimum-height: root.audience-panel-expanded
+        ? (root.presenter-work-area-height > 0px ? min(842px, max(710px, root.presenter-work-area-height)) : 842px)
+        : 608px;
+    out property <bool> audience-history-visible: audience-panel.visible;
+    out property <bool> audience-url-visible: audience-url-row.visible;
+    out property <length> audience-footer-bottom: root.audience-panel-expanded ? root.audience-url-bottom : root.audience-toggle-bottom;
+    in property <bool> audience-busy: false;
+    in property <string> audience-recent-reactions;
+    in property <string> audience-comment-history;
+    out property <length> audience-history-height: comment-history.preferred-height;
+    out property <length> audience-history-visible-height: comment-history-scroll.visible-height;
+    in property <bool> audience-comments-paused;
+    in property <bool> audience-flowing-enabled: true;
+    in property <bool> audience-bubbles-enabled: false;
+    callback audience-set-comment-display(bool, bool);
+    callback audience-set-sticky-qr(bool);
+    in property <string> audience-sticky-qr-error;
+    callback audience-dismiss-sticky-qr-error();
+    callback audience-toggle-comments();
+    in property <int> audience-reaction-count;
+    callback audience-open-url();
+    callback audience-open-account();
+    callback audience-copy-url();
+    callback audience-toggle-session();
+    callback audience-import-configuration();
+    callback audience-reset-configuration();
+    in property <bool> audience-can-import: true;
+    in property <bool> audience-recovery-pending: false;
+    in-out property <bool> settings-visible: false;
+    out property <length> settings-scroll-position: settings-scroll.content-y;
+    out property <length> settings-content-height: settings-scroll.content-height;
+    out property <length> settings-viewport-height: settings-scroll.visible-height;
+    out property <bool> settings-close-within-dialog: settings-close.y >= 0px && settings-close.y + settings-close.height <= settings-layout.height;
+
+    callback audience-next-address();
+    callback audience-refresh-addresses();
     in property <image> current-page-image;
     in property <image> next-page-image;
     in property <float> current-page-aspect-ratio: 16.0 / 9.0;
@@ -706,8 +912,39 @@ export component PresenterWindow inherits Window {
     in property <string> page-label: "";
     in property <string> notes-text: "";
     in property <float> notes-font-size: 12;
+    out property <length> audience-panel-right: audience-panel.x + audience-panel.width;
+    out property <string> audience-toggle-label: audience-live-toggle.text;
+    out property <string> audience-url-text: audience-url-link.text;
+    out property <bool> audience-url-copy-enabled: audience-url-copy.enabled;
+    out property <bool> audience-url-copy-fits: audience-url-field.x + audience-url-field.width + 8px <= audience-url-copy.x
+        && audience-url-copy.x + audience-url-copy.width <= audience-url-row.width
+        && audience-url-copy.y >= 0px
+        && audience-url-copy.y + audience-url-copy.height <= audience-url-row.height;
+    out property <bool> audience-address-controls-inline: next-address.x >= address-text.x + address-text.width && refresh-address.x >= next-address.x + next-address.width && abs(next-address.y - refresh-address.y) < 1px;
+    out property <length> audience-url-bottom: audience-url-row.y + audience-url-row.height;
+    out property <length> audience-url-top: audience-url-row.y;
+    out property <length> audience-panel-bottom: audience-panel.y + audience-panel.height;
+    out property <length> audience-panel-top: audience-panel.y;
+    out property <length> audience-toggle-bottom: audience-toggle-row.y + audience-live-toggle.y + audience-live-toggle.height;
+    out property <length> audience-toggle-y: audience-toggle-row.y;
+    out property <length> notes-area-bottom: main-area.y + main-area.height;
+    out property <length> thumbnails-left: main-area.x + thumbnail-column.x;
+    out property <length> thumbnails-bottom: main-area.y + thumbnail-column.y + thumbnail-column.height;
+    out property <length> audience-panel-width: audience-panel.width;
+    out property <string> audience-count-label: "👥" + audience-count-text.text;
+    out property <bool> audience-toolbar-ordered: audience-disclosure.x + audience-disclosure.width <= audience-count.x
+        && audience-count.x + audience-count.width <= audience-led.x
+        && audience-led.x + audience-led.width <= audience-live-toggle.x
+        && audience-pause.x + audience-pause.width <= address-text.x
+        && refresh-address.x + refresh-address.width <= audience-toggle-row.width;
+    out property <length> audience-reactions-width: audience-reactions.width;
     out property <length> notes-layout-slide-width: current-slide-with-progress.page-surface-width;
     out property <length> notes-layout-slide-height: current-slide-with-progress.page-surface-height;
+    out property <length> presenter-current-column-width: main-area.left-column-width;
+    out property <length> presenter-next-column-width: main-area.next-column-width;
+    out property <length> presenter-next-preview-height: next-preview-slot.height;
+    out property <length> presenter-next-slide-width: next-slide.page-surface-width;
+    out property <length> presenter-thumbnail-width: thumbnail-column.width;
     out property <length> notes-layout-outer-width: notes-view.width;
     out property <length> notes-layout-menu-height: inline-menu.height;
     out property <length> notes-layout-main-y: main-area.y;
@@ -717,7 +954,7 @@ export component PresenterWindow inherits Window {
     out property <length> notes-text-y: notes-view.text-y;
     in-out property <length> notes-scroll-y <=> notes-view.scroll-y;
     out property <[float]> notes-measured-heights: notes-view.measured-heights;
-    in property <bool> slide-fullscreen: false;
+    in property <bool> audience-fullscreen: false;
     in property <bool> use-physical-control-shortcuts: false;
     in property <bool> use-native-menu-bar: true;
     in property <string> clock-time-label: "--:--";
@@ -747,12 +984,11 @@ export component PresenterWindow inherits Window {
     in-out property <bool> about-visible: false;
     property <int> active-menu-index: -1;
     property <length> inline-menu-height: root.use-native-menu-bar ? 0px : 28px;
-    property <length> presenter-main-height: max(0px, root.height - root.inline-menu-height - 96px);
-    property <length> presenter-bottom-section-height: 200px;
+    property <length> presenter-main-height: max(0px, root.height - root.inline-menu-height - 96px - root.audience-panel-height);
+    // Reserve readable notes space; larger windows share spare height with slides.
+    property <length> presenter-bottom-section-height: max(200px, root.presenter-main-height * 0.34 - 34px);
     property <float> safe-current-page-aspect-ratio: root.current-page-aspect-ratio > 0 ? root.current-page-aspect-ratio : 16.0 / 9.0;
     property <float> safe-next-page-aspect-ratio: root.next-page-aspect-ratio > 0 ? root.next-page-aspect-ratio : 16.0 / 9.0;
-    property <length> next-preview-natural-height: 260px / root.safe-next-page-aspect-ratio;
-    property <length> next-preview-height: root.next-preview-natural-height > 190px ? 190px : root.next-preview-natural-height;
 
     callback open-pdf();
     callback open-recent-file(int);
@@ -762,13 +998,13 @@ export component PresenterWindow inherits Window {
     callback first-page();
     callback last-page();
     callback toggle-black-screen();
-    callback toggle-slide-fullscreen();
-    callback exit-slide-fullscreen();
+    callback toggle-audience-fullscreen();
+    callback exit-audience-fullscreen();
     callback show-presenter-window();
-    callback show-slide-window();
-    callback hide-slide-window();
+    callback show-audience-window();
+    callback hide-audience-window();
     callback bring-presenter-window-to-front();
-    callback bring-slide-window-to-front();
+    callback bring-audience-window-to-front();
     callback keyboard-previous-page();
     callback keyboard-next-page();
     callback keyboard-first-page();
@@ -782,17 +1018,32 @@ export component PresenterWindow inherits Window {
 
     title: "Quick Presenter";
     preferred-width: 1024px;
-    preferred-height: 720px;
+    preferred-height: root.audience-panel-expanded ? 1002px : 768px;
     min-width: 800px;
-    out property <length> presenter-minimum-height: 560px;
     min-height: root.presenter-minimum-height;
     background: #202124;
     forward-focus: presenter-focus;
+
+    public function open-settings() {
+        root.active-menu-index = -1;
+        root.settings-visible = true;
+        settings-focus.focus();
+    }
+
+    public function close-settings() {
+        root.settings-visible = false;
+        presenter-focus.focus();
+    }
 
     // BEGIN_NATIVE_MENU_BAR
     if root.use-native-menu-bar: MenuBar {
         Menu {
             title: "Application";
+            MenuItem {
+                title: "Settings...";
+                role: preferences;
+                activated => { root.open-settings(); }
+            }
             MenuItem {
                 title: "Quit Quick Presenter";
                 role: quit;
@@ -893,9 +1144,9 @@ export component PresenterWindow inherits Window {
             title: "View";
 
             MenuItem {
-                title: "Toggle Slide Fullscreen";
+                title: "Toggle Audience Fullscreen";
                 activated => {
-                    root.toggle-slide-fullscreen();
+                    root.toggle-audience-fullscreen();
                 }
             }
 
@@ -918,16 +1169,16 @@ export component PresenterWindow inherits Window {
             }
 
             MenuItem {
-                title: "Show Slide Window";
+                title: "Show Audience Window";
                 activated => {
-                    root.show-slide-window();
+                    root.show-audience-window();
                 }
             }
 
             MenuItem {
-                title: "Hide Slide Window";
+                title: "Hide Audience Window";
                 activated => {
-                    root.hide-slide-window();
+                    root.hide-audience-window();
                 }
             }
 
@@ -941,9 +1192,9 @@ export component PresenterWindow inherits Window {
             }
 
             MenuItem {
-                title: "Bring Slide Window to Front";
+                title: "Bring Audience Window to Front";
                 activated => {
-                    root.bring-slide-window-to-front();
+                    root.bring-audience-window-to-front();
                 }
             }
         }
@@ -963,6 +1214,7 @@ export component PresenterWindow inherits Window {
     // END_NATIVE_MENU_BAR
 
     presenter-focus := FocusScope {
+        enabled: !root.settings-visible;
         width: root.width;
         height: root.height;
 
@@ -1074,21 +1326,21 @@ export component PresenterWindow inherits Window {
         KeyBinding {
             keys: @keys(Escape);
             activated => {
-                root.exit-slide-fullscreen();
+                root.exit-audience-fullscreen();
             }
         }
 
         KeyBinding {
             keys: @keys(F5);
             activated => {
-                root.toggle-slide-fullscreen();
+                root.toggle-audience-fullscreen();
             }
         }
 
         KeyBinding {
             keys: @keys(F);
             activated => {
-                root.toggle-slide-fullscreen();
+                root.toggle-audience-fullscreen();
             }
         }
 
@@ -1165,9 +1417,9 @@ export component PresenterWindow inherits Window {
 
                 Button {
                     height: 32px;
-                    text: root.slide-fullscreen ? "Exit Fullscreen" : "Fullscreen";
+                    text: root.audience-fullscreen ? "Exit Fullscreen" : "Fullscreen";
                     clicked => {
-                        root.toggle-slide-fullscreen();
+                        root.toggle-audience-fullscreen();
                     }
                 }
 
@@ -1214,8 +1466,9 @@ export component PresenterWindow inherits Window {
                 width: parent.width - 24px;
                 height: root.presenter-main-height;
                 property <length> column-gap: 10px;
-                property <length> next-column-width: 260px;
-                property <length> thumbnail-column-width: 128px;
+                // Share extra width at 2:1, including on 4K and larger displays.
+                property <length> next-column-width: max(260px, (main-area.width - main-area.thumbnail-column-width - main-area.column-gap * 2) / 3);
+                property <length> thumbnail-column-width: clamp(main-area.width * 0.10, 128px, 192px);
                 property <length> left-column-width: max(0px, main-area.width - main-area.next-column-width - main-area.thumbnail-column-width - main-area.column-gap * 2);
                 property <length> current-slide-natural-height: main-area.left-column-width / root.safe-current-page-aspect-ratio + (root.has-slide-progress ? 4px : 0px);
                 property <length> top-section-height: min(main-area.current-slide-natural-height, max(0px, main-area.height - root.presenter-bottom-section-height - 34px));
@@ -1245,7 +1498,7 @@ export component PresenterWindow inherits Window {
 
                         Text {
                             x: (parent.width - self.width) / 2;
-                            width: current-slide-with-progress.page-surface-width;
+                            width: parent.width;
                             height: parent.height;
                             text: "Notes";
                             color: #d9dce0;
@@ -1261,7 +1514,7 @@ export component PresenterWindow inherits Window {
                         notes-view := NotesView {
                             navigation-key(event) => { root.notes-navigation-key(event) }
                             x: (parent.width - self.width) / 2;
-                            width: current-slide-with-progress.page-surface-width;
+                            width: parent.width;
                             height: parent.height;
                             has-notes: root.has-notes;
                             notes-text: root.notes-text;
@@ -1278,15 +1531,18 @@ export component PresenterWindow inherits Window {
                     y: 0px;
                     width: main-area.next-column-width;
                     height: parent.height;
-                    property <length> preview-height: min(root.next-preview-height, main-area.top-section-height);
+                    // Size the preview from the rendered current slide, not just its column:
+                    // height-constrained slides can leave substantial horizontal letterboxing.
+                    property <length> preview-width: min(self.width, current-slide-with-progress.page-surface-width / 2);
+                    property <length> preview-height: min(self.preview-width / root.safe-next-page-aspect-ratio, main-area.top-section-height);
 
                     next-preview-slot := Rectangle {
                         x: 0px;
                         y: 0px;
-                        width: parent.width;
+                        width: parent.preview-width;
                         height: parent.preview-height;
 
-                        SlideView {
+                        next-slide := SlideView {
                             x: 0px;
                             y: 0px;
                             page-image: root.next-page-image;
@@ -1330,17 +1586,21 @@ export component PresenterWindow inherits Window {
                     }
 
                     KeyboardBindingsPanel {
+                        x: 0px;
                         y: main-area.lower-section-y + 34px;
-                        width: parent.width;
-                        height: max(0px, parent.height - self.y);
+                        width: min(480px, parent.width);
+                        height: min(200px, max(0px, parent.height - self.y));
                     }
                 }
 
-                Rectangle {
+                thumbnail-column := Rectangle {
                     x: main-area.left-column-width + main-area.column-gap + main-area.next-column-width + main-area.column-gap;
                     y: 0px;
                     width: main-area.thumbnail-column-width;
-                    height: parent.height;
+                    height: root.audience-footer-bottom - main-area.y - self.y;
+                    background: #111315;
+                    border-color: #3c4043;
+                    border-width: 1px;
 
                     ThumbnailPane {
                         x: 0px;
@@ -1370,6 +1630,213 @@ export component PresenterWindow inherits Window {
                 overflow: elide;
             }
 
+            audience-toggle-row := Rectangle {
+                property <bool> led-dim: false;
+                Timer {
+                    interval: 500ms;
+                    running: root.audience-active && root.audience-comments-paused;
+                    triggered => { audience-toggle-row.led-dim = !audience-toggle-row.led-dim; }
+                }
+                x: main-area.x;
+                y: main-area.y + main-area.height + 6px;
+                width: main-area.width - main-area.thumbnail-column-width - main-area.column-gap;
+                height: 36px;
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: parent.width < 760px ? 4px : 8px;
+                    audience-disclosure := AudienceIconButton {
+                        icon: root.audience-panel-expanded ? @image-url("../assets/navigation/collapse.svg") : @image-url("../assets/navigation/expand.svg");
+                        action-name: root.audience-panel-expanded ? "Collapse Audience Live pane" : "Expand Audience Live pane";
+                        tooltip-text: root.audience-panel-expanded ? "Hide reactions and comment history" : "Show reactions and comment history";
+                        clicked => { root.audience-toggle-panel(); }
+                    }
+                    audience-count := HorizontalBox {
+                        padding: 0px;
+                        spacing: 2px;
+                        horizontal-stretch: 0;
+                        Rectangle {
+                            width: 20px;
+                            height: 36px;
+                            Image {
+                                source: @image-url("../assets/navigation/audience.svg");
+                                y: (parent.height - self.height) / 2;
+                                width: 20px;
+                                height: 20px;
+                                accessible-role: image;
+                                accessible-label: "Connected audience";
+                            }
+                        }
+                        audience-count-text := Text {
+                            text: "(" + root.audience-count + ")";
+                            accessible-label: "Connected audience: " + root.audience-count;
+                            color: white;
+                            font-size: 14px;
+                            vertical-alignment: center;
+                        }
+                    }
+                    audience-led := Rectangle {
+                        width: 16px;
+                        height: 36px;
+                        Rectangle {
+                            x: 2px;
+                            y: (parent.height - self.height) / 2;
+                            width: 12px;
+                            height: 12px;
+                            border-radius: 6px;
+                            background: root.audience-active ? #36c56b : #666b70;
+                            opacity: root.audience-active && root.audience-comments-paused && audience-toggle-row.led-dim ? 0.2 : 1;
+                        }
+                    }
+                    audience-live-toggle := Button {
+                        text: root.audience-active ? "Audience Live OFF 👍️" : "Audience Live ON  👍️";
+                        min-width: 160px;
+                        max-width: 160px;
+                        enabled: !root.audience-busy && (root.audience-active || root.audience-can-start);
+                        clicked => { root.audience-toggle-session(); }
+                    }
+                    audience-pause := Button {
+                        text: root.audience-comments-paused ? "Resume" : "Pause";
+                        enabled: root.audience-active && !root.audience-busy;
+                        clicked => { root.audience-toggle-comments(); }
+                    }
+                    address-text := Text {
+                        text: root.audience-address;
+                        accessible-label: "Server IP address: " + root.audience-address;
+                        color: #9aa0a6;
+                        font-size: 11px;
+                        min-width: 120px;
+                        max-width: 120px;
+                        horizontal-stretch: 0;
+                        overflow: elide;
+                        vertical-alignment: center;
+                    }
+                    next-address := Button {
+                        text: "Next";
+                        accessible-label: "Next server address";
+                        enabled: !root.audience-active;
+                        clicked => { root.audience-next-address(); }
+                    }
+                    refresh-address := Button {
+                        text: "Refresh";
+                        accessible-label: "Refresh server addresses";
+                        enabled: !root.audience-active;
+                        clicked => { root.audience-refresh-addresses(); }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                }
+            }
+
+            audience-panel := Rectangle {
+                x: main-area.x;
+                y: audience-toggle-row.y + audience-toggle-row.height + 6px;
+                width: audience-toggle-row.width;
+                height: root.audience-panel-expanded ? root.audience-expanded-height - 90px : 0px;
+                visible: root.audience-panel-expanded;
+                background: #111315;
+                border-color: #3c4043;
+                border-width: 1px;
+                clip: true;
+                audience-reactions := Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    background: #202124;
+                    border-color: #3c4043;
+                    border-width: 1px;
+                    VerticalBox {
+                        padding: 10px;
+                        Text { text: "Reactions: " + root.audience-reaction-count; color: white; font-weight: 700; }
+                        Text {
+                            text: root.audience-recent-reactions;
+                            color: white;
+                            font-size: 22px;
+                            overflow: elide;
+                        }
+                        comment-history-scroll := ScrollView {
+                            vertical-stretch: 1;
+                            content-width: self.visible-width;
+                            content-height: comment-history.preferred-height;
+                            content-y: min(0px, self.visible-height - self.content-height);
+                            comment-history := Text {
+                                width: parent.width;
+                                height: self.preferred-height;
+                                text: root.audience-comment-history == "" ? "Waiting for comments…" : root.audience-comment-history;
+                                color: white;
+                                font-size: 14px;
+                                wrap: word-wrap;
+                            }
+                        }
+                    }
+                }
+                if root.audience-alert-title != "": Rectangle {
+                    x: 0px; y: 0px;
+                    width: parent.width; height: parent.height;
+                    background: #30251a;
+                    border-color: #f0b45a;
+                    border-width: 2px;
+                    VerticalBox {
+                        padding: 14px; spacing: 8px;
+                        Text { text: "⚠ " + root.audience-alert-title; color: #ffd18a; font-size: 18px; font-weight: 700; wrap: word-wrap; }
+                        Text { text: root.audience-alert-guidance; color: white; font-size: 14px; wrap: word-wrap; }
+                        Rectangle { vertical-stretch: 1; }
+                    }
+                }
+            }
+
+            audience-url-row := Rectangle {
+                x: audience-panel.x;
+                y: audience-panel.y + audience-panel.height + 6px;
+                width: audience-panel.width;
+                height: root.audience-panel-expanded ? 36px : 0px;
+                visible: root.audience-panel-expanded;
+                if root.audience-alert-title != "" && root.audience-account-visible: Button {
+                    text: "Open account";
+                    enabled: root.audience-account-available;
+                    width: 160px;
+                    height: parent.height;
+                    clicked => { root.audience-open-account(); }
+                }
+                audience-url-field := Rectangle {
+                    visible: !root.audience-account-visible || root.audience-alert-title == "";
+                    x: 0px;
+                    y: 0px;
+                    width: max(0px, parent.width - 44px);
+                    height: parent.height;
+                    background: #111315;
+                    border-color: #3c4043;
+                    border-width: 1px;
+                    audience-url-link := Text {
+                        x: 8px;
+                        y: 3px;
+                        width: max(0px, parent.width - 16px);
+                        height: max(0px, parent.height - 6px);
+                        text: root.audience-url;
+                        overflow: elide;
+                        font-size: 12px;
+                        color: #8ab4f8;
+                        vertical-alignment: center;
+                        TouchArea {
+                            enabled: root.audience-url != "";
+                            mouse-cursor: pointer;
+                            clicked => { root.audience-open-url(); }
+                        }
+                    }
+                }
+                audience-url-copy := AudienceIconButton {
+                    visible: !root.audience-account-visible || root.audience-alert-title == "";
+                    width: 36px;
+                    height: 32px;
+                    x: parent.width - self.width;
+                    y: 2px;
+                    icon: @image-url("../assets/navigation/copy.svg");
+                    action-name: "Copy join URL";
+                    tooltip-text: "Copy join URL";
+                    enabled: root.audience-active && !root.audience-busy && root.audience-url != "";
+                    clicked => { root.audience-copy-url(); }
+                }
+            }
+
             inline-menu := Rectangle {
                 y: 0px;
                 width: parent.width;
@@ -1379,6 +1846,14 @@ export component PresenterWindow inherits Window {
 
                 PresenterMenuButton {
                     x: 0px;
+                    width: 100px;
+                    text: "Application";
+                    active: root.active-menu-index == 5;
+                    clicked => { root.active-menu-index = root.active-menu-index == 5 ? -1 : 5; }
+                }
+
+                PresenterMenuButton {
+                    x: 100px;
                     width: 56px;
                     text: "File";
                     active: root.active-menu-index == 0;
@@ -1386,7 +1861,7 @@ export component PresenterWindow inherits Window {
                 }
 
                 PresenterMenuButton {
-                    x: 56px;
+                    x: 156px;
                     width: 92px;
                     text: "Navigate";
                     active: root.active-menu-index == 1;
@@ -1394,7 +1869,7 @@ export component PresenterWindow inherits Window {
                 }
 
                 PresenterMenuButton {
-                    x: 148px;
+                    x: 248px;
                     width: 64px;
                     text: "View";
                     active: root.active-menu-index == 2;
@@ -1402,7 +1877,7 @@ export component PresenterWindow inherits Window {
                 }
 
                 PresenterMenuButton {
-                    x: 212px;
+                    x: 312px;
                     width: 86px;
                     text: "Window";
                     active: root.active-menu-index == 3;
@@ -1410,7 +1885,7 @@ export component PresenterWindow inherits Window {
                 }
 
                 PresenterMenuButton {
-                    x: 298px;
+                    x: 398px;
                     width: 64px;
                     text: "Help";
                     active: root.active-menu-index == 4;
@@ -1419,7 +1894,7 @@ export component PresenterWindow inherits Window {
             }
 
             if !root.use-native-menu-bar && root.active-menu-index == 0: Rectangle {
-                x: 0px;
+                x: 100px;
                 y: root.inline-menu-height;
                 width: 220px;
                 height: 196px;
@@ -1437,7 +1912,7 @@ export component PresenterWindow inherits Window {
             }
 
             if !root.use-native-menu-bar && root.active-menu-index == 1: Rectangle {
-                x: 56px;
+                x: 156px;
                 y: root.inline-menu-height;
                 width: 180px;
                 height: 112px;
@@ -1452,7 +1927,7 @@ export component PresenterWindow inherits Window {
             }
 
             if !root.use-native-menu-bar && root.active-menu-index == 2: Rectangle {
-                x: 148px;
+                x: 248px;
                 y: root.inline-menu-height;
                 width: 210px;
                 height: 56px;
@@ -1460,12 +1935,12 @@ export component PresenterWindow inherits Window {
                 border-color: #c8ccd0;
                 border-width: 1px;
 
-                PresenterMenuItem { y: 0px; width: parent.width; text: "Toggle Slide Fullscreen"; clicked => { root.active-menu-index = -1; root.toggle-slide-fullscreen(); } }
+                PresenterMenuItem { y: 0px; width: parent.width; text: "Toggle Audience Fullscreen"; clicked => { root.active-menu-index = -1; root.toggle-audience-fullscreen(); } }
                 PresenterMenuItem { y: 28px; width: parent.width; text: "Toggle Black Screen"; clicked => { root.active-menu-index = -1; root.toggle-black-screen(); } }
             }
 
             if !root.use-native-menu-bar && root.active-menu-index == 3: Rectangle {
-                x: 212px;
+                x: 312px;
                 y: root.inline-menu-height;
                 width: 240px;
                 height: 140px;
@@ -1474,14 +1949,14 @@ export component PresenterWindow inherits Window {
                 border-width: 1px;
 
                 PresenterMenuItem { y: 0px; width: parent.width; text: "Show Presenter Window"; clicked => { root.active-menu-index = -1; root.show-presenter-window(); } }
-                PresenterMenuItem { y: 28px; width: parent.width; text: "Show Slide Window"; clicked => { root.active-menu-index = -1; root.show-slide-window(); } }
-                PresenterMenuItem { y: 56px; width: parent.width; text: "Hide Slide Window"; clicked => { root.active-menu-index = -1; root.hide-slide-window(); } }
+                PresenterMenuItem { y: 28px; width: parent.width; text: "Show Audience Window"; clicked => { root.active-menu-index = -1; root.show-audience-window(); } }
+                PresenterMenuItem { y: 56px; width: parent.width; text: "Hide Audience Window"; clicked => { root.active-menu-index = -1; root.hide-audience-window(); } }
                 PresenterMenuItem { y: 84px; width: parent.width; text: "Bring Presenter Window to Front"; clicked => { root.active-menu-index = -1; root.bring-presenter-window-to-front(); } }
-                PresenterMenuItem { y: 112px; width: parent.width; text: "Bring Slide Window to Front"; clicked => { root.active-menu-index = -1; root.bring-slide-window-to-front(); } }
+                PresenterMenuItem { y: 112px; width: parent.width; text: "Bring Audience Window to Front"; clicked => { root.active-menu-index = -1; root.bring-audience-window-to-front(); } }
             }
 
             if !root.use-native-menu-bar && root.active-menu-index == 4: Rectangle {
-                x: 298px;
+                x: 398px;
                 y: root.inline-menu-height;
                 width: 210px;
                 height: 28px;
@@ -1491,8 +1966,106 @@ export component PresenterWindow inherits Window {
 
                 PresenterMenuItem { width: parent.width; text: "About Quick Presenter"; clicked => { root.active-menu-index = -1; root.about-visible = true; } }
             }
+            if !root.use-native-menu-bar && root.active-menu-index == 5: Rectangle {
+                x: 0px;
+                y: root.inline-menu-height;
+                width: 220px;
+                height: 28px;
+                background: #f8f9fa;
+                border-color: #c8ccd0;
+                border-width: 1px;
+                PresenterMenuItem { width: parent.width; text: "Settings..."; clicked => { root.open-settings(); } }
+            }
+
         }
 
+    }
+
+    settings-backdrop := Rectangle {
+        visible: root.settings-visible;
+        width: parent.width;
+        height: parent.height;
+        background: #00000080;
+        TouchArea { width: parent.width; height: parent.height; }
+        settings-focus := FocusScope {
+            width: parent.width;
+            height: parent.height;
+            KeyBinding { keys: @keys(Escape); activated => { root.close-settings(); } }
+            Rectangle {
+                width: min(parent.width - 48px, 600px);
+                height: min(parent.height - 48px, 660px);
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                background: #202124;
+                border-color: #5f6368;
+                border-width: 1px;
+                settings-layout := VerticalBox {
+                    padding: 24px;
+                    spacing: 12px;
+                    Text { text: "Settings"; color: white; font-size: 24px; }
+                    settings-scroll := ScrollView {
+                        vertical-stretch: 1;
+                        content-width: self.visible-width;
+                        content-height: settings-content.preferred-height;
+                        settings-content := VerticalBox {
+                            width: settings-scroll.visible-width;
+                            height: self.preferred-height;
+                            padding: 0px;
+                            spacing: 12px;
+                            Text { text: "Comment display"; color: white; font-size: 18px; }
+                            VerticalBox {
+                                spacing: 4px;
+                                padding: 0px;
+                                CommentDisplaySwitch {
+                                    text: "Flowing comments";
+                                    checked: root.audience-flowing-enabled;
+                                    toggled => { root.audience-set-comment-display(!root.audience-flowing-enabled, root.audience-bubbles-enabled); }
+                                }
+                                CommentDisplaySwitch {
+                                    text: "Bubble comments";
+                                    checked: root.audience-bubbles-enabled;
+                                    toggled => { root.audience-set-comment-display(root.audience-flowing-enabled, !root.audience-bubbles-enabled); }
+                                }
+                            }
+                            Text { text: "Both styles can be enabled. Changes apply immediately."; color: #d9dce0; wrap: word-wrap; }
+                            Text { text: "Experimental · v3.0.0"; color: white; font-size: 18px; }
+                            CommentDisplaySwitch {
+                                text: "Sticky QR code";
+                                checked: root.audience-sticky-qr-enabled;
+                                toggled => { root.audience-set-sticky-qr(!root.audience-sticky-qr-enabled); }
+                            }
+                            Text { text: "Keep a small join QR code at the bottom left during Audience Live. Off by default."; color: #d9dce0; wrap: word-wrap; }
+                            if root.audience-sticky-qr-error != "": HorizontalBox {
+                                Text { text: root.audience-sticky-qr-error; color: #ffd18a; wrap: word-wrap; horizontal-stretch: 1; }
+                                Button { text: "Dismiss"; clicked => { root.audience-dismiss-sticky-qr-error(); } }
+                            }
+                            Text { text: "Audience Live"; color: white; font-size: 18px; }
+                            Text { text: "Choose a settings file to import and apply automatically, or Reset to use the local server. Changes apply to the next start, preserve other settings, and do not start a session."; color: #d9dce0; wrap: word-wrap; }
+                            if root.audience-active || root.audience-busy: Text { text: "Stop Audience Live before changing relay settings."; color: #ffd18a; wrap: word-wrap; }
+                            if root.audience-recovery-pending: Text {
+                                text: "Relay recovery is pending. Close Settings, retry Audience Live on, then stop it before changing settings.";
+                                color: #ffd18a;
+                                wrap: word-wrap;
+                            }
+                            Text { text: root.audience-status; color: #d9dce0; wrap: word-wrap; }
+                            HorizontalBox {
+                                Button {
+                                    text: "Import settings...";
+                                    enabled: root.audience-can-import && !root.audience-active && !root.audience-busy && !root.audience-recovery-pending;
+                                    clicked => { root.audience-import-configuration(); }
+                                }
+                                Button {
+                                    text: "Reset";
+                                    enabled: root.audience-can-import && !root.audience-active && !root.audience-busy && !root.audience-recovery-pending;
+                                    clicked => { root.audience-reset-configuration(); }
+                                }
+                            }
+                        }
+                    }
+                    settings-close := Button { text: "Close"; clicked => { root.close-settings(); } }
+                }
+            }
+        }
     }
 
     if root.about-visible : Rectangle {
@@ -1617,18 +2190,30 @@ export component PresenterWindow inherits Window {
     }
 }
 
-export component SlideWindow inherits Window {
+export component AudienceWindow inherits Window {
     icon: @image-url("../assets/icons/png/quick-presenter-icon-256.png");
+    in property <bool> audience-guide-visible: false;
+    in property <bool> black-screen-active: false;
+    in property <[ReactionOverlayItem]> audience-overlay;
+    in property <[CommentOverlayItem]> audience-comments;
+    in property <[BubbleOverlayItem]> audience-bubbles;
+    callback audience-clear-overlay();
+    in property <bool> audience-sticky-qr-enabled: false;
+    in property <image> audience-qr;
+    in property <string> audience-url;
+    out property <bool> audience-sticky-qr-visible: root.audience-sticky-qr-enabled && root.audience-url != "" && root.audience-qr.width > 0 && !root.audience-guide-visible && !root.black-screen-active;
+    in property <string> audience-code;
+    in property <string> audience-status;
     in property <image> page-image;
     in property <float> page-aspect-ratio: 16.0 / 9.0;
-    in property <length> slide-window-width: 1024px;
-    in property <length> slide-window-height: 720px;
+    in property <length> audience-window-width: 1024px;
+    in property <length> audience-window-height: 720px;
     in property <length> titlebar-compensation-height: 0px;
     in property <bool> use-physical-control-shortcuts: false;
 
     callback exit-fullscreen();
     callback toggle-black-screen();
-    callback toggle-slide-fullscreen();
+    callback toggle-audience-fullscreen();
     callback keyboard-previous-page();
     callback keyboard-next-page();
     callback keyboard-first-page();
@@ -1636,13 +2221,19 @@ export component SlideWindow inherits Window {
     callback swap-displays();
 
     in property <bool> use-native-app-menu: false;
+    callback open-settings();
     callback show-about();
     callback quit-requested();
 
-    // Keep native application actions connected while the slide window has focus.
+    // Keep native application actions connected while the audience has focus.
     if root.use-native-app-menu: MenuBar {
         Menu {
             title: "Application";
+            MenuItem {
+                title: "Settings...";
+                role: preferences;
+                activated => { root.open-settings(); }
+            }
             MenuItem {
                 title: "About Quick Presenter";
                 role: about;
@@ -1656,15 +2247,15 @@ export component SlideWindow inherits Window {
         }
     }
 
-    title: "Quick Presenter - Slide";
-    preferred-width: root.slide-window-width;
-    preferred-height: root.slide-window-height;
+    title: "Quick Presenter - Audience";
+    preferred-width: root.audience-window-width;
+    preferred-height: root.audience-window-height;
     min-width: 640px;
     min-height: 360px;
     background: #111315;
-    forward-focus: slide-focus;
+    forward-focus: audience-focus;
 
-    slide-focus := FocusScope {
+    audience-focus := FocusScope {
         width: parent.width;
         height: parent.height;
 
@@ -1783,14 +2374,14 @@ export component SlideWindow inherits Window {
         KeyBinding {
             keys: @keys(F5);
             activated => {
-                root.toggle-slide-fullscreen();
+                root.toggle-audience-fullscreen();
             }
         }
 
         KeyBinding {
             keys: @keys(F);
             activated => {
-                root.toggle-slide-fullscreen();
+                root.toggle-audience-fullscreen();
             }
         }
 
@@ -1809,11 +2400,127 @@ export component SlideWindow inherits Window {
         }
 
         SlideView {
+            visible: !root.audience-guide-visible;
             page-image: root.page-image;
             page-aspect-ratio: root.page-aspect-ratio;
             width: parent.width;
             height: parent.height;
         }
+
+        if root.audience-guide-visible && !root.black-screen-active: Rectangle {
+            width: parent.width;
+            height: parent.height;
+            background: #111315;
+            VerticalBox {
+                padding: min(root.width, root.height) * 0.04;
+                spacing: 12px;
+                Text { text: "Quick Presenter · Audience Live"; color: white; font-size: min(root.width, root.height) * 0.045; horizontal-alignment: center; }
+                Text { text: root.audience-code == "" ? "Page 0 · Join this session" : "Page 0 · Session " + root.audience-code; color: #d9dce0; font-size: 22px; horizontal-alignment: center; }
+                Image { source: root.audience-qr; image-fit: contain; image-rendering: pixelated; min-height: 100px; vertical-stretch: 1; }
+                Text { text: root.audience-url == "" ? root.audience-status : root.audience-url; color: white; font-size: 18px; wrap: word-wrap; horizontal-alignment: center; }
+                Text { text: "Scan the QR code."; color: #d9dce0; font-size: 20px; horizontal-alignment: center; }
+            }
+        }
+        if !root.black-screen-active: Rectangle {
+            width: parent.width;
+            height: parent.height;
+            clip: true;
+            for reaction in root.audience-overlay: Image {
+                width: min(64px, max(24px, parent.height / 14));
+                height: self.width;
+                x: reaction.x * max(0px, parent.width - self.width);
+                y: reaction.y * max(0px, parent.height - self.height);
+                opacity: reaction.opacity;
+                source: reaction.kind == 0 ? @image-url("../assets/audience/reactions/thumbs-up.svg") :
+                    reaction.kind == 1 ? @image-url("../assets/audience/reactions/heart.svg") :
+                    reaction.kind == 2 ? @image-url("../assets/audience/reactions/applause.svg") :
+                    reaction.kind == 3 ? @image-url("../assets/audience/reactions/laugh.svg") :
+                    @image-url("../assets/audience/reactions/question.svg");
+            }
+        }
+        if !root.black-screen-active: Rectangle {
+            property <float> canvas-scale: min(parent.width / 1280px, parent.height / 720px);
+            width: 1280px * self.canvas-scale;
+            height: 720px * self.canvas-scale;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            clip: true;
+            for comment in root.audience-comments: Text {
+                x: comment.x * parent.canvas-scale * 1px;
+                y: comment.y * parent.canvas-scale * 1px;
+                width: (comment.width + 1) * parent.canvas-scale * 1px;
+                height: 48px * parent.canvas-scale;
+                text: comment.text;
+                color: white;
+                font-size: 32px * parent.canvas-scale;
+                font-weight: 700;
+                wrap: no-wrap;
+            }
+        }
+        if !root.black-screen-active: Rectangle {
+            width: parent.width;
+            height: parent.height;
+            bubble-stack := Rectangle {
+                property <float> canvas-scale: min(parent.width / 1280px, parent.height / 720px);
+                y: parent.height - self.height;
+                width: parent.width;
+                height: 684px * self.canvas-scale;
+                clip: true;
+                for bubble in root.audience-bubbles: bubble-card := Rectangle {
+                    x: parent.width - self.width - 24px * bubble-stack.canvas-scale;
+                    y: (bubble.y - 36) * bubble-stack.canvas-scale * 1px;
+                    width: parent.width / 4;
+                    height: 120px * bubble-stack.canvas-scale;
+                    border-radius: 16px * bubble-stack.canvas-scale;
+                    background: #60606080;
+                    clip: true;
+                    property <float> scale: bubble-stack.canvas-scale;
+                    if bubble.name != "": Text {
+                        x: 10px * bubble-card.scale;
+                        y: 10px * bubble-card.scale;
+                        width: parent.width - 20px * bubble-card.scale;
+                        height: 16px * bubble-card.scale;
+                        text: bubble.name;
+                        color: #eeeeee;
+                        font-size: 11px * bubble-card.scale;
+                        overflow: elide;
+                    }
+                    Text {
+                        x: 10px * bubble-card.scale;
+                        y: (bubble.name != "" ? 29px : 10px) * bubble-card.scale;
+                        width: parent.width - 20px * bubble-card.scale;
+                        height: parent.height - self.y - 10px * bubble-card.scale;
+                        text: bubble.text;
+                        color: white;
+                        font-size: 14px * bubble-card.scale;
+                        line-height-factor: 1.4;
+                        wrap: word-wrap;
+                        overflow: elide;
+                        vertical-alignment: top;
+                    }
+                }
+            }
+        }
+        // Keep the QR above reactions and comments so it remains scannable.
+        if root.audience-sticky-qr-visible: Rectangle {
+            property <length> qr-padding: min(parent.width, parent.height) * 0.012;
+            width: min(parent.width, parent.height) * 0.128 + self.qr-padding * 2;
+            height: self.width;
+            x: min(parent.width, parent.height) * 0.02;
+            y: parent.height - self.height - min(parent.width, parent.height) * 0.02;
+            background: #60606099;
+            border-radius: self.qr-padding;
+            Image {
+                x: parent.qr-padding;
+                y: parent.qr-padding;
+                width: parent.width - parent.qr-padding * 2;
+                height: self.width;
+                source: root.audience-qr;
+                image-fit: contain;
+                image-rendering: pixelated;
+            }
+        }
+        if root.black-screen-active: Rectangle { width: parent.width; height: parent.height; background: black; }
 
     }
 }

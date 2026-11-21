@@ -1,9 +1,12 @@
-# Slide Window and PDF Startup Restoration
+# Audience Window and PDF Startup Restoration
+
+For the v3.0.0 window role and compatibility rules, see
+[Audience Window](AUDIENCE_WINDOW.md).
 
 ## Status and Scope
 
 Implementation contract for [issue #31](https://github.com/koichiro/quick-presenter/issues/31).
-Remember the audience slide window's last usable windowed placement and reopen
+Remember the Audience Window's last usable windowed placement and reopen
 the PDF that was active at orderly exit. Restore both on the next normal launch
 to reduce presentation setup work. Reuse the Rust native-window boundary
 introduced by [display swapping](DISPLAY_SWAP.md) and the existing asynchronous
@@ -18,7 +21,7 @@ background monitor-management service.
 
 ## Behavior Contract
 
-- Restore a valid logical slide-window size and place the window near its last
+- Restore a valid logical audience-window size and place the window near its last
   location when the saved display geometry still matches a live display.
 - When the geometry is stale, select a currently available fallback display and
   clamp the window into it. Never submit the saved desktop coordinates blindly.
@@ -37,7 +40,7 @@ background monitor-management service.
 - Remember the last settled windowed placement before fullscreen or hiding.
   Fullscreen dimensions, minimized geometry, and hidden-window artifacts must
   never replace the normal size.
-- A successfully verified `X` swap updates the remembered slide destination.
+- A successfully verified `X` swap updates the remembered audience window destination.
   Failed, cancelled, and intermediate swaps do not save partial movement.
 - Persistence failures do not prevent startup, PDF loading, navigation, or exit.
   Log a short diagnostic without opening a modal dialog or replacing presentation
@@ -49,9 +52,9 @@ Continuous disk writes during a presentation are unnecessary for this issue.
 
 ## Existing Integration Points
 
-`AppWindows::apply_initial_positions()` currently sets fixed presenter and slide
-positions. `initialize_slide_window_size()` initializes the slide to a fitted
-16:9 size. Later, `fit_slide_window_to_aspect_ratio()` resizes the slide when the
+`AppWindows::apply_initial_positions()` currently sets fixed presenter and audience
+positions. `initialize_audience_window_size()` initializes the audience window to a fitted
+16:9 size. Later, `fit_audience_window_to_aspect_ratio()` resizes the audience window when the
 initial PDF page is accepted. Restoration must integrate with all three paths;
 otherwise opening a PDF immediately overwrites a restored size.
 
@@ -63,7 +66,7 @@ needed by both operations. Keep live Winit handles inside this boundary.
 ## Ownership and Data
 
 Add `src/window_placement.rs` for serializable records, validation, the pure
-restore planner, and an in-memory `SlidePlacementController`. Native capture and
+restore planner, and an in-memory `AudiencePlacementController`. Native capture and
 application stay in `window_controller.rs`. `main.rs` owns their lifetime and
 connects startup, window events, visibility, fullscreen, swap completion, and
 shutdown. Add a small `src/startup_state.rs` boundary for the shared settings
@@ -116,7 +119,7 @@ restoration. Do not reinterpret incomplete geometry as zero coordinates.
 1. For a normal GUI launch, load settings before showing windows. Apply the
    existing default size and positions provisionally. Keep capture disabled
    during initialization.
-2. After the slide's native window exists and chrome is configured, capture the
+2. After the Audience Window has a native handle and chrome is configured, capture the
    live display topology and frame insets. On Linux, run this step inside the
    deferred initial-show path, rather than before the event loop creates windows.
 3. Match the saved source rectangle and scale to one live display. Integer
@@ -154,7 +157,7 @@ performing their action. Delayed callbacks check their generation before moves
 or completion. Native move notifications alone cannot reliably distinguish user
 drags from requested moves, so compare observed geometry against the pending
 plan and cancel on conflicting movement; conservatively prefer user control.
-Never restore focus to the slide as a side effect. Preserve the current startup
+Never restore focus to the audience window as a side effect. Preserve the current startup
 ordering that brings the presenter forward.
 
 ## Automatic PDF Reopening
@@ -246,7 +249,7 @@ even when settings exist.
 
 A valid saved size becomes the run's initial size preference, including when its
 display requires fallback. Automatic fitting on PDF acceptance must respect that
-preference: skip `fit_slide_window_to_aspect_ratio()` for that run. `SlideView`
+preference: skip `fit_audience_window_to_aspect_ratio()` for that run. `SlideView`
 already fits the page within the viewport, so a different PDF aspect ratio can
 produce margins without losing page content.
 
@@ -257,11 +260,11 @@ cannot determine the final size. Subsequent manual resizing is captured normally
 
 ## Capture and Display Swap
 
-Register one slide `on_winit_window_event()` observer for moved, resized, and
+Register one audience window `on_winit_window_event()` observer for moved, resized, and
 scale-factor changes. Return `EventResult::Propagate` for every event. Coalesce
 notifications into a deferred snapshot after 250 ms of inactivity; capture
 actual native geometry rather than the raw event payload. These snapshots update
-memory only. Require a visible, non-minimized, windowed slide, valid display
+memory only. Require a visible, non-minimized, windowed audience window, valid display
 geometry, reachable controls, and no active placement transaction.
 
 Capture synchronously before entering fullscreen, hiding, or requesting orderly
@@ -273,7 +276,7 @@ Add a verified-completion hook to `DisplaySwapController`; its immediate
 `Applied` outcome currently means requests were submitted, not that both moves
 settled. Suspend normal capture from preparation through verification/recovery.
 
-For a successful windowed swap, sample the settled slide rectangle. For a
+For a successful windowed swap, sample the settled audience window rectangle. For a
 successful fullscreen swap, preserve the last known logical windowed size and
 normalized center, and replace its source-display hint with the verified
 destination. Clamp the virtual windowed placement there for the next launch.
@@ -322,7 +325,7 @@ new settings UI is required.
 
 | Backend or session | Version 1 behavior |
 | --- | --- |
-| macOS Winit | Capture and restore using the existing logical desktop conversion and slide chrome synchronization. |
+| macOS Winit | Capture and restore using the existing logical desktop conversion and audience window chrome synchronization. |
 | Windows Winit | Capture and restore using physical desktop coordinates and destination scale. |
 | Linux X11 Winit | Capture and restore after deferred native-window creation. |
 | Linux Wayland | Keep compositor placement and preserve its saved section; reopen and save the last PDF normally. |
@@ -370,7 +373,7 @@ launch with only `--log-file` to confirm that restoration still works there.
 
 Manual smoke checks on macOS, Windows, and X11:
 
-1. Move and resize the slide onto a second display, quit normally, and relaunch
+1. Move and resize the audience window onto a second display, quit normally, and relaunch
    without arguments. Confirm the same PDF reopens at its first page with the
    remembered window size/position and presenter focus. Repeat with an explicit
    different PDF and confirm it takes precedence.
@@ -379,7 +382,7 @@ Manual smoke checks on macOS, Windows, and X11:
    windowed on the remembered destination with normal windowed dimensions.
 4. Disconnect or rearrange displays between runs and during startup verification.
    Confirm an available, reachable placement and working shortcuts.
-5. Hide the slide, change displays, show it, and quit; confirm no hidden or
+5. Hide the audience window, change displays, show it, and quit; confirm no hidden or
    intermediate geometry is persisted.
 6. Test corrupt settings, an unwritable directory, very small displays, taskbars,
    docks, and a Wayland session reopening the PDF while preserving X11 placement.
@@ -387,7 +390,7 @@ Manual smoke checks on macOS, Windows, and X11:
    with a short error. Open another deck, quit, and confirm that deck reopens.
 8. Quit with no committed document or while a replacement PDF is pending; confirm
    the saved PDF is null or the previous active deck respectively.
-9. Save a PDF and unusual slide size in normal mode, then run each smoke mode
+9. Save a PDF and unusual audience window size in normal mode, then run each smoke mode
    against a different PDF, including report/log options and a failing test PDF.
    Confirm only the test PDF is attempted, harness geometry is unchanged, and the
    following normal launch still restores the original PDF and placement.

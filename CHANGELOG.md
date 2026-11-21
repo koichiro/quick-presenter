@@ -1,20 +1,51 @@
 # Changelog
 
-## Unreleased
+## 3.0.0-rc.1 — Unreleased
+
+### Added
+
+- Introduce optional **Audience Live** sessions with a QR code and join URL,
+  five reactions, live comments, participant count, and a presenter history.
+  PDF playback continues independently of audience connectivity.
+- Support local LAN hosting and remote relays using Relay Protocol 1, including
+  HTTP room creation, presenter authentication, bounded recovery, and explicit
+  room termination. Relay access requires an operator-provided configuration.
+- Import relay configuration through Settings and apply it without restarting;
+  reset to local hosting and open the relay account recovery page when needed.
+- Display comments as flowing text and stacked bubbles, with independent
+  settings, pause/resume controls, bounded queues, and local comment logs.
 
 ### Changed
 
-- Backport Slint and slint-build 1.19.0 from the v3.0.0 development branch,
-  retaining Slint edition 1.18 and the independent winit patch. Replace the
-  vendored Slint backend with upstream native menu identity, hidden-window
-  redraw, early window icon, and Linux activation-token fixes.
+- Upgrade Slint and its build compiler to 1.19.0 while retaining Slint edition
+  1.18. Replace the custom Slint backend with upstream menu identity,
+  hidden-window redraw, window icon, and Linux activation-token fixes.
+- Rename the audience-facing Slide Window to **Audience Window** throughout
+  menus, the native window title, Rust/Slint window APIs, and current
+  specifications. Existing startup settings and Control Protocol v1 remain
+  compatible; presentation behavior and keyboard shortcuts are unchanged.
 
 ### Fixed
 
-- Route native Quit and Command-Q through the same recoverable shutdown path
-  as closing the presenter, including when the Slide Window has focus.
-- Keep About license descriptions scrollable and its Close button accessible.
-- Fit the initial Windows presenter inside the monitor's taskbar-free work area.
+- Keep flowing-comment measurements current after recreating the audience
+  window on Wayland.
+- Make the About license descriptions scrollable so their complete text and
+  the Close button remain accessible in smaller windows.
+- Fit the Windows presenter to the monitor's taskbar-free work area, including
+  at 125% DPI and when expanding Audience Live, while keeping notes and controls
+  usable.
+
+### Security and distribution
+
+- Update bundled PDFium to **chromium/8165** with reproducible compatibility
+  gates; see [the upgrade record](docs/validation/PDFIUM_8165_UPGRADE.md).
+- RC1 is a prerelease candidate, identified by tag `v3.0.0-rc.1` and its source
+  revision. Cargo and native package versions remain `3.0.0` for the existing
+  Store packaging pipelines. See the [RC1 checklist](docs/releases/V3_0_0_RC1.md)
+  for candidate identity, validation status, and publication requirements.
+- Control Protocol v1 remains compatible. Official Relay staging and production
+  qualification are tracked separately; this candidate does not assert service
+  availability or final Store approval.
 
 ## [2.5.0](https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0) — 2026-10-24
 

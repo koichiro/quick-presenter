@@ -14,7 +14,7 @@ pub const SLOW_OPEN_STATUS_TEXT: &str = "Still opening PDF. The current deck rem
 
 pub struct SessionCommandOutcome {
     pub snapshot: Option<PageSnapshot>,
-    pub slide_fullscreen: Option<bool>,
+    pub audience_fullscreen: Option<bool>,
 }
 
 pub fn apply_session_command(
@@ -41,14 +41,14 @@ fn apply_session_command_inner(
         close_presentation_state(state);
         return SessionCommandOutcome {
             snapshot: None,
-            slide_fullscreen: None,
+            audience_fullscreen: None,
         };
     }
 
-    if command == PresentationCommand::ExitSlideFullscreen {
+    if command == PresentationCommand::ExitAudienceFullscreen {
         return SessionCommandOutcome {
             snapshot: None,
-            slide_fullscreen: Some(state.fullscreen.exit_slide_fullscreen()),
+            audience_fullscreen: Some(state.fullscreen.exit_audience_fullscreen()),
         };
     }
 
@@ -56,7 +56,7 @@ fn apply_session_command_inner(
         state.black_screen.toggle();
         return SessionCommandOutcome {
             snapshot: state.presentation.snapshot(),
-            slide_fullscreen: None,
+            audience_fullscreen: None,
         };
     }
 
@@ -65,7 +65,7 @@ fn apply_session_command_inner(
         state.black_screen.set_active(value);
         return SessionCommandOutcome {
             snapshot: changed.then(|| state.presentation.snapshot()).flatten(),
-            slide_fullscreen: None,
+            audience_fullscreen: None,
         };
     }
 
@@ -89,7 +89,7 @@ fn apply_session_command_inner(
 
     SessionCommandOutcome {
         snapshot,
-        slide_fullscreen: None,
+        audience_fullscreen: None,
     }
 }
 
@@ -514,7 +514,7 @@ mod tests {
         };
         state.presentation.jump_to_page_index(3);
         state.black_screen.set_active(true);
-        state.fullscreen.set_slide_fullscreen(true);
+        state.fullscreen.set_audience_fullscreen(true);
         state.timer.start(started_at);
         let current = state.render_sessions.begin_open_session();
         assert!(state.render_sessions.commit_pending_open(current));
@@ -534,7 +534,7 @@ mod tests {
 
         assert_eq!(snapshot.current_index, 3);
         assert!(state.black_screen.is_active());
-        assert!(state.fullscreen.is_slide_fullscreen());
+        assert!(state.fullscreen.is_audience_fullscreen());
         assert!(state.timer.is_running());
         assert!(state.notes.is_empty());
         assert_eq!(state.status_text, "PDF reloaded.");
@@ -719,7 +719,7 @@ mod tests {
 
         assert!(state.black_screen.is_active());
         assert_eq!(outcome.snapshot.unwrap().current_index, 0);
-        assert_eq!(outcome.slide_fullscreen, None);
+        assert_eq!(outcome.audience_fullscreen, None);
     }
 
     #[test]
@@ -733,7 +733,7 @@ mod tests {
         let outcome = apply_session_command(&mut state, PresentationCommand::NextPage, now);
 
         assert_eq!(outcome.snapshot.unwrap().current_index, 1);
-        assert_eq!(outcome.slide_fullscreen, None);
+        assert_eq!(outcome.audience_fullscreen, None);
         assert!(state.timer.is_running());
     }
 
@@ -750,7 +750,7 @@ mod tests {
 
         assert_eq!(state.presentation.snapshot().unwrap().current_index, 1);
         assert_eq!(outcome.snapshot, None);
-        assert_eq!(outcome.slide_fullscreen, None);
+        assert_eq!(outcome.audience_fullscreen, None);
     }
 
     #[test]
@@ -765,7 +765,7 @@ mod tests {
 
         assert_eq!(state.presentation.snapshot().unwrap().current_index, 0);
         assert_eq!(outcome.snapshot, None);
-        assert_eq!(outcome.slide_fullscreen, None);
+        assert_eq!(outcome.audience_fullscreen, None);
     }
 
     #[test]
@@ -774,16 +774,16 @@ mod tests {
             presentation: PresentationState::open_document("Deck", 2),
             ..AppState::default()
         };
-        state.fullscreen.set_slide_fullscreen(true);
+        state.fullscreen.set_audience_fullscreen(true);
 
         let outcome = apply_session_command(
             &mut state,
-            PresentationCommand::ExitSlideFullscreen,
+            PresentationCommand::ExitAudienceFullscreen,
             Instant::now(),
         );
 
         assert_eq!(outcome.snapshot, None);
-        assert_eq!(outcome.slide_fullscreen, Some(false));
+        assert_eq!(outcome.audience_fullscreen, Some(false));
         assert_eq!(state.presentation.snapshot().unwrap().current_index, 0);
     }
 
@@ -978,7 +978,7 @@ mod tests {
     }
 
     #[test]
-    fn first_current_page_render_requests_initial_slide_window_fit() {
+    fn first_current_page_render_requests_initial_audience_window_fit() {
         let mut state = AppState::default();
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
         commit_render_opened_state(
@@ -1005,7 +1005,7 @@ mod tests {
     }
 
     #[test]
-    fn subsequent_current_page_render_does_not_request_slide_window_fit() {
+    fn subsequent_current_page_render_does_not_request_audience_window_fit() {
         let mut state = AppState::default();
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
         commit_render_opened_state(
@@ -1040,7 +1040,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_render_does_not_request_initial_slide_window_fit() {
+    fn preview_render_does_not_request_initial_audience_window_fit() {
         let mut state = AppState::default();
         let session_id = begin_open_pdf_state(&mut state, PathBuf::from("deck.pdf"));
         commit_render_opened_state(

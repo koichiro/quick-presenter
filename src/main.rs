@@ -3,11 +3,26 @@
     windows_subsystem = "windows"
 )]
 
+mod app_config;
 pub mod app_metadata;
 pub mod app_state;
 pub mod aspect;
+pub mod audience;
+mod audience_alert;
+pub mod audience_comments;
+pub mod audience_events;
+mod audience_log;
+pub mod audience_overlay;
+mod audience_panel;
+pub mod audience_relay;
+mod audience_relay_http;
+mod audience_session;
+mod audience_ui;
+mod audience_wire;
 pub mod black_screen;
+mod browser;
 pub mod cli;
+mod clipboard;
 pub mod clock;
 mod control_app;
 #[cfg(all(unix, not(all(target_os = "macos", feature = "macos-store-control"))))]
@@ -114,11 +129,11 @@ use view_sync::{
 #[cfg(test)]
 use view_sync::{black_slide_image, presenter_status_text};
 use window_controller::{
-    apply_macos_slide_window_chrome, fitted_slide_window_size, hide_slide_window,
-    request_display_swap, restore_presenter_input_after_transient_ui, set_slide_fullscreen,
-    show_presenter_window, show_slide_window, slide_titlebar_compensation_height,
-    start_slide_chrome_sync, sync_slide_chrome, AppWindowRefs, AppWindows, DisplaySwapController,
-    DisplaySwapOutcome, WindowRole,
+    apply_macos_audience_window_chrome, audience_titlebar_compensation_height,
+    fitted_audience_window_size, hide_audience_window, request_display_swap,
+    restore_presenter_input_after_transient_ui, set_audience_fullscreen, show_audience_window,
+    show_presenter_window, start_audience_chrome_sync, sync_audience_chrome, AppWindowRefs,
+    AppWindows, DisplaySwapController, DisplaySwapOutcome, WindowRole,
 };
 
 slint::include_modules!();
@@ -131,8 +146,8 @@ const PENDING_OPEN_STATUS_INTERVAL: Duration = Duration::from_millis(250);
 #[cfg(target_os = "linux")]
 const FILE_DIALOG_RESULT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const SLOW_OPEN_STATUS_DELAY: Duration = Duration::from_secs(2);
-const SLIDE_WINDOW_MAX_WIDTH: f32 = 1024.0;
-const SLIDE_WINDOW_MAX_HEIGHT: f32 = 720.0;
+const AUDIENCE_WINDOW_MAX_WIDTH: f32 = 1024.0;
+const AUDIENCE_WINDOW_MAX_HEIGHT: f32 = 720.0;
 const PRESENTER_TIME_UPDATE_INTERVAL: Duration = Duration::from_millis(250);
 const FILE_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
 const WINDOW_MENU_ACTION_DELAY: Duration = Duration::from_millis(150);
@@ -232,6 +247,8 @@ fn main() -> Result<()> {
     #[cfg(target_os = "macos")]
     let _native_document_timer = macos_documents::start(windows.refs(), state.clone());
     wire_callbacks(&windows, windows.refs(), state.clone());
+    let audience_ui =
+        audience_ui::AudienceUi::install(&windows, state.clone(), startup_options.config_path);
     let _presenter_time_timer = start_presenter_time_updates(windows.refs(), state.clone());
     let _render_event_timer = start_render_event_updates(windows.refs(), state.clone());
     let _pending_open_status_timer =
@@ -242,12 +259,12 @@ fn main() -> Result<()> {
     apply_app_metadata(&windows.presenter);
 
     windows.apply_initial_positions();
-    initialize_slide_window_size(&windows.refs());
+    initialize_audience_window_size(&windows.refs());
     let window_refs = show_initial_windows(&windows)?;
     set_application_icon();
-    let _slide_chrome_sync_timer = start_slide_chrome_sync(window_refs.clone());
+    let _audience_chrome_sync_timer = start_audience_chrome_sync(window_refs.clone());
     let _render_sizing_timer = start_render_sizing_updates(window_refs.clone(), state.clone());
-    window_controller::start_slide_placement(window_refs.clone());
+    window_controller::start_audience_placement(window_refs.clone());
 
     if let Some(pdf) = startup_pdf {
         load_startup_pdf(&windows.refs(), &state, pdf.path);
@@ -258,8 +275,10 @@ fn main() -> Result<()> {
     }
 
     let event_loop_result = slint::run_event_loop();
+    audience_ui.shutdown();
+    audience_log::shutdown();
     if event_loop_result.is_ok() {
-        window_controller::capture_slide_placement(&windows.refs());
+        window_controller::capture_audience_placement(&windows.refs());
         let last_pdf = state
             .borrow()
             .active_document_path
@@ -297,10 +316,10 @@ fn show_initial_windows(windows: &AppWindows) -> Result<AppWindowRefs> {
 
 #[cfg(not(target_os = "linux"))]
 fn show_initial_windows(windows: &AppWindows) -> Result<AppWindowRefs> {
-    windows.slide.show()?;
+    windows.audience.show()?;
     let refs = windows.refs();
-    apply_macos_slide_window_chrome(&refs);
-    sync_slide_chrome(&refs);
+    apply_macos_audience_window_chrome(&refs);
+    sync_audience_chrome(&refs);
     windows.presenter.show()?;
     #[cfg(target_os = "windows")]
     {
@@ -321,10 +340,10 @@ fn show_initial_windows(windows: &AppWindows) -> Result<AppWindowRefs> {
 
 #[cfg(target_os = "linux")]
 fn show_initial_windows_from_refs(windows: &AppWindowRefs) -> Result<()> {
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.show()?;
+    if let Some(audience) = windows.audience.upgrade() {
+        audience.show()?;
     }
-    sync_slide_chrome(windows);
+    sync_audience_chrome(windows);
 
     let presenter_refs = windows.clone();
     Timer::single_shot(INITIAL_LINUX_PRESENTER_FRONT_DELAY, move || {
@@ -365,18 +384,18 @@ fn stabilize_initial_presenter_layout(windows: AppWindowRefs) {
     }
 }
 
-fn initialize_slide_window_size(windows: &AppWindowRefs) {
-    let size = default_slide_window_size();
-    window_controller::set_slide_logical_size(
+fn initialize_audience_window_size(windows: &AppWindowRefs) {
+    let size = default_audience_window_size();
+    window_controller::set_audience_logical_size(
         windows,
         [f64::from(size.width), f64::from(size.height)],
     );
 }
 
-fn default_slide_window_size() -> slint::LogicalSize {
-    fitted_slide_window_size(
-        SLIDE_WINDOW_MAX_WIDTH,
-        SLIDE_WINDOW_MAX_HEIGHT,
+fn default_audience_window_size() -> slint::LogicalSize {
+    fitted_audience_window_size(
+        AUDIENCE_WINDOW_MAX_WIDTH,
+        AUDIENCE_WINDOW_MAX_HEIGHT,
         aspect::DEFAULT_SLIDE_ASPECT_RATIO,
         0.0,
     )
@@ -389,7 +408,7 @@ fn configure_shortcut_modifiers(windows: &AppWindows) {
         .presenter
         .set_use_physical_control_shortcuts(use_physical_control);
     windows
-        .slide
+        .audience
         .set_use_physical_control_shortcuts(use_physical_control);
 }
 
@@ -483,7 +502,9 @@ fn smoke_open_pdf(path: PathBuf) -> Result<()> {
 }
 
 fn run_gui_smoke(options: GuiSmokeOptions) -> Result<()> {
-    gui_smoke::run(options)
+    let result = gui_smoke::run(options);
+    audience_log::shutdown();
+    result
 }
 
 #[cfg(target_os = "macos")]
@@ -711,13 +732,13 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let window_refs = refs.clone();
     let state_for_toggle = state.clone();
     let swap_for_toggle = display_swap_active.clone();
-    app.on_toggle_slide_fullscreen(move || {
+    app.on_toggle_audience_fullscreen(move || {
         swap_for_toggle.cancel();
         let fullscreen = state_for_toggle
             .borrow_mut()
             .fullscreen
-            .toggle_slide_fullscreen();
-        set_slide_fullscreen(&window_refs, fullscreen);
+            .toggle_audience_fullscreen();
+        set_audience_fullscreen(&window_refs, fullscreen);
     });
 
     wire_window_menu_callbacks(app, refs.clone(), state.clone());
@@ -725,97 +746,97 @@ fn wire_callbacks(windows: &AppWindows, refs: AppWindowRefs, state: Rc<RefCell<A
     let window_refs = refs.clone();
     let state_for_presenter_exit = state.clone();
     let swap_for_presenter_exit = display_swap_active.clone();
-    app.on_exit_slide_fullscreen(move || {
+    app.on_exit_audience_fullscreen(move || {
         swap_for_presenter_exit.cancel();
         handle_presentation_command(
             &window_refs,
             &state_for_presenter_exit,
-            PresentationCommand::ExitSlideFullscreen,
+            PresentationCommand::ExitAudienceFullscreen,
         );
     });
 
     let window_refs = refs.clone();
-    let state_for_slide_previous = state.clone();
-    windows.slide.on_keyboard_previous_page(move || {
+    let state_for_audience_previous = state.clone();
+    windows.audience.on_keyboard_previous_page(move || {
         handle_presentation_command(
             &window_refs,
-            &state_for_slide_previous,
+            &state_for_audience_previous,
             PresentationCommand::PreviousPage,
         );
     });
 
     let window_refs = refs.clone();
-    let state_for_slide_next = state.clone();
-    windows.slide.on_keyboard_next_page(move || {
+    let state_for_audience_next = state.clone();
+    windows.audience.on_keyboard_next_page(move || {
         handle_presentation_command(
             &window_refs,
-            &state_for_slide_next,
+            &state_for_audience_next,
             PresentationCommand::NextPage,
         );
     });
 
     let window_refs = refs.clone();
-    let state_for_slide_first = state.clone();
-    windows.slide.on_keyboard_first_page(move || {
+    let state_for_audience_first = state.clone();
+    windows.audience.on_keyboard_first_page(move || {
         handle_presentation_command(
             &window_refs,
-            &state_for_slide_first,
+            &state_for_audience_first,
             PresentationCommand::FirstPage,
         );
     });
 
     let window_refs = refs.clone();
-    let state_for_slide_last = state.clone();
-    windows.slide.on_keyboard_last_page(move || {
+    let state_for_audience_last = state.clone();
+    windows.audience.on_keyboard_last_page(move || {
         handle_presentation_command(
             &window_refs,
-            &state_for_slide_last,
+            &state_for_audience_last,
             PresentationCommand::LastPage,
         );
     });
 
     let window_refs = refs.clone();
-    let state_for_slide_swap = state.clone();
-    let slide_swap_active = display_swap_active.clone();
-    windows.slide.on_swap_displays(move || {
+    let state_for_audience_swap = state.clone();
+    let audience_swap_active = display_swap_active.clone();
+    windows.audience.on_swap_displays(move || {
         handle_display_swap(
             &window_refs,
-            &state_for_slide_swap,
-            WindowRole::Slide,
-            slide_swap_active.clone(),
+            &state_for_audience_swap,
+            WindowRole::Audience,
+            audience_swap_active.clone(),
         );
     });
 
     let window_refs = refs.clone();
-    let state_for_slide_black_screen = state.clone();
-    windows.slide.on_toggle_black_screen(move || {
+    let state_for_audience_black_screen = state.clone();
+    windows.audience.on_toggle_black_screen(move || {
         handle_presentation_command(
             &window_refs,
-            &state_for_slide_black_screen,
+            &state_for_audience_black_screen,
             PresentationCommand::ToggleBlackScreen,
         );
     });
 
     let window_refs = refs.clone();
-    let state_for_slide_toggle = state.clone();
-    let swap_for_slide_toggle = display_swap_active.clone();
-    windows.slide.on_toggle_slide_fullscreen(move || {
-        swap_for_slide_toggle.cancel();
-        let fullscreen = state_for_slide_toggle
+    let state_for_audience_toggle = state.clone();
+    let swap_for_audience_toggle = display_swap_active.clone();
+    windows.audience.on_toggle_audience_fullscreen(move || {
+        swap_for_audience_toggle.cancel();
+        let fullscreen = state_for_audience_toggle
             .borrow_mut()
             .fullscreen
-            .toggle_slide_fullscreen();
-        set_slide_fullscreen(&window_refs, fullscreen);
+            .toggle_audience_fullscreen();
+        set_audience_fullscreen(&window_refs, fullscreen);
     });
 
     let window_refs = refs;
-    let state_for_slide_exit = state;
-    windows.slide.on_exit_fullscreen(move || {
+    let state_for_audience_exit = state;
+    windows.audience.on_exit_fullscreen(move || {
         display_swap_active.cancel();
         handle_presentation_command(
             &window_refs,
-            &state_for_slide_exit,
-            PresentationCommand::ExitSlideFullscreen,
+            &state_for_audience_exit,
+            PresentationCommand::ExitAudienceFullscreen,
         );
     });
 }
@@ -828,7 +849,7 @@ fn handle_display_swap(
 ) {
     let both_visible = {
         let state = state.borrow();
-        state.window_menu.presenter_visible() && state.window_menu.slide_visible()
+        state.window_menu.presenter_visible() && state.window_menu.audience_visible()
     };
 
     let outcome = if both_visible {
@@ -850,7 +871,7 @@ fn handle_display_swap(
 }
 
 fn request_app_quit(windows: &AppWindowRefs) {
-    window_controller::capture_slide_placement(windows);
+    window_controller::capture_audience_placement(windows);
     if let Err(error) = slint::quit_event_loop() {
         warn!(error = ?error, "failed to quit event loop");
         if let Some(presenter) = windows.presenter.upgrade() {
@@ -866,10 +887,17 @@ fn wire_application_menu_and_close_requests(windows: &AppWindows) {
         .on_quit_requested(move || request_app_quit(&refs));
     let refs = windows.refs();
     windows
-        .slide
+        .audience
         .on_quit_requested(move || request_app_quit(&refs));
     let refs = windows.refs();
-    windows.slide.on_show_about(move || {
+    windows.audience.on_open_settings(move || {
+        if let Some(presenter) = refs.presenter.upgrade() {
+            presenter.invoke_open_settings();
+            window_controller::show_presenter_window(&refs);
+        }
+    });
+    let refs = windows.refs();
+    windows.audience.on_show_about(move || {
         if let Some(presenter) = refs.presenter.upgrade() {
             presenter.set_about_visible(true);
             window_controller::show_presenter_window(&refs);
@@ -898,10 +926,14 @@ fn wire_window_menu_callbacks(
     refs: AppWindowRefs,
     state: Rc<RefCell<AppState>>,
 ) {
-    if let Some(slide) = refs.slide.upgrade() {
+    if let Some(audience) = refs.audience.upgrade() {
         let state = state.clone();
-        slide.window().on_close_requested(move || {
-            state.borrow_mut().window_menu.set_slide_visible(false);
+        let overlay = audience.as_weak();
+        audience.window().on_close_requested(move || {
+            if let Some(audience) = overlay.upgrade() {
+                audience.invoke_audience_clear_overlay();
+            }
+            state.borrow_mut().window_menu.set_audience_visible(false);
             CloseRequestResponse::HideWindow
         });
     }
@@ -920,24 +952,24 @@ fn wire_window_menu_callbacks(
 
     let window_refs = refs.clone();
     let state_for_presenter_front = state.clone();
-    presenter.on_show_slide_window(move || {
+    presenter.on_show_audience_window(move || {
         schedule_window_menu_action(
             window_refs.clone(),
             state_for_presenter_front.clone(),
             |windows, state| {
-                show_slide_window_from_menu(&windows, &state);
+                show_audience_window_from_menu(&windows, &state);
             },
         );
     });
 
     let window_refs = refs.clone();
-    let state_for_slide_front = state.clone();
-    presenter.on_hide_slide_window(move || {
+    let state_for_audience_front = state.clone();
+    presenter.on_hide_audience_window(move || {
         schedule_window_menu_action(
             window_refs.clone(),
-            state_for_slide_front.clone(),
+            state_for_audience_front.clone(),
             |windows, state| {
-                hide_slide_window_from_menu(&windows, &state);
+                hide_audience_window_from_menu(&windows, &state);
             },
         );
     });
@@ -955,13 +987,13 @@ fn wire_window_menu_callbacks(
     });
 
     let window_refs = refs.clone();
-    let state_for_slide_front = state.clone();
-    presenter.on_bring_slide_window_to_front(move || {
+    let state_for_audience_front = state.clone();
+    presenter.on_bring_audience_window_to_front(move || {
         schedule_window_menu_action(
             window_refs.clone(),
-            state_for_slide_front.clone(),
+            state_for_audience_front.clone(),
             |windows, state| {
-                bring_slide_window_to_front(&windows, &state);
+                bring_audience_window_to_front(&windows, &state);
             },
         );
     });
@@ -1005,6 +1037,41 @@ fn handle_presentation_command(
     state: &Rc<RefCell<AppState>>,
     command: PresentationCommand,
 ) {
+    if command == PresentationCommand::PreviousPage {
+        let app = state.borrow();
+        if app.audience_join_visible {
+            return;
+        }
+        let return_to_join = app.audience_join_available
+            && app
+                .presentation
+                .snapshot()
+                .is_some_and(|snapshot| snapshot.current_index == 0);
+        drop(app);
+        if return_to_join {
+            audience_ui::set_join_visible(windows, state, true);
+            show_audience_window_from_menu(windows, state);
+            return;
+        }
+    }
+    if state.borrow().audience_join_visible
+        && matches!(
+            command,
+            PresentationCommand::NextPage
+                | PresentationCommand::PreviousPage
+                | PresentationCommand::FirstPage
+                | PresentationCommand::LastPage
+                | PresentationCommand::JumpToPage(_)
+                | PresentationCommand::Close
+        )
+    {
+        audience_ui::set_join_visible(windows, state, false);
+        // Page 0 is an independent join screen, not a page in the PDF.
+        if command == PresentationCommand::NextPage || command == PresentationCommand::PreviousPage
+        {
+            return;
+        }
+    }
     if command == PresentationCommand::Close {
         apply_session_command(&mut state.borrow_mut(), command, Instant::now());
         #[cfg(target_os = "macos")]
@@ -1015,8 +1082,8 @@ fn handle_presentation_command(
     let outcome = apply_session_command(&mut state.borrow_mut(), command, Instant::now());
     // AppKit may emit synchronous resize callbacks. Release application state
     // before applying native fullscreen intent.
-    if let Some(fullscreen) = outcome.slide_fullscreen {
-        set_slide_fullscreen(windows, fullscreen);
+    if let Some(fullscreen) = outcome.audience_fullscreen {
+        set_audience_fullscreen(windows, fullscreen);
     }
     let preload_snapshot = {
         let state = state.borrow();
@@ -1029,6 +1096,16 @@ fn handle_presentation_command(
         }
     };
 
+    if let Some(audience) = windows.audience.upgrade() {
+        audience.set_black_screen_active(state.borrow().black_screen.is_active());
+        if matches!(
+            command,
+            PresentationCommand::SetBlackScreen(_) | PresentationCommand::ToggleBlackScreen
+        ) {
+            audience.invoke_audience_clear_overlay();
+        }
+    }
+
     if let Some(snapshot) = preload_snapshot {
         schedule_presentation_preload(state.clone(), snapshot);
         schedule_thumbnail_render(windows.clone(), state.clone());
@@ -1040,26 +1117,26 @@ fn show_presenter_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<A
     show_presenter_window(windows);
 }
 
-fn show_slide_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
-    state.borrow_mut().window_menu.set_slide_visible(true);
-    show_slide_window(windows);
+fn show_audience_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+    state.borrow_mut().window_menu.set_audience_visible(true);
+    show_audience_window(windows);
 }
 
-fn hide_slide_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+fn hide_audience_window_from_menu(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
     let show_presenter_first = {
         let mut state = state.borrow_mut();
         let show_presenter_first = !state.window_menu.presenter_visible();
         if show_presenter_first {
             state.window_menu.set_presenter_visible(true);
         }
-        state.window_menu.set_slide_visible(false);
+        state.window_menu.set_audience_visible(false);
         show_presenter_first
     };
 
     if show_presenter_first {
         show_presenter_window(windows);
     }
-    hide_slide_window(windows);
+    hide_audience_window(windows);
 }
 
 fn bring_presenter_window_to_front(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
@@ -1070,12 +1147,12 @@ fn bring_presenter_window_to_front(windows: &AppWindowRefs, state: &Rc<RefCell<A
     show_presenter_window(windows);
 }
 
-fn bring_slide_window_to_front(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
+fn bring_audience_window_to_front(windows: &AppWindowRefs, state: &Rc<RefCell<AppState>>) {
     {
         let mut state = state.borrow_mut();
-        state.window_menu.set_slide_visible(true);
+        state.window_menu.set_audience_visible(true);
     }
-    show_slide_window(windows);
+    show_audience_window(windows);
 }
 
 #[cfg(target_os = "linux")]
@@ -1261,7 +1338,7 @@ pub(crate) fn open_and_render(
     };
 
     if let Some(aspect_ratio) = committed.initial_slide_aspect_ratio {
-        fit_slide_window_to_aspect_ratio(windows, aspect_ratio);
+        fit_audience_window_to_aspect_ratio(windows, aspect_ratio);
     }
 
     if let (Some(snapshot), Some(rendered)) = (&committed.snapshot, committed.initial_pages) {
@@ -1513,29 +1590,29 @@ fn update_recent_file_menu_snapshot(
     presenter.set_recent_file_4_enabled(enabled[4]);
 }
 
-fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
+fn fit_audience_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) {
     if windows.placement.preserve_size.get() && !cfg!(target_os = "macos") {
         return;
     }
-    if let Some(slide) = windows.slide.upgrade() {
-        if slide.window().is_fullscreen() {
+    if let Some(audience) = windows.audience.upgrade() {
+        if audience.window().is_fullscreen() {
             return;
         }
 
         let compensation_height =
-            slide_titlebar_compensation_height(slide.window().is_fullscreen());
+            audience_titlebar_compensation_height(audience.window().is_fullscreen());
         let bounds = if windows.placement.preserve_size.get() {
-            let current = slide
+            let current = audience
                 .window()
                 .size()
-                .to_logical(slide.window().scale_factor());
+                .to_logical(audience.window().scale_factor());
             [current.width, current.height]
         } else {
-            [SLIDE_WINDOW_MAX_WIDTH, SLIDE_WINDOW_MAX_HEIGHT]
+            [AUDIENCE_WINDOW_MAX_WIDTH, AUDIENCE_WINDOW_MAX_HEIGHT]
         };
         let size =
-            fitted_slide_window_size(bounds[0], bounds[1], aspect_ratio, compensation_height);
-        window_controller::set_slide_logical_size(
+            fitted_audience_window_size(bounds[0], bounds[1], aspect_ratio, compensation_height);
+        window_controller::set_audience_logical_size(
             windows,
             [f64::from(size.width), f64::from(size.height)],
         );
@@ -1543,13 +1620,13 @@ fn fit_slide_window_to_aspect_ratio(windows: &AppWindowRefs, aspect_ratio: f32) 
 }
 
 #[cfg(test)]
-fn fitted_slide_window_content_size(
+fn fitted_audience_window_content_size(
     aspect_ratio: f32,
     titlebar_compensation_height: f32,
 ) -> (f32, f32) {
-    let size = fitted_slide_window_size(
-        SLIDE_WINDOW_MAX_WIDTH,
-        SLIDE_WINDOW_MAX_HEIGHT,
+    let size = fitted_audience_window_size(
+        AUDIENCE_WINDOW_MAX_WIDTH,
+        AUDIENCE_WINDOW_MAX_HEIGHT,
         aspect_ratio,
         titlebar_compensation_height,
     );
@@ -1619,9 +1696,10 @@ fn apply_rendered_pages_to_windows(
         presenter.set_notes_text(current_note.unwrap_or_default().into());
     }
 
-    if let Some(slide) = windows.slide.upgrade() {
-        slide.set_page_aspect_ratio(rendered.current.aspect_ratio);
-        slide.set_page_image(if state.black_screen.is_active() {
+    if let Some(audience) = windows.audience.upgrade() {
+        audience.set_page_aspect_ratio(rendered.current.aspect_ratio);
+        audience.set_black_screen_active(state.black_screen.is_active());
+        audience.set_page_image(if state.black_screen.is_active() {
             black_slide_image()
         } else {
             rendered.current.image
@@ -1839,7 +1917,7 @@ fn start_render_sizing_updates(windows: AppWindowRefs, state: Rc<RefCell<AppStat
     let timer = Timer::default();
     let mut samples = render_sizing::SizingSamples::default();
     timer.start(TimerMode::Repeated, Duration::from_millis(250), move || {
-        let width = window_controller::slide_surface_width(&windows);
+        let width = window_controller::audience_surface_width(&windows);
         let mut state = state.borrow_mut();
         let Some(policy) = samples.observe(width, state.render_sizing) else { return; };
         state.update_render_sizing(policy, PRESENTATION_CACHE_RADIUS);
@@ -2483,7 +2561,7 @@ fn handle_page_rendered(
     };
 
     if let Some(aspect_ratio) = outcome.initial_fit_aspect_ratio {
-        fit_slide_window_to_aspect_ratio(windows, aspect_ratio);
+        fit_audience_window_to_aspect_ratio(windows, aspect_ratio);
     }
 }
 
@@ -2630,7 +2708,7 @@ mod tests {
         // Construct software windows directly, bypassing native AppKit setup.
         let windows = AppWindows {
             presenter: PresenterWindow::new().unwrap(),
-            slide: SlideWindow::new().unwrap(),
+            audience: AudienceWindow::new().unwrap(),
             placement: Rc::default(),
         };
         wire_application_menu_and_close_requests(&windows);
@@ -2661,35 +2739,40 @@ mod tests {
         probe.fail.store(false, Ordering::SeqCst);
         windows.presenter.invoke_quit_requested();
         assert_eq!(probe.requests.load(Ordering::SeqCst), 5);
-        windows.slide.invoke_quit_requested();
+        windows.audience.invoke_quit_requested();
         assert_eq!(probe.requests.load(Ordering::SeqCst), 6);
         probe.fail.store(true, Ordering::SeqCst);
-        windows.slide.invoke_quit_requested();
+        windows.audience.invoke_quit_requested();
         assert_eq!(probe.requests.load(Ordering::SeqCst), 7);
         assert!(windows.presenter.window().is_visible());
         windows.presenter.hide().unwrap();
-        windows.slide.invoke_show_about();
+        windows.audience.invoke_open_settings();
+        assert!(windows.presenter.get_settings_visible());
+        assert!(windows.presenter.window().is_visible());
+        windows.presenter.invoke_close_settings();
+        windows.presenter.hide().unwrap();
+        windows.audience.invoke_show_about();
         assert!(windows.presenter.get_about_visible());
         assert!(windows.presenter.window().is_visible());
     }
 
     #[test]
-    fn fitted_slide_window_content_size_ignores_titlebar_compensation() {
-        let (_, height) = fitted_slide_window_content_size(16.0 / 9.0, 28.0);
+    fn fitted_audience_window_content_size_ignores_titlebar_compensation() {
+        let (_, height) = fitted_audience_window_content_size(16.0 / 9.0, 28.0);
 
         assert_eq!(height, 576.0);
     }
 
     #[test]
-    fn fitted_slide_window_content_size_keeps_full_height_without_titlebar_compensation() {
-        let (_, height) = fitted_slide_window_content_size(16.0 / 9.0, 0.0);
+    fn fitted_audience_window_content_size_keeps_full_height_without_titlebar_compensation() {
+        let (_, height) = fitted_audience_window_content_size(16.0 / 9.0, 0.0);
 
         assert_eq!(height, 576.0);
     }
 
     #[test]
-    fn default_slide_window_size_uses_standard_widescreen_aspect_ratio() {
-        let size = default_slide_window_size();
+    fn default_audience_window_size_uses_standard_widescreen_aspect_ratio() {
+        let size = default_audience_window_size();
 
         assert_eq!(size.width, 1024.0);
         assert_eq!(size.height, 576.0);

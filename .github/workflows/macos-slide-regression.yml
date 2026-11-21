@@ -1,4 +1,4 @@
-name: macOS Slide Regression
+name: macOS Audience Window Regression
 
 on:
   workflow_dispatch:

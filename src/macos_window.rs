@@ -4,14 +4,14 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use slint::Window;
 use std::{cell::Cell, rc::Rc};
 
-pub fn create_app_windows() -> anyhow::Result<(crate::PresenterWindow, crate::SlideWindow)> {
+pub fn create_app_windows() -> anyhow::Result<(crate::PresenterWindow, crate::AudienceWindow)> {
     use slint::winit_030::winit::platform::macos::WindowAttributesExtMacOS;
     use slint::ComponentHandle;
 
     // Set full-size content before AppKit and the renderer create their views.
     // Changing the style afterwards can leave their initial viewport sizes out of sync.
-    let creating_slide = Rc::new(Cell::new(false));
-    let role = creating_slide.clone();
+    let creating_audience = Rc::new(Cell::new(false));
+    let role = creating_audience.clone();
     slint::BackendSelector::new()
         .with_winit_window_attributes_hook(move |attributes| {
             if role.get() {
@@ -28,14 +28,14 @@ pub fn create_app_windows() -> anyhow::Result<(crate::PresenterWindow, crate::Sl
     let presenter = crate::PresenterWindow::new()?;
     // Materialize the lazy adapters while the matching window role is selected.
     let _ = presenter.window().window_handle();
-    creating_slide.set(true);
-    let slide = crate::SlideWindow::new()?;
-    let _ = slide.window().window_handle();
-    creating_slide.set(false);
-    Ok((presenter, slide))
+    creating_audience.set(true);
+    let audience = crate::AudienceWindow::new()?;
+    let _ = audience.window().window_handle();
+    creating_audience.set(false);
+    Ok((presenter, audience))
 }
 
-pub fn apply_slide_chrome(window: &Window, fallback_title: &str) {
+pub fn apply_audience_chrome(window: &Window, fallback_title: &str) {
     with_window(window, fallback_title, |_, window| {
         window.setStyleMask(window.styleMask() | NSWindowStyleMask::FullSizeContentView);
         window.setTitleVisibility(NSWindowTitleVisibility::Hidden);

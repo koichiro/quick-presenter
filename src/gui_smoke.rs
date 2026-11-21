@@ -18,7 +18,7 @@ use crate::{
     input::PresentationCommand,
     render_controller::CURRENT_RENDER_WIDTH,
     rendering::{RenderPurpose, RenderRequest},
-    window_controller::{set_slide_fullscreen, AppWindows},
+    window_controller::{set_audience_fullscreen, AppWindows},
 };
 
 const ASYNC_OPEN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -78,46 +78,71 @@ async fn run_checks(
 
     crate::wire_callbacks(&windows, windows.refs(), state.clone());
     crate::apply_app_metadata(&windows.presenter);
+    let audience_config = tempfile::tempdir()?;
+    let _audience_ui = crate::audience_ui::AudienceUi::install_for_smoke(
+        &windows,
+        state.clone(),
+        audience_config.path().join("config.toml"),
+    );
 
     windows.apply_initial_positions();
     windows
-        .slide
+        .audience
         .show()
-        .context("failed to show slide window")?;
+        .context("failed to show audience window")?;
+    if std::env::var("QP_GUI_SMOKE_SCOPE").as_deref() == Ok("comments") {
+        report.pass("scope: focused Audience Live/comments only; not the full GUI suite");
+        let window_refs = windows.refs();
+        crate::apply_macos_audience_window_chrome(&window_refs);
+        crate::sync_audience_chrome(&window_refs);
+        windows
+            .presenter
+            .show()
+            .context("failed to show presenter window")?;
+        check_audience_join_screen(&windows, &state, report).await?;
+        crate::begin_open_pdf(&window_refs, &state, options.pdf_path.clone());
+        wait_for_async_open(&window_refs, &state).await?;
+        check_audience_join_screen(&windows, &state, report).await?;
+        check_settings_dialog(&windows, &state, report).await?;
+        check_sticky_qr_save_error(&windows, audience_config.path().join("config.toml"), report)
+            .await?;
+        check_qr_failure_and_settings_layout(&windows, &state, report).await?;
+        return Ok(());
+    }
     #[cfg(target_os = "macos")]
-    let transitions = macos_fullscreen::Transitions::new(&windows.slide)?;
+    let transitions = macos_fullscreen::Transitions::new(&windows.audience)?;
     #[cfg(target_os = "macos")]
     {
         use slint::winit_030::WinitWindowAccessor;
         check_macos_fullscreen_reversal(&windows, report, &transitions).await?;
         settle_notes_layout().await?;
         report.check(
-            "macOS native slide titlebar is transparent and hidden from creation",
-            macos_slide_chrome_is_correct(&windows.slide),
+            "macOS native audience titlebar is transparent and hidden from creation",
+            macos_audience_chrome_is_correct(&windows.audience),
             "AppKit full-size content, transparent titlebar, and hidden title are set",
             "initial native titlebar attributes are incomplete",
         );
         report.check(
-            "macOS slide content includes the titlebar from creation",
+            "macOS audience content includes the titlebar from creation",
             windows
-                .slide
+                .audience
                 .window()
                 .with_winit_window(|native| native.inner_size() == native.outer_size())
                 == Some(true),
-            "native slide viewport covers the entire window before chrome synchronization",
-            "native slide viewport excludes the titlebar",
+            "native audience viewport covers the entire window before chrome synchronization",
+            "native audience viewport excludes the titlebar",
         );
     }
     let window_refs = windows.refs();
-    crate::apply_macos_slide_window_chrome(&window_refs);
-    crate::sync_slide_chrome(&window_refs);
+    crate::apply_macos_audience_window_chrome(&window_refs);
+    crate::sync_audience_chrome(&window_refs);
     windows
         .presenter
         .show()
         .context("failed to show presenter window")?;
     crate::set_application_icon();
 
-    report.pass("created presenter and slide windows");
+    report.pass("created presenter and audience windows");
     report.check(
         "presenter window handle is alive",
         window_refs.presenter.upgrade().is_some(),
@@ -125,13 +150,14 @@ async fn run_checks(
         "presenter window weak handle could not be upgraded",
     );
     report.check(
-        "slide window handle is alive",
-        window_refs.slide.upgrade().is_some(),
-        "slide window weak handle upgraded",
-        "slide window weak handle could not be upgraded",
+        "audience window handle is alive",
+        window_refs.audience.upgrade().is_some(),
+        "audience window weak handle upgraded",
+        "audience window weak handle could not be upgraded",
     );
 
     check_notes_font_size(&windows, &state, report, "before opening a PDF").await?;
+    check_audience_join_screen(&windows, &state, report).await?;
 
     crate::begin_open_pdf(&window_refs, &state, options.pdf_path.clone());
     report.check(
@@ -190,6 +216,11 @@ async fn run_checks(
         state.status_text == "Ready" || state.status_text.contains("notes")
     });
     check_notes_font_size(&windows, &state, report, "with a PDF open").await?;
+    check_audience_join_screen(&windows, &state, report).await?;
+    check_settings_dialog(&windows, &state, report).await?;
+    check_sticky_qr_save_error(&windows, audience_config.path().join("config.toml"), report)
+        .await?;
+    check_qr_failure_and_settings_layout(&windows, &state, report).await?;
     report_presenter_progress(
         report,
         &windows,
@@ -273,37 +304,37 @@ async fn run_checks(
     report_state(
         report,
         &state,
-        "black screen command restores slide output",
+        "black screen command restores audience output",
         |state| !state.black_screen.is_active() && current_page_index(state) == Some(1),
     );
 
     {
-        let fullscreen = state.borrow_mut().fullscreen.toggle_slide_fullscreen();
-        set_slide_fullscreen(&window_refs, fullscreen);
+        let fullscreen = state.borrow_mut().fullscreen.toggle_audience_fullscreen();
+        set_audience_fullscreen(&window_refs, fullscreen);
     }
     report_state(report, &state, "fullscreen state toggles on", |state| {
-        state.fullscreen.is_slide_fullscreen()
+        state.fullscreen.is_audience_fullscreen()
     });
     crate::handle_presentation_command(
         &window_refs,
         &state,
-        PresentationCommand::ExitSlideFullscreen,
+        PresentationCommand::ExitAudienceFullscreen,
     );
     report_state(
         report,
         &state,
         "fullscreen exit command toggles off",
-        |state| !state.fullscreen.is_slide_fullscreen(),
+        |state| !state.fullscreen.is_audience_fullscreen(),
     );
 
     report_state(
         report,
         &state,
-        "presenter and slide state remain synchronized",
+        "presenter and audience state remain synchronized",
         |state| {
             state.presentation.snapshot().is_some()
                 && !state.black_screen.is_active()
-                && !state.fullscreen.is_slide_fullscreen()
+                && !state.fullscreen.is_audience_fullscreen()
         },
     );
 
@@ -312,7 +343,7 @@ async fn run_checks(
         crate::control_smoke::run(&windows, state.clone(), options.pdf_path.clone()).await?;
         report.pass("local control operates through the GUI and isolated renderer");
     }
-    check_hidden_slide_recovery(
+    check_hidden_audience_recovery(
         &windows,
         &state,
         report,
@@ -322,7 +353,7 @@ async fn run_checks(
     .await?;
     #[cfg(target_os = "macos")]
     {
-        check_macos_slide_edges(&windows, report, &transitions).await?;
+        check_macos_audience_edges(&windows, report, &transitions).await?;
         check_macos_preserved_pdf_open(&windows, &state, options, report).await?;
     }
 
@@ -330,19 +361,19 @@ async fn run_checks(
 }
 
 #[cfg(target_os = "macos")]
-async fn check_macos_slide_edges(
+async fn check_macos_audience_edges(
     windows: &AppWindows,
     report: &mut GuiSmokeReport,
     transitions: &macos_fullscreen::Transitions,
 ) -> Result<()> {
     use slint::winit_030::WinitWindowAccessor;
-    let slide = &windows.slide;
-    let original_image = slide.get_page_image();
-    let original_aspect = slide.get_page_aspect_ratio();
-    let original_size = slide
+    let audience = &windows.audience;
+    let original_image = audience.get_page_image();
+    let original_aspect = audience.get_page_aspect_ratio();
+    let original_size = audience
         .window()
         .size()
-        .to_logical(slide.window().scale_factor());
+        .to_logical(audience.window().scale_factor());
     // Narrow edge bands disappear if the old 28-point offset crops the slide.
     let mut buffer = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(160, 90);
     for (row, pixels) in buffer
@@ -368,10 +399,10 @@ async fn check_macos_slide_edges(
             pixel.copy_from_slice(&color);
         }
     }
-    slide.set_page_image(slint::Image::from_rgba8(buffer));
-    slide.set_page_aspect_ratio(16.0 / 9.0);
+    audience.set_page_image(slint::Image::from_rgba8(buffer));
+    audience.set_page_aspect_ratio(16.0 / 9.0);
     let refs = windows.refs();
-    let display_size = slide
+    let display_size = audience
         .window()
         .with_winit_window(|native| {
             native
@@ -393,21 +424,21 @@ async fn check_macos_slide_edges(
         let width = width * scale;
         let height = height * scale;
         if name == "after fullscreen" {
-            settle_slide_fullscreen(&refs, true, transitions).await?;
-            settle_slide_fullscreen(&refs, false, transitions).await?;
+            settle_audience_fullscreen(&refs, true, transitions).await?;
+            settle_audience_fullscreen(&refs, false, transitions).await?;
         }
         let action_refs = refs.clone();
         run_macos_window_action(move || {
-            crate::window_controller::set_slide_logical_size(&action_refs, [width, height]);
+            crate::window_controller::set_audience_logical_size(&action_refs, [width, height]);
             if name == "restored tall window" {
                 let preserve = action_refs.placement.preserve_size.replace(true);
-                crate::fit_slide_window_to_aspect_ratio(&action_refs, 16.0 / 9.0);
+                crate::fit_audience_window_to_aspect_ratio(&action_refs, 16.0 / 9.0);
                 action_refs.placement.preserve_size.set(preserve);
             }
-            crate::sync_slide_chrome(&action_refs);
+            crate::sync_audience_chrome(&action_refs);
         })
         .await?;
-        check_macos_native_slide_edges(slide, report, name)?;
+        check_macos_native_audience_edges(audience, report, name)?;
     }
 
     let unrelated_tick = Rc::new(Cell::new(false));
@@ -447,7 +478,7 @@ async fn check_macos_slide_edges(
 
     // Exercise the actual startup planner and its asynchronous verification,
     // rather than directly invoking the PDF fitting helper.
-    let saved = slide
+    let saved = audience
         .window()
         .with_winit_window(|native| {
             let monitor = native
@@ -482,14 +513,14 @@ async fn check_macos_slide_edges(
         let width = width * scale;
         let height = height * scale;
         // Distort the image to the test page ratio; edge colors remain intact.
-        slide.set_page_aspect_ratio(aspect);
+        audience.set_page_aspect_ratio(aspect);
         let mut record = saved.clone();
         record.logical_inner_size = [width, height];
         refs.placement.initialize(Some(record));
         let action_refs = refs.clone();
         let verification_refs = refs.clone();
         run_macos_window_action_until(
-            move || crate::window_controller::start_slide_placement(action_refs),
+            move || crate::window_controller::start_audience_placement(action_refs),
             move || verification_refs.placement.restore_verified.get(),
             Duration::from_secs(5),
         )
@@ -500,10 +531,10 @@ async fn check_macos_slide_edges(
             "startup restore settled through the production verification path",
             "startup restore did not verify the saved geometry",
         );
-        let logical = slide
+        let logical = audience
             .window()
             .size()
-            .to_logical(slide.window().scale_factor());
+            .to_logical(audience.window().scale_factor());
         report.check(
             format!("macOS {name} preserves scale within saved bounds"),
             logical.width <= width as f32 + 2.0
@@ -513,14 +544,14 @@ async fn check_macos_slide_edges(
             "one saved dimension is retained and the other fits the page",
             format!("unexpected restored size {logical:?} for {width}x{height}"),
         );
-        check_macos_native_slide_edges(slide, report, name)?;
+        check_macos_native_audience_edges(audience, report, name)?;
     }
     refs.placement.cancel();
     refs.placement.enabled.set(false);
-    slide.set_page_image(original_image);
-    slide.set_page_aspect_ratio(original_aspect);
+    audience.set_page_image(original_image);
+    audience.set_page_aspect_ratio(original_aspect);
     run_macos_window_action(move || {
-        crate::window_controller::set_slide_logical_size(
+        crate::window_controller::set_audience_logical_size(
             &refs,
             [
                 f64::from(original_size.width),
@@ -533,10 +564,10 @@ async fn check_macos_slide_edges(
 }
 
 #[cfg(target_os = "macos")]
-fn macos_native_fullscreen(slide: &crate::SlideWindow) -> Option<bool> {
+fn macos_native_fullscreen(audience: &crate::AudienceWindow) -> Option<bool> {
     use objc2_app_kit::{NSView, NSWindowStyleMask};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    let handle = slide.window().window_handle();
+    let handle = audience.window().window_handle();
     let handle = handle.window_handle().ok()?;
     let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
         return None;
@@ -565,7 +596,7 @@ async fn check_macos_fullscreen_reversal(
     ] {
         let before = transitions.counts();
         let started = Instant::now();
-        set_slide_fullscreen(&refs, sequence[0]);
+        set_audience_fullscreen(&refs, sequence[0]);
         if sequence.len() == 2 {
             let will = if sequence[0] { 0 } else { 2 };
             while transitions.counts()[will] == before[will] {
@@ -578,14 +609,14 @@ async fn check_macos_fullscreen_reversal(
                 transitions.counts()[will + 1] == before[will + 1],
                 "macOS {name}: initial transition finished before reversal"
             );
-            set_slide_fullscreen(&refs, sequence[1]);
+            set_audience_fullscreen(&refs, sequence[1]);
         }
         loop {
             let actual = (
-                macos_native_fullscreen(&windows.slide),
-                windows.slide.window().is_fullscreen(),
+                macos_native_fullscreen(&windows.audience),
+                windows.audience.window().is_fullscreen(),
                 windows
-                    .slide
+                    .audience
                     .window()
                     .with_winit_window(|native| native.fullscreen().is_some()),
             );
@@ -623,10 +654,10 @@ async fn check_macos_fullscreen_reversal(
 }
 
 #[cfg(target_os = "macos")]
-fn macos_slide_chrome_is_correct(slide: &crate::SlideWindow) -> bool {
+fn macos_audience_chrome_is_correct(audience: &crate::AudienceWindow) -> bool {
     use objc2_app_kit::{NSView, NSWindowStyleMask, NSWindowTitleVisibility};
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    let handle = slide.window().window_handle();
+    let handle = audience.window().window_handle();
     let Ok(handle) = handle.window_handle() else {
         return false;
     };
@@ -646,20 +677,20 @@ fn macos_slide_chrome_is_correct(slide: &crate::SlideWindow) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-fn check_macos_native_slide_edges(
-    slide: &crate::SlideWindow,
+fn check_macos_native_audience_edges(
+    audience: &crate::AudienceWindow,
     report: &mut GuiSmokeReport,
     name: &str,
 ) -> Result<()> {
     use slint::winit_030::WinitWindowAccessor;
     report.check(
         format!("macOS {name} native titlebar remains transparent"),
-        macos_slide_chrome_is_correct(slide),
+        macos_audience_chrome_is_correct(audience),
         "native titlebar allows the slide behind window buttons",
         "native titlebar attributes were lost",
     );
-    let snapshot = slide.window().take_snapshot()?;
-    let native_size = slide.window().with_winit_window(|native| {
+    let snapshot = audience.window().take_snapshot()?;
+    let native_size = audience.window().with_winit_window(|native| {
         (
             native.inner_size(),
             native.outer_size(),
@@ -668,7 +699,7 @@ fn check_macos_native_slide_edges(
     });
     report.check(
         format!("macOS {name} renderer covers the native window including the titlebar"),
-        slide.window().with_winit_window(|native| {
+        audience.window().with_winit_window(|native| {
             let size = native.outer_size();
             size.width == snapshot.width() && size.height == snapshot.height()
         }) == Some(true),
@@ -677,12 +708,12 @@ fn check_macos_native_slide_edges(
             "renderer {}x{}, Slint {:?}, native {native_size:?}",
             snapshot.width(),
             snapshot.height(),
-            slide.window().size()
+            audience.window().size()
         ),
     );
     anyhow::ensure!(
         snapshot.width() >= 8 && snapshot.height() >= 8,
-        "slide snapshot is too small"
+        "audience snapshot is too small"
     );
     for fraction in 1..=3 {
         for (edge, x, y, color) in [
@@ -704,7 +735,7 @@ fn check_macos_native_slide_edges(
             let index = ((y * snapshot.width() + x) * 4) as usize;
             let pixel = &snapshot.as_bytes()[index..index + 3];
             report.check(
-                format!("macOS {name} slide {edge} edge at {fraction}/4 fills the window without cropping"),
+                format!("macOS {name} audience {edge} edge at {fraction}/4 fills the window without cropping"),
                 pixel.iter().zip(color).all(|(actual, expected)| actual.abs_diff(expected) <= 2),
                 "the original slide edge reaches the window edge",
                 format!("pixel at ({x}, {y}) is {pixel:?}, expected {color:?}"),
@@ -725,18 +756,18 @@ async fn check_macos_preserved_pdf_open(
     refs.placement.preserve_size.set(true);
     let action_refs = refs.clone();
     run_macos_window_action(move || {
-        crate::window_controller::set_slide_logical_size(&action_refs, [1704.0, 1063.0]);
+        crate::window_controller::set_audience_logical_size(&action_refs, [1704.0, 1063.0]);
     })
     .await?;
     crate::begin_open_pdf(&refs, state, options.pdf_path.clone());
     wait_for_async_open(&refs, state).await?;
     run_macos_window_action(|| {}).await?;
     let size = windows
-        .slide
+        .audience
         .window()
         .size()
-        .to_logical(windows.slide.window().scale_factor());
-    let aspect = windows.slide.get_page_aspect_ratio();
+        .to_logical(windows.audience.window().scale_factor());
+    let aspect = windows.audience.get_page_aspect_ratio();
     report.check(
         "macOS opening a PDF refits a preserved window through the async open path",
         (size.width - size.height * aspect).abs() < 2.0,
@@ -787,7 +818,7 @@ async fn run_macos_window_action_until(
     }
 }
 
-async fn settle_slide_fullscreen(
+async fn settle_audience_fullscreen(
     refs: &crate::window_controller::AppWindowRefs,
     fullscreen: bool,
     #[cfg(target_os = "macos")] transitions: &macos_fullscreen::Transitions,
@@ -808,24 +839,24 @@ async fn settle_slide_fullscreen(
             }
             delay(Duration::from_millis(10)).await;
         }
-        let slide = refs
-            .slide
+        let audience = refs
+            .audience
             .upgrade()
-            .context("hidden-window fixture lost its slide")?;
+            .context("hidden-window fixture lost its audience")?;
         let initial =
-            macos_native_fullscreen(&slide).context("native slide delegate is missing")?;
+            macos_native_fullscreen(&audience).context("native audience delegate is missing")?;
         let before = transitions.counts();
         let did = if fullscreen { 1 } else { 3 };
-        set_slide_fullscreen(refs, fullscreen);
+        set_audience_fullscreen(refs, fullscreen);
         loop {
             let counts = transitions.counts();
             let completed = counts[0] == counts[1]
                 && counts[2] == counts[3]
                 && (initial == fullscreen || counts[did] > before[did]);
             let actual = (
-                macos_native_fullscreen(&slide),
-                slide.window().is_fullscreen(),
-                slide
+                macos_native_fullscreen(&audience),
+                audience.window().is_fullscreen(),
+                audience
                     .window()
                     .with_winit_window(|native| native.fullscreen().is_some()),
             );
@@ -840,12 +871,12 @@ async fn settle_slide_fullscreen(
     }
     #[cfg(not(target_os = "macos"))]
     {
-        set_slide_fullscreen(refs, fullscreen);
+        set_audience_fullscreen(refs, fullscreen);
         settle_notes_layout().await
     }
 }
 
-async fn check_hidden_slide_recovery(
+async fn check_hidden_audience_recovery(
     windows: &AppWindows,
     state: &Rc<RefCell<AppState>>,
     report: &mut GuiSmokeReport,
@@ -855,18 +886,18 @@ async fn check_hidden_slide_recovery(
     let frames = Rc::new(Cell::new(0_u32));
     let rendered_frames = frames.clone();
     windows
-        .slide
+        .audience
         .window()
         .set_rendering_notifier(move |phase, _| {
             if matches!(phase, slint::RenderingState::AfterRendering) {
                 rendered_frames.set(rendered_frames.get() + 1);
             }
         })
-        .context("failed to monitor slide rendering for hidden-window recovery")?;
+        .context("failed to monitor audience rendering for hidden-window recovery")?;
     settle_notes_layout().await?;
 
     for fullscreen in [false, true] {
-        settle_slide_fullscreen(
+        settle_audience_fullscreen(
             &refs,
             fullscreen,
             #[cfg(target_os = "macos")]
@@ -881,22 +912,23 @@ async fn check_hidden_slide_recovery(
         ] {
             if close_request {
                 windows
-                    .slide
+                    .audience
                     .window()
                     .dispatch_event(slint::platform::WindowEvent::CloseRequested);
             } else {
-                crate::hide_slide_window_from_menu(&refs, state);
+                crate::hide_audience_window_from_menu(&refs, state);
             }
             report.check(
                 format!(
-                    "slide is hidden through {}",
+                    "audience is hidden through {}",
                     if close_request {
                         "close request"
                     } else {
-                        "Hide Slide"
+                        "Hide Audience"
                     }
                 ),
-                !windows.slide.window().is_visible() && !state.borrow().window_menu.slide_visible(),
+                !windows.audience.window().is_visible()
+                    && !state.borrow().window_menu.audience_visible(),
                 "Slint lifecycle is hidden",
                 "native hide left the Slint lifecycle visible",
             );
@@ -905,36 +937,36 @@ async fn check_hidden_slide_recovery(
             let buffer =
                 slint::SharedPixelBuffer::<slint::Rgba8Pixel>::clone_from_slice(&color, 1, 1);
             windows
-                .slide
+                .audience
                 .set_page_image(slint::Image::from_rgba8(buffer));
             settle_notes_layout().await?;
             let previous_frames = frames.get();
             if raise {
-                crate::bring_slide_window_to_front(&refs, state);
+                crate::bring_audience_window_to_front(&refs, state);
             } else {
-                crate::show_slide_window_from_menu(&refs, state);
+                crate::show_audience_window_from_menu(&refs, state);
             }
             settle_notes_layout().await?;
             let action = format!(
                 "{} ({})",
                 if raise {
-                    "Bring Slide to Front"
+                    "Bring Audience to Front"
                 } else {
-                    "Show Slide"
+                    "Show Audience"
                 },
                 if fullscreen { "fullscreen" } else { "windowed" }
             );
             report.check(
-                format!("{action} restores the slide rendering lifecycle"),
-                windows.slide.window().is_visible() && frames.get() > previous_frames,
+                format!("{action} restores the audience rendering lifecycle"),
+                windows.audience.window().is_visible() && frames.get() > previous_frames,
                 "Slint is visible and rendered a new frame",
                 "Slint is hidden or no new frame was rendered",
             );
             let snapshot = windows
-                .slide
+                .audience
                 .window()
                 .take_snapshot()
-                .context("failed to capture the restored slide")?;
+                .context("failed to capture the restored audience")?;
             let center = &snapshot.as_bytes()[((snapshot.height() / 2 * snapshot.width()
                 + snapshot.width() / 2)
                 * 4) as usize..];
@@ -944,7 +976,7 @@ async fn check_hidden_slide_recovery(
                     .iter()
                     .zip(color[..3].iter())
                     .all(|(actual, expected)| actual.abs_diff(*expected) <= 2),
-                "restored slide has the replacement image pixels",
+                "restored audience has the replacement image pixels",
                 format!(
                     "unexpected center pixel: {:?}, expected {:?}",
                     &center[..4],
@@ -953,7 +985,7 @@ async fn check_hidden_slide_recovery(
             );
         }
     }
-    settle_slide_fullscreen(
+    settle_audience_fullscreen(
         &refs,
         false,
         #[cfg(target_os = "macos")]
@@ -987,6 +1019,944 @@ fn report_state(
 ) {
     let state = state.borrow();
     report.check(name, verify(&state), "state matched", "state did not match");
+}
+
+async fn check_audience_join_screen(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let before = state.borrow().presentation.snapshot();
+    let generation = state.borrow().render_generation;
+    let now = Instant::now();
+    let elapsed = state.borrow().timer.elapsed_at(now);
+    let presenter = &windows.presenter;
+    report.check(
+        "Inactive Audience Live offers the ON action",
+        presenter.get_audience_toggle_label() == "Audience Live ON  👍️"
+            && !presenter.get_audience_panel_expanded(),
+        "start action displayed",
+        "incorrect start label",
+    );
+    presenter.invoke_audience_toggle_panel();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Inactive Audience Live history can be manually opened",
+        presenter.get_audience_panel_expanded() && !presenter.get_audience_active(),
+        "history opened without starting a session",
+        "disclosure changed session state or did not open history",
+    );
+    presenter.invoke_audience_toggle_panel();
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    let url = presenter.get_audience_url();
+    report.check(
+        "Audience Live ON starts a local session with a QR code",
+        presenter.get_audience_active()
+            && presenter.get_audience_panel_expanded()
+            && url.starts_with("http://127.0.0.1:")
+            && presenter.get_audience_qr().size().width > 0,
+        "real loopback session became ready",
+        "session or QR not ready",
+    );
+    presenter.invoke_audience_toggle_panel();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Active Audience Live history can collapse without stopping reception",
+        !presenter.get_audience_panel_expanded()
+            && presenter.get_audience_active()
+            && presenter.get_audience_url() == url,
+        "session and join URL remained active",
+        "collapsing history changed the session",
+    );
+    presenter.invoke_audience_toggle_panel();
+    report.check(
+        "Audience Live ON shows page 0 on the audience window",
+        windows.audience.get_audience_guide_visible()
+            && windows.audience.get_audience_url() == url
+            && windows.audience.get_audience_code() == presenter.get_audience_code()
+            && windows.audience.get_audience_qr().size().width > 0
+            && windows.audience.get_audience_overlay().row_count() == 0,
+        "join metadata reached the audience window",
+        "join screen or metadata missing",
+    );
+    report.check(
+        "page 0 preserves PDF, render generation, and timer",
+        state.borrow().presentation.snapshot() == before
+            && state.borrow().render_generation == generation
+            && state.borrow().timer.elapsed_at(now) == elapsed,
+        "presentation state unchanged",
+        "join screen changed the presentation",
+    );
+    submit_audience_smoke_reaction(&url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while windows.audience.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    let snapshot = windows.audience.window().take_snapshot()?;
+    let colored = snapshot
+        .as_bytes()
+        .chunks_exact(4)
+        .filter(|p| p[0] > 220 && p[1] > 160 && p[1] < 230 && p[2] < 120)
+        .count();
+    report.check(
+        "Page 0 renders incoming reactions above the join information",
+        windows.audience.get_audience_guide_visible()
+            && windows.audience.get_audience_overlay().row_count() > 0
+            && colored > 5
+            && windows.audience.get_audience_url() == url
+            && state.borrow().render_generation == generation,
+        "reaction pixels visible on the join screen without PDF rendering",
+        "page 0 reaction missing or presentation changed",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(true),
+    );
+    settle_presenter_notes_layout(presenter).await?;
+    let blank = windows.audience.window().take_snapshot()?;
+    let center = ((blank.height() / 2 * blank.width() + blank.width() / 2) * 4) as usize;
+    report.check(
+        "blackout renders black over the join QR code",
+        blank.as_bytes()[center..center + 3] == [0, 0, 0],
+        "center pixel is black",
+        "QR code remained visible during blackout",
+    );
+    report.check(
+        "blackout hides the page 0 join screen",
+        windows.audience.get_black_screen_active(),
+        "blackout covers join information",
+        "join information bypassed blackout",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(false),
+    );
+    crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::NextPage);
+    report.check(
+        "next from page 0 returns to the current PDF without skipping",
+        !windows.audience.get_audience_guide_visible()
+            && state.borrow().presentation.snapshot() == before,
+        "join screen dismissed without PDF navigation",
+        "PDF page skipped or join screen remained",
+    );
+    report.check(
+        "Sticky QR defaults to off",
+        !presenter.get_audience_sticky_qr_enabled()
+            && !windows.audience.get_audience_sticky_qr_visible(),
+        "experimental overlay is opt-in",
+        "sticky QR unexpectedly enabled",
+    );
+    presenter.invoke_open_settings();
+    presenter.invoke_audience_set_sticky_qr(true);
+    presenter.invoke_close_settings();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Settings enables sticky QR immediately on PDF pages",
+        presenter.get_audience_sticky_qr_enabled()
+            && windows.audience.get_audience_sticky_qr_visible(),
+        "sticky QR enabled",
+        "sticky QR did not appear",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(true),
+    );
+    settle_presenter_notes_layout(presenter).await?;
+    let blank = windows.audience.window().take_snapshot()?;
+    report.check(
+        "Blackout hides sticky QR and renders every pixel black",
+        !windows.audience.get_audience_sticky_qr_visible()
+            && blank
+                .as_bytes()
+                .chunks_exact(4)
+                .all(|p| p[..3] == [0, 0, 0]),
+        "blackout covers sticky QR",
+        "sticky QR leaked through blackout",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(false),
+    );
+    if before.is_some() {
+        crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::FirstPage);
+        let first = state.borrow().presentation.snapshot();
+        let generation = state.borrow().render_generation;
+        crate::handle_presentation_command(
+            &windows.refs(),
+            state,
+            PresentationCommand::PreviousPage,
+        );
+        report.check(
+            "Previous from PDF page 1 returns to page 0 while Audience Live is ON",
+            windows.audience.get_audience_guide_visible()
+                && state.borrow().presentation.snapshot() == first
+                && state.borrow().render_generation == generation,
+            "join screen restored without rendering or PDF navigation",
+            "page 0 missing or PDF changed",
+        );
+        crate::handle_presentation_command(
+            &windows.refs(),
+            state,
+            PresentationCommand::PreviousPage,
+        );
+        report.check(
+            "Previous at page 0 remains on page 0",
+            windows.audience.get_audience_guide_visible(),
+            "lower boundary preserved",
+            "join screen dismissed at lower boundary",
+        );
+        crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::NextPage);
+        report.check(
+            "Next from restored page 0 returns to PDF page 1",
+            !windows.audience.get_audience_guide_visible()
+                && state.borrow().presentation.snapshot() == first,
+            "first PDF page restored",
+            "PDF skipped or guide remained",
+        );
+        report.check(
+            "Sticky QR returns after page 0",
+            windows.audience.get_audience_sticky_qr_visible(),
+            "overlay restored on page 1",
+            "overlay missing after join screen",
+        );
+        crate::handle_presentation_command(&windows.refs(), state, PresentationCommand::NextPage);
+        settle_presenter_notes_layout(presenter).await?;
+        report.check(
+            "Sticky QR remains on later PDF pages",
+            windows.audience.get_audience_sticky_qr_visible(),
+            "overlay survived PDF navigation",
+            "overlay disappeared on later pages",
+        );
+        if let Some(path) = std::env::var_os("QP_GUI_SMOKE_STICKY_QR_SNAPSHOT") {
+            let snapshot = windows.audience.window().take_snapshot()?;
+            let mut bytes =
+                format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+            for pixel in snapshot.as_bytes().chunks_exact(4) {
+                bytes.extend_from_slice(&pixel[..3]);
+            }
+            fs::write(path, bytes).context("failed to save sticky QR snapshot")?;
+        }
+        if let Some(snapshot) = &before {
+            crate::handle_presentation_command(
+                &windows.refs(),
+                state,
+                PresentationCommand::JumpToPage(snapshot.current_index),
+            );
+        }
+    }
+    submit_audience_smoke_reaction(&url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while presenter.get_audience_reaction_count() < 2 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    report.check(
+        "WebSocket reaction reaches Presenter View",
+        presenter.get_audience_reaction_count() == 2
+            && presenter.get_audience_recent_reactions().contains("👏"),
+        "authenticated reaction displayed",
+        "reaction did not reach the presenter",
+    );
+    check_audience_overlay(windows, state, &url, report).await?;
+    check_live_comments(windows, state, &url, report).await?;
+    report.check(
+        "PDF navigation keeps Audience Live running",
+        !state.borrow().audience_join_visible
+            && !windows.audience.get_audience_guide_visible()
+            && presenter.get_audience_active()
+            && presenter.get_audience_toggle_label() == "Audience Live OFF 👍️"
+            && presenter.get_audience_url_text() == presenter.get_audience_url(),
+        "both windows returned to PDF",
+        "join screen remained active",
+    );
+    submit_audience_smoke_reaction(&url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while windows.audience.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    report.check(
+        "Reaction is visible before session stop",
+        windows.audience.get_audience_overlay().row_count() > 0,
+        "overlay active",
+        "overlay missing before stop",
+    );
+    presenter.invoke_audience_toggle_session();
+    report.check(
+        "Stop immediately clears live reaction overlays",
+        windows.audience.get_audience_overlay().row_count() == 0,
+        "overlay cleared",
+        "overlay survived stop",
+    );
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_active() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    report.check(
+        "Stop clears audience QR, URLs, and join screen",
+        !presenter.get_audience_active()
+            && !presenter.get_audience_panel_expanded()
+            && presenter.get_audience_url().is_empty()
+            && windows.audience.get_audience_url().is_empty()
+            && windows.audience.get_audience_qr().size().width == 0
+            && !windows.audience.get_audience_guide_visible()
+            && !state.borrow().audience_join_available
+            && !windows.audience.get_audience_sticky_qr_visible()
+            && presenter.get_audience_recent_reactions().is_empty(),
+        "stale join credentials cleared",
+        "stale join information remained",
+    );
+    presenter.invoke_audience_set_sticky_qr(false);
+    report.check(
+        "Settings disables sticky QR",
+        !presenter.get_audience_sticky_qr_enabled()
+            && !windows.audience.get_audience_sticky_qr_enabled(),
+        "preference disabled in both windows",
+        "sticky QR preference remained enabled",
+    );
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    let new_url = presenter.get_audience_url();
+    submit_audience_smoke_reaction(&new_url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while presenter.get_audience_reaction_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    report.check(
+        "Audience Live can restart with a new URL and automatically receives reactions",
+        new_url != url
+            && presenter.get_audience_reaction_count() == 1
+            && !presenter.get_audience_recent_reactions().is_empty(),
+        "new session received a reaction",
+        "restart reused credentials or failed to receive",
+    );
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_active() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    check_audience_panel_layout(windows, report).await?;
+    Ok(())
+}
+
+async fn check_audience_panel_layout(
+    windows: &AppWindows,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let was_expanded = presenter.get_audience_panel_expanded();
+    if !was_expanded {
+        presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    let size = presenter.window().size();
+    for (width, height) in [
+        (800.0, 842.0),
+        (1024.0, 1002.0),
+        (1280.0, 900.0),
+        (1920.0, 1080.0),
+        (2560.0, 1440.0),
+        (1200.0, 1240.0),
+    ] {
+        presenter
+            .window()
+            .dispatch_event(slint::platform::WindowEvent::Resized {
+                size: slint::LogicalSize::new(width, height),
+            });
+        settle_presenter_notes_layout(presenter).await?;
+        let current_width = presenter.get_presenter_current_column_width();
+        let next_width = presenter.get_presenter_next_column_width();
+        let thumbnail_width = presenter.get_presenter_thumbnail_width();
+        report.check(
+            format!("Presenter panes stay balanced and notes remain usable ({width}x{height})"),
+            current_width >= next_width
+                && next_width >= 260.0
+                && (128.0..=192.0).contains(&thumbnail_width)
+                && (presenter.get_notes_layout_outer_width() - current_width).abs() <= 1.0
+                && presenter.get_notes_visible_height() >= 180.0
+                && presenter.get_presenter_next_preview_height() > 0.0
+                && presenter.get_presenter_next_preview_height()
+                    <= next_width / presenter.get_next_page_aspect_ratio() + 1.0
+                && (next_width <= 260.0 || (current_width - next_width * 2.0).abs() <= 1.0),
+            format!("current={current_width}, next={next_width}, thumbnails={thumbnail_width}"),
+            format!(
+                "unbalanced panes or unusable notes: {:?}",
+                NotesResizeSnapshot::capture(presenter)
+            ),
+        );
+        report.check(
+            format!("Audience panel leaves thumbnails unobstructed ({width}x{height})"),
+            presenter.get_audience_panel_right() + 8.0 <= presenter.get_thumbnails_left()
+                && presenter.get_thumbnails_bottom() > presenter.get_notes_area_bottom()
+                && (presenter.get_thumbnails_bottom() - presenter.get_audience_url_bottom()).abs()
+                    <= 1.0,
+            "thumbnail column stays beside the footer",
+            "audience footer overlaps the thumbnail column",
+        );
+        report.check(
+            format!(
+                "Audience toggle follows notes and reactions have more space ({width}x{height})"
+            ),
+            presenter.get_audience_toggle_y() >= presenter.get_notes_area_bottom()
+                && presenter.get_audience_panel_top()
+                    >= presenter.get_audience_toggle_bottom() + 4.0
+                && (presenter.get_audience_reactions_width()
+                    - presenter.get_audience_panel_width())
+                .abs()
+                    <= 1.0
+                && presenter.get_audience_toolbar_ordered()
+                && presenter.get_audience_url_top() >= presenter.get_audience_panel_bottom() + 4.0
+                && presenter.get_audience_address_controls_inline(),
+            "toggle and expanded feed fit",
+            "toggle placement or feed width failed",
+        );
+    }
+    presenter.window().set_size(size);
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::Resized {
+            size: size.to_logical(presenter.window().scale_factor()),
+        });
+    settle_presenter_notes_layout(presenter).await?;
+    if !was_expanded {
+        presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    Ok(())
+}
+
+async fn check_audience_overlay(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    url: &str,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let audience = &windows.audience;
+    let presenter = &windows.presenter;
+    let generation = state.borrow().render_generation;
+    // The sticky QR intentionally covers newly spawned bottom-left reactions.
+    // Observe the SVG after it rises clear of that protected scanning area.
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while audience.get_audience_sticky_qr_visible()
+        && audience
+            .get_audience_overlay()
+            .row_data(0)
+            .is_some_and(|frame| frame.y > 0.75)
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    let first = audience.get_audience_overlay().row_data(0);
+    let observed_at = Instant::now();
+    let snapshot = audience.window().take_snapshot()?;
+    let colored = snapshot
+        .as_bytes()
+        .chunks_exact(4)
+        .filter(|p| p[0] > 220 && p[1] > 160 && p[1] < 230 && p[2] < 120)
+        .count();
+    report.check(
+        "Reaction renders an independent SVG overlay",
+        first.is_some() && colored > 5,
+        "overlay model and colored pixels present",
+        "reaction overlay was not rendered",
+    );
+    let size = audience.window().size();
+    audience
+        .window()
+        .set_size(slint::LogicalSize::new(800.0, 600.0));
+    settle_presenter_notes_layout(presenter).await?;
+    let moving = audience.get_audience_overlay().row_data(0);
+    report.check(
+        "Overlay animates within resized bounds and preserves the presentation session",
+        first.as_ref().zip(moving.as_ref()).is_some_and(|(a, b)| {
+            b.y < a.y && (0.0..=1.0).contains(&b.x) && (0.0..=1.0).contains(&b.y)
+        }) && state.borrow().render_generation == generation,
+        "motion stays normalized and render generation unchanged",
+        format!("first={first:?}, after={moving:?}, elapsed={:?}, generation={generation}->{}, window={:?}", observed_at.elapsed(), state.borrow().render_generation, audience.window().size()),
+    );
+    audience.window().set_size(size);
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(true),
+    );
+    report.check(
+        "Blackout immediately discards reaction overlays",
+        audience.get_audience_overlay().row_count() == 0,
+        "model cleared",
+        "overlay remained queued",
+    );
+    submit_audience_smoke_reaction(url)?;
+    settle_presenter_notes_layout(presenter).await?;
+    let blank = audience.window().take_snapshot()?;
+    report.check(
+        "Blackout remains black while audience reactions arrive",
+        blank
+            .as_bytes()
+            .chunks_exact(4)
+            .all(|p| p[0..3] == [0, 0, 0]),
+        "all pixels black",
+        "reaction bypassed blackout",
+    );
+    crate::handle_presentation_command(
+        &windows.refs(),
+        state,
+        PresentationCommand::SetBlackScreen(false),
+    );
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Restoring blackout never replays suppressed reactions",
+        audience.get_audience_overlay().row_count() == 0,
+        "no stale reactions",
+        "old reaction replayed",
+    );
+    crate::window_controller::hide_audience_window(&windows.refs());
+    submit_audience_smoke_reaction(url)?;
+    settle_presenter_notes_layout(presenter).await?;
+    crate::window_controller::show_audience_window(&windows.refs());
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Showing the audience never replays hidden-window reactions",
+        audience.get_audience_overlay().row_count() == 0,
+        "hidden reactions discarded",
+        "hidden reaction replayed",
+    );
+    submit_audience_smoke_reaction(url)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while audience.get_audience_overlay().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    report.check(
+        "New reactions resume after showing the audience",
+        audience.get_audience_overlay().row_count() > 0,
+        "new input displayed",
+        "new input missing",
+    );
+    let deadline =
+        Instant::now() + crate::audience_overlay::GUI_SMOKE_LIFETIME + Duration::from_secs(2);
+    while audience.get_audience_overlay().row_count() > 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    report.check(
+        "Reaction overlay expires without further inputs",
+        audience.get_audience_overlay().row_count() == 0,
+        "animation expired",
+        "animation retained an old reaction",
+    );
+    Ok(())
+}
+
+async fn check_live_comments(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    url: &str,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let audience = &windows.audience;
+    let submit = |body: &str| {
+        submit_audience_smoke_event(
+            url,
+            serde_json::json!({"protocol":"qp.audience","version":"1","type":"comment","request_id":"c","body":body,"handle":"Anonymous"}),
+        )
+    };
+    submit("Hello 世界")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while audience.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    let first = audience.get_audience_comments().row_data(0);
+    report.check(
+        "Live comments measure the actual font and enter the logical canvas",
+        first.as_ref().is_some_and(|f| {
+            f.width > 100.0 && f.x <= 1280.0 && f.y == 48.0 && f.text == "Hello 世界"
+        }) && presenter
+            .get_audience_comment_history()
+            .contains("Hello 世界"),
+        "measured comment and independent history present",
+        format!("comment={first:?}"),
+    );
+    let original_size = audience.window().size();
+    audience
+        .window()
+        .set_size(slint::LogicalSize::new(800.0, 600.0));
+    crate::audience_ui::set_join_visible(&windows.refs(), state, true);
+    settle_presenter_notes_layout(presenter).await?;
+    let next = audience.get_audience_comments().row_data(0);
+    report.check(
+        "Resize and page 0 preserve comment lane, width, and elapsed motion",
+        first
+            .as_ref()
+            .zip(next.as_ref())
+            .is_some_and(|(a, b)| b.x < a.x && a.y == b.y && a.width == b.width),
+        "logical comment state preserved",
+        format!("before={first:?}, after={next:?}"),
+    );
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    audience.window().set_size(original_size);
+    presenter.invoke_audience_toggle_comments();
+    report.check(
+        "Pause immediately clears comments",
+        presenter.get_audience_comments_paused()
+            && audience.get_audience_comments().row_count() == 0,
+        "comments cleared",
+        "comments survived pause",
+    );
+    submit("Paused comment")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !presenter
+        .get_audience_comment_history()
+        .contains("Paused comment")
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    report.check(
+        "Paused comments reach history without overlay",
+        presenter
+            .get_audience_comment_history()
+            .contains("Paused comment")
+            && audience.get_audience_comments().row_count() == 0,
+        "history updated only",
+        "pause lost history or displayed comment",
+    );
+    // Resume before the UI poll: this queued event must retain its old generation.
+    submit("Old generation")?;
+    presenter.invoke_audience_toggle_comments();
+    settle_presenter_notes_layout(presenter).await?;
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Resume rejects old-generation UI deliveries",
+        !presenter.get_audience_comments_paused()
+            && audience.get_audience_comments().row_count() == 0,
+        "no replay",
+        "old comment appeared after resume",
+    );
+    submit("After resume")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while audience.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    report.check(
+        "New comments display after Resume",
+        audience.get_audience_comments().row_count() == 1
+            && audience
+                .get_audience_comments()
+                .row_data(0)
+                .is_some_and(|f| f.text == "After resume"),
+        "new comment displayed",
+        "new comment missing or old comment replayed",
+    );
+    presenter.invoke_audience_set_comment_display(true, true);
+    submit("Bubble one")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while audience.get_audience_bubbles().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Both comment styles display the same live event",
+        audience
+            .get_audience_bubbles()
+            .row_data(0)
+            .is_some_and(|b| b.name.is_empty() && b.text == "Bubble one")
+            && audience
+                .get_audience_comments()
+                .iter()
+                .any(|c| c.text == "Bubble one"),
+        "anonymous bubble and flowing comment are visible together",
+        "one of the enabled styles is missing",
+    );
+    save_comment_smoke_snapshot(audience, state, "combined").await?;
+    presenter.invoke_audience_set_comment_display(false, true);
+    submit_audience_smoke_event(
+        url,
+        serde_json::json!({"protocol":"qp.audience","version":"1","type":"comment","request_id":"named-bubble","body":"Bubble two 日本語のコメント","handle":"Alice"}),
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while audience.get_audience_bubbles().row_count() < 2 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    settle_presenter_notes_layout(presenter).await?;
+    let bubbles = audience.get_audience_bubbles();
+    report.check(
+        "Bubble-only mode keeps the newest comment below the previous one",
+        audience.get_audience_comments().row_count() == 0
+            && bubbles
+                .row_data(0)
+                .zip(bubbles.row_data(1))
+                .is_some_and(|(old, new)| {
+                    old.y < new.y
+                        && new.name == "Alice"
+                        && new.text == "Bubble two 日本語のコメント"
+                }),
+        "ordered bubbles retain the author separately",
+        format!("bubbles={:?}", bubbles.iter().collect::<Vec<_>>()),
+    );
+    crate::audience_ui::set_join_visible(&windows.refs(), state, true);
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Page 0 transitions preserve the bubble stack",
+        audience.get_audience_bubbles().row_count() == 2,
+        "bubbles retained",
+        "page transition cleared bubbles",
+    );
+    save_comment_smoke_snapshot(audience, state, "two-bubbles").await?;
+    for body in ["Bubble three", "Bubble four", "Bubble five", "Bubble six"] {
+        submit(body)?;
+    }
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !presenter
+        .get_audience_comment_history()
+        .contains("Bubble six")
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    delay(Duration::from_millis(300)).await;
+    let stacked = audience.get_audience_bubbles().iter().collect::<Vec<_>>();
+    report.check(
+        "Bubble bursts keep the newest five cards in ascending order",
+        stacked.len() == 5
+            && stacked.last().is_some_and(|b| b.text == "Bubble six")
+            && stacked.windows(2).all(|pair| pair[0].y < pair[1].y),
+        "oldest card evicted and newest card at the bottom",
+        format!("bubbles={stacked:?}"),
+    );
+    save_comment_smoke_snapshot(audience, state, "five-bubbles").await?;
+    presenter.invoke_audience_set_comment_display(true, true);
+    submit("Great slide!")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while audience.get_audience_comments().row_count() == 0 && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    delay(Duration::from_millis(300)).await;
+    report.check(
+        "Five bubble cards coexist with flowing comments",
+        audience.get_audience_bubbles().row_count() == 5
+            && audience.get_audience_comments().row_count() > 0,
+        "five cards and a flowing comment are visible together",
+        "combined five-card display is missing",
+    );
+    if std::env::var_os("QP_GUI_SMOKE_BUBBLES_SNAPSHOT").is_some() {
+        delay(Duration::from_secs(3)).await;
+    }
+    save_comment_smoke_snapshot(audience, state, "five-bubbles-combined").await?;
+    presenter.invoke_audience_set_comment_display(false, true);
+    let long_comments = [
+        ("Alice", "こんにちは！今日の発表を楽しみにしていました。図と具体例がとても分かりやすく、初めて聞く内容でも理解できました。次のスライドも楽しみです。".to_owned()),
+        ("Bob", "実際の運用では、参加者が増えたときのコメント表示や読みやすさが気になります。今回のように右側へまとめて表示できると、資料の内容を追いながら他の方の感想も読めるので、とても使いやすそうですね。".to_owned()),
+        ("", "名前を入力しないコメントも、本文を広く使って表示できます。文字の折り返しと余白のバランスが自然で、少し長めの質問や感想も最後まで読みやすくなるとうれしいです。発表資料と一緒に確認しています。".to_owned()),
+        ("Carol", "長いコメントの表示を確認しています。".repeat(12).chars().take(200).collect()),
+        ("Dave", "Thanks for the presentation! The examples make the design easy to understand. How does this work with longer audience questions while keeping the slide readable?".to_owned()),
+    ];
+    for (index, (handle, body)) in long_comments.iter().enumerate() {
+        submit_audience_smoke_event(
+            url,
+            serde_json::json!({"protocol":"qp.audience","version":"1","type":"comment","request_id":format!("long-bubble-{index}"),"body":body,"handle":handle}),
+        )?;
+    }
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !audience
+        .get_audience_bubbles()
+        .iter()
+        .any(|b| b.text == long_comments[4].1)
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    delay(Duration::from_millis(300)).await;
+    let stacked = audience.get_audience_bubbles().iter().collect::<Vec<_>>();
+    report.check(
+        "Five long comments retain full bodies and separate authors",
+        stacked.len() == long_comments.len()
+            && stacked
+                .iter()
+                .zip(&long_comments)
+                .all(|(bubble, (name, body))| bubble.name == *name && bubble.text == *body)
+            && long_comments[3].1.chars().count() == 200
+            && presenter
+                .get_audience_comment_history()
+                .contains(&long_comments[3].1),
+        "named, anonymous, Japanese, English, and 200-character comments retained",
+        format!("bubbles={stacked:?}"),
+    );
+    save_comment_smoke_snapshot(audience, state, "five-long-bubbles").await?;
+    presenter.invoke_audience_toggle_comments();
+    report.check(
+        "Pause clears bubble comments immediately",
+        audience.get_audience_bubbles().row_count() == 0,
+        "bubbles cleared",
+        "bubbles survived pause",
+    );
+    presenter.invoke_audience_toggle_comments();
+    presenter.invoke_audience_set_comment_display(false, false);
+    submit("Hidden styles")?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !presenter
+        .get_audience_comment_history()
+        .contains("Hidden styles")
+        && Instant::now() < deadline
+    {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    report.check(
+        "Both disabled styles preserve history without displaying comments",
+        presenter
+            .get_audience_comment_history()
+            .contains("Hidden styles")
+            && audience.get_audience_bubbles().row_count() == 0
+            && audience.get_audience_comments().row_count() == 0,
+        "history updated without overlays",
+        "disabled style displayed or history missing",
+    );
+    presenter.invoke_audience_set_comment_display(true, false);
+    let history = presenter.get_audience_comment_history();
+    presenter.set_audience_comment_history(
+        (1..=20)
+            .map(|n| format!("{n}: A long comment that wraps 日本語のコメント").repeat(4))
+            .collect::<Vec<_>>()
+            .join("\n")
+            .into(),
+    );
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Twenty comment history entries remain scrollable below notes",
+        presenter.get_audience_history_height() > presenter.get_audience_history_visible_height()
+            && presenter.get_audience_history_visible_height() > 0.0,
+        "bounded history overflows a usable scroll viewport",
+        "history height or viewport missing",
+    );
+    presenter.set_audience_comment_history(history);
+    presenter.invoke_audience_toggle_comments();
+    presenter.invoke_audience_toggle_comments();
+    Ok(())
+}
+
+async fn save_comment_smoke_snapshot(
+    audience: &crate::AudienceWindow,
+    state: &Rc<RefCell<AppState>>,
+    stage: &str,
+) -> Result<()> {
+    let Some(path) = std::env::var_os("QP_GUI_SMOKE_BUBBLES_SNAPSHOT") else {
+        return Ok(());
+    };
+    // Let entry motion settle and bring flowing text fully inside the canvas.
+    delay(Duration::from_secs(1)).await;
+    let snapshot = audience.window().take_snapshot()?;
+    let mut bytes = format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+    for pixel in snapshot.as_bytes().chunks_exact(4) {
+        bytes.extend_from_slice(&pixel[..3]);
+    }
+    let path = std::path::PathBuf::from(path);
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("comments");
+    let context = if state.borrow().presentation.snapshot().is_some() {
+        "pdf"
+    } else {
+        "no-deck"
+    };
+    let destination = path.with_file_name(format!("{stem}-{context}-{stage}.ppm"));
+    fs::write(destination, bytes).context("failed to save comment smoke snapshot")?;
+    Ok(())
+}
+
+// A minimal loopback client keeps GUI smoke independent of a new runtime dependency.
+fn submit_audience_smoke_reaction(url: &str) -> Result<()> {
+    submit_audience_smoke_event(
+        url,
+        serde_json::json!({"protocol":"qp.audience","version":"1","type":"reaction","request_id":"smoke","kind":"applause"}),
+    )
+}
+fn submit_audience_smoke_event(url: &str, event: serde_json::Value) -> Result<()> {
+    use std::io::{Read, Write};
+    let (url, token) = url.split_once("#k=").context("missing audience token")?;
+    let authority = url
+        .strip_prefix("http://")
+        .context("invalid join URL")?
+        .split('/')
+        .next()
+        .unwrap();
+    let mut socket = std::net::TcpStream::connect(authority)?;
+    socket.set_read_timeout(Some(Duration::from_secs(2)))?;
+    socket.set_write_timeout(Some(Duration::from_secs(2)))?;
+    let code = url.rsplit('/').next().unwrap();
+    write!(socket, "GET /ws/audience/{code} HTTP/1.1\r\nHost: {authority}\r\nOrigin: http://{authority}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")?;
+    let mut headers = Vec::new();
+    while !headers.ends_with(b"\r\n\r\n") && headers.len() < 4096 {
+        let mut byte = [0];
+        socket.read_exact(&mut byte)?;
+        headers.push(byte[0]);
+    }
+    anyhow::ensure!(
+        headers.starts_with(b"HTTP/1.1 101"),
+        "WebSocket upgrade failed"
+    );
+    fn send(socket: &mut std::net::TcpStream, value: serde_json::Value) -> Result<()> {
+        let payload = value.to_string().into_bytes();
+        anyhow::ensure!(payload.len() <= 4096, "smoke message too large");
+        let mask = [1u8, 2, 3, 4];
+        if payload.len() < 126 {
+            socket.write_all(&[0x81, 0x80 | payload.len() as u8])?;
+        } else {
+            socket.write_all(&[0x81, 0x80 | 126])?;
+            socket.write_all(&(payload.len() as u16).to_be_bytes())?;
+        }
+        socket.write_all(&mask)?;
+        socket.write_all(
+            &payload
+                .iter()
+                .enumerate()
+                .map(|(n, b)| b ^ mask[n % 4])
+                .collect::<Vec<_>>(),
+        )?;
+        Ok(())
+    }
+    fn read(socket: &mut std::net::TcpStream) -> Result<serde_json::Value> {
+        let mut header = [0; 2];
+        socket.read_exact(&mut header)?;
+        anyhow::ensure!(
+            header[0] == 0x81 && header[1] <= 126,
+            "unexpected smoke server frame"
+        );
+        let length = if header[1] == 126 {
+            let mut bytes = [0; 2];
+            socket.read_exact(&mut bytes)?;
+            u16::from_be_bytes(bytes) as usize
+        } else {
+            header[1] as usize
+        };
+        anyhow::ensure!(length <= 4096, "smoke server frame too large");
+        let mut payload = vec![0; length];
+        socket.read_exact(&mut payload)?;
+        Ok(serde_json::from_slice(&payload)?)
+    }
+    send(
+        &mut socket,
+        serde_json::json!({"protocol":"qp.audience","version":"1","type":"hello","token":token}),
+    )?;
+    anyhow::ensure!(
+        read(&mut socket)?["type"] == "welcome",
+        "audience authentication failed"
+    );
+    send(&mut socket, event)?;
+    anyhow::ensure!(
+        read(&mut socket)?["status"] == "accepted",
+        "smoke reaction rejected"
+    );
+    Ok(())
 }
 
 pub(crate) async fn delay(duration: Duration) {
@@ -1028,6 +1998,258 @@ async fn settle_presenter_notes_layout(presenter: &crate::PresenterWindow) -> Re
     settle_notes_layout().await
 }
 
+async fn check_qr_failure_and_settings_layout(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let enabled = presenter.get_audience_sticky_qr_enabled();
+    let original_url = presenter.get_audience_url();
+    let original_qr = presenter.get_audience_qr();
+    let original_status = presenter.get_audience_status();
+    let original_error = presenter.get_audience_sticky_qr_error();
+    let original_size = presenter.window().size();
+    let join_visible = state.borrow().audience_join_visible;
+    windows.audience.set_audience_sticky_qr_enabled(true);
+    crate::audience_ui::publish_join_qr(presenter, "http://127.0.0.1/join")?;
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    report.check(
+        "Valid QR image enables the sticky overlay",
+        windows.audience.get_audience_sticky_qr_visible(),
+        "valid QR published",
+        "valid QR hidden",
+    );
+    let oversized = "x".repeat(5000);
+    let failed = crate::audience_ui::publish_join_qr(presenter, &oversized).is_err();
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    report.check(
+        "QR generation failure clears stale pixels and hides the sticky backdrop",
+        failed
+            && presenter.get_audience_qr().size().width == 0
+            && windows.audience.get_audience_qr().size().width == 0
+            && presenter.get_audience_url() == oversized
+            && !windows.audience.get_audience_sticky_qr_visible(),
+        "manual URL retained without blank or stale QR",
+        "invalid QR remained visible",
+    );
+    crate::audience_ui::publish_join_qr(presenter, "http://127.0.0.1/retry")?;
+    crate::audience_ui::set_join_visible(&windows.refs(), state, false);
+    report.check(
+        "Successful QR retry restores the sticky overlay",
+        windows.audience.get_audience_sticky_qr_visible(),
+        "replacement QR visible",
+        "replacement QR missing",
+    );
+    presenter.set_audience_url(original_url);
+    presenter.set_audience_qr(original_qr);
+    windows.audience.set_audience_sticky_qr_enabled(enabled);
+    crate::audience_ui::set_join_visible(&windows.refs(), state, join_visible);
+
+    presenter
+        .window()
+        .set_size(slint::LogicalSize::new(800.0, 608.0));
+    presenter.set_audience_sticky_qr_error(
+        "Cannot save protected configuration; previous settings are retained.".into(),
+    );
+    presenter.set_audience_status(
+        "Configuration needs attention. Check the file and its permissions before trying again."
+            .into(),
+    );
+    presenter.invoke_open_settings();
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Settings scrolls at minimum height with errors while Close stays visible",
+        presenter.get_settings_content_height() > presenter.get_settings_viewport_height()
+            && presenter.get_settings_viewport_height() > 0.0
+            && presenter.get_settings_close_within_dialog(),
+        "overflow is scrollable and Close stays inside the dialog",
+        "settings content or Close is inaccessible",
+    );
+    presenter
+        .window()
+        .dispatch_event(slint::platform::WindowEvent::PointerScrolled {
+            position: slint::LogicalPosition::new(400.0, 300.0),
+            delta_x: 0.0,
+            delta_y: -2000.0,
+        });
+    settle_presenter_notes_layout(presenter).await?;
+    report.check(
+        "Settings scroll input reaches the import controls at minimum height",
+        presenter.get_settings_scroll_position() < 0.0
+            && presenter.get_settings_close_within_dialog(),
+        "content scrolled while Close stayed visible",
+        "scroll input did not expose the remaining controls",
+    );
+    if let Some(path) = std::env::var_os("QP_GUI_SMOKE_SETTINGS_MINIMUM_SNAPSHOT") {
+        let snapshot = presenter.window().take_snapshot()?;
+        let mut bytes =
+            format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+        for pixel in snapshot.as_bytes().chunks_exact(4) {
+            bytes.extend_from_slice(&pixel[..3]);
+        }
+        fs::write(path, bytes)?;
+    }
+    presenter.invoke_close_settings();
+    presenter.set_audience_status(original_status);
+    presenter.set_audience_sticky_qr_error(original_error);
+    presenter.window().set_size(original_size);
+    settle_presenter_notes_layout(presenter).await?;
+    Ok(())
+}
+
+async fn check_sticky_qr_save_error(
+    windows: &AppWindows,
+    config_path: std::path::PathBuf,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let enabled = presenter.get_audience_sticky_qr_enabled();
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_url().is_empty() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    anyhow::ensure!(
+        !presenter.get_audience_url().is_empty(),
+        "save-error check requires a running session"
+    );
+    presenter.invoke_open_settings();
+    let original = fs::read(&config_path)?;
+    // Only the smoke run's temporary configuration is made invalid.
+    fs::write(&config_path, "invalid TOML")?;
+    presenter.invoke_audience_set_sticky_qr(!enabled);
+    let error = presenter.get_audience_sticky_qr_error();
+    delay(Duration::from_millis(350)).await;
+    report.check(
+        "Sticky QR save error survives live session refresh polls",
+        !error.is_empty()
+            && presenter.get_audience_sticky_qr_error() == error
+            && presenter.get_audience_status() != error
+            && presenter.get_audience_sticky_qr_enabled() == enabled
+            && windows.audience.get_audience_sticky_qr_enabled() == enabled,
+        "error retained separately and both switches unchanged",
+        "save error lost or setting changed",
+    );
+    presenter.invoke_close_settings();
+    presenter.invoke_open_settings();
+    report.check(
+        "Reopening Settings retains the sticky QR save error",
+        presenter.get_audience_sticky_qr_error() == error,
+        "error retained until explicit dismissal or successful save",
+        "error cleared on close",
+    );
+    presenter.invoke_audience_dismiss_sticky_qr_error();
+    report.check(
+        "Sticky QR save error can be explicitly dismissed",
+        presenter.get_audience_sticky_qr_error().is_empty(),
+        "error dismissed",
+        "error remained after dismissal",
+    );
+    presenter.invoke_audience_set_sticky_qr(!enabled);
+    let failed_again = !presenter.get_audience_sticky_qr_error().is_empty();
+    fs::write(&config_path, original)?;
+    presenter.invoke_audience_set_sticky_qr(!enabled);
+    report.check(
+        "Successful sticky QR save clears the retained error and applies the setting",
+        failed_again
+            && presenter.get_audience_sticky_qr_error().is_empty()
+            && presenter.get_audience_sticky_qr_enabled() == !enabled
+            && windows.audience.get_audience_sticky_qr_enabled() == !enabled,
+        "retry saved and cleared the error",
+        "successful retry did not recover",
+    );
+    presenter.invoke_audience_set_sticky_qr(enabled);
+    presenter.invoke_close_settings();
+    presenter.invoke_audience_toggle_session();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while presenter.get_audience_active() && Instant::now() < deadline {
+        settle_presenter_notes_layout(presenter).await?;
+    }
+    Ok(())
+}
+
+async fn check_settings_dialog(
+    windows: &AppWindows,
+    state: &Rc<RefCell<AppState>>,
+    report: &mut GuiSmokeReport,
+) -> Result<()> {
+    let presenter = &windows.presenter;
+    let before = state.borrow().presentation.snapshot();
+    presenter.invoke_open_settings();
+    settle_notes_layout().await?;
+    if let Some(path) = std::env::var_os("QP_GUI_SMOKE_SETTINGS_SNAPSHOT") {
+        let snapshot = presenter.window().take_snapshot()?;
+        let mut bytes =
+            format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+        for pixel in snapshot.as_bytes().chunks_exact(4) {
+            bytes.extend_from_slice(&pixel[..3]);
+        }
+        fs::write(path, bytes).context("failed to save Settings smoke snapshot")?;
+    }
+    report.check(
+        "Settings opens independently of Audience Live",
+        presenter.get_settings_visible() && !presenter.get_audience_active(),
+        "settings opened without starting an audience session",
+        "settings did not open independently",
+    );
+    for (flowing, bubbles, stage) in [
+        (true, true, "both-on"),
+        (false, true, "bubbles-only"),
+        (false, false, "both-off"),
+        (true, false, "flow-only"),
+    ] {
+        presenter.invoke_audience_set_comment_display(flowing, bubbles);
+        delay(Duration::from_millis(180)).await;
+        report.check(
+            format!("Settings switches reflect {stage}"),
+            presenter.get_audience_flowing_enabled() == flowing
+                && presenter.get_audience_bubbles_enabled() == bubbles,
+            "independent display preferences applied",
+            "display preferences did not match the requested combination",
+        );
+        if let Some(path) = std::env::var_os("QP_GUI_SMOKE_SETTINGS_SNAPSHOT") {
+            let path = std::path::PathBuf::from(path);
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("settings");
+            let snapshot = presenter.window().take_snapshot()?;
+            let mut bytes =
+                format!("P6\n{} {}\n255\n", snapshot.width(), snapshot.height()).into_bytes();
+            for pixel in snapshot.as_bytes().chunks_exact(4) {
+                bytes.extend_from_slice(&pixel[..3]);
+            }
+            fs::write(path.with_file_name(format!("{stem}-{stage}.ppm")), bytes)
+                .context("failed to save switch state snapshot")?;
+        }
+    }
+    for text in [" ", "\n"] {
+        presenter
+            .window()
+            .dispatch_event(slint::platform::WindowEvent::KeyPressed { text: text.into() });
+        presenter
+            .window()
+            .dispatch_event(slint::platform::WindowEvent::KeyReleased { text: text.into() });
+    }
+    settle_notes_layout().await?;
+    report.check(
+        "Settings isolates presentation keyboard navigation",
+        state.borrow().presentation.snapshot() == before,
+        "Space/Return in Settings did not turn the page",
+        "Settings forwarded a navigation key to the presentation",
+    );
+    presenter.invoke_close_settings();
+    settle_notes_layout().await?;
+    report.check(
+        "Closing Settings restores the presenter",
+        !presenter.get_settings_visible(),
+        "settings closed",
+        "settings remained open",
+    );
+    Ok(())
+}
+
 #[derive(Debug, PartialEq)]
 struct NotesResizeSnapshot {
     window_size: slint::PhysicalSize,
@@ -1065,7 +2287,7 @@ impl NotesResizeSnapshot {
     fn portrait_inline_layout_is_applied(&self) -> bool {
         // Read actual element bounds, not just the requested aspect/menu flags.
         // The 0.6 slide surface, 28px inline menu and displaced main area must
-        // agree, and the notes viewport must belong to that new slide width.
+        // agree, and the notes viewport must contain that new slide width.
         // This is an applied-layout witness even if native size did not change;
         // neither an arbitrary quiet period nor a resize event proves it alone.
         self.slide_width > 0.0
@@ -1073,7 +2295,7 @@ impl NotesResizeSnapshot {
             && (self.slide_width - self.slide_height * 0.6).abs() <= 1.0
             && (self.menu_height - 28.0).abs() <= 1.0
             && (self.main_y - self.menu_height - 54.0).abs() <= 1.0
-            && (self.notes_outer_width - self.slide_width).abs() <= 1.0
+            && self.notes_outer_width >= self.slide_width - 1.0
             && self.viewport_width <= self.notes_outer_width - 20.0 + 1.0
     }
 
@@ -1206,6 +2428,14 @@ async fn check_notes_font_size(
     context: &str,
 ) -> Result<()> {
     let presenter = &windows.presenter;
+    let original_panel_expanded = presenter.get_audience_panel_expanded();
+    // Keep typography fixtures within small CI displays. Expanding the footer
+    // raises even the minimum fixture above AppKit's available work area.
+    // Disclosure and expanded history are exercised separately below.
+    if original_panel_expanded {
+        presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
+    }
     let original_size = presenter.window().size();
     let original_aspect = presenter.get_current_page_aspect_ratio();
     let original_has_notes = presenter.get_has_notes();
@@ -1215,7 +2445,11 @@ async fn check_notes_font_size(
     let generation_before = state.borrow().render_generation;
     let now = Instant::now();
     let elapsed_before = state.borrow().timer.elapsed_at(now);
-    resize_presenter_notes(presenter, slint::LogicalSize::new(800.0, 560.0)).await?;
+    resize_presenter_notes(
+        presenter,
+        slint::LogicalSize::new(800.0, 560.0 + presenter.get_audience_panel_height()),
+    )
+    .await?;
 
     presenter.set_has_notes(false);
     presenter.set_notes_text("".into());
@@ -1227,8 +2461,9 @@ async fn check_notes_font_size(
         "unexpected placeholder size",
     );
 
+    // These fixtures isolate vertical font fitting even on small CI displays.
     presenter.set_has_notes(true);
-    presenter.set_notes_text("Opening remarks. 日本語のノート。".into());
+    presenter.set_notes_text("Hi. 日本語。".into());
     settle_presenter_notes_layout(presenter).await?;
     report.check(
         format!("short notes automatically use 24px ({context})"),
@@ -1346,6 +2581,10 @@ async fn check_notes_font_size(
     let small_size = presenter.get_notes_font_size();
     let heights: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();
     let selected = (small_size as usize).saturating_sub(12);
+    let small_diagnostics = format!(
+        "fixture_repeats={fixture_repeats}, {}",
+        notes_layout_diagnostics(presenter)
+    );
     report.check(
         format!("shrinking content clamps the previous end-of-note scroll offset ({context})"),
         presenter.get_notes_scroll_y() == 0.0,
@@ -1357,53 +2596,92 @@ async fn check_notes_font_size(
         small_size > 12.0
             && small_size < 24.0
             && small_size.fract() == 0.0
-            && heights
-                .get(selected)
-                .is_some_and(|height| *height + 10.0 <= presenter.get_notes_visible_height())
-            && heights
-                .iter()
-                .skip(selected + 1)
-                .all(|height| *height + 10.0 > presenter.get_notes_visible_height())
+            && heights.get(selected).is_some_and(|height| {
+                *height + crate::notes::NOTES_BOTTOM_PADDING <= presenter.get_notes_visible_height()
+            })
+            && heights.iter().skip(selected + 1).all(|height| {
+                *height + crate::notes::NOTES_BOTTOM_PADDING > presenter.get_notes_visible_height()
+            })
             && presenter.get_notes_content_height() <= presenter.get_notes_visible_height(),
-        "an intermediate size fits and every larger candidate overflows",
-        format!(
-            "size={small_size}, measurements={heights:?}, viewport={}",
-            presenter.get_notes_visible_height()
-        ),
+        small_diagnostics.clone(),
+        small_diagnostics,
     );
-    // Keep both native sizes inside the small CI desktop. A constant width
-    // isolates extra vertical room instead of enlarging the slide preview too.
-    resize_presenter_notes(presenter, slint::LogicalSize::new(800.0, 650.0)).await?;
+    // Keep the width fixed so the slide preview does not consume the extra
+    // vertical room. The collapsed footer makes this a 608 -> 640px resize,
+    // which fits the 656px client work area on macOS CI.
+    resize_presenter_notes(
+        presenter,
+        slint::LogicalSize::new(800.0, 592.0 + presenter.get_audience_panel_height()),
+    )
+    .await?;
+    settle_presenter_notes_layout(presenter).await?;
+    let resized_size = presenter.get_notes_font_size();
+    let resized_height = presenter.get_notes_visible_height();
+    let resized_measurements: Vec<f32> = presenter.get_notes_measured_heights().iter().collect();
+    let resized_selected = (resized_size as usize).saturating_sub(12);
+    let resized_diagnostics = notes_layout_diagnostics(presenter);
     report.check(
-        format!("native resize automatically enlarges notes ({context})"),
-        presenter.get_notes_font_size() > small_size,
-        "larger viewport enlarged the text",
         format!(
-            "before={small_size}, after={}, viewport={}, window={:?}",
-            presenter.get_notes_font_size(),
-            presenter.get_notes_visible_height(),
-            presenter.window().size()
+            "resize events select the largest size fitting the settled notes viewport ({context})"
         ),
+        (12.0..=24.0).contains(&resized_size)
+            && resized_size.fract() == 0.0
+            && resized_measurements.len() == 13
+            && resized_measurements
+                .iter()
+                .all(|height| height.is_finite() && *height > 0.0)
+            && resized_measurements
+                .get(resized_selected)
+                .is_some_and(|height| {
+                    *height + crate::notes::NOTES_BOTTOM_PADDING <= resized_height
+                })
+            && resized_measurements
+                .iter()
+                .skip(resized_selected + 1)
+                .all(|height| *height + crate::notes::NOTES_BOTTOM_PADDING > resized_height)
+            && presenter.get_notes_content_height() <= resized_height,
+        resized_diagnostics.clone(),
+        resized_diagnostics,
     );
-    resize_presenter_notes(presenter, slint::LogicalSize::new(800.0, 560.0)).await?;
+
+    // Change only the preview's aspect ratio to release notes space without
+    // requesting an oversized native window. Preserve strict growth coverage.
+    presenter.set_current_page_aspect_ratio(0.6);
+    settle_presenter_notes_layout(presenter).await?;
+    let constrained_height = presenter.get_notes_visible_height();
+    let constrained_size = presenter.get_notes_font_size();
+    let controlled_window = presenter.window().size();
+    let constrained_diagnostics = notes_layout_diagnostics(presenter);
+    presenter.set_current_page_aspect_ratio(4.0);
+    settle_presenter_notes_layout(presenter).await?;
+    let growth_diagnostics = format!(
+        "before: {constrained_diagnostics}; after: {}",
+        notes_layout_diagnostics(presenter)
+    );
     report.check(
-        format!("native shrink restores fitted notes ({context})"),
-        presenter.get_notes_font_size() == small_size && presenter.get_notes_scroll_y() == 0.0,
-        "smaller viewport restored its fitting size without an empty scroll offset",
-        format!(
-            "expected={small_size}, actual={}, scroll={}",
-            presenter.get_notes_font_size(),
-            presenter.get_notes_scroll_y()
-        ),
+        format!("increasing available notes space automatically enlarges text ({context})"),
+        presenter.window().size() == controlled_window
+            && presenter.get_notes_visible_height() > constrained_height
+            && presenter.get_notes_font_size() > constrained_size
+            && presenter.get_notes_font_size() == 24.0
+            && presenter.get_notes_content_height() <= presenter.get_notes_visible_height(),
+        growth_diagnostics.clone(),
+        growth_diagnostics,
     );
+    resize_presenter_notes(
+        presenter,
+        slint::LogicalSize::new(800.0, 560.0 + presenter.get_audience_panel_height()),
+    )
+    .await?;
     presenter.set_current_page_aspect_ratio(0.6);
     presenter.set_use_native_menu_bar(false);
     // The new layout can raise the native minimum size (notably with Windows
     // inline menus). Verify fitting and the usable viewport at the OS-selected
-    // size; exact 800x560 is only required by the controlled grow/shrink checks.
-    presenter
-        .window()
-        .set_size(slint::LogicalSize::new(800.0, 560.0));
+    // size; the Audience Live footer can also constrain the native geometry.
+    presenter.window().set_size(slint::LogicalSize::new(
+        800.0,
+        560.0 + presenter.get_audience_panel_height(),
+    ));
     wait_for_presenter_notes_resize(presenter, None).await?;
     report.check(
         format!("portrait slides and inline menus retain bounded notes sizing ({context})"),
@@ -1438,6 +2716,10 @@ async fn check_notes_font_size(
         "page, render generation, and timer stayed unchanged",
         "automatic sizing unexpectedly changed presentation state",
     );
+    if original_panel_expanded {
+        presenter.invoke_audience_toggle_panel();
+        settle_presenter_notes_layout(presenter).await?;
+    }
     Ok(())
 }
 

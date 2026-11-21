@@ -7,7 +7,7 @@ version.
 
 Quick Presenter does not request winit window blur. On macOS, this copy makes
 `WindowDelegate::set_blur` a no-op and removes its private CoreGraphics imports
-`CGSMainConnectionID` and `CGSSetWindowBackgroundBlurRadius`. The Slide window's
+`CGSMainConnectionID` and `CGSSetWindowBackgroundBlurRadius`. The Audience Window's
 transparent title bar uses public AppKit calls in `src/macos_window.rs`, separate
 from winit blur. Keep the override until a compatible stable winit release
 implements blur using public APIs and the Store binary check passes.
