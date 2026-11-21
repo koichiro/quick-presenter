@@ -286,7 +286,11 @@ impl Dispatcher {
                         );
                     }
                     let before = control_state::snapshot(&state.borrow(), Instant::now());
-                    crate::handle_presentation_command(windows, state, PresentationCommand::Close);
+                    crate::handle_control_presentation_command(
+                        windows,
+                        state,
+                        PresentationCommand::Close,
+                    );
                     reply(
                         &pending,
                         Reply::Mutation {
@@ -300,7 +304,7 @@ impl Dispatcher {
                     let validated = navigation_command(&state.borrow(), &command);
                     match validated {
                         Ok(command) => {
-                            crate::handle_presentation_command(windows, state, command);
+                            crate::handle_control_presentation_command(windows, state, command);
                             let after = control_state::snapshot(&state.borrow(), Instant::now());
                             let changed =
                                 before.page != after.page || before.blackout != after.blackout;

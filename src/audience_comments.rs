@@ -84,6 +84,8 @@ pub struct CommentEngine {
     generation: u64,
     paused: bool,
     last_sequence: u64,
+    flowing_after: u64,
+    bubbles_after: u64,
     history: VecDeque<String>,
 }
 impl CommentEngine {
@@ -93,6 +95,15 @@ impl CommentEngine {
         self.settings = settings;
     }
     pub fn set_display_settings(&mut self, settings: CommentDisplaySettings) {
+        self.set_display_settings_after(settings, self.last_sequence);
+    }
+    pub fn set_display_settings_after(&mut self, settings: CommentDisplaySettings, sequence: u64) {
+        if settings.flowing && !self.settings.flowing {
+            self.flowing_after = sequence;
+        }
+        if settings.bubbles && !self.settings.bubbles {
+            self.bubbles_after = sequence;
+        }
         if !settings.flowing {
             self.active.clear();
             self.pending.clear();
@@ -157,7 +168,7 @@ impl CommentEngine {
         {
             return;
         }
-        if self.settings.bubbles {
+        if self.settings.bubbles && event.sequence > self.bubbles_after {
             self.bubbles_moving = true;
             for bubble in &mut self.bubbles {
                 bubble.from_y = bubble.y(now);
@@ -181,6 +192,7 @@ impl CommentEngine {
             }
         }
         if !self.settings.flowing
+            || event.sequence <= self.flowing_after
             || !width.is_finite()
             || width < 0.0
             || self.active.len() >= MAX_ACTIVE
@@ -276,6 +288,34 @@ mod tests {
                 assert_eq!(e.bubble_frames(now).len(), usize::from(bubbles));
                 assert_eq!(e.history().len(), 1);
             }
+        }
+    }
+
+    #[test]
+    fn enabling_a_style_does_not_replay_comments_admitted_before_the_toggle() {
+        let now = Instant::now();
+        for flowing_before in [false, true] {
+            let mut engine = CommentEngine::default();
+            engine.set_display_settings(CommentDisplaySettings {
+                flowing: flowing_before,
+                bubbles: !flowing_before,
+            });
+            let queued = event(1, now, 0);
+            engine.set_display_settings_after(
+                CommentDisplaySettings {
+                    flowing: true,
+                    bubbles: true,
+                },
+                queued.sequence,
+            );
+            engine.receive(&queued, 100.0, now);
+            engine.receive(&event(2, now, 0), 100.0, now);
+            assert_eq!(engine.history().len(), 2);
+            assert_eq!(engine.frames(now).len(), if flowing_before { 2 } else { 1 });
+            assert_eq!(
+                engine.bubble_frames(now).len(),
+                if flowing_before { 1 } else { 2 }
+            );
         }
     }
 

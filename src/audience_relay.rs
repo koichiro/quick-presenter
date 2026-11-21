@@ -260,21 +260,27 @@ pub struct RemoteAudienceSession {
 }
 impl RemoteAudienceSession {
     pub fn start(path: PathBuf) -> std::io::Result<Self> {
-        Self::start_worker(Some(path), None)
+        Self::start_worker(Some(path), None, false)
     }
     pub(crate) fn start_managed(
         settings: crate::audience_relay_http::ManagedRelay,
     ) -> std::io::Result<Self> {
-        Self::start_worker(None, Some(settings))
+        Self::start_worker(None, Some(settings), false)
+    }
+    pub(crate) fn start_cleanup(
+        settings: crate::audience_relay_http::ManagedRelay,
+    ) -> std::io::Result<Self> {
+        Self::start_worker(None, Some(settings), true)
     }
     fn start_worker(
         path: Option<PathBuf>,
         managed: Option<crate::audience_relay_http::ManagedRelay>,
+        cleanup_only: bool,
     ) -> std::io::Result<Self> {
         let status = Arc::new(Mutex::new(SessionStatus::Starting));
         let connections = Arc::new(AtomicUsize::new(0));
         let engine = Arc::new(Mutex::new(AudienceEngine::new(Instant::now())));
-        let (stop, mut stopped) = watch::channel(false);
+        let (stop, mut stopped) = watch::channel(cleanup_only);
         let end_requested = managed
             .as_ref()
             .map(|s| s.end_requested.clone())
@@ -363,6 +369,12 @@ impl RemoteAudienceSession {
                 .clone(),
             connections: self.connections.load(Ordering::Relaxed),
         }
+    }
+    pub fn admission_sequence(&self) -> u64 {
+        self.engine
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sequence()
     }
     pub fn drain_events(&self) -> Vec<AcceptedAudienceEvent> {
         self.engine
@@ -627,14 +639,15 @@ async fn run(
     .await
     .map_err(|_| "Relay startup send timed out.")?
     .map_err(|_| "Relay connection closed during startup.")?;
-    *status.lock().unwrap_or_else(|e| e.into_inner()) = SessionStatus::Running {
-        url: config.join_url,
-        code: config.code,
-    };
+    let mut running = false;
+    let startup_deadline = tokio::time::Instant::now() + TIMEOUT;
     let mut heartbeat = tokio::time::interval(Duration::from_secs(15));
     let mut last_received = Instant::now();
     loop {
         let outgoing = tokio::select! {
+            _ = tokio::time::sleep_until(startup_deadline), if !running => {
+                return Err("Relay display synchronization timed out.");
+            }
             _ = updates.changed() => { let display = *updates.borrow_and_update(); Some(Message::Text(state.display(display)?.to_string().into())) }
             _ = heartbeat.tick() => {
                 if last_received.elapsed() >= Duration::from_secs(45) { return Err("Relay heartbeat timed out."); }
@@ -657,6 +670,13 @@ async fn run(
                 .await
                 .map_err(|_| "Relay send timed out.")?
                 .map_err(|_| "Relay connection closed.")?;
+        }
+        if !running && state.confirmed {
+            *status.lock().unwrap_or_else(|e| e.into_inner()) = SessionStatus::Running {
+                url: config.join_url.clone(),
+                code: config.code.clone(),
+            };
+            running = true;
         }
     }
 }
@@ -709,10 +729,10 @@ mod tests {
 
     #[test]
     fn strict_json_accepts_exact_byte_limit_and_rejects_escaped_duplicate_keys() {
-        let exact = format!("\"{}\"", "x".repeat(MAX_BYTES - 2));
+        let exact = format!("{{\"x\":\"{}\"}}", "x".repeat(MAX_BYTES - 8));
         assert_eq!(
             strict_json(exact.as_bytes()).unwrap(),
-            json!("x".repeat(MAX_BYTES - 2))
+            json!({"x": "x".repeat(MAX_BYTES - 8)})
         );
         assert_eq!(
             strict_json(format!("{exact} ").as_bytes()).err(),
@@ -729,8 +749,8 @@ mod tests {
             );
         }
         assert_eq!(
-            strict_json(br#"[null,true,false,1,-2,1.5,"text",{"x":1}]"#).unwrap(),
-            json!([null, true, false, 1, -2, 1.5, "text", {"x":1}])
+            strict_json(br#"{"values":[null,true,false,1,-2,1.5,"text",{"x":1}]}"#).unwrap(),
+            json!({"values":[null, true, false, 1, -2, 1.5, "text", {"x":1}]})
         );
     }
 
@@ -1292,8 +1312,10 @@ mod tests {
             let mut ws = tungstenite::accept(stream).unwrap();
             ws.read().unwrap();
             ws.send(tungstenite::Message::Text(json!({"protocol":"qp.presenter","version":VERSION,"type":"presenter_welcome","presenter_epoch":"7","display_epoch":"10","audience_connections":0}).to_string().into())).unwrap();
-            ws.read().unwrap(); // Initial display is sent before Running.
-                                // Drop TCP without a WebSocket close handshake, producing a read error.
+            ws.read().unwrap(); // Initial display.
+            ws.send(tungstenite::Message::Text(snapshot("1", "11", 0).into()))
+                .unwrap();
+            // Drop TCP after acknowledging availability, without a close handshake.
         });
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()

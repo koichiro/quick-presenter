@@ -7,6 +7,7 @@ use crate::PresenterWindow;
 #[derive(Default)]
 pub struct AudiencePanelGeometry {
     sizes: Option<PanelSizes>,
+    last_requested: Option<PhysicalSize>,
 }
 
 struct PanelSizes {
@@ -43,14 +44,16 @@ impl AudiencePanelGeometry {
         // Let the OS retain ownership of maximized/fullscreen geometry.
         if window.is_maximized() || window.is_fullscreen() {
             self.sizes = None;
+            self.last_requested = None;
             return;
         }
-        // Retain the exact device-pixel pair until the presenter resizes the
-        // window or changes display scaling. This prevents accumulated rounding
-        // drift and also handles another toggle before native resize completion.
-        let target = if let Some(sizes) = self.sizes.as_ref().filter(|sizes| {
-            sizes.scale == scale && (current == sizes.expanded || current == sizes.collapsed)
-        }) {
+        // Reuse the device-pixel pair only at the size we last requested. A
+        // manual resize to the other cached size must establish a new pair.
+        let target = if let Some(sizes) = self
+            .sizes
+            .as_ref()
+            .filter(|sizes| sizes.scale == scale && self.last_requested == Some(current))
+        {
             if expanded {
                 sizes.expanded
             } else {
@@ -80,7 +83,9 @@ impl AudiencePanelGeometry {
                 f64::from(presenter.get_presenter_minimum_height()),
             )));
         });
-        window.set_size(PhysicalSize::new(target.width, limit_height(target.height)));
+        let requested = PhysicalSize::new(target.width, limit_height(target.height));
+        self.last_requested = Some(requested);
+        window.set_size(requested);
         #[cfg(target_os = "windows")]
         crate::windows_window::fit_presenter_to_work_area(presenter);
     }

@@ -5,10 +5,24 @@ pub struct AudienceAlert {
     pub guidance: &'static str,
 }
 
+pub fn for_transport_failure(error: &str, remote: bool) -> AudienceAlert {
+    if remote {
+        for_failure(error)
+    } else {
+        AudienceAlert {
+            title: "Audience Live local hosting could not start",
+            guidance: "Check your local network, refresh the LAN address, then turn Audience Live ON again. PDF playback is still available.",
+        }
+    }
+}
+
 pub fn for_failure(error: &str) -> AudienceAlert {
     match error {
-        "Relay creation credential was rejected."
-        | "Relay authentication failed." | "Relay access was denied." => AudienceAlert {
+        "Relay creation credential was rejected." => AudienceAlert {
+            title: "Audience Live access was not allowed",
+            guidance: "Open Settings and import the corrected configuration, then turn Audience Live ON again. If recovery is pending, check the same room with your server administrator before replacing settings. PDF playback is still available.",
+        },
+        "Relay authentication failed." | "Relay access was denied." => AudienceAlert {
             title: "Audience Live access was not allowed",
             guidance: "Check the relay credentials and session access with your server administrator, then turn Audience Live ON again. PDF playback is still available.",
         },
@@ -22,6 +36,7 @@ pub fn for_failure(error: &str) -> AudienceAlert {
         },
         "Cannot connect to relay." | "Relay connection timed out."
         | "Relay authentication timed out."
+        | "Relay display synchronization timed out."
         | "Relay startup send timed out." | "Relay connection closed during startup."
         | "Relay room creation is unavailable. Retry to recover the same room."
         | "Relay room creation timed out. Retry to recover the same room." => AudienceAlert {
@@ -52,6 +67,17 @@ pub fn for_failure(error: &str) -> AudienceAlert {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn local_listener_failure_does_not_direct_the_presenter_to_a_relay() {
+        let alert = for_transport_failure("untrusted detail", false);
+        assert!(alert.guidance.contains("refresh the LAN address"));
+        assert!(!alert.guidance.contains("relay"));
+        assert!(!alert.guidance.contains("untrusted detail"));
+        assert_eq!(
+            for_transport_failure("Relay denied room creation.", true),
+            for_failure("Relay denied room creation.")
+        );
+    }
     #[test]
     fn room_end_failure_requires_previous_room_confirmation() {
         let alert = for_failure("Cannot confirm relay room termination.");

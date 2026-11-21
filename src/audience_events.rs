@@ -169,6 +169,9 @@ pub struct AudienceEngine {
     pub(crate) logger: Option<std::sync::Arc<crate::audience_log::CommentLogger>>,
 }
 impl AudienceEngine {
+    pub fn sequence(&self) -> u64 {
+        self.sequence
+    }
     pub fn new(now: Instant) -> Self {
         Self {
             stopped: false,
@@ -565,6 +568,13 @@ mod tests {
         assert!(!b.allow(now + Duration::from_millis(250)));
         assert!(b.allow(now + Duration::from_millis(500)));
         assert!(!b.allow(now + Duration::from_millis(500)));
+        let mut comments = RateBudget::new(2, 1, now);
+        assert!(comments.allow(now));
+        assert!(comments.allow(now));
+        assert!(!comments.allow(now));
+        assert!(!comments.allow(now + Duration::from_millis(999)));
+        assert!(comments.allow(now + Duration::from_secs(1)));
+        assert!(!comments.allow(now + Duration::from_secs(1)));
     }
     #[test]
     fn delivery_is_bounded_expires_and_stops_permanently() {

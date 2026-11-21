@@ -23,6 +23,13 @@ mod tests {
     }
 }
 impl AudienceSession {
+    pub(crate) fn start_for_smoke(address: Option<Ipv4Addr>) -> std::io::Result<Self> {
+        LocalAudienceSession::start_for_smoke(
+            address.ok_or_else(|| std::io::Error::other("No LAN address available"))?,
+        )
+        .map(Self::Local)
+    }
+
     pub fn start(
         address: Option<Ipv4Addr>,
         relay_config: Option<crate::audience_relay_http::ManagedRelay>,
@@ -40,6 +47,12 @@ impl AudienceSession {
         match self {
             Self::Local(s) => s.snapshot(),
             Self::Remote(s) => s.snapshot(),
+        }
+    }
+    pub fn admission_sequence(&self) -> u64 {
+        match self {
+            Self::Local(s) => s.admission_sequence(),
+            Self::Remote(s) => s.admission_sequence(),
         }
     }
     pub fn drain_events(&self) -> Vec<AcceptedAudienceEvent> {

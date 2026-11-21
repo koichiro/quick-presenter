@@ -1,6 +1,34 @@
 //! User-owned TOML configuration loading and protected Audience settings updates.
 use serde::Deserialize;
-use std::{fs::File, io::Read, path::PathBuf};
+use std::{
+    fs::{File, OpenOptions},
+    io::{self, Read},
+    path::{Path, PathBuf},
+};
+
+fn open_regular(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = options.open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Configuration must be a regular file",
+        ));
+    }
+    Ok(file)
+}
+
+fn read_bounded(path: &Path) -> io::Result<String> {
+    let mut text = String::new();
+    open_regular(path)?.take(16385).read_to_string(&mut text)?;
+    Ok(text)
+}
 
 #[derive(Clone)]
 pub struct RelayEndpoint {
@@ -35,7 +63,7 @@ fn load_from(
     let Some(path) = explicit.or(default) else {
         return Ok(None);
     };
-    let file = match File::open(path) {
+    let file = match open_regular(&path) {
         Ok(file) => file,
         Err(e) if !required && e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err("Cannot open Audience configuration."),
@@ -108,7 +136,7 @@ fn parse(text: &str) -> Result<Option<RelayEndpoint>, &'static str> {
 /// Read and validate an imported download without requiring its original permissions.
 /// The destination is protected separately before credential bytes are written.
 pub fn read_import(path: &std::path::Path) -> Result<RelayEndpoint, &'static str> {
-    let file = File::open(path).map_err(|_| "Cannot open configuration import.")?;
+    let file = open_regular(path).map_err(|_| "Cannot open configuration import.")?;
     if !file
         .metadata()
         .map_err(|_| "Cannot inspect configuration import.")?
@@ -166,7 +194,7 @@ pub fn load_comment_display(
     explicit: Option<PathBuf>,
 ) -> Result<crate::audience_comments::CommentDisplaySettings, &'static str> {
     let path = import_destination(explicit)?;
-    let file = match File::open(path) {
+    let file = match open_regular(&path) {
         Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Default::default()),
         Err(_) => return Err("Cannot open comment display settings."),
@@ -198,7 +226,7 @@ pub fn load_audience_display(
     explicit: Option<PathBuf>,
 ) -> Result<AudienceDisplaySettings, &'static str> {
     let path = import_destination(explicit)?;
-    let file = match File::open(path) {
+    let file = match open_regular(&path) {
         Ok(file) => file,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Default::default()),
         Err(_) => return Err("Cannot open audience display settings."),
@@ -245,7 +273,7 @@ fn save_section(
     if std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink()) {
         return Err("Configuration destination must not be a symbolic link.");
     }
-    let mut current: toml::Table = match std::fs::read_to_string(path) {
+    let mut current: toml::Table = match read_bounded(path) {
         Ok(text) if text.len() <= 16384 => toml::from_str(&text)
             .map_err(|_| "Existing configuration is invalid; it was not changed.")?,
         Ok(_) => return Err("Existing configuration is too large; it was not changed."),
@@ -267,6 +295,42 @@ fn save_section(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn fifo_without_a_writer_cannot_block_configuration_callbacks() {
+        use std::{ffi::CString, os::unix::ffi::OsStrExt, time::Duration};
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        let fifo = CString::new(path.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let results = [
+                load(Some(path.clone())).is_err(),
+                read_import(&path).is_err(),
+                load_comment_display(Some(path.clone())).is_err(),
+                load_audience_display(Some(path.clone())).is_err(),
+                reset_relay(&path).is_err(),
+            ];
+            sender.send(results).unwrap();
+        });
+        assert!(receiver
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .into_iter()
+            .all(|v| v));
+    }
+
+    #[test]
+    fn oversized_destination_is_not_read_or_replaced_by_a_display_save() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        let original = " ".repeat(1024 * 1024);
+        std::fs::write(&path, &original).unwrap();
+        assert!(save_audience_display(&path, AudienceDisplaySettings::default()).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+    }
     #[test]
     fn sticky_qr_is_opt_in_and_survives_other_settings_updates() {
         let dir = tempfile::tempdir().unwrap();

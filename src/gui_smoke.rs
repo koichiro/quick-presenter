@@ -1457,16 +1457,31 @@ async fn check_audience_overlay(
     }
     let first = audience.get_audience_overlay().row_data(0);
     let observed_at = Instant::now();
+    let overlay = audience.get_audience_overlay();
+    audience.set_audience_overlay(
+        Rc::new(slint::VecModel::<crate::ReactionOverlayItem>::default()).into(),
+    );
+    settle_presenter_notes_layout(presenter).await?;
+    let baseline = audience.window().take_snapshot();
+    audience.set_audience_overlay(overlay);
+    let baseline = baseline?;
+    settle_presenter_notes_layout(presenter).await?;
     let snapshot = audience.window().take_snapshot()?;
     let colored = snapshot
         .as_bytes()
         .chunks_exact(4)
-        .filter(|p| p[0] > 220 && p[1] > 160 && p[1] < 230 && p[2] < 120)
+        .zip(baseline.as_bytes().chunks_exact(4))
+        .filter(|(p, before)| {
+            p[..3] != before[..3] && p[0] > 220 && p[1] > 160 && p[1] < 230 && p[2] < 120
+        })
         .count();
     report.check(
         "Reaction renders an independent SVG overlay",
-        first.is_some() && colored > 5,
-        "overlay model and colored pixels present",
+        first.is_some()
+            && snapshot.width() == baseline.width()
+            && snapshot.height() == baseline.height()
+            && colored > 5,
+        "overlay model and reaction-colored pixels differ from the same-page baseline",
         "reaction overlay was not rendered",
     );
     let size = audience.window().size();

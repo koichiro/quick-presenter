@@ -21,7 +21,7 @@ const html = fs.readFileSync('assets/audience/index.html', 'utf8');
 const script = fs.readFileSync('assets/audience/audience.js', 'utf8');
 assert.match(html, /<script type="module" src="\/assets\/audience.js"><\/script>/);
 
-function client(hash = '#k=' + 'A'.repeat(43), storage = new Map(), blockedStorage = false, pathname = '/join') {
+async function client(hash = '#k=' + 'A'.repeat(43), storage = new Map(), blockedStorage = false, pathname = '/join') {
   const elements = new Map();
   for (const id of ['status', 'retry', 'feedback', 'comments', 'body', 'handle', 'send-comment']) {
     elements.set(id, {
@@ -71,7 +71,10 @@ function client(hash = '#k=' + 'A'.repeat(43), storage = new Map(), blockedStora
     setTimeout: (callback, delay) => { timers.set(++timerId, {callback, delay}); return timerId; },
     clearTimeout: id => timers.delete(id)
   });
-  vm.runInContext(script.replace('export function mountAudience', 'function mountAudience') + '\nmountAudience(globalThis);', context, {timeout: 1000});
+  vm.runInContext('globalThis.window = globalThis;', context);
+  const module = new vm.SourceTextModule(script, {context});
+  await module.link(() => { throw new Error('Unexpected module import'); });
+  await module.evaluate({timeout: 1000});
   const socket = () => sockets.at(-1);
   function open() { socket().readyState = WebSocket.OPEN; socket().onopen(); }
   function receive(message, target = socket()) { target.onmessage({data: JSON.stringify(message)}); }
@@ -100,14 +103,16 @@ function client(hash = '#k=' + 'A'.repeat(43), storage = new Map(), blockedStora
 class AudienceBrowserTests(unittest.TestCase):
     def run_js(self, case):
         completed = subprocess.run(
-            [NODE, "-"], input=HARNESS + "\n" + case, cwd=REPO,
+            [NODE, "--experimental-vm-modules", "-"],
+            input="(async () => {\n" + HARNESS + "\n" + case + "\n})().catch(error => {console.error(error); process.exitCode = 1;});", cwd=REPO,
             capture_output=True, text=True, encoding="utf-8", timeout=3,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_authentication_removes_fragment_and_waits_for_capabilities(self):
         self.run_js(r"""
-const c = client();
+const c = await client();
+assert.equal(c.sockets.length, 1, 'the unmodified module mounts on page load');
 assert.equal(c.socket().url, 'ws://127.0.0.1:4321/ws/audience/join');
 assert.equal(JSON.stringify(c.replaced), JSON.stringify([[{}, '', '/join']]));
 c.open();
@@ -122,7 +127,7 @@ assert.equal(c.elements.get('send-comment').disabled, false);
     def test_missing_join_token_does_not_connect_or_submit(self):
         self.run_js(r"""
 for (const hash of ['', '#k=']) {
-  const c = client(hash);
+  const c = await client(hash);
   assert.equal(c.sockets.length, 0);
   c.submit();
   assert.equal(c.sockets.length, 0);
@@ -134,31 +139,31 @@ for (const hash of ['', '#k=']) {
     def test_reload_recovers_tab_token_and_new_join_replaces_it(self):
         self.run_js(r"""
 const storage = new Map();
-const first = client('#k=' + 'A'.repeat(43), storage); first.welcome(); first.socket().close();
-const reloaded = client('', storage); reloaded.welcome();
+const first = await client('#k=' + 'A'.repeat(43), storage); first.welcome(); first.socket().close();
+const reloaded = await client('', storage); reloaded.welcome();
 assert.equal(reloaded.socket().sent[0].token, 'A'.repeat(43));
 reloaded.submit('After reload');
 assert.equal(reloaded.socket().sent[1].body, 'After reload');
-const next = client('#k=' + 'B'.repeat(43), storage); next.welcome();
+const next = await client('#k=' + 'B'.repeat(43), storage); next.welcome();
 assert.equal(next.socket().sent[0].token, 'B'.repeat(43));
-const again = client('', storage); again.welcome();
+const again = await client('', storage); again.welcome();
 assert.equal(again.socket().sent[0].token, 'B'.repeat(43));
-assert.equal(client('', storage, false, '/different-join').sockets.length, 0);
-assert.equal(client('').sockets.length, 0, 'another tab has no retained credential');
+assert.equal((await client('', storage, false, '/different-join')).sockets.length, 0);
+assert.equal((await client('')).sockets.length, 0, 'another tab has no retained credential');
 """)
 
     def test_unavailable_tab_storage_keeps_join_fragment_reloadable(self):
         self.run_js(r"""
-const c = client('#k=' + 'A'.repeat(43), new Map(), true); c.welcome();
+const c = await client('#k=' + 'A'.repeat(43), new Map(), true); c.welcome();
 assert.deepEqual(c.replaced, []);
 assert.equal(c.socket().sent[0].token, 'A'.repeat(43));
-const missing = client('', new Map(), true);
+const missing = await client('', new Map(), true);
 assert.equal(missing.sockets.length, 0);
 """)
 
     def test_enter_sends_once_but_shift_enter_and_composition_do_not(self):
         self.run_js(r"""
-const c = client(); c.welcome();
+const c = await client(); c.welcome();
 c.elements.get('body').value = 'Line one\nLine two';
 function key(overrides = {}) {
   let prevented = false;
@@ -181,12 +186,12 @@ assert.equal(c.socket().sent.length, 2, 'disconnected Enter cannot submit');
 
     def test_enter_uses_comment_validation_and_capabilities(self):
         self.run_js(r"""
-const c = client(); c.welcome();
+const c = await client(); c.welcome();
 c.elements.get('body').value = '   ';
 c.elements.get('body').onkeydown({key: 'Enter', preventDefault() {}});
 assert.equal(c.socket().sent.length, 1);
 assert.equal(c.validityReports(), 1);
-const reactions = client(); reactions.welcome(['reactions', 'comments'], false);
+const reactions = await client(); reactions.welcome(['reactions', 'comments'], false);
 reactions.elements.get('body').value = 'Comment';
 reactions.elements.get('body').onkeydown({key: 'Enter', preventDefault() {}});
 assert.equal(reactions.socket().sent.length, 1);
@@ -194,7 +199,7 @@ assert.equal(reactions.socket().sent.length, 1);
 
     def test_unavailable_state_disables_and_resume_enables_controls(self):
         self.run_js(r"""
-const c = client(); c.welcome(['reactions','comments','future'], false);
+const c = await client(); c.welcome(['reactions','comments','future'], false);
 assert(c.reactions.every(button => button.disabled));
 assert(c.elements.get('send-comment').disabled);
 c.submit(); assert.equal(c.socket().sent.length, 1);
@@ -205,7 +210,7 @@ assert.equal(c.elements.get('send-comment').disabled, false);
 
     def test_comment_submission_preserves_plain_text_and_original_handle(self):
         self.run_js(r"""
-const c = client(); c.welcome();
+const c = await client(); c.welcome();
 const body = '<script>alert("x")</script>\n世界';
 const handle = ' Name\t ';
 c.submit(body, handle);
@@ -217,7 +222,7 @@ assert.equal(c.elements.get('feedback').textContent, 'Sending…');
 
     def test_supplementary_unicode_at_both_exact_limits_is_accepted(self):
         self.run_js(r"""
-const c = client(); c.welcome();
+const c = await client(); c.welcome();
 c.submit('😀'.repeat(200), '🦀'.repeat(32));
 assert.equal(c.socket().sent.length, 2);
 assert.equal(c.validityReports(), 0);
@@ -232,7 +237,7 @@ for (const [body, handle] of [
   ['Hello', 'x'.repeat(33)], ['Hello', '🦀'.repeat(33)],
   ['', 'Name'], [' \t\r\n\u2003\u00a0', 'Name']
 ]) {
-  const c = client(); c.welcome(); c.submit(body, handle);
+  const c = await client(); c.welcome(); c.submit(body, handle);
   assert.equal(c.socket().sent.length, 1);
   assert.equal(c.validityReports(), 1);
   assert.equal(c.elements.get('send-comment').disabled, false);
@@ -241,7 +246,7 @@ for (const [body, handle] of [
 
     def test_correcting_input_clears_custom_validity_and_allows_empty_handle(self):
         self.run_js(r"""
-const c = client(); c.welcome();
+const c = await client(); c.welcome();
 c.submit('x'.repeat(201), 'x'.repeat(33));
 assert(c.elements.get('body').error);
 assert(c.elements.get('handle').error);
@@ -256,7 +261,7 @@ assert.equal(c.socket().sent[1].handle, '');
 
     def test_pending_comment_blocks_reactions_and_duplicate_submissions(self):
         self.run_js(r"""
-const c = client(); c.welcome(); c.submit('First');
+const c = await client(); c.welcome(); c.submit('First');
 c.submit('Second'); c.reactions[0].onclick();
 assert.equal(c.socket().sent.length, 2);
 assert.equal(c.timers.size, 1);
@@ -270,7 +275,7 @@ assert.equal(c.socket().sent[2].request_id, '2');
 
     def test_matching_acceptance_clears_only_unchanged_comment_body(self):
         self.run_js(r"""
-const c = client(); c.welcome(); c.submit('Hello', 'Name');
+const c = await client(); c.welcome(); c.submit('Hello', 'Name');
 c.result('accepted');
 assert.equal(c.elements.get('body').value, '');
 assert.equal(c.elements.get('handle').value, 'Name');
@@ -281,7 +286,7 @@ assert(c.reactions.every(button => !button.disabled));
 
     def test_unmatched_receipt_does_not_finish_pending_comment(self):
         self.run_js(r"""
-const c = client(); c.welcome(); c.submit('Hello');
+const c = await client(); c.welcome(); c.submit('Hello');
 c.result('accepted', 'other');
 assert.equal(c.elements.get('body').value, 'Hello');
 assert(c.elements.get('send-comment').disabled);
@@ -298,7 +303,7 @@ for (const [status, feedback] of [
   ['busy', 'The presentation is busy. Try again shortly.'],
   ['stopped', 'This session has ended.']
 ]) {
-  const c = client(); c.welcome(); c.submit('Keep this draft'); c.result(status);
+  const c = await client(); c.welcome(); c.submit('Keep this draft'); c.result(status);
   assert.equal(c.elements.get('body').value, 'Keep this draft');
   assert.equal(c.elements.get('feedback').textContent, feedback);
   assert.equal(c.elements.get('send-comment').disabled, false);
@@ -308,7 +313,7 @@ for (const [status, feedback] of [
 
     def test_reaction_acceptance_does_not_clear_comment_draft(self):
         self.run_js(r"""
-const c = client(); c.welcome();
+const c = await client(); c.welcome();
 c.elements.get('body').value = 'Unsubmitted draft';
 c.reactions[0].onclick(); c.result('accepted');
 assert.equal(c.elements.get('body').value, 'Unsubmitted draft');
@@ -317,7 +322,7 @@ assert.equal(c.elements.get('feedback').textContent, 'Reaction received.');
 
     def test_disconnect_cancels_timeout_disables_inputs_and_preserves_draft(self):
         self.run_js(r"""
-const c = client(); c.welcome(); c.submit('Keep this draft'); c.socket().close();
+const c = await client(); c.welcome(); c.submit('Keep this draft'); c.socket().close();
 assert.equal(c.timers.size, 0);
 assert(c.reactions.every(button => button.disabled));
 assert(c.elements.get('send-comment').disabled);
@@ -329,7 +334,7 @@ assert.equal(c.socket().sent.length, 2);
 
     def test_timeout_closes_connection_and_never_replays_comment_on_reconnect(self):
         self.run_js(r"""
-const c = client(); c.welcome(); c.submit('Keep this draft');
+const c = await client(); c.welcome(); c.submit('Keep this draft');
 const timer = [...c.timers.values()][0];
 assert.equal(timer.delay, 4000); timer.callback();
 assert.equal(c.socket().readyState, 3);
@@ -343,7 +348,7 @@ assert.equal(c.socket().sent[1].request_id, '2');
 
     def test_old_socket_messages_and_close_cannot_mutate_new_pending_comment(self):
         self.run_js(r"""
-const c = client(); c.welcome(); c.submit('First');
+const c = await client(); c.welcome(); c.submit('First');
 const old = c.socket(); old.close();
 c.elements.get('retry').onclick(); c.welcome(); c.submit('Second');
 c.receive({protocol:'qp.audience',version:'1', type: 'result', request_id: '2', status: 'accepted'}, old);
@@ -359,7 +364,7 @@ assert.equal(c.elements.get('body').value, '');
     def test_malformed_or_wrong_version_messages_close_and_keep_draft(self):
         self.run_js(r"""
 for (const data of ['{', JSON.stringify({v: 2, type: 'welcome', capabilities: ['reactions', 'comments']})]) {
-  const c = client(); c.welcome(); c.submit('Draft');
+  const c = await client(); c.welcome(); c.submit('Draft');
   c.socket().onmessage({data});
   assert.equal(c.socket().readyState, 3);
   assert.equal(c.elements.get('body').value, 'Draft');
@@ -383,7 +388,7 @@ for (const data of [
   JSON.stringify({protocol:'qp.audience',version:'1',type:'result',request_id:'1',status:'rate_limited'}),
   ' '.repeat(4097), new ArrayBuffer(2)
 ]) {
-  const c=client(); c.welcome(); c.submit('Keep this draft');
+  const c=await client(); c.welcome(); c.submit('Keep this draft');
   c.socket().onmessage({data});
   assert.equal(c.socket().readyState,3);
   assert(c.elements.get('send-comment').disabled);
@@ -395,7 +400,7 @@ for (const data of [
     def test_emoji_sequences_and_limit_preserve_submission(self):
         self.run_js(r"""
 for (const body of ['😀 👍 ❤️ 👏 😂 ❓', '👨‍👩‍👧‍👦', '🇯🇵 🇺🇸', '👍🏽 👩🏽‍💻', 'e\u0301 🏳️‍🌈', '😀'.repeat(200)]) {
-  const c=client(); c.welcome(['reactions','comments','😀']); c.submit(body,'👩🏽‍💻');
+  const c=await client(); c.welcome(['reactions','comments','😀']); c.submit(body,'👩🏽‍💻');
   assert.equal(c.socket().sent[1].body,body);
   assert.equal(c.socket().sent[1].handle,'👩🏽‍💻');
   c.result('accepted'); assert.equal(c.elements.get('body').value,'');
