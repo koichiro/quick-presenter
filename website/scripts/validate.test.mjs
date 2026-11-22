@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +14,8 @@ const dist = join(root, "dist");
 const origin = "https://quickpresenter.com";
 const oldOrigin = "https://koichiro.github.io/quick-presenter";
 const pages = [
+  ["audience-live/index.html", "/audience-live/"],
+  ["ja/audience-live/index.html", "/ja/audience-live/"],
   ["index.html", "/"],
   ["privacy/index.html", "/privacy/"],
   ["ja/index.html", "/ja/"],
@@ -69,6 +72,12 @@ test("required stylesheet and image assets are generated and nonempty", async ()
     "assets/kokoro-demo.mp4",
     "assets/kokoro-demo-poster.jpg",
     "styles.css",
+    "audience-live.css",
+    "audience-live.js",
+    "assets/audience-live/flowing.gif",
+    "assets/audience-live/bubbles.gif",
+    "assets/audience-live/flowing.jpg",
+    "assets/audience-live/bubbles.jpg",
     "assets/presenter-window-v2-macos.png",
     "assets/audience-window-title-en.png",
     "assets/audience-window-en.png",
@@ -220,6 +229,8 @@ test("language routing remembers choices and preserves destinations without redi
     return { redirect, stored: () => stored, click };
   }
   assert.equal(visit().redirect, "/ja/?from=demo#download");
+  assert.equal(visit({ path: "/audience-live/" }).redirect, "/ja/audience-live/?from=demo#download");
+  assert.equal(visit({ path: "/ja/audience-live/", saved: "en" }).redirect, "/audience-live/?from=demo#download");
   assert.equal(visit({ path: "/privacy/" }).redirect, "/ja/privacy/?from=demo#download");
   assert.equal(visit({ languages: ["en-US", "ja"] }).redirect, undefined);
   assert.equal(visit({ languages: ["fr-FR"] }).stored(), "en");
@@ -291,5 +302,34 @@ test("preview survives a range stream read failure", { timeout: 10000 }, async (
       child.kill();
       await exited;
     }
+  }
+});
+
+
+test("Audience Live media retain PR #561 byte identity and do not animate on initial load", async () => {
+  const hashes = {
+    "flowing.gif": "695ba41579bd16913d61aff11b4e408f8678aeaacf9e93cfc9dc41ec11979e33",
+    "bubbles.gif": "16b4c084a7629a39897b3a741dab2f3488d7a5d2576f44e79ca50fcba5f96a1f",
+    "flowing.jpg": "821924546f27baf70eecef13f25495040a83645d16cacd59ab8de025a160c654",
+    "bubbles.jpg": "fbc38773724bb299149bd38d4b09b94f2f6f9f9f9f1f22de4288b935705d37ee",
+  };
+  for (const [file, hash] of Object.entries(hashes)) {
+    const data = await readFile(join(dist, "assets/audience-live", file));
+    assert.equal(createHash("sha256").update(data).digest("hex"), hash, file);
+  }
+  for (const [file] of pages.filter(([, path]) => path.endsWith("audience-live/"))) {
+    const html = await readFile(join(dist, file), "utf8");
+    const images = [...html.matchAll(/<img\b[^>]*>/g)].map(([tag]) => attributes(tag));
+    const demos = images.filter(image => image["data-animation"]);
+    assert.equal(demos.length, 3);
+    for (const demo of demos) {
+      assert.ok(demo.src.endsWith(".jpg"), "Initial image must be a still poster");
+      assert.ok(demo.alt.length > 0);
+      assert.ok((await stat(outputPath(new URL(demo["data-animation"], origin)))).isFile());
+    }
+    assert.doesNotMatch(html, /<img[^>]*\bsrc=["'][^"']*\.gif/);
+    assert.doesNotMatch(html, /<[^>]+\sautoplay(?:[\s=>])/);
+    assert.equal((html.match(/<div id="panel-[^>]*data-panel>/g) || []).length, 2,
+      "Both demos remain available when JavaScript is disabled");
   }
 });

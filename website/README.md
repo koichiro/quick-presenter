@@ -199,7 +199,7 @@ restoring a saved page.
 
 ## Release and local verification checklist
 
-This website targets v2.5.0. Public release and actual Store delivery were
+The existing homepages target v2.5.0. Public release and actual Store delivery were
 confirmed for both Mac App Store and Microsoft Store on 2026-10-25 JST.
 The completed [Store qualification tracker #520](https://github.com/koichiro/quick-presenter/issues/520#issuecomment-6391442187)
 records the results and remaining validation limits.
@@ -224,7 +224,7 @@ kept within PDF preparation; `#support` now includes open source and support.
 
 Before publishing, manually inspect English and Japanese at desktop, tablet,
 and phone widths, keyboard focus, menu behavior, media playback, and language
-switching. Automated tests cover six generated pages, reciprocal locale links,
+switching. Automated tests cover eight generated pages, reciprocal locale links,
 internal links/assets, and seeking for all three videos. Browser rendering,
 responsive geometry, playback interaction, and screenshots remain unverified
 in this session because the in-app browser's connection-error document is
@@ -242,3 +242,74 @@ first/previous/next/last icon controls and the 12-slide deck's speaker notes.
 The screenshot retains the source recording's visible window area and pixel
 geometry; no UI was recreated. The original recording's SHA-256 is
 `b6726cf89d255da4bcb07bff7491d2e3bc47d2030404902badbf286eaf474e4e`.
+
+## Audience Live v3.0.0 landing pages (PR1)
+
+The English page is `/audience-live/` and Japanese is `/ja/audience-live/`.
+Both homepages add a navigation-menu link only; their Hero, existing anchors,
+AI/CLI sections, and v2.5.0 downloads are unchanged. This is a source-only PR for
+the existing dependency-free static build and GitHub Pages workflow; no new
+hosting, framework, runtime dependency, or deployment is introduced.
+
+The page follows Hero, How It Works, Live Comments & Reactions, Choose Your
+Connection, Getting Started, FAQ, and final CTA. English uses the adopted
+"Turn your presentation into a conversation." copy. All download CTAs target
+v3.0.0 RC1 and explicitly identify it as a testing prerelease with macOS Apple
+Silicon DMG and Ubuntu amd64 DEB, not the final release or Store update.
+Review those labels and destinations in both languages when final delivery is
+confirmed. Official Relay is described as an Open Beta with free tickets only,
+per the approved brief; no future pricing or service features are advertised.
+The Shop remains authoritative for ticket conditions.
+
+### Media and interaction
+
+Unmodified GIFs and posters from PR #561 are independently vendored in
+`src/assets/audience-live/`. See its [media notes](src/assets/audience-live/README.md)
+for pinned provenance, GPL-3.0-only licensing, sizes, hashes, and recording limits.
+There is a content/provenance relationship to #561, but no merge-order or build
+dependency. Do not cherry-pick its README/CHANGELOG commits into this PR.
+
+The Hero and comparison begin with still posters. `audience-live.js` loads GIFs
+only on explicit Play, stops after 27 seconds, and restores posters on Stop,
+tab changes, page hiding, and changes to the OS reduced-motion preference. There
+is never autoplay, including for reduced-motion users. Hidden/inactive demos do
+not keep animating. The comparison supports Left/Right/Home/End with a single
+active tab stop, ARIA tab/panel relationships, and visible focus. Without JS,
+both posters, original GIF links, native FAQ disclosures, and static content
+remain accessible. Language selection reuses the existing `language.js`.
+
+### Specification and link review
+
+Reviewed on 2026-11-22 against the app's `docs/AUDIENCE_LOCAL.md`,
+`docs/AUDIENCE_COMMENTS.md`, `docs/AUDIENCE_RELAY.md`, and `docs/PRIVACY.md`, plus:
+
+- [Relay README](https://github.com/koichiro/quick-presenter-relay) and
+  [self-hosting guide](https://github.com/koichiro/quick-presenter-relay/blob/main/docs/SELF_HOSTED.md):
+  independent infrastructure, HTTPS for remote clients, TOML settings export.
+- [Official Shop](https://shop.quickpresenter.com/): GET returned 200; confirms
+  free tickets, presenter account/ticket flow, internet access, and no attendee
+  account. HEAD returns 404, so use GET for this service's link checks.
+- [npm registry](https://registry.npmjs.org/quick-presenter-relay/latest): confirmed
+  published package `quick-presenter-relay` and Apache-2.0 licensing. npm's human
+  package page returned 403 to automated requests; manual access remains a check.
+- [RC1 release](https://github.com/koichiro/quick-presenter/releases/tag/v3.0.0-rc.1):
+  verified `isPrerelease: true` and the DMG/DEB assets. GitHub CTA, documentation,
+  repository, and issue links returned 200.
+
+### Validation
+
+`npm test` validates eight pages, reciprocal locales, metadata, links/fragments,
+asset byte identity, initial still posters, and existing video range handling.
+Run `node --check src/audience-live.js` for script syntax. No Rust/Slint/build
+configuration for the native app is changed, so Cargo checks are outside PR1.
+
+Local browser review covered English/Japanese at 1280px and 390px, with no mobile
+horizontal overflow, loaded posters and GIFs, Play/Stop, stopping on tab change,
+arrow-key tab selection, language switching, menu operation, and native FAQ.
+Screenshots are saved locally under `artifacts/audience-live-pr1/` (ignored);
+full pages in both locales plus Japanese desktop/mobile Hero captures are
+available. Review copies of the Japanese Hero are tracked in
+`review/audience-live/{desktop-ja,mobile-ja}.jpg` and are not deployed. Review screenshots and the page before publishing. Cross-browser
+coverage, a real phone, OS reduced-motion toggle, and JS-disabled browser testing
+remain manual release checks; static fallback/no-autoplay contracts are covered
+by source checks and the automatic tests.
