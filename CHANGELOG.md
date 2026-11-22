@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.0.0-rc.1 — Unreleased
+## 3.0.0-rc.1 — 2026-11-22
 
 ### Added
 
@@ -47,6 +47,12 @@
   revision. Cargo and native package versions remain `3.0.0` for the existing
   Store packaging pipelines. See the [RC1 checklist](docs/releases/V3_0_0_RC1.md)
   for candidate identity, validation status, and publication requirements.
+- Repair rustix and Tokio memory-safety advisories and replace the yanked
+  async-executor version. Remaining maintenance warnings and native-pin risks
+  require the [RC1 security disposition](docs/validation/RC1_FINAL_SECURITY_20261122.md).
+- RC1 distribution starts with notarized macOS Developer ID DMG and Ubuntu
+  DEB. Mac/Windows Store updates follow separately; no v3 Store availability
+  or installed-Store validation is claimed by this prerelease.
 - Control Protocol v1 remains compatible. Official Relay staging and production
   qualification are tracked separately; this candidate does not assert service
   availability or final Store approval.
