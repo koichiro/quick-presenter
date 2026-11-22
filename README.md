@@ -67,6 +67,10 @@ local logs; see [privacy and retention](docs/PRIVACY.md).
 
 ### Start a local LAN session
 
+If you previously imported relay settings, stop Audience Live and choose
+**Settings > Reset** to return to local hosting. Saved relay settings remain
+selected until you reset them.
+
 1. Open a PDF and connect the presenter computer and audience devices to the
    same trusted LAN. Select the LAN IPv4 address in the Audience Live panel.
 2. Click **Audience Live ON**. The Audience Window shows a join screen with a
@@ -100,9 +104,12 @@ To start a relay session:
    the relay; they do not need to share a LAN.
 2. Open a PDF and, while Audience Live is off, import the TOML file through
    **Settings > Import settings**. The settings apply immediately.
-3. Click **Audience Live ON**, then share the join URL or have attendees scan the
+3. For an unused Official Relay ticket, open its details in your account, select
+   **Review activation**, and confirm when ready. Activation starts the ticket's
+   validity period. Skip this step if the ticket is already active.
+4. Click **Audience Live ON**, then share the join URL or have attendees scan the
    QR code. Advance once to show your PDF; reactions and comments continue.
-4. Click **Audience Live OFF** when the presentation ends.
+5. Click **Audience Live OFF** when the presentation ends.
 
 Relay service access is separate from the app. Network errors are reported
 without stopping PDF playback.
