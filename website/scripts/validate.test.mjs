@@ -306,7 +306,7 @@ test("preview survives a range stream read failure", { timeout: 10000 }, async (
 });
 
 
-test("Audience Live media retain PR #561 byte identity autoplay with reduced-motion still alternatives", async () => {
+test("Audience Live media retain PR #561 byte identity and provide static no-JS fallbacks", async () => {
   const hashes = {
     "flowing.gif": "695ba41579bd16913d61aff11b4e408f8678aeaacf9e93cfc9dc41ec11979e33",
     "bubbles.gif": "16b4c084a7629a39897b3a741dab2f3488d7a5d2576f44e79ca50fcba5f96a1f",
@@ -323,22 +323,132 @@ test("Audience Live media retain PR #561 byte identity autoplay with reduced-mot
     const demos = images.filter(image => image["data-animation"]);
     assert.equal(demos.length, 3);
     for (const demo of demos) {
-      assert.ok(demo.src.endsWith(".gif"), "Demos should autoplay and loop natively");
+      assert.ok(demo.src.endsWith(".jpg"), "No-JS content must remain static");
       assert.ok((await stat(outputPath(new URL(demo["data-poster"], origin)))).isFile());
       assert.ok(demo.alt.length > 0);
       assert.ok((await stat(outputPath(new URL(demo["data-animation"], origin)))).isFile());
     }
-    const reducedMotionSources = [...html.matchAll(/<source\b[^>]*>/g)]
+    const controls = [...html.matchAll(/<button\b[^>]*data-playback[^>]*>/g)]
       .map(([tag]) => attributes(tag));
-    assert.equal(reducedMotionSources.length, demos.length);
-    for (const source of reducedMotionSources) {
-      assert.equal(source.media, "(prefers-reduced-motion: reduce)");
-      assert.ok(source.srcset.endsWith(".jpg"));
-      assert.ok((await stat(outputPath(new URL(source.srcset, origin)))).isFile());
+    assert.equal(controls.length, demos.length);
+    for (const [i, control] of controls.entries()) {
+      assert.equal(control["aria-controls"], demos[i].id);
+      assert.ok(control["aria-describedby"]);
     }
-    assert.doesNotMatch(html, /data-playback/);
+    assert.doesNotMatch(html, /<img[^>]*\bsrc=["'][^"']*\.gif/);
     assert.doesNotMatch(html, /<[^>]+\sautoplay(?:[\s=>])/);
     assert.equal((html.match(/<div id="panel-[^>]*data-panel>/g) || []).length, 2,
       "Both demos remain available when JavaScript is disabled");
   }
+});
+
+// Exercise the browser controller without adding a DOM dependency.
+async function demoController({ reduced = false, observe = true } = {}) {
+  const script = await readFile(join(dist, 'audience-live.js'), 'utf8');
+  function element(dataset = {}) {
+    return {
+      dataset, attrs: {}, events: {}, hidden: false,
+      setAttribute(name, value) { this.attrs[name] = value; },
+      getAttribute(name) { return this.attrs[name]; },
+      addEventListener(name, callback) { this.events[name] = callback; },
+      focus() { this.focused = true; },
+    };
+  }
+  const panels = [element(), element()];
+  const demos = ['hero', 'flowing', 'bubble'].map((name, i) => {
+    const demo = element({ pause: 'Pause', play: 'Play', reduced: 'Still image' });
+    demo.image = element({ animation: `${name}.gif`, poster: `${name}.jpg` });
+    demo.image.attrs.src = `${name}.jpg`;
+    Object.defineProperty(demo.image, 'src', {
+      set(value) { this.attrs.src = value; }, get() { return this.attrs.src; },
+    });
+    demo.button = element();
+    demo.querySelector = selector => selector === 'img' ? demo.image : demo.button;
+    demo.closest = () => i ? panels[i - 1] : null;
+    return demo;
+  });
+  const tabs = panels.map((_, i) => element({ tab: `panel-${i}` }));
+  const tablist = element();
+  tablist.querySelectorAll = () => tabs;
+  const comparison = {
+    querySelector: () => tablist,
+    querySelectorAll: () => panels,
+  };
+  const document = element();
+  document.querySelectorAll = selector => selector === '[data-demo]' ? demos : [comparison];
+  const motion = element();
+  motion.matches = reduced;
+  let observerCallback;
+  class Observer {
+    constructor(callback) { observerCallback = callback; }
+    observe() {}
+  }
+  const window = { matchMedia: () => motion };
+  if (observe) window.IntersectionObserver = Observer;
+  runInNewContext(script, { window, document, IntersectionObserver: Observer });
+  return { demos, tabs, panels, document,
+    visible(index, value = true) { observerCallback([{ target: demos[index], isIntersecting: value }]); },
+    reduced(value) { motion.matches = value; motion.events.change(); },
+  };
+}
+
+test('demo controls autoplay only visible active demos and retain individual pause choices', async () => {
+  const c = await demoController();
+  const [hero, flowing, bubble] = c.demos;
+  const source = demo => demo.image.src;
+  assert.deepEqual(c.demos.map(source), ['hero.jpg', 'flowing.jpg', 'bubble.jpg']);
+  c.visible(0);
+  c.visible(1);
+  c.visible(2); // A hidden panel must remain static even with a stale observation.
+  assert.deepEqual(c.demos.map(source), ['hero.gif', 'flowing.gif', 'bubble.jpg']);
+  hero.button.events.click();
+  assert.equal(source(hero), 'hero.jpg');
+  assert.equal(hero.button.textContent, 'Play');
+  flowing.button.events.click();
+  c.tabs[1].events.click();
+  assert.equal(source(bubble), 'bubble.gif');
+  c.tabs[0].events.click();
+  assert.equal(source(flowing), 'flowing.jpg');
+  assert.equal(flowing.button.textContent, 'Play');
+  flowing.button.events.click();
+  assert.equal(source(flowing), 'flowing.gif');
+  c.visible(1, false);
+  assert.equal(source(flowing), 'flowing.jpg');
+  c.visible(1);
+  assert.equal(source(flowing), 'flowing.gif');
+  c.document.hidden = true;
+  c.document.events.visibilitychange();
+  assert.equal(source(flowing), 'flowing.jpg');
+  c.document.hidden = false;
+  c.document.events.visibilitychange();
+  assert.equal(source(flowing), 'flowing.gif');
+  assert.equal(source(hero), 'hero.jpg');
+  let prevented = false;
+  c.tabs[0].events.keydown({ key: 'ArrowRight', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(c.tabs[1].focused, true);
+  assert.equal(c.tabs[1].attrs['aria-selected'], 'true');
+  assert.equal(c.panels[0].hidden, true);
+});
+
+test('reduced motion prevents GIF loading and preserves pause intent across preference changes', async () => {
+  const c = await demoController({ reduced: true });
+  c.demos.forEach((_, i) => c.visible(i));
+  c.tabs[1].events.click();
+  for (const demo of c.demos) {
+    assert.ok(demo.image.src.endsWith('.jpg'));
+    assert.equal(demo.button.disabled, true);
+    assert.equal(demo.button.textContent, 'Still image');
+  }
+  c.reduced(false);
+  assert.equal(c.demos[2].image.src, 'bubble.gif');
+  c.demos[2].button.events.click();
+  c.reduced(true);
+  c.reduced(false);
+  assert.equal(c.demos[2].image.src, 'bubble.jpg');
+  assert.equal(c.demos[2].button.textContent, 'Play');
+  const fallback = await demoController({ observe: false });
+  assert.equal(fallback.demos[0].image.src, 'hero.gif');
+  assert.equal(fallback.demos[1].image.src, 'flowing.gif');
+  assert.equal(fallback.demos[2].image.src, 'bubble.jpg');
 });

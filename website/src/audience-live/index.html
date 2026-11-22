@@ -43,9 +43,9 @@
           <div class="hero-actions"><a class="button primary" href="https://github.com/koichiro/quick-presenter/releases/tag/v3.0.0-rc.1">Download Quick Presenter RC1</a><a class="button secondary" href="https://shop.quickpresenter.com/">Try Official Relay Beta</a></div>
           <p class="live-status">v3.0.0 is not yet final. RC1 is a testing prerelease for macOS Apple Silicon and Ubuntu amd64; Store updates follow separately. Official Relay Open Beta currently offers free tickets only.</p>
         </div>
-        <figure class="live-demo live-hero-media" data-demo>
-            <picture><source media="(prefers-reduced-motion: reduce)" srcset="/assets/audience-live/flowing.jpg" /><img src="/assets/audience-live/flowing.gif" data-animation="/assets/audience-live/flowing.gif" data-poster="/assets/audience-live/flowing.jpg" width="960" height="510" alt="Real Quick Presenter Audience Window showing synthetic English and Japanese comments and reactions over a PDF slide" fetchpriority="high" decoding="async" /></picture>
-            <figcaption><strong>Flowing comments</strong></figcaption>
+        <figure class="live-demo live-hero-media" data-demo data-pause="Pause" data-play="Play" data-reduced="Still image (reduced motion)">
+            <img id="hero-demo" src="/assets/audience-live/flowing.jpg" data-animation="/assets/audience-live/flowing.gif" data-poster="/assets/audience-live/flowing.jpg" width="960" height="510" alt="Real Quick Presenter Audience Window showing synthetic English and Japanese comments and reactions over a PDF slide" fetchpriority="high" decoding="async" />
+            <figcaption><strong id="hero-demo-label">Flowing comments</strong><button class="live-playback" type="button" data-playback hidden aria-controls="hero-demo" aria-describedby="hero-demo-label">Pause</button></figcaption>
           </figure>
       </section>
       <section class="live-section live-wrap" id="how-it-works">
@@ -61,21 +61,21 @@
       <section class="live-section live-wrap" id="demos">
         <p class="eyebrow">Live Comments &amp; Reactions</p>
         <h2>Feel the room respond.</h2>
-        <p class="live-intro">Compare flowing comments and bubbles from the real app. Choose either style or both in Settings > Comment display. Flowing is on by default; bubbles are off.</p>
+        <p class="live-intro">Let comments flow across your slides or gather in bubbles. Choose the style that fits your talk.</p>
         <div class="live-comparison" data-comparison>
           <div class="live-tabs" data-tabs hidden aria-label="Comment display style"><button type="button" id="tab-flowing" data-tab="panel-flowing">Flowing comments</button><button type="button" id="tab-bubbles" data-tab="panel-bubbles">Bubble comments</button></div>
-          <div id="panel-flowing" data-panel><figure class="live-demo" data-demo>
-            <picture><source media="(prefers-reduced-motion: reduce)" srcset="/assets/audience-live/flowing.jpg" /><img src="/assets/audience-live/flowing.gif" data-animation="/assets/audience-live/flowing.gif" data-poster="/assets/audience-live/flowing.jpg" width="960" height="510" alt="Real Quick Presenter Audience Window showing synthetic English and Japanese comments and reactions over a PDF slide" loading="lazy" decoding="async" /></picture>
-            <figcaption><strong>Flowing comments</strong></figcaption>
-          </figure><p>Messages move across the slide in spaced lanes.</p></div>
-          <div id="panel-bubbles" data-panel><figure class="live-demo" data-demo>
-            <picture><source media="(prefers-reduced-motion: reduce)" srcset="/assets/audience-live/bubbles.jpg" /><img src="/assets/audience-live/bubbles.gif" data-animation="/assets/audience-live/bubbles.gif" data-poster="/assets/audience-live/bubbles.jpg" width="960" height="510" alt="Real Quick Presenter Audience Window showing synthetic English and Japanese comments and reactions over a PDF slide" loading="lazy" decoding="async" /></picture>
-            <figcaption><strong>Bubble comments</strong></figcaption>
-          </figure><p>Translucent cards stack from the bottom right, keeping up to five settled bubbles visible.</p></div>
+          <div id="panel-flowing" data-panel><figure class="live-demo" data-demo data-pause="Pause" data-play="Play" data-reduced="Still image (reduced motion)">
+            <img id="flowing-demo" src="/assets/audience-live/flowing.jpg" data-animation="/assets/audience-live/flowing.gif" data-poster="/assets/audience-live/flowing.jpg" width="960" height="510" alt="Real Quick Presenter Audience Window showing synthetic English and Japanese comments and reactions over a PDF slide" loading="lazy" decoding="async" />
+            <figcaption><strong id="flowing-demo-label">Flowing comments</strong><button class="live-playback" type="button" data-playback hidden aria-controls="flowing-demo" aria-describedby="flowing-demo-label">Pause</button></figcaption>
+          </figure><p>Let audience comments flow across your slides.</p></div>
+          <div id="panel-bubbles" data-panel><figure class="live-demo" data-demo data-pause="Pause" data-play="Play" data-reduced="Still image (reduced motion)">
+            <img id="bubble-demo" src="/assets/audience-live/bubbles.jpg" data-animation="/assets/audience-live/bubbles.gif" data-poster="/assets/audience-live/bubbles.jpg" width="960" height="510" alt="Real Quick Presenter Audience Window showing synthetic English and Japanese comments and reactions over a PDF slide" loading="lazy" decoding="async" />
+            <figcaption><strong id="bubble-demo-label">Bubble comments</strong><button class="live-playback" type="button" data-playback hidden aria-controls="bubble-demo" aria-describedby="bubble-demo-label">Pause</button></figcaption>
+          </figure><p>Keep recent comments in view with bubbles.</p></div>
         </div>
-        <div class="live-reactions"><h3>Five ways to react</h3><p><span aria-hidden="true">👍 ❤️ 👏 😄 ❓</span></p><p>Thumbs-up, heart, applause, laugh, and question reactions animate over the slide. Both recordings show real reactions alongside comments.</p></div>
-        <p class="live-note">Real macOS v3.0.0 RC1 recordings with synthetic English and Japanese comments, reused from PR #561. Each GIF is 27 seconds: flowing 4.54 MB; bubbles 1.05 MB. Demos play automatically and loop. If your device requests reduced motion, still images are shown instead. These local demos are not relay performance benchmarks.</p>
-        <p class="live-note">Pause clears visible comments while reception and presenter history continue. Resume shows new messages without replaying paused ones. Blackout hides slides and overlays together. Accepted comments are saved in rotating local logs, even while paused. PDF files and speaker notes are not sent to attendees. <a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/main/docs/PRIVACY.md">Privacy and retention</a></p>
+        <div class="live-reactions"><h3>Five ways to react</h3><p><span aria-hidden="true">👍 ❤️ 👏 😄 ❓</span></p><p>A thumbs-up, a heart, applause, a laugh, or a question—see how your audience feels.</p></div>
+        <p class="live-note">Real app demos with sample comments. Use Pause / Play to control each animation. Reduced-motion settings show still images.</p>
+        <p class="live-note">Your PDF and speaker notes stay local. Comments are saved in local logs; relay sessions send responses through your chosen server. <a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/main/docs/PRIVACY.md">Privacy and retention</a> · <a class="text-link" href="https://github.com/koichiro/quick-presenter/blob/main/docs/AUDIENCE_COMMENTS.md">Comment display controls</a></p>
       </section>
       <section class="live-section live-wrap" id="connect">
         <p class="eyebrow">Choose Your Connection</p>

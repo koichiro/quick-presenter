@@ -75,3 +75,7 @@
   .live-page .nav-links { font-size: .875rem; }
   :lang(ja) .live-hero h1 { font-size: clamp(1.5rem, 7vw, 2.8rem); }
 }
+
+.live-demo figcaption { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.live-page .live-playback { font-size: .875rem; padding: 6px 12px; min-height: 36px; }
+.live-page .live-playback:disabled { cursor: default; color: var(--muted); border-color: var(--line); }
