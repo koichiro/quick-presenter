@@ -64,8 +64,7 @@ Up to five settled bubbles stay visible, making recent messages easier to read.
 
 Both demos are native macOS recordings of v3.0.0 RC1 using the repository's
 sample deck and synthetic comments: six English and four Japanese, all
-Anonymous. The GIFs, posters, and comment text are **GPL-3.0-only**; see
-[recording sources and provenance](docs/assets/audience-live/README.md).
+Anonymous. See [recording sources and provenance](docs/assets/audience-live/README.md).
 
 In **Settings > Comment display**, enable **Flowing comments**, **Bubble
 comments**, or both. Flowing comments are on by default; bubbles are off.
@@ -86,10 +85,25 @@ local logs; see [privacy and retention](docs/PRIVACY.md).
 
 Local hosting needs no relay account. Venue Wi-Fi isolation or firewall rules
 can prevent devices from joining; local HTTP/WebSocket traffic is unencrypted.
-For remote participation, import an operator-provided relay TOML file through
-**Settings > Import settings** while Audience Live is off. The settings apply
-immediately. Relay service access and availability are separate from the app.
-Network errors are reported without stopping PDF playback.
+
+### Use Audience Live beyond your LAN
+
+A relay lets attendees join from other networks, including over the Internet.
+Choose the option that fits your presentation and hosting needs:
+
+- **Self-hosted OSS Relay:** [Quick Presenter Relay](https://github.com/koichiro/quick-presenter-relay)
+  is an open-source server for Audience Live reactions and comments. Run it on
+  your own infrastructure and configure HTTPS for remote access. See its
+  [self-hosting guide](https://github.com/koichiro/quick-presenter-relay/blob/main/docs/SELF_HOSTED.md)
+  for setup and generating the Quick Presenter connection settings.
+- **Official Relay service:** If you cannot deploy your own relay, prefer to
+  leave server operations to the service, or are planning a larger presentation,
+  use [Quick Presenter Official Relay](https://shop.quickpresenter.com/).
+  Visit the Shop for service plans and setup information.
+
+Import the relay's TOML settings file through **Settings > Import settings**
+while Audience Live is off. The settings apply immediately. Relay service access
+is separate from the app. Network errors are reported without stopping PDF playback.
 
 An experimental **Sticky QR code** option keeps a small join QR at the bottom
 left of PDF pages. It is off by default. The full join screen remains available.
