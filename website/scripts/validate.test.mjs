@@ -343,7 +343,7 @@ test("Audience Live media retain PR #561 byte identity and provide static no-JS 
 });
 
 // Exercise the browser controller without adding a DOM dependency.
-async function demoController({ reduced = false, observe = true } = {}) {
+async function demoController({ reduced = false, observe = true, deferred = false } = {}) {
   const script = await readFile(join(dist, 'audience-live.js'), 'utf8');
   function element(dataset = {}) {
     return {
@@ -385,8 +385,22 @@ async function demoController({ reduced = false, observe = true } = {}) {
   }
   const window = { matchMedia: () => motion };
   if (observe) window.IntersectionObserver = Observer;
-  runInNewContext(script, { window, document, IntersectionObserver: Observer });
-  return { demos, tabs, panels, document,
+  const requests = [];
+  const pending = new Map();
+  const response = (source, ok = true) => ({ ok, blob: async () => ({ source }) });
+  const fetch = source => {
+    requests.push(source);
+    return deferred ? new Promise(resolve => pending.set(source, resolve))
+      : Promise.resolve(response(source));
+  };
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  runInNewContext(script, {
+    window, document, IntersectionObserver: Observer, fetch,
+    URL: { createObjectURL: blob => `blob:${blob.source}` },
+  });
+  await settle();
+  return { demos, tabs, panels, document, requests, settle,
+    complete(source, ok = true) { pending.get(source)(response(source, ok)); },
     visible(index, value = true) { observerCallback([{ target: demos[index], isIntersecting: value }]); },
     reduced(value) { motion.matches = value; motion.events.change(); },
   };
@@ -395,32 +409,37 @@ async function demoController({ reduced = false, observe = true } = {}) {
 test('demo controls autoplay only visible active demos and retain individual pause choices', async () => {
   const c = await demoController();
   const [hero, flowing, bubble] = c.demos;
-  const source = demo => demo.image.src;
+  const source = demo => demo.image.src.replace('blob:', '');
   assert.deepEqual(c.demos.map(source), ['hero.jpg', 'flowing.jpg', 'bubble.jpg']);
   c.visible(0);
   c.visible(1);
   c.visible(2); // A hidden panel must remain static even with a stale observation.
+  await c.settle();
   assert.deepEqual(c.demos.map(source), ['hero.gif', 'flowing.gif', 'bubble.jpg']);
   hero.button.events.click();
   assert.equal(source(hero), 'hero.jpg');
   assert.equal(hero.button.textContent, 'Play');
   flowing.button.events.click();
   c.tabs[1].events.click();
+  await c.settle();
   assert.equal(source(bubble), 'bubble.gif');
   c.tabs[0].events.click();
   assert.equal(source(flowing), 'flowing.jpg');
   assert.equal(flowing.button.textContent, 'Play');
   flowing.button.events.click();
+  await c.settle();
   assert.equal(source(flowing), 'flowing.gif');
   c.visible(1, false);
   assert.equal(source(flowing), 'flowing.jpg');
   c.visible(1);
+  await c.settle();
   assert.equal(source(flowing), 'flowing.gif');
   c.document.hidden = true;
   c.document.events.visibilitychange();
   assert.equal(source(flowing), 'flowing.jpg');
   c.document.hidden = false;
   c.document.events.visibilitychange();
+  await c.settle();
   assert.equal(source(flowing), 'flowing.gif');
   assert.equal(source(hero), 'hero.jpg');
   let prevented = false;
@@ -441,14 +460,71 @@ test('reduced motion prevents GIF loading and preserves pause intent across pref
     assert.equal(demo.button.textContent, 'Still image');
   }
   c.reduced(false);
-  assert.equal(c.demos[2].image.src, 'bubble.gif');
+  await c.settle();
+  assert.equal(c.demos[2].image.src, 'blob:bubble.gif');
   c.demos[2].button.events.click();
   c.reduced(true);
   c.reduced(false);
   assert.equal(c.demos[2].image.src, 'bubble.jpg');
   assert.equal(c.demos[2].button.textContent, 'Play');
   const fallback = await demoController({ observe: false });
-  assert.equal(fallback.demos[0].image.src, 'hero.gif');
-  assert.equal(fallback.demos[1].image.src, 'flowing.gif');
+  assert.equal(fallback.demos[0].image.src, 'blob:hero.gif');
+  assert.equal(fallback.demos[1].image.src, 'blob:flowing.gif');
   assert.equal(fallback.demos[2].image.src, 'bubble.jpg');
+});
+
+test('GIF fetches are shared and reused across pause, tab and viewport changes', async () => {
+  const c = await demoController();
+  const [hero, flowing] = c.demos;
+  // The real Hero and Flowing images use the same asset URL.
+  flowing.image.dataset.animation = hero.image.dataset.animation;
+  c.visible(0);
+  c.visible(1);
+  await c.settle();
+  assert.deepEqual(c.requests, ['hero.gif']);
+  for (let i = 0; i < 3; i++) {
+    hero.button.events.click();
+    hero.button.events.click();
+    c.visible(0, false);
+    c.visible(0);
+    c.tabs[1].events.click();
+    c.visible(2);
+    c.tabs[0].events.click();
+    await c.settle();
+  }
+  assert.deepEqual(c.requests, ['hero.gif', 'bubble.gif']);
+  assert.equal(flowing.image.src, 'blob:hero.gif');
+  const reduced = await demoController({ reduced: true });
+  reduced.demos.forEach((_, i) => reduced.visible(i));
+  reduced.tabs[1].events.click();
+  await reduced.settle();
+  assert.deepEqual(reduced.requests, []);
+});
+
+test('a late GIF response cannot restart a paused, hidden or reduced-motion demo', async () => {
+  for (const action of ['pause', 'hide', 'reduce']) {
+    const c = await demoController({ deferred: true });
+    c.visible(0);
+    if (action === 'pause') c.demos[0].button.events.click();
+    if (action === 'hide') c.visible(0, false);
+    if (action === 'reduce') c.reduced(true);
+    c.complete('hero.gif');
+    await c.settle();
+    assert.equal(c.demos[0].image.src, 'hero.jpg', action);
+    assert.deepEqual(c.requests, ['hero.gif']);
+  }
+});
+
+test('a failed GIF request keeps a poster and permits an explicit retry', async () => {
+  const c = await demoController({ deferred: true });
+  c.visible(0);
+  c.complete('hero.gif', false);
+  await c.settle();
+  assert.equal(c.demos[0].image.src, 'hero.jpg');
+  assert.equal(c.demos[0].button.textContent, 'Play');
+  c.demos[0].button.events.click();
+  c.complete('hero.gif');
+  await c.settle();
+  assert.equal(c.demos[0].image.src, 'blob:hero.gif');
+  assert.deepEqual(c.requests, ['hero.gif', 'hero.gif']);
 });

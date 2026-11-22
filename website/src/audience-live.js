@@ -2,12 +2,42 @@
 (() => {
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const demos = new Map();
+  // Share one fetch per asset, including Hero/Flowing. Blob URLs live with the page.
+  const animations = new Map();
+  const animation = (source) => {
+    if (!animations.has(source)) {
+      const pending = fetch(source)
+        .then(response => {
+          if (!response.ok) throw new Error('Animation request failed');
+          return response.blob();
+        })
+        .then(blob => URL.createObjectURL(blob))
+        .catch(error => {
+          animations.delete(source);
+          throw error;
+        });
+      animations.set(source, pending);
+    }
+    return animations.get(source);
+  };
   const render = (demo) => {
-    const { image, button, paused, visible } = demos.get(demo);
+    const state = demos.get(demo);
+    const { image, button, paused, visible } = state;
     const active = !demo.closest('[data-panel]')?.hidden;
     const playing = !motion.matches && !document.hidden && active && visible && !paused;
-    const source = playing ? image.dataset.animation : image.dataset.poster;
-    if (image.getAttribute('src') !== source) image.src = source;
+    const wasPlaying = state.playing;
+    state.playing = playing;
+    if (!playing) {
+      if (image.getAttribute('src') !== image.dataset.poster) image.src = image.dataset.poster;
+    } else if (!wasPlaying) {
+      animation(image.dataset.animation).then(source => {
+        if (state.playing && image.getAttribute('src') !== source) image.src = source;
+      }).catch(() => {
+        if (!state.playing) return;
+        state.paused = true;
+        render(demo);
+      });
+    }
     button.disabled = motion.matches;
     button.textContent = motion.matches ? demo.dataset.reduced
       : paused ? demo.dataset.play : demo.dataset.pause;
@@ -22,7 +52,7 @@
   for (const demo of document.querySelectorAll('[data-demo]')) {
     const image = demo.querySelector('img');
     const button = demo.querySelector('[data-playback]');
-    demos.set(demo, { image, button, paused: false, visible: !observer });
+    demos.set(demo, { image, button, paused: false, playing: false, visible: !observer });
     button.hidden = false;
     button.addEventListener('click', () => {
       const state = demos.get(demo);

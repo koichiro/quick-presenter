@@ -79,3 +79,4 @@
 .live-demo figcaption { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
 .live-page .live-playback { font-size: .875rem; padding: 6px 12px; min-height: 36px; }
 .live-page .live-playback:disabled { cursor: default; color: var(--muted); border-color: var(--line); }
+.live-tabs [aria-selected="true"]:hover { background: var(--accent-strong); }
