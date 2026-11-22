@@ -657,10 +657,11 @@ pub(crate) mod tests {
         assert_eq!(s.peer.requests.lock().unwrap().len(), 1);
         drop(held);
         wait_until(|| session.is_finished()).await;
-        assert!(matches!(
-            session.snapshot().status,
-            crate::audience::SessionStatus::Stopped
-        ));
+        let status = session.snapshot().status;
+        assert!(
+            matches!(status, crate::audience::SessionStatus::Stopped),
+            "Unexpected completed session status: {status:?}"
+        );
         assert_eq!(s.peer.requests.lock().unwrap().len(), 1);
         assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 1);
         session.shutdown();
