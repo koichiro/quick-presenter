@@ -227,6 +227,21 @@ impl ManagedRelay {
         *slot = prospective;
         Ok(ambiguous)
     }
+    fn begin_request_locked(
+        &self,
+        slot: &mut Option<Attempt>,
+        cleanup: bool,
+    ) -> Result<bool, &'static str> {
+        // A concurrent terminal reply can clear the identity after cleanup
+        // prepared it. That confirmation needs no replay or replacement key.
+        if cleanup && slot.is_none() {
+            return Err(NO_REQUEST);
+        }
+        if !cleanup && self.creation_blocked.load(Ordering::Acquire) {
+            return Err(END_PENDING);
+        }
+        self.mark_locked(slot)
+    }
     #[cfg(test)]
     pub fn mark_request_started(&self) -> Result<bool, &'static str> {
         self.transition(None, Self::mark_locked)
@@ -278,12 +293,7 @@ async fn create_inner(
                 tokio::time::sleep(Duration::from_millis(200 * index)).await;
             }
             let previously_ambiguous = settings
-                .io(move |s, slot| {
-                    if !cleanup && s.creation_blocked.load(Ordering::Acquire) {
-                        return Err(END_PENDING);
-                    }
-                    s.mark_locked(slot)
-                })
+                .io(move |s, slot| s.begin_request_locked(slot, cleanup))
                 .await?;
             if !cleanup && settings.creation_blocked.load(Ordering::Acquire) {
                 return Err(END_PENDING);
@@ -1470,6 +1480,26 @@ pub(crate) mod tests {
         assert_eq!(create(&http, &s.settings).await.unwrap().room_id, "test");
         assert_eq!(s.peer.requests.lock().unwrap().len(), 2);
         assert_eq!(s.settings.attempt().unwrap().key, key);
+    }
+
+    #[test]
+    fn terminal_reply_between_cleanup_prepare_and_mark_needs_no_new_request() {
+        let settings = ManagedRelay::new(RelayEndpoint {
+            origin: url::Url::parse("https://relay.example/").unwrap(),
+            create_token: "A".repeat(43),
+        });
+        settings.attempt().unwrap();
+        settings.mark_request_started().unwrap();
+        settings.end_requested.store(true, Ordering::Release);
+        settings
+            .transition(None, |s, slot| s.prepare_locked(slot, true))
+            .unwrap();
+        // The original creation receives 410 after cleanup has observed its key.
+        settings.clear().unwrap();
+        let result = settings.transition(None, |s, slot| s.begin_request_locked(slot, true));
+        assert_eq!(result, Err(NO_REQUEST));
+        assert!(!settings.has_attempt());
+        assert!(settings.end_requested.load(Ordering::Acquire));
     }
 
     #[tokio::test]
