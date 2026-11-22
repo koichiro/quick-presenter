@@ -49,10 +49,23 @@ The presenter sees the connection count, recent reactions, and comment history.
 Comments move across the Audience Window in spaced lanes while reactions
 animate over the slide. Anonymous comments display just their message.
 
+![Anonymous English and Japanese comments flowing over a PDF slide with animated reactions](docs/assets/audience-live/flowing.gif)
+
+[Still image](docs/assets/audience-live/flowing.jpg) · 27 seconds, no audio.
+
 ### Bubble comments
 
 Comments enter from the bottom right and stack upward in translucent cards.
 Up to five settled bubbles stay visible, making recent messages easier to read.
+
+![Anonymous English and Japanese comments stacking in bubbles at the lower right of a PDF slide with animated reactions](docs/assets/audience-live/bubbles.gif)
+
+[Still image](docs/assets/audience-live/bubbles.jpg) · 27 seconds, no audio.
+
+Both demos are native macOS recordings of v3.0.0 RC1 using the repository's
+sample deck and synthetic comments: six English and four Japanese, all
+Anonymous. The GIFs, posters, and comment text are **GPL-3.0-only**; see
+[recording sources and provenance](docs/assets/audience-live/README.md).
 
 In **Settings > Comment display**, enable **Flowing comments**, **Bubble
 comments**, or both. Flowing comments are on by default; bubbles are off.
@@ -96,8 +109,8 @@ Use the package for your platform:
 | Windows x64 | Install from [Microsoft Store](https://apps.microsoft.com/detail/9N913S9NJ6D1). | Registered `qp.exe` app execution alias |
 | Ubuntu x64 | Install the released `quick-presenter_<version>_amd64.deb` from [GitHub Releases](https://github.com/koichiro/quick-presenter/releases). | `/usr/bin/qp` |
 
-Mac App Store versions before 2.5.0 do not provide CLI control. A GitHub release alone does not
-establish Store availability; the v3.0.0 RC1 downloads above are separate from
+Mac App Store versions before 2.5.0 do not provide CLI control. A GitHub release
+alone does not establish Store availability; the v3.0.0 RC1 downloads above are separate from
 the Store channels. Windows MSI, direct MSIX, and raw
 CI executables are validation artifacts, not supported public downloads.
 

@@ -15,11 +15,16 @@ async function main() {
   } finally {
     input.close();
   }
-  if (join.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(join.hostname)) {
-    throw new Error('Use a dedicated loopback HTTP session, never a hosted room.');
+  const octets = join.hostname.split('.').map(Number);
+  const privateIpv4 = octets.length === 4 && octets.every(n => Number.isInteger(n) && n >= 0 && n <= 255)
+    && (octets[0] === 10 || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+      || (octets[0] === 192 && octets[1] === 168));
+  if (join.protocol !== 'http:'
+      || (!['127.0.0.1', 'localhost'].includes(join.hostname) && !privateIpv4)) {
+    throw new Error('Use a dedicated private-LAN or loopback HTTP session, never a hosted room.');
   }
   const code = join.pathname.split('/').filter(Boolean).at(-1);
-  const token = join.hash.slice(1);
+  const token = new URLSearchParams(join.hash.slice(1)).get('k') || '';
   if (!code || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
     throw new Error('Expected the complete local join URL including its token fragment.');
   }
