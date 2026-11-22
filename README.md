@@ -51,16 +51,12 @@ animate over the slide. Anonymous comments display just their message.
 
 ![Anonymous English and Japanese comments flowing over a PDF slide with animated reactions](docs/assets/audience-live/flowing.gif)
 
-[Still image](docs/assets/audience-live/flowing.jpg)
-
 ### Bubble comments
 
 Comments enter from the bottom right and stack upward in translucent cards.
 Up to five settled bubbles stay visible, making recent messages easier to read.
 
 ![Anonymous English and Japanese comments stacking in bubbles at the lower right of a PDF slide with animated reactions](docs/assets/audience-live/bubbles.gif)
-
-[Still image](docs/assets/audience-live/bubbles.jpg)
 
 In **Settings > Comment display**, enable **Flowing comments**, **Bubble
 comments**, or both. Flowing comments are on by default; bubbles are off.
