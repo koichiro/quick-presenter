@@ -15,8 +15,10 @@ target filter, source exclusion or lowered test threshold is introduced.
 The current audit reports zero vulnerability advisories and seven unmaintained
 warnings; the two unsound and one yanked findings are no longer reported.
 
-The change is a lockfile patch update. Tokio's obsolete Windows support packages
-are removed by dependency resolution; this is not a Windows feature-policy change.
+The change is a lockfile patch update. Resolver consolidation changes arboard's
+windows-sys dependency from 0.60.2 to 0.52.0 and removes the unused 0.60/0.53
+support packages. Tokio retains windows-sys 0.61.2 in both lockfiles. This is not
+a Windows feature-policy change.
 All supported-target package checks and application recovery regression must pass
 on this new candidate. Earlier runtime/package evidence retains its old source.
 
