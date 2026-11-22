@@ -652,11 +652,15 @@ pub(crate) mod tests {
         let s = server().await;
         let gate = Arc::new(tokio::sync::Notify::new());
         *s.peer.creation_gate.lock().unwrap() = Some(gate.clone());
+        // A cancelled 410 persistence may require one idempotent recovery
+        // request. The peer must return the same terminal result for that key.
+        push(&s, 410, "{}".into());
         push(&s, 410, "{}".into());
         let mut session =
             crate::audience_relay::RemoteAudienceSession::start_managed(s.settings.clone())
                 .unwrap();
         wait_until(|| !s.peer.requests.lock().unwrap().is_empty()).await;
+        let key = s.peer.requests.lock().unwrap()[0].1.clone();
         let held = s.settings.attempt.lock().unwrap();
         session.request_end().unwrap();
         assert!(s.settings.creation_blocked.load(Ordering::Acquire));
@@ -672,8 +676,41 @@ pub(crate) mod tests {
             matches!(status, crate::audience::SessionStatus::Stopped),
             "Unexpected completed session status: {status:?}"
         );
-        assert_eq!(s.peer.requests.lock().unwrap().len(), 1);
+        let requests = s.peer.requests.lock().unwrap();
+        assert!((1..=2).contains(&requests.len()));
+        assert!(requests.iter().all(|(_, observed)| observed == &key));
+        drop(requests);
         assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 1);
+        session.shutdown();
+    }
+
+    #[tokio::test]
+    async fn off_replays_only_the_original_key_when_creation_reply_is_cancelled() {
+        let s = server().await;
+        let gate = Arc::new(tokio::sync::Notify::new());
+        *s.peer.creation_gate.lock().unwrap() = Some(gate.clone());
+        push(&s, 410, "{}".into());
+        push(&s, 410, "{}".into());
+        let mut session =
+            crate::audience_relay::RemoteAudienceSession::start_managed(s.settings.clone())
+                .unwrap();
+        wait_until(|| s.peer.requests.lock().unwrap().len() == 1).await;
+        let key = s.peer.requests.lock().unwrap()[0].1.clone();
+        // Keep the original response blocked until OFF recovers its uncertain
+        // identity. This exercises cancellation without a scheduler-dependent sleep.
+        session.request_end().unwrap();
+        wait_until(|| session.is_finished()).await;
+        let status = session.snapshot().status;
+        assert!(
+            matches!(status, crate::audience::SessionStatus::Stopped),
+            "Unexpected completed session status: {status:?}"
+        );
+        let requests = s.peer.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(requests.iter().all(|(_, observed)| observed == &key));
+        drop(requests);
+        assert_eq!(s.peer.session_ends.load(Ordering::SeqCst), 1);
+        gate.notify_one();
         session.shutdown();
     }
 
