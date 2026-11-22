@@ -46,7 +46,6 @@
 .live-demo { margin: 24px 0; min-width: 0; }
 .live-demo img { width: 100%; height: auto; border-radius: 8px; }
 .live-demo figcaption { margin-top: 18px; }
-.live-demo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 12px; }
 .live-page button { font: inherit; font-weight: 700; padding: 10px 16px; cursor: pointer; border: 1px solid var(--accent); border-radius: 6px; color: var(--accent-strong); background: var(--surface); }
 .live-page button:hover { background: var(--accent-soft); }
 .live-page button:focus-visible, .live-page [role="tabpanel"]:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
