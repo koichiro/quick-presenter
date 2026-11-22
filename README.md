@@ -51,7 +51,7 @@ animate over the slide. Anonymous comments display just their message.
 
 ![Anonymous English and Japanese comments flowing over a PDF slide with animated reactions](docs/assets/audience-live/flowing.gif)
 
-[Still image](docs/assets/audience-live/flowing.jpg) · 27 seconds, no audio.
+[Still image](docs/assets/audience-live/flowing.jpg)
 
 ### Bubble comments
 
@@ -60,11 +60,7 @@ Up to five settled bubbles stay visible, making recent messages easier to read.
 
 ![Anonymous English and Japanese comments stacking in bubbles at the lower right of a PDF slide with animated reactions](docs/assets/audience-live/bubbles.gif)
 
-[Still image](docs/assets/audience-live/bubbles.jpg) · 27 seconds, no audio.
-
-Both demos are native macOS recordings of v3.0.0 RC1 using the repository's
-sample deck and synthetic comments: six English and four Japanese, all
-Anonymous. See [recording sources and provenance](docs/assets/audience-live/README.md).
+[Still image](docs/assets/audience-live/bubbles.jpg)
 
 In **Settings > Comment display**, enable **Flowing comments**, **Bubble
 comments**, or both. Flowing comments are on by default; bubbles are off.
