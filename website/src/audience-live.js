@@ -11,7 +11,18 @@
           if (!response.ok) throw new Error('Animation request failed');
           return response.blob();
         })
-        .then(blob => URL.createObjectURL(blob))
+        .then(async blob => {
+          const source = URL.createObjectURL(blob);
+          const probe = new Image();
+          probe.src = source;
+          try {
+            await probe.decode();
+            return source;
+          } catch (error) {
+            URL.revokeObjectURL(source);
+            throw error;
+          }
+        })
         .catch(error => {
           animations.delete(source);
           throw error;

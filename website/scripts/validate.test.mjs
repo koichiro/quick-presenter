@@ -343,7 +343,7 @@ test("Audience Live media retain PR #561 byte identity and provide static no-JS 
 });
 
 // Exercise the browser controller without adding a DOM dependency.
-async function demoController({ reduced = false, observe = true, deferred = false } = {}) {
+async function demoController({ reduced = false, observe = true, deferred = false, decodeFailures = 0 } = {}) {
   const script = await readFile(join(dist, 'audience-live.js'), 'utf8');
   function element(dataset = {}) {
     return {
@@ -385,6 +385,15 @@ async function demoController({ reduced = false, observe = true, deferred = fals
   }
   const window = { matchMedia: () => motion };
   if (observe) window.IntersectionObserver = Observer;
+  const revoked = [];
+  class Image {
+    async decode() {
+      if (decodeFailures > 0) {
+        decodeFailures--;
+        throw new Error('Invalid image data');
+      }
+    }
+  }
   const requests = [];
   const pending = new Map();
   const response = (source, ok = true) => ({ ok, blob: async () => ({ source }) });
@@ -395,11 +404,11 @@ async function demoController({ reduced = false, observe = true, deferred = fals
   };
   const settle = () => new Promise(resolve => setImmediate(resolve));
   runInNewContext(script, {
-    window, document, IntersectionObserver: Observer, fetch,
-    URL: { createObjectURL: blob => `blob:${blob.source}` },
+    window, document, IntersectionObserver: Observer, fetch, Image,
+    URL: { createObjectURL: blob => `blob:${blob.source}`, revokeObjectURL: source => revoked.push(source) },
   });
   await settle();
-  return { demos, tabs, panels, document, requests, settle,
+  return { demos, tabs, panels, document, requests, revoked, settle,
     complete(source, ok = true) { pending.get(source)(response(source, ok)); },
     visible(index, value = true) { observerCallback([{ target: demos[index], isIntersecting: value }]); },
     reduced(value) { motion.matches = value; motion.events.change(); },
@@ -526,5 +535,31 @@ test('a failed GIF request keeps a poster and permits an explicit retry', async 
   c.complete('hero.gif');
   await c.settle();
   assert.equal(c.demos[0].image.src, 'blob:hero.gif');
+  assert.deepEqual(c.requests, ['hero.gif', 'hero.gif']);
+});
+
+
+test('invalid image bodies evict and revoke the shared URL before a successful retry', async () => {
+  const c = await demoController({ decodeFailures: 1 });
+  const [hero, flowing] = c.demos;
+  flowing.image.dataset.animation = hero.image.dataset.animation;
+  c.visible(0);
+  c.visible(1);
+  await c.settle();
+  assert.deepEqual(c.requests, ['hero.gif']);
+  assert.equal(hero.image.src, 'hero.jpg');
+  assert.equal(flowing.image.src, 'flowing.jpg');
+  assert.equal(hero.button.textContent, 'Play');
+  assert.equal(flowing.button.textContent, 'Play');
+  assert.deepEqual(c.revoked, ['blob:hero.gif']);
+  hero.button.events.click();
+  flowing.button.events.click();
+  await c.settle();
+  assert.deepEqual(c.requests, ['hero.gif', 'hero.gif']);
+  assert.equal(hero.image.src, 'blob:hero.gif');
+  assert.equal(flowing.image.src, hero.image.src);
+  hero.button.events.click();
+  hero.button.events.click();
+  await c.settle();
   assert.deepEqual(c.requests, ['hero.gif', 'hero.gif']);
 });
