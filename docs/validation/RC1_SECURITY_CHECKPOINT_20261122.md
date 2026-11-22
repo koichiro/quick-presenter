@@ -71,10 +71,21 @@ before attributing optional-engine findings to this application.
 
 The retrieved official Chrome 50-post feed includes November 17/18 notices
 naming CVE-2026-130976 and November 3 disclosures naming CVE-2026-121166,
-CVE-2026-121113 and CVE-2026-121179. Map their publicly available fixes and
-configuration applicability to the selected native build before closing the
-security gate. A Chrome version comparison alone cannot establish standalone
-PDFium affectedness. The current retrieved CISA KEV catalog is version
+CVE-2026-121113 and CVE-2026-121179. Their official CVE references identify the
+same bug numbers as the following changes in the retrieved 500-commit history
+of the selected 8165 branch:
+
+| CVE / bug | Identified upstream change included in 8165 |
+| --- | --- |
+| CVE-2026-130976 / 574302978 | [Clear FormCalc value bindings during destruction](https://pdfium.googlesource.com/pdfium/+/c9a34bc1d8b93531cfaa0a0ab3c2c8519d6270bb) |
+| CVE-2026-121166 / 566111382 | [Construct the global property array in one call](https://pdfium.googlesource.com/pdfium/+/cce5c5ed801f54cadb5b039d98ed43804994764c) |
+| CVE-2026-121113 / 567106301 | [Copy JPEG input before malformed-data repair](https://pdfium.googlesource.com/pdfium/+/4150fb564e0d83109f33a06385d22bb13cc3cd97) |
+| CVE-2026-121179 / 567936263 | [Handle reentrant form-field focus transitions](https://pdfium.googlesource.com/pdfium/+/0a21f66dd0c665dc4d6dbdafc150e93528cb0020) |
+
+This establishes inclusion of those identified changes, rather than relying on
+Chrome version ordering. It is not an exhaustive fix or affectedness inventory.
+Complete the remaining native-dependency and enabled-path assessment before
+closing the security gate. The current retrieved CISA KEV catalog is version
 2026.11.20; catalog absence alone is not an exploitation assessment.
 
 Sources: [official Chrome release feed](https://chromereleases.googleblog.com/feeds/posts/default?alt=json&max-results=50),
