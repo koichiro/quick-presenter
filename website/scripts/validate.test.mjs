@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +14,8 @@ const dist = join(root, "dist");
 const origin = "https://quickpresenter.com";
 const oldOrigin = "https://koichiro.github.io/quick-presenter";
 const pages = [
+  ["audience-live/index.html", "/audience-live/"],
+  ["ja/audience-live/index.html", "/ja/audience-live/"],
   ["index.html", "/"],
   ["privacy/index.html", "/privacy/"],
   ["ja/index.html", "/ja/"],
@@ -69,6 +72,12 @@ test("required stylesheet and image assets are generated and nonempty", async ()
     "assets/kokoro-demo.mp4",
     "assets/kokoro-demo-poster.jpg",
     "styles.css",
+    "audience-live.css",
+    "audience-live.js",
+    "assets/audience-live/flowing.gif",
+    "assets/audience-live/bubbles.gif",
+    "assets/audience-live/flowing.jpg",
+    "assets/audience-live/bubbles.jpg",
     "assets/presenter-window-v2-macos.png",
     "assets/audience-window-title-en.png",
     "assets/audience-window-en.png",
@@ -220,6 +229,8 @@ test("language routing remembers choices and preserves destinations without redi
     return { redirect, stored: () => stored, click };
   }
   assert.equal(visit().redirect, "/ja/?from=demo#download");
+  assert.equal(visit({ path: "/audience-live/" }).redirect, "/ja/audience-live/?from=demo#download");
+  assert.equal(visit({ path: "/ja/audience-live/", saved: "en" }).redirect, "/audience-live/?from=demo#download");
   assert.equal(visit({ path: "/privacy/" }).redirect, "/ja/privacy/?from=demo#download");
   assert.equal(visit({ languages: ["en-US", "ja"] }).redirect, undefined);
   assert.equal(visit({ languages: ["fr-FR"] }).stored(), "en");
@@ -292,4 +303,263 @@ test("preview survives a range stream read failure", { timeout: 10000 }, async (
       await exited;
     }
   }
+});
+
+
+test("Audience Live media retain PR #561 byte identity and provide static no-JS fallbacks", async () => {
+  const hashes = {
+    "flowing.gif": "695ba41579bd16913d61aff11b4e408f8678aeaacf9e93cfc9dc41ec11979e33",
+    "bubbles.gif": "16b4c084a7629a39897b3a741dab2f3488d7a5d2576f44e79ca50fcba5f96a1f",
+    "flowing.jpg": "821924546f27baf70eecef13f25495040a83645d16cacd59ab8de025a160c654",
+    "bubbles.jpg": "fbc38773724bb299149bd38d4b09b94f2f6f9f9f9f1f22de4288b935705d37ee",
+  };
+  for (const [file, hash] of Object.entries(hashes)) {
+    const data = await readFile(join(dist, "assets/audience-live", file));
+    assert.equal(createHash("sha256").update(data).digest("hex"), hash, file);
+  }
+  for (const [file] of pages.filter(([, path]) => path.endsWith("audience-live/"))) {
+    const html = await readFile(join(dist, file), "utf8");
+    const images = [...html.matchAll(/<img\b[^>]*>/g)].map(([tag]) => attributes(tag));
+    const demos = images.filter(image => image["data-animation"]);
+    assert.equal(demos.length, 3);
+    for (const demo of demos) {
+      assert.ok(demo.src.endsWith(".jpg"), "No-JS content must remain static");
+      assert.ok((await stat(outputPath(new URL(demo["data-poster"], origin)))).isFile());
+      assert.ok(demo.alt.length > 0);
+      assert.ok((await stat(outputPath(new URL(demo["data-animation"], origin)))).isFile());
+    }
+    const controls = [...html.matchAll(/<button\b[^>]*data-playback[^>]*>/g)]
+      .map(([tag]) => attributes(tag));
+    assert.equal(controls.length, demos.length);
+    for (const [i, control] of controls.entries()) {
+      assert.equal(control["aria-controls"], demos[i].id);
+      assert.ok(control["aria-describedby"]);
+    }
+    assert.doesNotMatch(html, /<img[^>]*\bsrc=["'][^"']*\.gif/);
+    assert.doesNotMatch(html, /<[^>]+\sautoplay(?:[\s=>])/);
+    assert.equal((html.match(/<div id="panel-[^>]*data-panel>/g) || []).length, 2,
+      "Both demos remain available when JavaScript is disabled");
+  }
+});
+
+// Exercise the browser controller without adding a DOM dependency.
+async function demoController({ reduced = false, observe = true, deferred = false, decodeFailures = 0 } = {}) {
+  const script = await readFile(join(dist, 'audience-live.js'), 'utf8');
+  function element(dataset = {}) {
+    return {
+      dataset, attrs: {}, events: {}, hidden: false,
+      setAttribute(name, value) { this.attrs[name] = value; },
+      getAttribute(name) { return this.attrs[name]; },
+      addEventListener(name, callback) { this.events[name] = callback; },
+      focus() { this.focused = true; },
+    };
+  }
+  const panels = [element(), element()];
+  const demos = ['hero', 'flowing', 'bubble'].map((name, i) => {
+    const demo = element({ pause: 'Pause', play: 'Play', reduced: 'Still image' });
+    demo.image = element({ animation: `${name}.gif`, poster: `${name}.jpg` });
+    demo.image.attrs.src = `${name}.jpg`;
+    Object.defineProperty(demo.image, 'src', {
+      set(value) { this.attrs.src = value; }, get() { return this.attrs.src; },
+    });
+    demo.button = element();
+    demo.querySelector = selector => selector === 'img' ? demo.image : demo.button;
+    demo.closest = () => i ? panels[i - 1] : null;
+    return demo;
+  });
+  const tabs = panels.map((_, i) => element({ tab: `panel-${i}` }));
+  const tablist = element();
+  tablist.querySelectorAll = () => tabs;
+  const comparison = {
+    querySelector: () => tablist,
+    querySelectorAll: () => panels,
+  };
+  const document = element();
+  document.querySelectorAll = selector => selector === '[data-demo]' ? demos : [comparison];
+  const motion = element();
+  motion.matches = reduced;
+  let observerCallback;
+  class Observer {
+    constructor(callback) { observerCallback = callback; }
+    observe() {}
+  }
+  const window = { matchMedia: () => motion };
+  if (observe) window.IntersectionObserver = Observer;
+  const revoked = [];
+  class Image {
+    async decode() {
+      if (decodeFailures > 0) {
+        decodeFailures--;
+        throw new Error('Invalid image data');
+      }
+    }
+  }
+  const requests = [];
+  const pending = new Map();
+  const response = (source, ok = true) => ({ ok, blob: async () => ({ source }) });
+  const fetch = source => {
+    requests.push(source);
+    return deferred ? new Promise(resolve => pending.set(source, resolve))
+      : Promise.resolve(response(source));
+  };
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  runInNewContext(script, {
+    window, document, IntersectionObserver: Observer, fetch, Image,
+    URL: { createObjectURL: blob => `blob:${blob.source}`, revokeObjectURL: source => revoked.push(source) },
+  });
+  await settle();
+  return { demos, tabs, panels, document, requests, revoked, settle,
+    complete(source, ok = true) { pending.get(source)(response(source, ok)); },
+    visible(index, value = true) { observerCallback([{ target: demos[index], isIntersecting: value }]); },
+    reduced(value) { motion.matches = value; motion.events.change(); },
+  };
+}
+
+test('demo controls autoplay only visible active demos and retain individual pause choices', async () => {
+  const c = await demoController();
+  const [hero, flowing, bubble] = c.demos;
+  const source = demo => demo.image.src.replace('blob:', '');
+  assert.deepEqual(c.demos.map(source), ['hero.jpg', 'flowing.jpg', 'bubble.jpg']);
+  c.visible(0);
+  c.visible(1);
+  c.visible(2); // A hidden panel must remain static even with a stale observation.
+  await c.settle();
+  assert.deepEqual(c.demos.map(source), ['hero.gif', 'flowing.gif', 'bubble.jpg']);
+  hero.button.events.click();
+  assert.equal(source(hero), 'hero.jpg');
+  assert.equal(hero.button.textContent, 'Play');
+  flowing.button.events.click();
+  c.tabs[1].events.click();
+  await c.settle();
+  assert.equal(source(bubble), 'bubble.gif');
+  c.tabs[0].events.click();
+  assert.equal(source(flowing), 'flowing.jpg');
+  assert.equal(flowing.button.textContent, 'Play');
+  flowing.button.events.click();
+  await c.settle();
+  assert.equal(source(flowing), 'flowing.gif');
+  c.visible(1, false);
+  assert.equal(source(flowing), 'flowing.jpg');
+  c.visible(1);
+  await c.settle();
+  assert.equal(source(flowing), 'flowing.gif');
+  c.document.hidden = true;
+  c.document.events.visibilitychange();
+  assert.equal(source(flowing), 'flowing.jpg');
+  c.document.hidden = false;
+  c.document.events.visibilitychange();
+  await c.settle();
+  assert.equal(source(flowing), 'flowing.gif');
+  assert.equal(source(hero), 'hero.jpg');
+  let prevented = false;
+  c.tabs[0].events.keydown({ key: 'ArrowRight', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(c.tabs[1].focused, true);
+  assert.equal(c.tabs[1].attrs['aria-selected'], 'true');
+  assert.equal(c.panels[0].hidden, true);
+});
+
+test('reduced motion prevents GIF loading and preserves pause intent across preference changes', async () => {
+  const c = await demoController({ reduced: true });
+  c.demos.forEach((_, i) => c.visible(i));
+  c.tabs[1].events.click();
+  for (const demo of c.demos) {
+    assert.ok(demo.image.src.endsWith('.jpg'));
+    assert.equal(demo.button.disabled, true);
+    assert.equal(demo.button.textContent, 'Still image');
+  }
+  c.reduced(false);
+  await c.settle();
+  assert.equal(c.demos[2].image.src, 'blob:bubble.gif');
+  c.demos[2].button.events.click();
+  c.reduced(true);
+  c.reduced(false);
+  assert.equal(c.demos[2].image.src, 'bubble.jpg');
+  assert.equal(c.demos[2].button.textContent, 'Play');
+  const fallback = await demoController({ observe: false });
+  assert.equal(fallback.demos[0].image.src, 'blob:hero.gif');
+  assert.equal(fallback.demos[1].image.src, 'blob:flowing.gif');
+  assert.equal(fallback.demos[2].image.src, 'bubble.jpg');
+});
+
+test('GIF fetches are shared and reused across pause, tab and viewport changes', async () => {
+  const c = await demoController();
+  const [hero, flowing] = c.demos;
+  // The real Hero and Flowing images use the same asset URL.
+  flowing.image.dataset.animation = hero.image.dataset.animation;
+  c.visible(0);
+  c.visible(1);
+  await c.settle();
+  assert.deepEqual(c.requests, ['hero.gif']);
+  for (let i = 0; i < 3; i++) {
+    hero.button.events.click();
+    hero.button.events.click();
+    c.visible(0, false);
+    c.visible(0);
+    c.tabs[1].events.click();
+    c.visible(2);
+    c.tabs[0].events.click();
+    await c.settle();
+  }
+  assert.deepEqual(c.requests, ['hero.gif', 'bubble.gif']);
+  assert.equal(flowing.image.src, 'blob:hero.gif');
+  const reduced = await demoController({ reduced: true });
+  reduced.demos.forEach((_, i) => reduced.visible(i));
+  reduced.tabs[1].events.click();
+  await reduced.settle();
+  assert.deepEqual(reduced.requests, []);
+});
+
+test('a late GIF response cannot restart a paused, hidden or reduced-motion demo', async () => {
+  for (const action of ['pause', 'hide', 'reduce']) {
+    const c = await demoController({ deferred: true });
+    c.visible(0);
+    if (action === 'pause') c.demos[0].button.events.click();
+    if (action === 'hide') c.visible(0, false);
+    if (action === 'reduce') c.reduced(true);
+    c.complete('hero.gif');
+    await c.settle();
+    assert.equal(c.demos[0].image.src, 'hero.jpg', action);
+    assert.deepEqual(c.requests, ['hero.gif']);
+  }
+});
+
+test('a failed GIF request keeps a poster and permits an explicit retry', async () => {
+  const c = await demoController({ deferred: true });
+  c.visible(0);
+  c.complete('hero.gif', false);
+  await c.settle();
+  assert.equal(c.demos[0].image.src, 'hero.jpg');
+  assert.equal(c.demos[0].button.textContent, 'Play');
+  c.demos[0].button.events.click();
+  c.complete('hero.gif');
+  await c.settle();
+  assert.equal(c.demos[0].image.src, 'blob:hero.gif');
+  assert.deepEqual(c.requests, ['hero.gif', 'hero.gif']);
+});
+
+
+test('invalid image bodies evict and revoke the shared URL before a successful retry', async () => {
+  const c = await demoController({ decodeFailures: 1 });
+  const [hero, flowing] = c.demos;
+  flowing.image.dataset.animation = hero.image.dataset.animation;
+  c.visible(0);
+  c.visible(1);
+  await c.settle();
+  assert.deepEqual(c.requests, ['hero.gif']);
+  assert.equal(hero.image.src, 'hero.jpg');
+  assert.equal(flowing.image.src, 'flowing.jpg');
+  assert.equal(hero.button.textContent, 'Play');
+  assert.equal(flowing.button.textContent, 'Play');
+  assert.deepEqual(c.revoked, ['blob:hero.gif']);
+  hero.button.events.click();
+  flowing.button.events.click();
+  await c.settle();
+  assert.deepEqual(c.requests, ['hero.gif', 'hero.gif']);
+  assert.equal(hero.image.src, 'blob:hero.gif');
+  assert.equal(flowing.image.src, hero.image.src);
+  hero.button.events.click();
+  hero.button.events.click();
+  await c.settle();
+  assert.deepEqual(c.requests, ['hero.gif', 'hero.gif']);
 });

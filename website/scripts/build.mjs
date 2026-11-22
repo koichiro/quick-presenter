@@ -7,6 +7,14 @@ const repoRoot = dirname(root);
 const dist = join(root, "dist");
 
 const files = [
+  ["src/audience-live/index.html", "audience-live/index.html"],
+  ["src/ja/audience-live/index.html", "ja/audience-live/index.html"],
+  ["src/audience-live.css", "audience-live.css"],
+  ["src/audience-live.js", "audience-live.js"],
+  ["src/assets/audience-live/flowing.gif", "assets/audience-live/flowing.gif"],
+  ["src/assets/audience-live/bubbles.gif", "assets/audience-live/bubbles.gif"],
+  ["src/assets/audience-live/flowing.jpg", "assets/audience-live/flowing.jpg"],
+  ["src/assets/audience-live/bubbles.jpg", "assets/audience-live/bubbles.jpg"],
   ["src/guides/interactive-ai/index.html", "guides/interactive-ai/index.html"],
   ["src/ja/guides/interactive-ai/index.html", "ja/guides/interactive-ai/index.html"],
   ["src/assets/interactive-ai-short.mp4", "assets/interactive-ai-short.mp4"],
