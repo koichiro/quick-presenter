@@ -1,6 +1,14 @@
 # Changelog
 
-## 3.0.0-rc.1 — 2026-11-22
+## 3.0.0 — Unreleased
+
+The final release is in preparation. The v3 feature set is introduced in
+[3.0.0-rc.1](#300-rc1--2026-11-22) below; final package qualification, security
+disposition, and Store availability are tracked separately in the
+[release checklist](docs/releases/V3_0_0_RC1.md). RC1 validation and risk
+acceptance do not qualify the eventual final artifacts.
+
+## [3.0.0-rc.1](https://github.com/koichiro/quick-presenter/releases/tag/v3.0.0-rc.1) — 2026-11-22
 
 ### Added
 
@@ -13,7 +21,12 @@
 - Import relay configuration through Settings and apply it without restarting;
   reset to local hosting and open the relay account recovery page when needed.
 - Display comments as flowing text and stacked bubbles, with independent
-  settings, pause/resume controls, bounded queues, and local comment logs.
+  settings, pause/resume controls, bounded queues, and rotating local comment
+  logs. Anonymous messages omit the author label. Flowing comments default to
+  ON and bubbles to OFF; both can be enabled together. Pause clears overlays
+  while reception/history continue, and Resume shows only new comments.
+- Add an experimental **Sticky QR code** setting to keep a small join QR on PDF
+  pages. It is off by default; the full page 0 join screen remains available.
 
 ### Changed
 
@@ -30,7 +43,6 @@
 - Preserve relay creation identity and pending termination across process crashes,
   so explicit retry can recover the same room without competing for a new one.
   Keep recovery data private and stop relay requests when it cannot be saved.
-
 - Keep flowing-comment measurements current after recreating the audience
   window on Wayland.
 - Make the About license descriptions scrollable so their complete text and
