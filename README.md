@@ -73,7 +73,7 @@ comments**, or both. Flowing comments are on by default; bubbles are off.
 the slide and audience overlays together. Comments are also saved in rotating
 local logs; see [privacy and retention](docs/PRIVACY.md).
 
-### Start a session
+### Start a local LAN session
 
 1. Open a PDF and connect the presenter computer and audience devices to the
    same trusted LAN. Select the LAN IPv4 address in the Audience Live panel.
@@ -101,9 +101,19 @@ Choose the option that fits your presentation and hosting needs:
   use [Quick Presenter Official Relay](https://shop.quickpresenter.com/).
   Visit the Shop for service plans and setup information.
 
-Import the relay's TOML settings file through **Settings > Import settings**
-while Audience Live is off. The settings apply immediately. Relay service access
-is separate from the app. Network errors are reported without stopping PDF playback.
+To start a relay session:
+
+1. Obtain the relay's TOML settings file from your self-hosted server or Official
+   Relay service. The presenter computer and attendees need Internet access to
+   the relay; they do not need to share a LAN.
+2. Open a PDF and, while Audience Live is off, import the TOML file through
+   **Settings > Import settings**. The settings apply immediately.
+3. Click **Audience Live ON**, then share the join URL or have attendees scan the
+   QR code. Advance once to show your PDF; reactions and comments continue.
+4. Click **Audience Live OFF** when the presentation ends.
+
+Relay service access is separate from the app. Network errors are reported
+without stopping PDF playback.
 
 An experimental **Sticky QR code** option keeps a small join QR at the bottom
 left of PDF pages. It is off by default. The full join screen remains available.

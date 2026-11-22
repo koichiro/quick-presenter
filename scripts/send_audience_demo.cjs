@@ -4,16 +4,30 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline/promises');
+const { Writable } = require('node:stream');
 const { setTimeout: delay } = require('node:timers/promises');
 const WebSocket = require('ws');
 
 async function main() {
-  const input = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const wasRaw = Boolean(process.stdin.isRaw);
+  const silentOutput = new Writable({ write(_chunk, _encoding, done) { done(); } });
+  const input = readline.createInterface({
+    input: process.stdin, output: silentOutput, terminal: Boolean(process.stdin.isTTY),
+  });
+  const abort = new AbortController();
+  input.once('SIGINT', () => abort.abort());
+  input.once('close', () => abort.abort());
   let join;
   try {
-    join = new URL(await input.question('Recording-only local join URL: '));
+    process.stdout.write('Recording-only local join URL (hidden): ');
+    join = new URL(await input.question('', { signal: abort.signal }));
   } finally {
     input.close();
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(wasRaw);
+      process.stdout.write('\n');
+    }
+    silentOutput.end();
   }
   const octets = join.hostname.split('.').map(Number);
   const privateIpv4 = octets.length === 4 && octets.every(n => Number.isInteger(n) && n >= 0 && n <= 255)

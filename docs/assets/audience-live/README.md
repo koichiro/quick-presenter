@@ -69,9 +69,10 @@ NODE_PATH=/tmp/qp-demo-tools/node_modules node scripts/send_audience_demo.cjs
 ```
 
 Paste the dedicated local join URL (including its `#k=` token fragment) into the
-interactive prompt. The sender accepts private-LAN and loopback HTTP URLs only. It is not
-printed by the script or saved in the repository. After authentication the
-script counts down three seconds, then prints START. Capture 27 seconds from
+interactive prompt. The sender accepts private-LAN and loopback HTTP URLs only.
+The prompt hides the pasted URL and restores the original terminal mode on
+completion or interruption. The URL is not saved in the repository. After
+authentication the script counts down three seconds, then prints START. Capture 27 seconds from
 START so the last flowing comment can leave the screen. Repeat with a fresh
 session for the other style. A failed or timed-out event aborts the schedule
 without resending an uncertain message.
