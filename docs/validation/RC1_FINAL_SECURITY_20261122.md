@@ -1,7 +1,10 @@
 # RC1 final dependency and native-security disposition — 2026-11-22
 
-Status: three actionable dependency findings are repaired; native-pin and
-maintenance-warning disposition remains pending maintainer acceptance.
+Status: three actionable dependency findings are repaired. On November 22,
+the maintainer explicitly accepted seven maintenance warnings and PDFium 8165
+for RC1 only, with the remaining native risks documented and fixed-version
+follow-up tracked in [#559](https://github.com/koichiro/quick-presenter/issues/559).
+Final-artifact security/runtime qualification and publication remain separate.
 This document does not authorize publication or claim absence of vulnerabilities.
 
 ## Dependency repairs
@@ -35,7 +38,7 @@ on this new candidate. Earlier runtime/package evidence retains its old source.
 | zvariant_derive 5.15.0 | RUSTSEC-2026-0372 | Derive tooling for the same Linux dependency graph; track with zbus migration. |
 
 These advisories report maintenance status, not proof of a reachable exploit or
-proof of safety. Proposed RC-only disposition: retain the existing compatible
+proof of safety. Accepted RC-only disposition: retain the existing compatible
 versions, keep warnings visible, track replacement work and refresh before the
 final release. No old v2.5 risk decision is carried forward automatically.
 
@@ -64,11 +67,12 @@ relevant fixes that are not in the selected prebuilt package:
   changes are not all security fixes by implication.
 
 The latest compatible prebuilt does not yet contain these fixes. Proposed RC-only
-retention requires an explicit maintainer decision, a tracked expedited review of
+retention was explicitly accepted by the maintainer for this RC only, with a tracked expedited review of
 the next fixed prebuilt, and package-specific renderer isolation/deadline/recovery
 validation. Process deadlines constrain hangs and crashes; they do not repair
 native undefined behavior or establish that hostile PDFs are safe. Do not
-publish a stronger security claim or treat this proposal as accepted.
+publish a stronger security claim or carry this RC-only acceptance into the final
+release without a fresh decision.
 
 ## Publication boundary
 
