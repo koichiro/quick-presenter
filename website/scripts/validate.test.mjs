@@ -306,7 +306,7 @@ test("preview survives a range stream read failure", { timeout: 10000 }, async (
 });
 
 
-test("Audience Live media retain PR #561 byte identity and do not animate on initial load", async () => {
+test("Audience Live media retain PR #561 byte identity autoplay with reduced-motion still alternatives", async () => {
   const hashes = {
     "flowing.gif": "695ba41579bd16913d61aff11b4e408f8678aeaacf9e93cfc9dc41ec11979e33",
     "bubbles.gif": "16b4c084a7629a39897b3a741dab2f3488d7a5d2576f44e79ca50fcba5f96a1f",
@@ -323,11 +323,20 @@ test("Audience Live media retain PR #561 byte identity and do not animate on ini
     const demos = images.filter(image => image["data-animation"]);
     assert.equal(demos.length, 3);
     for (const demo of demos) {
-      assert.ok(demo.src.endsWith(".jpg"), "Initial image must be a still poster");
+      assert.ok(demo.src.endsWith(".gif"), "Demos should autoplay and loop natively");
+      assert.ok((await stat(outputPath(new URL(demo["data-poster"], origin)))).isFile());
       assert.ok(demo.alt.length > 0);
       assert.ok((await stat(outputPath(new URL(demo["data-animation"], origin)))).isFile());
     }
-    assert.doesNotMatch(html, /<img[^>]*\bsrc=["'][^"']*\.gif/);
+    const reducedMotionSources = [...html.matchAll(/<source\b[^>]*>/g)]
+      .map(([tag]) => attributes(tag));
+    assert.equal(reducedMotionSources.length, demos.length);
+    for (const source of reducedMotionSources) {
+      assert.equal(source.media, "(prefers-reduced-motion: reduce)");
+      assert.ok(source.srcset.endsWith(".jpg"));
+      assert.ok((await stat(outputPath(new URL(source.srcset, origin)))).isFile());
+    }
+    assert.doesNotMatch(html, /data-playback/);
     assert.doesNotMatch(html, /<[^>]+\sautoplay(?:[\s=>])/);
     assert.equal((html.match(/<div id="panel-[^>]*data-panel>/g) || []).length, 2,
       "Both demos remain available when JavaScript is disabled");
