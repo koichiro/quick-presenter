@@ -13,7 +13,7 @@
 
 ![Quick Presenter icon](assets/icons/png/quick-presenter-icon-128.png)
 
-**PDF slides, presenter notes, and local automation.**
+**PDF slides, presenter notes, and live audience interaction.**
 
 Quick Presenter plays prepared PDF slide decks in separate presenter and audience
 windows. The presenter sees the current slide, next-slide preview, speaker notes,
@@ -26,11 +26,100 @@ PDF display and presentation state; your integration supplies interpretation,
 narration, or other automation. The app does not create slides or bundle an AI
 model or TTS engine.
 
-Version **2.5.0** adds sandbox-compatible Mac App Store CLI control and improves
-PDF opening, keyboard focus, and macOS fullscreen transitions. See the
-[changelog](CHANGELOG.md) for the release highlights. Store updates are
-reviewed and distributed separately from GitHub releases; check the installed
-version before using version-specific features.
+Version **3.0.0** introduces **Audience Live**: attendees join from a browser
+with a QR code and send reactions and comments that appear over your slides.
+Use local LAN hosting or configure a compatible remote relay. PDF playback,
+presenter notes, and the existing `qp` CLI remain at the center of the app.
+
+**Release status:** [v3.0.0 RC1](https://github.com/koichiro/quick-presenter/releases/tag/v3.0.0-rc.1)
+is available for testing; the final v3.0.0 release is still in preparation.
+RC1 provides a macOS Apple Silicon DMG and an Ubuntu amd64 DEB. Store updates
+follow separately; check the installed version before using v3 features.
+See the [changelog](CHANGELOG.md) for changes and release limitations.
+
+## Audience Live in v3.0.0
+
+Bring audience responses into a PDF presentation without distributing the deck
+or speaker notes. Attendees scan the join QR code and use their browser to send
+thumbs-up, heart, applause, laugh, and question reactions, plus short comments.
+The presenter sees the connection count, recent reactions, and comment history.
+
+### Flowing comments
+
+Comments move across the Audience Window in spaced lanes while reactions
+animate over the slide. Anonymous comments display just their message.
+
+![Anonymous English and Japanese comments flowing over a PDF slide with animated reactions](docs/assets/audience-live/flowing.gif)
+
+### Bubble comments
+
+Comments enter from the bottom right and stack upward in translucent cards.
+Up to five settled bubbles stay visible, making recent messages easier to read.
+
+![Anonymous English and Japanese comments stacking in bubbles at the lower right of a PDF slide with animated reactions](docs/assets/audience-live/bubbles.gif)
+
+In **Settings > Comment display**, enable **Flowing comments**, **Bubble
+comments**, or both. Flowing comments are on by default; bubbles are off.
+**Pause** clears visible comments while reception and presenter history continue;
+**Resume** shows new comments without replaying paused messages. Blackout hides
+the slide and audience overlays together. Comments are also saved in rotating
+local logs; see [privacy and retention](docs/PRIVACY.md).
+
+### Start a local LAN session
+
+If you previously imported relay settings, stop Audience Live and choose
+**Settings > Reset** to return to local hosting. Saved relay settings remain
+selected until you reset them.
+
+1. Open a PDF and connect the presenter computer and audience devices to the
+   same trusted LAN. Select the LAN IPv4 address in the Audience Live panel.
+2. Click **Audience Live ON**. The Audience Window shows a join screen with a
+   QR code and URL; attendees scan it with their phones.
+3. Advance once to show your PDF. Reactions and comments continue during
+   playback. Previous from PDF page 1 returns to the join screen.
+4. Click **Audience Live OFF** to end the session and invalidate its join link.
+
+Local hosting needs no relay account. Venue Wi-Fi isolation or firewall rules
+can prevent devices from joining; local HTTP/WebSocket traffic is unencrypted.
+
+### Use Audience Live beyond your LAN
+
+A relay lets attendees join from other networks, including over the Internet.
+Choose the option that fits your presentation and hosting needs:
+
+- **Self-hosted OSS Relay:** [Quick Presenter Relay](https://github.com/koichiro/quick-presenter-relay)
+  is an open-source server for Audience Live reactions and comments. Run it on
+  your own infrastructure and configure HTTPS for remote access. See its
+  [self-hosting guide](https://github.com/koichiro/quick-presenter-relay/blob/main/docs/SELF_HOSTED.md)
+  for setup and generating the Quick Presenter connection settings.
+- **Official Relay service:** If you cannot deploy your own relay, prefer to
+  leave server operations to the service, or are planning a larger presentation,
+  use [Quick Presenter Official Relay](https://shop.quickpresenter.com/).
+  Visit the Shop for service plans and setup information.
+
+To start a relay session:
+
+1. Obtain the relay's TOML settings file from your self-hosted server or Official
+   Relay service. The presenter computer and attendees need Internet access to
+   the relay; they do not need to share a LAN.
+2. Open a PDF and, while Audience Live is off, import the TOML file through
+   **Settings > Import settings**. The settings apply immediately.
+3. For an unused Official Relay ticket, open its details in your account, select
+   **Review activation**, and confirm when ready. Activation starts the ticket's
+   validity period. Skip this step if the ticket is already active.
+4. Click **Audience Live ON**, then share the join URL or have attendees scan the
+   QR code. Advance once to show your PDF; reactions and comments continue.
+5. Click **Audience Live OFF** when the presentation ends.
+
+Relay service access is separate from the app. Network errors are reported
+without stopping PDF playback.
+
+An experimental **Sticky QR code** option keeps a small join QR at the bottom
+left of PDF pages. It is off by default. The full join screen remains available.
+
+See [local sessions](docs/AUDIENCE_LOCAL.md),
+[comment display](docs/AUDIENCE_COMMENTS.md), and
+[remote relay setup and recovery](docs/AUDIENCE_RELAY.md).
 
 ## Install
 
@@ -39,14 +128,13 @@ Use the package for your platform:
 | Platform | Installation | CLI |
 | --- | --- | --- |
 | macOS direct | Download the signed/notarized DMG from [GitHub Releases](https://github.com/koichiro/quick-presenter/releases) and copy the app to Applications or a writable user Applications folder. | `Quick Presenter.app/Contents/MacOS/qp` |
-| Mac App Store | Install from the [Mac App Store](https://apps.apple.com/app/quick-presenter-pdf-slides/id6820406883); the Store channel requires macOS 14.4 or later. | In **2.5.0**: `Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp` |
+| Mac App Store | Install from the [Mac App Store](https://apps.apple.com/app/quick-presenter-pdf-slides/id6820406883); the Store channel requires macOS 14.4 or later. | Since **2.5.0**: `Quick Presenter.app/Contents/Helpers/ControlCLI.app/Contents/MacOS/qp` |
 | Windows x64 | Install from [Microsoft Store](https://apps.microsoft.com/detail/9N913S9NJ6D1). | Registered `qp.exe` app execution alias |
 | Ubuntu x64 | Install the released `quick-presenter_<version>_amd64.deb` from [GitHub Releases](https://github.com/koichiro/quick-presenter/releases). | `/usr/bin/qp` |
 
-Mac App Store versions before 2.5.0 do not provide CLI control. The 2.5.0 Store
-rollouts and customer-installed checks are tracked in
-[#520](https://github.com/koichiro/quick-presenter/issues/520); a GitHub release
-alone does not establish Store availability. Windows MSI, direct MSIX, and raw
+Mac App Store versions before 2.5.0 do not provide CLI control. A GitHub release
+alone does not establish Store availability; the v3.0.0 RC1 downloads above are separate from
+the Store channels. Windows MSI, direct MSIX, and raw
 CI executables are validation artifacts, not supported public downloads.
 
 Launch the installed app and choose **Open**, or drop a PDF onto its presenter
