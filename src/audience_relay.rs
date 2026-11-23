@@ -1439,6 +1439,8 @@ mod tests {
     fn active_transport_read_failure_uses_connection_loss_guidance() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
+        let status = Arc::new(Mutex::new(SessionStatus::Starting));
+        let server_status = status.clone();
         let server = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
             stream
@@ -1450,14 +1452,25 @@ mod tests {
             ws.read().unwrap(); // Initial display.
             ws.send(tungstenite::Message::Text(snapshot("1", "11", 0).into()))
                 .unwrap();
-            // Drop TCP after acknowledging availability, without a close handshake.
+            // Drain the immediate heartbeat so closing TCP cannot race its send or
+            // reset the connection with unread data before the snapshot is consumed.
+            assert!(matches!(ws.read().unwrap(), tungstenite::Message::Ping(_)));
+            ws.flush().unwrap();
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !matches!(
+                *server_status.lock().unwrap(),
+                SessionStatus::Running { .. }
+            ) {
+                assert!(Instant::now() < deadline, "Relay did not become running");
+                thread::sleep(Duration::from_millis(5));
+            }
+            // Drop TCP only after the client is running, without a close handshake.
         });
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap();
         let (_sender, updates) = watch::channel(Display::default());
-        let status = Arc::new(Mutex::new(SessionStatus::Starting));
         let result = runtime.block_on(run(
             serde_json::from_value(config(port)).unwrap(),
             status.clone(),
