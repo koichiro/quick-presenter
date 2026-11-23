@@ -4,21 +4,21 @@
     <meta charset="utf-8" />
     <script src="/language.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quick Presenter 2.5.0 — PDF presentation playback for live talks</title>
+    <title>Quick Presenter — Audience Live for interactive PDF presentations</title>
     <meta
       name="description"
-      content="A lightweight desktop app for presenting prepared PDF slide decks with predictable controls, presenter context, and reliable live playback."
+      content="Let your audience react and comment on your PDF slides in real time. Open source. Your choice of hosting."
     />
     <link rel="canonical" href="https://quickpresenter.com/" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Quick Presenter" />
+    <meta property="og:title" content="Quick Presenter — Audience Live for interactive PDF presentations" />
     <meta
       property="og:description"
-      content="A lightweight desktop app for presenting prepared PDF slide decks with predictable controls, presenter context, and reliable live playback."
+      content="Let your audience react and comment on your PDF slides in real time. Open source. Your choice of hosting."
     />
     <meta
       property="og:image"
-      content="https://quickpresenter.com/assets/presenter-window-v2-macos.png"
+      content="https://quickpresenter.com/assets/audience-live/flowing.jpg"
     />
     <meta property="og:url" content="https://quickpresenter.com/" />
     <link rel="icon" href="./assets/quick-presenter-icon-256.png" />
@@ -26,47 +26,69 @@
     <link rel="alternate" hreflang="en" href="https://quickpresenter.com/" />
     <link rel="alternate" hreflang="ja" href="https://quickpresenter.com/ja/" />
     <link rel="alternate" hreflang="x-default" href="https://quickpresenter.com/" />
+    <meta property="og:image:width" content="960" />
+    <meta property="og:image:height" content="510" />
+    <meta property="og:image:alt" content="Real Quick Presenter PDF slide with flowing sample comments and reactions" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="ja_JP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quick Presenter — Audience Live for interactive PDF presentations" />
+    <meta name="twitter:description" content="Let your audience react and comment on your PDF slides in real time. Open source. Your choice of hosting." />
+    <meta name="twitter:image" content="https://quickpresenter.com/assets/audience-live/flowing.jpg" />
+    <meta name="twitter:image:alt" content="Real Quick Presenter PDF slide with flowing sample comments and reactions" />
+    <link rel="stylesheet" href="/audience-live.css" />
+    <script src="/audience-live.js" defer></script>
   </head>
-  <body>
+  <body class="homepage">
+    <a class="skip-link" href="#top">Skip to content</a>
     <header class="site-header">
       <a class="brand" href="#top" aria-label="Quick Presenter home">
         <img src="./assets/quick-presenter-icon-256.png" alt="" />
         <span>Quick Presenter</span>
       </a>
       <nav class="nav-links" aria-label="Primary navigation">
-        <details class="navigation-menu"><summary>Menu</summary><div class="navigation-items"><a href="/audience-live/">Audience Live</a><a href="#demo">Demos</a><a href="#automation">CLI &amp; agents</a><a href="#features">Presenter view</a><a href="#download">Download</a><a href="/privacy/">Privacy</a></div></details>
+        <details class="navigation-menu"><summary>Menu</summary><div class="navigation-items"><a href="/audience-live/">Audience Live</a><a href="#demo">AI &amp; CLI</a><a href="#features">Presenter</a><a href="#download">Download</a><a href="https://github.com/koichiro/quick-presenter">GitHub</a></div></details>
         <span class="language-switch" role="group" aria-label="Language"><a href="/" lang="en" hreflang="en" aria-current="page">EN</a><a href="/ja/" lang="ja" hreflang="ja" >日本語</a></span>
       </nav>
     </header>
 
     <main id="top">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">OPEN SOURCE PDF PRESENTATION PLAYER</p>
-          <h1 class="product-headline">Quick Presenter</h1>
-          <p class="hero-subtitle">A lightweight desktop app for presenting prepared PDF slide decks with predictable controls, presenter context, and reliable live playback.</p>
-          <div class="hero-actions" aria-label="Primary actions">
-            <a class="button primary" href="#download">Get Quick Presenter</a>
-            <a class="button secondary" href="#features">Explore the presenter view</a>
-          </div>
-          <dl class="hero-facts" aria-label="Project facts">
-            <div>
-              <dt>Input</dt>
-              <dd>PDF slides</dd>
-            </div>
-            <div>
-              <dt>License</dt>
-              <dd>GPL-3.0-only</dd>
-            </div>
-            <div>
-              <dt>Platforms</dt>
-              <dd>macOS, Windows, Linux</dd>
-            </div>
-          </dl>
+      <section class="live-hero live-wrap homepage-hero" aria-labelledby="home-title">
+        <div class="home-message">
+          <p class="live-name">Quick Presenter</p>
+          <p class="eyebrow">Audience Live · v3.0.0 Preview</p>
+          <h1 id="home-title">Turn your presentation into a conversation.</h1>
+          <p class="live-lead">Let your audience react and comment on your PDF slides in real time. Open source. Your choice of hosting.</p>
+          <div class="hero-actions"><a class="button primary" href="/audience-live/">Explore Audience Live</a><a class="button secondary" href="#download">Get Quick Presenter</a></div>
         </div>
-        <figure class="hero-shot">
-          <a href="#features"><img src="/assets/presenter-window-v2-macos.png" width="889" height="519" alt="Quick Presenter showing the current slide, next slide preview, speaker notes, timer, and page position." /></a>
-        </figure>
+        <figure class="live-demo live-hero-media" data-demo data-pause="Pause" data-play="Play" data-reduced="Still image (reduced motion)">
+            <img id="hero-demo" src="/assets/audience-live/flowing.jpg" data-animation="/assets/audience-live/flowing.gif" data-poster="/assets/audience-live/flowing.jpg" width="960" height="510" alt="Real Quick Presenter Audience Window showing synthetic English and Japanese comments and reactions over a PDF slide" fetchpriority="high" decoding="async" />
+            <figcaption><strong id="hero-demo-label">Flowing comments</strong><button class="live-playback" type="button" data-playback hidden aria-controls="hero-demo" aria-describedby="hero-demo-label">Pause</button></figcaption>
+          </figure>
+        <div class="home-details">
+          <div class="live-badges"><span>Open Source · GPL-3.0-only</span><span>Official Relay · Open Beta</span></div>
+          <p class="live-status">v3.0.0 is not yet final. Try Audience Live in RC1 for macOS and Ubuntu. Official Relay is in Open Beta with free tickets only.</p>
+        </div>
+      </section>
+
+      <section id="audience-live" class="audience homepage-overview" aria-labelledby="audience-title">
+        <div class="section-heading"><p class="eyebrow">Audience Live</p><h2 id="audience-title">Audience Live brings your audience into the presentation.</h2><p>Attendees join from a QR code in their browser. Share the room’s voice with comments and reactions over your PDF slides.</p></div>
+        <div class="audience-grid">
+          <article><h3>Join instantly</h3><p>Scan a QR code. No participant app required.</p></article>
+          <article><h3>React in real time</h3><p>Send comments and reactions. See them appear on the slides.</p></article>
+          <article><h3>Choose your connection</h3><p>Local LAN, Self-hosted Relay, or Official Relay.</p></article>
+        </div>
+        <p class="hero-actions"><a class="button primary" href="/audience-live/">See How Audience Live Works</a></p>
+        <p class="live-status">Venue guest Wi-Fi may isolate devices and block Local LAN joining. <a class="text-link" href="/audience-live/#faq">See connection options and FAQ</a></p>
+      </section>
+      <section id="presenter" class="positioning" aria-labelledby="presenter-title">
+        <div class="section-heading"><p class="eyebrow">PDF presentation playback</p><h2 id="presenter-title">Your PDF. A dependable presenter.</h2><p>A lightweight PDF presenter, useful with or without Audience Live. Present on macOS, Windows, and Linux with keyboard-first controls that keep you focused on the talk.</p></div>
+        <div class="positioning-grid">
+          <article><h3>Two windows. One talk.</h3><p>Separate presenter and audience windows keep your notes with you and your slides with the room.</p></article>
+          <article><h3>Keep your place.</h3><p>See the current and next slide preview alongside your speaker notes.</p></article>
+          <article><h3>Stay on time.</h3><p>Follow the timer and clock, and control pages from the keyboard.</p></article>
+        </div>
+        <p><a class="text-link" href="#features">Explore the presenter view</a></p>
       </section>
 
       <section id="demo" class="demo-section demo-overview" aria-labelledby="demo-title">
@@ -189,7 +211,7 @@ qp status --json</code></pre></figure>
           </div>
           <figure>
             <img
-              src="/assets/presenter-window-v2-macos.png"
+              src="/assets/presenter-window-v2-macos.png" loading="lazy" decoding="async"
               width="889"
               height="519"
               alt="Quick Presenter showing the current slide, next slide, speaker notes, and timer."
@@ -200,7 +222,7 @@ qp status --json</code></pre></figure>
         <article class="feature split">
           <figure>
             <img
-              src="./assets/audience-window-title-en.png"
+              src="./assets/audience-window-title-en.png" loading="lazy" decoding="async"
               width="1024"
               height="548"
               alt="Audience Window showing the Quick Presenter title slide."
@@ -229,9 +251,10 @@ qp status --json</code></pre></figure>
       </section>
 
       <section id="download" class="download" aria-labelledby="download-title">
-        <p class="eyebrow">Get Quick Presenter 2.5.0</p><h2 id="download-title">Choose your OS and workflow.</h2>
+        <p class="eyebrow">Quick Presenter · Stable v2.5.0</p><h2 id="download-title">Choose your OS and workflow.</h2>
         <p class="release-status">Install Quick Presenter 2.5.0 for your OS. For AI integration, use the GUI and CLI from the same v2.5.0 package.</p>
         <p>New in 2.5.0: Mac App Store CLI support, more reliable presenter keys and fullscreen transitions, and improved macOS PDF opening. <a href="https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0">Read the release notes</a>.</p>
+        <aside class="release-preview" aria-labelledby="preview-title"><h3 id="preview-title">Try Audience Live · v3.0.0 RC1</h3><p>A testing prerelease, not the final release. RC1 provides a macOS Apple Silicon DMG and an Ubuntu amd64 DEB. There is no Windows RC package. Store updates follow separately.</p><a class="button secondary" href="https://github.com/koichiro/quick-presenter/releases/tag/v3.0.0-rc.1">Get v3.0.0 RC1</a></aside>
         <div class="download-grid">
           <article><h3>Windows</h3><p>Quick Presenter v2.5.0 is available from Microsoft Store, with the qp.exe CLI execution alias included.</p><a class="button secondary" href="https://apps.microsoft.com/detail/9N913S9NJ6D1">Microsoft Store <span aria-hidden="true">↗</span></a></article>
           <article><h3>macOS</h3><p>Quick Presenter v2.5.0 is available from Mac App Store, now with qp CLI control. Requires Apple silicon (M1 or later) and macOS 14.4 or later.</p><a class="button secondary" href="https://apps.apple.com/app/quick-presenter-pdf-slides/id6820406883">Mac App Store <span aria-hidden="true">↗</span></a></article>
@@ -242,7 +265,7 @@ qp status --json</code></pre></figure>
         <p>The Store editions are donation editions: purchasing them supports development.</p>
       </section>
       <section id="support" class="oss" aria-labelledby="oss-title">
-        <div><p class="eyebrow">Open source · Support development</p><h2 id="oss-title">Built in the open for reliable talks.</h2><p>Public source, release notes, and issue tracking keep development open. Bug reports, ideas, and code contributions help improve reliable PDF playback and CLI integration across platforms.</p></div>
+        <div><p class="eyebrow">Open source · Support development</p><h2 id="oss-title">Built in the open for reliable talks.</h2><p>Public source, release notes, and issue tracking keep development open. Bug reports, ideas, and code contributions help improve reliable PDF playback and CLI integration across platforms.</p><p>Quick Presenter is GPL-3.0-only; the open-source <a class="text-link" href="https://github.com/koichiro/quick-presenter-relay">quick-presenter-relay</a> is Apache-2.0. Choose a Self-hosted Relay or Official Relay, the hosted service. Official Relay is currently in Open Beta with free tickets only.</p></div>
         <div class="oss-actions"><a class="button secondary" href="https://github.com/koichiro/quick-presenter">Source code</a><a class="button secondary" href="https://github.com/koichiro/quick-presenter/issues">Report an issue</a></div>
       </section>
     </main>

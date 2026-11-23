@@ -51,7 +51,7 @@ test("generated pages have canonical and Open Graph URLs on the new domain", asy
       assert.equal(tags.find((tag) => tag.property === "og:url")?.content, `${origin}${pathname}`);
       assert.equal(
         tags.find((tag) => tag.property === "og:image")?.content,
-        `${origin}/assets/presenter-window-v2-macos.png`,
+        `${origin}/assets/audience-live/flowing.jpg`,
       );
     }
     for (const tag of tags.filter((tag) => ["og:url", "og:image"].includes(tag.property))) {
@@ -343,7 +343,7 @@ test("Audience Live media retain PR #561 byte identity and provide static no-JS 
 });
 
 // Exercise the browser controller without adding a DOM dependency.
-async function demoController({ reduced = false, observe = true, deferred = false, decodeFailures = 0 } = {}) {
+async function demoController({ reduced = false, observe = true, deferred = false, decodeFailures = 0, homepage = false } = {}) {
   const script = await readFile(join(dist, 'audience-live.js'), 'utf8');
   function element(dataset = {}) {
     return {
@@ -355,7 +355,7 @@ async function demoController({ reduced = false, observe = true, deferred = fals
     };
   }
   const panels = [element(), element()];
-  const demos = ['hero', 'flowing', 'bubble'].map((name, i) => {
+  const demos = (homepage ? ['hero'] : ['hero', 'flowing', 'bubble']).map((name, i) => {
     const demo = element({ pause: 'Pause', play: 'Play', reduced: 'Still image' });
     demo.image = element({ animation: `${name}.gif`, poster: `${name}.jpg` });
     demo.image.attrs.src = `${name}.jpg`;
@@ -375,7 +375,7 @@ async function demoController({ reduced = false, observe = true, deferred = fals
     querySelectorAll: () => panels,
   };
   const document = element();
-  document.querySelectorAll = selector => selector === '[data-demo]' ? demos : [comparison];
+  document.querySelectorAll = selector => selector === '[data-demo]' ? demos : homepage ? [] : [comparison];
   const motion = element();
   motion.matches = reduced;
   let observerCallback;
@@ -562,4 +562,95 @@ test('invalid image bodies evict and revoke the shared URL before a successful r
   hero.button.events.click();
   await c.settle();
   assert.deepEqual(c.requests, ['hero.gif', 'hero.gif']);
+});
+
+test('homepages lead with the adopted Audience Live copy and preserve legacy destinations', async () => {
+  for (const japanese of [false, true]) {
+    const html = await readFile(join(dist, japanese ? 'ja/index.html' : 'index.html'), 'utf8');
+    const live = japanese ? '/ja/audience-live/' : '/audience-live/';
+    const headline = japanese ? 'プレゼンテーションを、双方向のコミュニケーションへ。'
+      : 'Turn your presentation into a conversation.';
+    const lead = japanese ? '参加者のコメントやリアクションを、PDFスライドにリアルタイム表示。オープンソースで、接続方式も自由に選べます。'
+      : 'Let your audience react and comment on your PDF slides in real time. Open source. Your choice of hosting.';
+    assert.equal(html.match(/<h1 id="home-title">([\s\S]*?)<\/h1>/)[1].replace(/<[^>]*>/g, ''), headline);
+    assert.ok(html.includes(`<p class="live-lead">${lead}</p>`));
+    assert.equal((html.match(/<h1\b/g) || []).length, 1);
+    const hero = html.match(/<section class="live-hero[\s\S]*?<\/section>/)[0];
+    const actions = [...hero.matchAll(/<a\b[^>]*>/g)].map(([tag]) => attributes(tag));
+    assert.deepEqual(actions.map(a => [a.class, a.href]), [['button primary', live], ['button secondary', '#download']]);
+    const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(([, id]) => id);
+    assert.equal(new Set(ids).size, ids.length, 'IDs must remain unique');
+    for (const id of ['top', 'demo', 'demo-title', 'agentic-presentation', 'agentic-title', 'agentic-description',
+      'autopilot', 'autopilot-title', 'demo-description', 'automation', 'automation-title', 'features',
+      'features-title', 'authoring', 'scope', 'authoring-title', 'download', 'download-title', 'support', 'oss-title']) {
+      assert.ok(ids.includes(id), id);
+    }
+    const order = ['audience-live', 'presenter', 'demo', 'agentic-presentation', 'autopilot', 'automation', 'features', 'download', 'support'];
+    for (let i = 1; i < order.length; i++) assert.ok(ids.indexOf(order[i - 1]) < ids.indexOf(order[i]));
+    assert.ok(html.includes(`href="${live}#faq"`));
+    for (const command of ['qp export --json', 'qp context --full --json', 'qp goto 3 --json', 'qp next --json', 'qp status --json', 'qp watch --json']) {
+      assert.ok(html.includes(command), command);
+    }
+    for (const asset of ['interactive-ai-short.mp4', 'agentic-presentation-demo.mp4', 'kokoro-demo.mp4']) {
+      assert.ok(html.includes(asset));
+    }
+    assert.match(html, /Stable v2\.5\.0/);
+    assert.match(html, /releases\/tag\/v3\.0\.0-rc\.1/);
+    assert.match(html, /Ubuntu amd64/);
+    assert.match(html, /Apple Silicon/);
+    assert.match(html, /Official Relay · Open Beta/);
+    assert.match(html, /GPL-3\.0-only/);
+    assert.match(html, /Apache-2\.0/);
+    assert.doesNotMatch(html, /href="https:\/\/shop\./);
+  }
+});
+
+test('homepage social cards and demos reuse the real poster and shared playback controller', async () => {
+  for (const file of ['index.html', 'ja/index.html']) {
+    const html = await readFile(join(dist, file), 'utf8');
+    const meta = [...html.matchAll(/<meta\b[^>]*>/g)].map(([tag]) => attributes(tag));
+    const value = key => meta.find(tag => tag.name === key || tag.property === key)?.content;
+    assert.match(value('og:title'), /Audience Live/);
+    assert.equal(value('og:title'), value('twitter:title'));
+    assert.equal(value('description'), value('og:description'));
+    assert.equal(value('description'), value('twitter:description'));
+    assert.equal(value('twitter:card'), 'summary_large_image');
+    assert.equal(value('twitter:image'), `${origin}/assets/audience-live/flowing.jpg`);
+    assert.ok(value('og:locale'));
+    assert.ok(value('og:locale:alternate'));
+    assert.match(html, /<script src="\/audience-live.js" defer><\/script>/);
+    const demos = [...html.matchAll(/<img\b[^>]*data-animation[^>]*>/g)].map(([tag]) => attributes(tag));
+    assert.equal(demos.length, 1);
+    assert.equal(demos[0].src, '/assets/audience-live/flowing.jpg');
+    assert.equal(demos[0]['data-poster'], demos[0].src);
+    assert.equal(demos[0]['data-animation'], '/assets/audience-live/flowing.gif');
+    assert.equal(demos[0].width, '960');
+    assert.equal(demos[0].height, '510');
+    assert.equal(demos[0].fetchpriority, 'high');
+    assert.ok(demos[0].alt);
+    assert.match(html, /<button[^>]*data-playback hidden aria-controls="hero-demo" aria-describedby="hero-demo-label"/);
+    assert.doesNotMatch(html, /<img[^>]*\bsrc="[^"]*\.gif/);
+  }
+});
+
+test('homepage single-demo playback works without comparison tabs', async () => {
+  const c = await demoController({ homepage: true });
+  assert.deepEqual(c.requests, []);
+  c.visible(0);
+  await c.settle();
+  assert.deepEqual(c.requests, ['hero.gif']);
+  assert.equal(c.demos[0].image.src, 'blob:hero.gif');
+  c.demos[0].button.events.click();
+  assert.equal(c.demos[0].image.src, 'hero.jpg');
+  c.demos[0].button.events.click();
+  await c.settle();
+  assert.equal(c.demos[0].image.src, 'blob:hero.gif');
+  c.visible(0, false);
+  assert.equal(c.demos[0].image.src, 'hero.jpg');
+  assert.equal(c.requests.length, 1);
+  const reduced = await demoController({ homepage: true, reduced: true });
+  reduced.visible(0);
+  await reduced.settle();
+  assert.deepEqual(reduced.requests, []);
+  assert.equal(reduced.demos[0].button.disabled, true);
 });
