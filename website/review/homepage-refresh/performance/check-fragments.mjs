@@ -17,15 +17,16 @@ const [line] = await once(lines,'line');
 const origin = line.match(/http:\/\/127\.0\.0\.1:\d+/)[0];
 lines.close();
 const browser = await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH});
-const results=process.env.ONLY_LANDING ? JSON.parse(await readFile(join(output,'browser-checks.json'),'utf8')).cases.filter(c=>c.name!=='audience-live-shared-controller') : [];
+const results=process.env.ONLY_LANDING && !process.env.NO_OBSERVER ? JSON.parse(await readFile(join(output,'browser-checks.json'),'utf8')).cases.filter(c=>c.name!=='audience-live-shared-controller') : [];
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function session(language,slow=false,options={}) {
   const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1,isMobile:true,hasTouch:true,
     locale:'en-US',timezoneId:'Asia/Tokyo',reducedMotion:'no-preference',serviceWorkers:'block',
     userAgent:`Mozilla/5.0 (Linux; Android 10; Lab) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${browser.version()} Mobile Safari/537.36`,...options});
-  await context.addInitScript(language=>{
+  await context.addInitScript(({language,noObserver})=>{
     localStorage.setItem('quick-presenter-language',language);
     window.intersections=[];
+    if(noObserver) { delete window.IntersectionObserver; return; }
     const Native=window.IntersectionObserver;
     window.IntersectionObserver=class extends Native {
       constructor(callback,options) {
@@ -35,7 +36,7 @@ async function session(language,slow=false,options={}) {
         },options);
       }
     };
-  },language);
+  },{language,noObserver:Boolean(process.env.NO_OBSERVER)});
   const page=await context.newPage();
   const cdp=await context.newCDPSession(page);
   await cdp.send('Network.enable');
@@ -54,7 +55,7 @@ async function session(language,slow=false,options={}) {
   cdp.on('Network.loadingFinished',e=>{const r=requests.get(e.requestId);if(r)Object.assign(r,{finished:true,endMs:(e.timestamp-started)*1000,transferredBytes:e.encodedDataLength});});
   const states=[];
   async function state(step) {
-    const dom=await page.evaluate(()=>({pathname:location.pathname,hash:location.hash,time:performance.now(),scrollY,
+    const dom=await page.evaluate(()=>({pathname:location.pathname,hash:location.hash,time:performance.now(),scrollY,viewport:{width:innerWidth,height:innerHeight},observerAvailable:typeof window.IntersectionObserver==='function',
       images:[...document.querySelectorAll('[data-demo] img')].map(i=>({id:i.id,src:i.src.startsWith('blob:')?'blob:local-demo':new URL(i.src).pathname,complete:i.complete,rect:i.getBoundingClientRect().toJSON()})),
       buttons:[...document.querySelectorAll('[data-playback]')].map(b=>({text:b.textContent,hidden:b.hidden,disabled:b.disabled})),
       intersections:window.intersections||[]}));
@@ -116,6 +117,19 @@ try {
     await r.page.goto(origin+root+'audience-live/#connect',{waitUntil:'load'});await sleep(5000);
     await r.state('landing-connect-settled');assert.equal(gifs(r).length,0);
     await r.page.locator('#hero-demo').scrollIntoViewIfNeeded();await playing(r.page);assert.equal(gifs(r).length,1);await r.state('landing-hero-visible');
+    if(process.env.NO_OBSERVER) {
+      const button=r.page.locator('[data-playback]').first();
+      await button.click();await sleep(200);
+      assert.equal((await r.state('fallback-paused')).images[0].src,'/assets/audience-live/flowing.jpg');
+      await button.click();await playing(r.page);await r.state('fallback-play');
+      await r.page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
+      await r.page.setViewportSize({width:390,height:200});await sleep(400);
+      assert.equal((await r.state('fallback-resize-small')).images[0].src,'/assets/audience-live/flowing.jpg');
+      await r.page.setViewportSize({width:390,height:2000});await playing(r.page);
+      await r.state('fallback-resize-large');assert.equal(gifs(r).length,1);
+      await r.page.setViewportSize({width:390,height:844});
+      await r.page.locator('#hero-demo').scrollIntoViewIfNeeded();await playing(r.page);
+    }
     await r.page.locator('#panel-flowing').scrollIntoViewIfNeeded();await playing(r.page,'flowing-demo');assert.equal(gifs(r).length,1);
     await r.page.locator('#tab-bubbles').click();await r.page.locator('#bubble-demo').scrollIntoViewIfNeeded();await playing(r.page,'bubble-demo');assert.equal(gifs(r).length,2);
     await r.page.locator('#tab-flowing').click();await r.page.locator('#flowing-demo').scrollIntoViewIfNeeded();await playing(r.page,'flowing-demo');assert.equal(gifs(r).length,2);

@@ -4,6 +4,26 @@ Validated on 2026-11-23 against main `a6a38d1` (PRs #562 and #563 merged).
 
 The English and Japanese homepages lead with Audience Live, the approved Hero copy, the existing Flowing recording, and a primary link to the localized Audience Live page. The existing AI, CLI, demo, and PDF preparation sections are preserved byte for byte. Legacy section and description IDs remain available. Presenter screenshots are reused and lazy-loaded.
 
+## CodeRabbit follow-up — no-observer fallback
+
+[The review finding](https://github.com/koichiro/quick-presenter/pull/564#discussion_r4664336564) is fixed in **`11a56d0304e8b014000a95845517565f4de15c61`**. Without IntersectionObserver, initial fragment settling could set a demo's visibility to false with no later viewport notification to update it. Hero therefore stayed on its poster after the user returned from `#connect`.
+
+The fallback now refreshes demo geometry on scroll and resize, coalescing notifications into one animation frame. It also refreshes geometry when playback/preferences or comparison tabs trigger a render. Initial-fragment deferral, explicit pause intent, reduced motion, hidden-panel filtering and shared Fetch/cache ownership remain intact. Native IntersectionObserver pages do not install these fallback scroll/resize listeners. The fragment-settle check reuses the same geometry helper.
+
+- Web build and **all 22 tests passed**. The new regression covers an offscreen `#connect` landing without IntersectionObserver, returning to Hero, pause retention, resize, hidden/visible comparison panels and unique asset reuse. Existing native-observer, slow-response, failed-fetch/decode and retry tests still pass.
+- [Sanitized real-browser Network and state evidence](performance/no-observer-fix/browser-checks.json): Chrome for Testing 151.0.7922.34, fresh contexts, 390 × 844 mobile viewport / DPR 1 / 4× CPU, unthrottled local HTTP. IntersectionObserver was deleted before page scripts; every captured state verifies it is unavailable.
+- Both English and Japanese Audience Live `#connect` cold visits issue **0 GIF requests** after landing. Returning to the actual Hero image starts one Flowing Fetch and renders its Blob image. Pause/Play works. Resizing through 390 × 200 (offscreen) and 390 × 2000 (visible), then restoring the normal viewport, updates poster/playback without another Flowing request. Visiting Flowing and switching Bubbles/back finishes with **one Fetch per unique GIF**.
+- `node --check` for the controller/capture script and `git diff --check` passed. Published evidence contains static pathnames and media state only; no cookies, auth headers, response bodies or local absolute paths are exported.
+
+No new LCP/CLS measurement is claimed in this fallback-only follow-up. The datasets below remain explicitly tied to their recorded product commits. Copy, CSS, assets, dependencies and build/deployment settings are unchanged.
+
+To reproduce, archive/build `11a56d0` as `CHECKOUT_ROOT/after`, set the existing Playwright/Chrome paths as below, and use a fresh evidence directory:
+
+```sh
+ONLY_LANDING=1 NO_OBSERVER=1 AFTER_REVISION=11a56d0304e8b014000a95845517565f4de15c61 \
+  node website/review/homepage-refresh/performance/check-fragments.mjs
+```
+
 ## Initial-fragment fix and verification — 5d62371
 
 The P2 direct-anchor issue is fixed in **`5d6237141d8534de9f778b072299f11a5fc1c843`**. The old controller could start a GIF Fetch during the brief initial Hero intersection before smooth scrolling reached `#download`.
@@ -12,7 +32,7 @@ For a valid initial fragment only, animation activation now waits for `load` and
 
 ### Post-fix normal-visit measurements
 
-The measured product commit is `5d62371`; subsequent evidence/test-documentation changes do not alter that controller. A fresh archive of that commit was built/served with the same existing scripts and **the same Chrome 151.0.7922.34, macOS/host, 390 × 844 DPR 1 mobile emulation, 1.6 Mbps down / 750 Kbps up / 150 ms latency, 4× CPU slowdown, cold contexts, and observation windows** as the historical captures. English and Japanese normal no-fragment visits were each repeated three times; all six succeeded, none were excluded. These are a new measurement batch, not replacement values for `d5ed4d5` or a claim to isolate millisecond-level host noise.
+The measured product commit is `5d62371`; the evidence commit `30e7b1d` did not alter that controller. The later no-observer fallback fix `11a56d0` is documented separately above and is not represented by these historical numbers. A fresh archive of that commit was built/served with the same existing scripts and **the same Chrome 151.0.7922.34, macOS/host, 390 × 844 DPR 1 mobile emulation, 1.6 Mbps down / 750 Kbps up / 150 ms latency, 4× CPU slowdown, cold contexts, and observation windows** as the historical captures. English and Japanese normal no-fragment visits were each repeated three times; all six succeeded, none were excluded. These are a new measurement batch, not replacement values for `d5ed4d5` or a claim to isolate millisecond-level host noise.
 
 | Page | d5ed4d5 LCP median | 5d62371 LCP median | CLS median old / fixed | Final transfer old / fixed (B) | Requests old / fixed |
 | --- | --- | --- | --- | --- | --- |
@@ -71,7 +91,7 @@ Desktop places the copy and demo side by side. Mobile places copy, CTAs, demo, t
 
 ## Validation
 
-- `npm test` in `website`: build and all 21 tests passed after the initial-fragment fix (the original refresh had 18 tests).
+- `npm test` in `website`: build and all 22 tests passed after the no-observer fallback fix (18 in the original refresh, 21 after the initial-fragment fix).
 - `node --check` for the shared demo controller and language script: passed.
 - `git diff --check`: passed.
 - Internal navigation, fragments, assets, canonical URLs, hreflang, social cards, media identity, language routing, and legacy IDs are covered by the Web tests.
