@@ -4,21 +4,21 @@
     <meta charset="utf-8" />
     <script src="/language.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Quick Presenter 2.5.0 — PDFスライドの発表ツール</title>
+    <title>Quick Presenter — Audience Liveで双方向のPDFプレゼンテーション</title>
     <meta
       name="description"
-      content="作成済みのPDFスライドを、迷わず操作して発表するための軽量デスクトップアプリ。スライド、ノート、タイマーを手元で確認できます。"
+      content="参加者のコメントやリアクションを、PDFスライドにリアルタイム表示。オープンソースで、接続方式も自由に選べます。"
     />
     <link rel="canonical" href="https://quickpresenter.com/ja/" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Quick Presenter" />
+    <meta property="og:title" content="Quick Presenter — Audience Liveで双方向のPDFプレゼンテーション" />
     <meta
       property="og:description"
-      content="作成済みのPDFスライドを、迷わず操作して発表するための軽量デスクトップアプリ。スライド、ノート、タイマーを手元で確認できます。"
+      content="参加者のコメントやリアクションを、PDFスライドにリアルタイム表示。オープンソースで、接続方式も自由に選べます。"
     />
     <meta
       property="og:image"
-      content="https://quickpresenter.com/assets/presenter-window-v2-macos.png"
+      content="https://quickpresenter.com/assets/audience-live/flowing.jpg"
     />
     <meta property="og:url" content="https://quickpresenter.com/ja/" />
     <link rel="icon" href="/assets/quick-presenter-icon-256.png" />
@@ -26,47 +26,69 @@
     <link rel="alternate" hreflang="en" href="https://quickpresenter.com/" />
     <link rel="alternate" hreflang="ja" href="https://quickpresenter.com/ja/" />
     <link rel="alternate" hreflang="x-default" href="https://quickpresenter.com/" />
+    <meta property="og:image:width" content="960" />
+    <meta property="og:image:height" content="510" />
+    <meta property="og:image:alt" content="実際のQuick PresenterのPDFスライド上を流れるサンプルコメントとリアクション" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quick Presenter — Audience Liveで双方向のPDFプレゼンテーション" />
+    <meta name="twitter:description" content="参加者のコメントやリアクションを、PDFスライドにリアルタイム表示。オープンソースで、接続方式も自由に選べます。" />
+    <meta name="twitter:image" content="https://quickpresenter.com/assets/audience-live/flowing.jpg" />
+    <meta name="twitter:image:alt" content="実際のQuick PresenterのPDFスライド上を流れるサンプルコメントとリアクション" />
+    <link rel="stylesheet" href="/audience-live.css" />
+    <script src="/audience-live.js" defer></script>
   </head>
-  <body>
+  <body class="homepage">
+    <a class="skip-link" href="#top">本文へ移動</a>
     <header class="site-header">
       <a class="brand" href="#top" aria-label="Quick Presenter ホーム">
         <img src="/assets/quick-presenter-icon-256.png" alt="" />
         <span>Quick Presenter</span>
       </a>
       <nav class="nav-links" aria-label="メインナビゲーション">
-        <details class="navigation-menu"><summary>メニュー</summary><div class="navigation-items"><a href="/ja/audience-live/">Audience Live</a><a href="#demo">デモ</a><a href="#automation">CLI・AI連携</a><a href="#features">発表者画面</a><a href="#download">ダウンロード</a><a href="/ja/privacy/">プライバシー</a></div></details>
+        <details class="navigation-menu"><summary>メニュー</summary><div class="navigation-items"><a href="/ja/audience-live/">Audience Live</a><a href="#demo">AI &amp; CLI</a><a href="#features">発表者画面</a><a href="#download">ダウンロード</a><a href="https://github.com/koichiro/quick-presenter">GitHub</a></div></details>
         <span class="language-switch" role="group" aria-label="言語"><a href="/" lang="en" hreflang="en" >EN</a><a href="/ja/" lang="ja" hreflang="ja" aria-current="page">日本語</a></span>
       </nav>
     </header>
 
     <main id="top">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">オープンソースのPDFプレゼンテーションツール</p>
-          <h1 class="product-headline">Quick Presenter</h1>
-          <p class="hero-subtitle">作成済みのPDFスライドを、迷わず操作して発表するための軽量デスクトップアプリ。現在のスライド、次のページ、ノート、タイマーを手元で確認しながら、安定したプレゼンテーションを行えます。</p>
-          <div class="hero-actions" aria-label="主な操作">
-            <a class="button primary" href="#download">Quick Presenterを入手</a>
-            <a class="button secondary" href="#features">発表者画面を見る</a>
-          </div>
-          <dl class="hero-facts" aria-label="プロジェクト情報">
-            <div>
-              <dt>入力形式</dt>
-              <dd>PDFスライド</dd>
-            </div>
-            <div>
-              <dt>ライセンス</dt>
-              <dd>GPL-3.0-only</dd>
-            </div>
-            <div>
-              <dt>対応OS</dt>
-              <dd>macOS・Windows・Linux</dd>
-            </div>
-          </dl>
+      <section class="live-hero live-wrap homepage-hero" aria-labelledby="home-title">
+        <div class="home-message">
+          <p class="live-name">Quick Presenter</p>
+          <p class="eyebrow">Audience Live · v3.0.0 Preview</p>
+          <h1 id="home-title"><span class="home-title-phrase">プレゼンテーションを、</span><wbr /><span class="home-title-phrase">双方向のコミュニケーションへ。</span></h1>
+          <p class="live-lead">参加者のコメントやリアクションを、PDFスライドにリアルタイム表示。オープンソースで、接続方式も自由に選べます。</p>
+          <div class="hero-actions"><a class="button primary" href="/ja/audience-live/">Audience Liveを見る</a><a class="button secondary" href="#download">Quick Presenterを入手</a></div>
         </div>
-        <figure class="hero-shot">
-          <a href="#features"><img src="/assets/presenter-window-v2-macos.png" width="889" height="519" alt="現在のスライド、次ページのプレビュー、スピーカーノート、タイマー、ページ位置を表示するQuick Presenterの発表者画面。" /></a>
-        </figure>
+        <figure class="live-demo live-hero-media" data-demo data-pause="一時停止" data-play="再生" data-reduced="静止画（視差効果を減らす設定）">
+            <img id="hero-demo" src="/assets/audience-live/flowing.jpg" data-animation="/assets/audience-live/flowing.gif" data-poster="/assets/audience-live/flowing.jpg" width="960" height="510" alt="実際のAudience WindowでPDFスライドに重なる英語・日本語の架空のコメントとリアクション" fetchpriority="high" decoding="async" />
+            <figcaption><strong id="hero-demo-label">流れるコメント</strong><button class="live-playback" type="button" data-playback hidden aria-controls="hero-demo" aria-describedby="hero-demo-label">一時停止</button></figcaption>
+          </figure>
+        <div class="home-details">
+          <div class="live-badges"><span>Open Source · GPL-3.0-only</span><span>Official Relay · Open Beta</span></div>
+          <p class="live-status">v3.0.0は正式公開前です。Audience LiveはmacOS・Ubuntu向けRC1で試せます。Official Relayは無料チケット限定のOpen Betaです。</p>
+        </div>
+      </section>
+
+      <section id="audience-live" class="audience homepage-overview" aria-labelledby="audience-title">
+        <div class="section-heading"><p class="eyebrow">Audience Live</p><h2 id="audience-title">参加者も、プレゼンテーションの一員に。</h2><p>QRコードからブラウザで参加。コメントやリアクションをPDFスライドに重ねて、会場の声を共有できます。</p></div>
+        <div class="audience-grid">
+          <article><h3>すぐに参加</h3><p>QRコードをスキャンするだけ。参加者専用アプリは不要です。</p></article>
+          <article><h3>その場でリアクション</h3><p>コメントやリアクションを送ると、スライド上にリアルタイムで表示されます。</p></article>
+          <article><h3>接続方式を選べる</h3><p>Local LAN、Self-hosted Relay、Official Relayから選べます。</p></article>
+        </div>
+        <p class="hero-actions"><a class="button primary" href="/ja/audience-live/">Audience Liveの仕組みを見る</a></p>
+        <p class="live-status">会場のゲストWi-Fiでは、端末間通信の分離によりLocal LANで参加できない場合があります。<a class="text-link" href="/ja/audience-live/#faq">接続方式とFAQを確認</a></p>
+      </section>
+      <section id="presenter" class="positioning" aria-labelledby="presenter-title">
+        <div class="section-heading"><p class="eyebrow">PDF presentation playback</p><h2 id="presenter-title">いつものPDFで、安心して発表。</h2><p>Audience Liveを使わなくても便利な、軽量PDFプレゼンター。macOS・Windows・Linuxに対応し、キーボード中心の操作で発表に集中できます。</p></div>
+        <div class="positioning-grid">
+          <article><h3>ふたつの画面</h3><p>発表者と参加者のウィンドウを分離。ノートは手元に、スライドは会場に。</p></article>
+          <article><h3>次の展開を手元に</h3><p>現在・次ページのプレビューとスピーカーノートを確認できます。</p></article>
+          <article><h3>時間と操作を確実に</h3><p>タイマーと時計を確認しながら、キーボードでページを操作できます。</p></article>
+        </div>
+        <p><a class="text-link" href="#features">発表者画面を見る</a></p>
       </section>
 
       <section id="demo" class="demo-section demo-overview" aria-labelledby="demo-title">
@@ -188,7 +210,7 @@ qp status --json</code></pre></figure>
           </div>
           <figure>
             <img
-              src="/assets/presenter-window-v2-macos.png"
+              src="/assets/presenter-window-v2-macos.png" loading="lazy" decoding="async"
               width="889"
               height="519"
               alt="現在のスライド、次ページ、スピーカーノート、タイマーを表示するQuick Presenterの発表者画面。"
@@ -199,7 +221,7 @@ qp status --json</code></pre></figure>
         <article class="feature split">
           <figure>
             <img
-              src="/assets/audience-window-title-en.png"
+              src="/assets/audience-window-title-en.png" loading="lazy" decoding="async"
               width="1024"
               height="548"
               alt="Quick Presenterのタイトルスライドを表示した投影用ウィンドウ。"
@@ -225,9 +247,10 @@ qp status --json</code></pre></figure>
       </section>
 
       <section id="download" class="download" aria-labelledby="download-title">
-        <p class="eyebrow">Get Quick Presenter 2.5.0</p><h2 id="download-title">OSと用途に合う配布先を選ぶ</h2>
+        <p class="eyebrow">Quick Presenter · Stable v2.5.0</p><h2 id="download-title">OSと用途に合う配布先を選ぶ</h2>
         <p class="release-status">OSに合うQuick Presenter 2.5.0をインストールしてください。AI連携には、同じv2.5.0パッケージに含まれるGUIとCLIを使います。</p>
         <p>2.5.0ではMac App Store版のCLI操作に対応し、発表中のキー操作、フルスクリーン切り替え、macOSでのPDFオープンを改善しました。<a href="https://github.com/koichiro/quick-presenter/releases/tag/v2.5.0">リリースノート</a></p>
+        <aside class="release-preview" aria-labelledby="preview-title"><h3 id="preview-title">Audience Liveを試す · v3.0.0 RC1</h3><p>正式版ではなく、テスト用のPrereleaseです。macOS Apple Silicon向けDMGとUbuntu amd64向けDEBを提供しています。Windows向けRCパッケージはありません。Store版の更新は別途行われます。</p><a class="button secondary" href="https://github.com/koichiro/quick-presenter/releases/tag/v3.0.0-rc.1">v3.0.0 RC1を入手</a></aside>
         <div class="download-grid">
           <article><h3>Windows</h3><p>Quick Presenter v2.5.0はMicrosoft Storeで配信中です。qp.exeのCLI実行エイリアスを同梱しています。</p><a class="button secondary" href="https://apps.microsoft.com/detail/9N913S9NJ6D1">Microsoft Store <span aria-hidden="true">↗</span></a></article>
           <article><h3>macOS</h3><p>Quick Presenter v2.5.0はMac App Storeで配信中です。qp CLIによる操作に対応しました。Apple silicon（M1以降）・macOS 14.4以降が必要です。</p><a class="button secondary" href="https://apps.apple.com/jp/app/quick-presenter-pdf-slides/id6820406883">Mac App Store <span aria-hidden="true">↗</span></a></article>
@@ -238,7 +261,7 @@ qp status --json</code></pre></figure>
         <p>各ストアの配布版は、購入を通じて開発を支援できるドネーション版です。</p>
       </section>
       <section id="support" class="oss" aria-labelledby="oss-title">
-        <div><p class="eyebrow">Open source · Support development</p><h2 id="oss-title">発表を支えるOSSを、一緒に。</h2><p>公開ソース、リリースノート、Issueを通じて開発を進めています。不具合の報告、改善提案、コードへの貢献が、マルチプラットフォームでの安定したPDF再生とCLI連携を支えます。</p></div>
+        <div><p class="eyebrow">Open source · Support development</p><h2 id="oss-title">発表を支えるOSSを、一緒に。</h2><p>公開ソース、リリースノート、Issueを通じて開発を進めています。不具合の報告、改善提案、コードへの貢献が、マルチプラットフォームでの安定したPDF再生とCLI連携を支えます。</p><p>Quick Presenter本体はGPL-3.0-only、<a class="text-link" href="https://github.com/koichiro/quick-presenter-relay">quick-presenter-relay</a>はApache-2.0のOSSです。Self-hosted Relayと、ホスト型サービスのOfficial Relayを選べます。Official Relayは現在、無料チケット限定のOpen Betaです。</p></div>
         <div class="oss-actions"><a class="button secondary" href="https://github.com/koichiro/quick-presenter">ソースコード</a><a class="button secondary" href="https://github.com/koichiro/quick-presenter/issues">Issueを報告</a></div>
       </section>
     </main>

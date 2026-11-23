@@ -1,0 +1,4790 @@
+[
+  {
+    "language": "en",
+    "revision": "after",
+    "iteration": 1,
+    "initial": {
+      "time": 12297.699999809265,
+      "pathname": "/",
+      "lang": "en",
+      "languageChoice": "en",
+      "lcp": {
+        "time": 1808,
+        "renderTime": 1808,
+        "loadTime": 1766.5,
+        "size": 69617,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1260,
+          "renderTime": 1260,
+          "loadTime": 0,
+          "size": 25826,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1808,
+          "renderTime": 1808,
+          "loadTime": 1766.5,
+          "size": 69617,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1352.5,
+          "value": 0.0009496830561521241,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 789.140625,
+                "width": 362,
+                "height": 54.859375,
+                "top": 789.140625,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.9375,
+                "width": 362,
+                "height": 44.0625,
+                "top": 799.9375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 739.546875,
+                "width": 146,
+                "height": 25.59375,
+                "top": 739.546875,
+                "right": 160,
+                "bottom": 765.140625,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.9375,
+                "width": 146,
+                "height": 25.59375,
+                "top": 744.9375,
+                "right": 160,
+                "bottom": 770.53125,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7278.199999809265
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "/assets/audience-live/flowing.jpg",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 529.234375,
+          "width": 362,
+          "height": 192.3125,
+          "top": 529.234375,
+          "right": 376,
+          "bottom": 721.546875,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "Pause",
+          "rect": {
+            "x": 308.203125,
+            "y": 739.546875,
+            "width": 67.796875,
+            "height": 36.390625,
+            "top": 739.546875,
+            "right": 376,
+            "bottom": 775.9375,
+            "left": 308.203125
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 1092664,
+        "requests": 12,
+        "completeRequests": 11,
+        "records": [
+          {
+            "path": "/",
+            "type": "Document",
+            "receivedBodyBytes": 24210,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 24398,
+            "startMs": 0,
+            "endMs": 282.79299987480044
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 203.10299983248115,
+            "endMs": 414.8420002311468
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 205.83799993619323,
+            "endMs": 1014.8419998586178
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 205.8669999241829,
+            "endMs": 491.7589998804033
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 206.74300007522106,
+            "endMs": 1337.8200000151992
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 206.7619999870658,
+            "endMs": 2029.3319998309016
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 206.78000012412667,
+            "endMs": 1765.3319998644292
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 210.07699985057116,
+            "endMs": 7195.141000207514
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 213.02299993112683,
+            "endMs": 7277.203000150621
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 219.95199983939528,
+            "endMs": 2021.7940001748502
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 0,
+            "finished": false,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "startMs": 1360.8809998258948
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7281.88499994576,
+            "endMs": 8043.585000094026
+          }
+        ]
+      }
+    },
+    "extended": {
+      "time": 33454.40000009537,
+      "pathname": "/",
+      "lang": "en",
+      "languageChoice": "en",
+      "lcp": {
+        "time": 1808,
+        "renderTime": 1808,
+        "loadTime": 1766.5,
+        "size": 69617,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1260,
+          "renderTime": 1260,
+          "loadTime": 0,
+          "size": 25826,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1808,
+          "renderTime": 1808,
+          "loadTime": 1766.5,
+          "size": 69617,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1352.5,
+          "value": 0.0009496830561521241,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 789.140625,
+                "width": 362,
+                "height": 54.859375,
+                "top": 789.140625,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.9375,
+                "width": 362,
+                "height": 44.0625,
+                "top": 799.9375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 739.546875,
+                "width": 146,
+                "height": 25.59375,
+                "top": 739.546875,
+                "right": 160,
+                "bottom": 765.140625,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.9375,
+                "width": 146,
+                "height": 25.59375,
+                "top": 744.9375,
+                "right": 160,
+                "bottom": 770.53125,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7278.199999809265
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/audience-live/flowing.gif",
+          "initiatorType": "fetch",
+          "transferSize": 4538642,
+          "encodedBodySize": 4538342,
+          "decodedBodySize": 4538342
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "blob:local-demo",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 529.234375,
+          "width": 362,
+          "height": 192.3125,
+          "top": 529.234375,
+          "right": 376,
+          "bottom": 721.546875,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "Pause",
+          "rect": {
+            "x": 308.203125,
+            "y": 739.546875,
+            "width": 67.796875,
+            "height": 36.390625,
+            "top": 739.546875,
+            "right": 376,
+            "bottom": 775.9375,
+            "left": 308.203125
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 5631006,
+        "requests": 12,
+        "completeRequests": 12,
+        "records": [
+          {
+            "path": "/",
+            "type": "Document",
+            "receivedBodyBytes": 24210,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 24398,
+            "startMs": 0,
+            "endMs": 282.79299987480044
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 203.10299983248115,
+            "endMs": 414.8420002311468
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 205.83799993619323,
+            "endMs": 1014.8419998586178
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 205.8669999241829,
+            "endMs": 491.7589998804033
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 206.74300007522106,
+            "endMs": 1337.8200000151992
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 206.7619999870658,
+            "endMs": 2029.3319998309016
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 206.78000012412667,
+            "endMs": 1765.3319998644292
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 210.07699985057116,
+            "endMs": 7195.141000207514
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 213.02299993112683,
+            "endMs": 7277.203000150621
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 219.95199983939528,
+            "endMs": 2021.7940001748502
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 4538342,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 4538517,
+            "startMs": 1360.8809998258948,
+            "endMs": 28427.298000082374
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7281.88499994576,
+            "endMs": 8043.585000094026
+          }
+        ]
+      }
+    }
+  },
+  {
+    "language": "ja",
+    "revision": "after",
+    "iteration": 1,
+    "initial": {
+      "time": 12232.599999904633,
+      "pathname": "/ja/",
+      "lang": "ja",
+      "languageChoice": "ja",
+      "lcp": {
+        "time": 1784,
+        "renderTime": 1784,
+        "loadTime": 1744.9000000953674,
+        "size": 69487,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1200,
+          "renderTime": 1200,
+          "loadTime": 0,
+          "size": 26400,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1784,
+          "renderTime": 1784,
+          "loadTime": 1744.9000000953674,
+          "size": 69487,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1276.0999999046326,
+          "value": 0.0009087202986965529,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 788.546875,
+                "width": 362,
+                "height": 55.453125,
+                "top": 788.546875,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.34375,
+                "width": 362,
+                "height": 44.65625,
+                "top": 799.34375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 738.953125,
+                "width": 112,
+                "height": 25.59375,
+                "top": 738.953125,
+                "right": 126,
+                "bottom": 764.546875,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.34375,
+                "width": 112,
+                "height": 25.59375,
+                "top": 744.34375,
+                "right": 126,
+                "bottom": 769.9375,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7227.400000095367
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "/assets/audience-live/flowing.jpg",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 528.640625,
+          "width": 362,
+          "height": 192.3125,
+          "top": 528.640625,
+          "right": 376,
+          "bottom": 720.953125,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "一時停止",
+          "rect": {
+            "x": 294,
+            "y": 738.953125,
+            "width": 82,
+            "height": 36.390625,
+            "top": 738.953125,
+            "right": 376,
+            "bottom": 775.34375,
+            "left": 294
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 1097028,
+        "requests": 12,
+        "completeRequests": 11,
+        "records": [
+          {
+            "path": "/ja/",
+            "type": "Document",
+            "receivedBodyBytes": 28574,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 28762,
+            "startMs": 0,
+            "endMs": 295.4250001348555
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 162.9389999434352,
+            "endMs": 333.28700019046664
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 163.0220003426075,
+            "endMs": 940.502000041306
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 168.83200034499168,
+            "endMs": 431.20700027793646
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 168.86500036343932,
+            "endMs": 1264.6540002897382
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 168.88600029051304,
+            "endMs": 1947.9499999433756
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 177.70700016990304,
+            "endMs": 1744.535000063479
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 205.9130002744496,
+            "endMs": 7182.155000045896
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 205.93900000676513,
+            "endMs": 7226.317000109702
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 216.61900030449033,
+            "endMs": 1960.709000006318
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 0,
+            "finished": false,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "startMs": 1277.5790002197027
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7228.186999913305,
+            "endMs": 7992.178000044078
+          }
+        ]
+      }
+    },
+    "extended": {
+      "time": 33396.09999990463,
+      "pathname": "/ja/",
+      "lang": "ja",
+      "languageChoice": "ja",
+      "lcp": {
+        "time": 1784,
+        "renderTime": 1784,
+        "loadTime": 1744.9000000953674,
+        "size": 69487,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1200,
+          "renderTime": 1200,
+          "loadTime": 0,
+          "size": 26400,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1784,
+          "renderTime": 1784,
+          "loadTime": 1744.9000000953674,
+          "size": 69487,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1276.0999999046326,
+          "value": 0.0009087202986965529,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 788.546875,
+                "width": 362,
+                "height": 55.453125,
+                "top": 788.546875,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.34375,
+                "width": 362,
+                "height": 44.65625,
+                "top": 799.34375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 738.953125,
+                "width": 112,
+                "height": 25.59375,
+                "top": 738.953125,
+                "right": 126,
+                "bottom": 764.546875,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.34375,
+                "width": 112,
+                "height": 25.59375,
+                "top": 744.34375,
+                "right": 126,
+                "bottom": 769.9375,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7227.400000095367
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/audience-live/flowing.gif",
+          "initiatorType": "fetch",
+          "transferSize": 4538642,
+          "encodedBodySize": 4538342,
+          "decodedBodySize": 4538342
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "blob:local-demo",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 528.640625,
+          "width": 362,
+          "height": 192.3125,
+          "top": 528.640625,
+          "right": 376,
+          "bottom": 720.953125,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "一時停止",
+          "rect": {
+            "x": 294,
+            "y": 738.953125,
+            "width": 82,
+            "height": 36.390625,
+            "top": 738.953125,
+            "right": 376,
+            "bottom": 775.34375,
+            "left": 294
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 5635370,
+        "requests": 12,
+        "completeRequests": 12,
+        "records": [
+          {
+            "path": "/ja/",
+            "type": "Document",
+            "receivedBodyBytes": 28574,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 28762,
+            "startMs": 0,
+            "endMs": 295.4250001348555
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 162.9389999434352,
+            "endMs": 333.28700019046664
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 163.0220003426075,
+            "endMs": 940.502000041306
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 168.83200034499168,
+            "endMs": 431.20700027793646
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 168.86500036343932,
+            "endMs": 1264.6540002897382
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 168.88600029051304,
+            "endMs": 1947.9499999433756
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 177.70700016990304,
+            "endMs": 1744.535000063479
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 205.9130002744496,
+            "endMs": 7182.155000045896
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 205.93900000676513,
+            "endMs": 7226.317000109702
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 216.61900030449033,
+            "endMs": 1960.709000006318
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 4538342,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 4538517,
+            "startMs": 1277.5790002197027,
+            "endMs": 28377.650000154972
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7228.186999913305,
+            "endMs": 7992.178000044078
+          }
+        ]
+      }
+    }
+  },
+  {
+    "language": "en",
+    "revision": "after",
+    "iteration": 2,
+    "initial": {
+      "time": 12237.699999809265,
+      "pathname": "/",
+      "lang": "en",
+      "languageChoice": "en",
+      "lcp": {
+        "time": 1768,
+        "renderTime": 1768,
+        "loadTime": 1737.0999999046326,
+        "size": 69617,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1068,
+          "renderTime": 1068,
+          "loadTime": 0,
+          "size": 25826,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1768,
+          "renderTime": 1768,
+          "loadTime": 1737.0999999046326,
+          "size": 69617,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1276.6999998092651,
+          "value": 0.0009496830561521241,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 789.140625,
+                "width": 362,
+                "height": 54.859375,
+                "top": 789.140625,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.9375,
+                "width": 362,
+                "height": 44.0625,
+                "top": 799.9375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 739.546875,
+                "width": 146,
+                "height": 25.59375,
+                "top": 739.546875,
+                "right": 160,
+                "bottom": 765.140625,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.9375,
+                "width": 146,
+                "height": 25.59375,
+                "top": 744.9375,
+                "right": 160,
+                "bottom": 770.53125,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7234.39999961853
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "/assets/audience-live/flowing.jpg",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 529.234375,
+          "width": 362,
+          "height": 192.3125,
+          "top": 529.234375,
+          "right": 376,
+          "bottom": 721.546875,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "Pause",
+          "rect": {
+            "x": 308.203125,
+            "y": 739.546875,
+            "width": 67.796875,
+            "height": 36.390625,
+            "top": 739.546875,
+            "right": 376,
+            "bottom": 775.9375,
+            "left": 308.203125
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 1092664,
+        "requests": 12,
+        "completeRequests": 11,
+        "records": [
+          {
+            "path": "/",
+            "type": "Document",
+            "receivedBodyBytes": 24210,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 24398,
+            "startMs": 0,
+            "endMs": 282.33700012788177
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 170.90799985453486,
+            "endMs": 356.79699992761016
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 170.99800007417798,
+            "endMs": 942.1600000932813
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 176.10300006344914,
+            "endMs": 448.3429999090731
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 176.14400014281273,
+            "endMs": 1270.7409998402
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 176.1659998446703,
+            "endMs": 1961.1370000056922
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 186.14899972453713,
+            "endMs": 1736.5449997596443
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 208.87299999594688,
+            "endMs": 7180.99999986589
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 215.2249999344349,
+            "endMs": 7233.517999760807
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 221.3710001669824,
+            "endMs": 1976.1819997802377
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 0,
+            "finished": false,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "startMs": 1279.4139999896288
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7235.440999735147,
+            "endMs": 7997.988000046462
+          }
+        ]
+      }
+    },
+    "extended": {
+      "time": 33410.5,
+      "pathname": "/",
+      "lang": "en",
+      "languageChoice": "en",
+      "lcp": {
+        "time": 1768,
+        "renderTime": 1768,
+        "loadTime": 1737.0999999046326,
+        "size": 69617,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1068,
+          "renderTime": 1068,
+          "loadTime": 0,
+          "size": 25826,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1768,
+          "renderTime": 1768,
+          "loadTime": 1737.0999999046326,
+          "size": 69617,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1276.6999998092651,
+          "value": 0.0009496830561521241,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 789.140625,
+                "width": 362,
+                "height": 54.859375,
+                "top": 789.140625,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.9375,
+                "width": 362,
+                "height": 44.0625,
+                "top": 799.9375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 739.546875,
+                "width": 146,
+                "height": 25.59375,
+                "top": 739.546875,
+                "right": 160,
+                "bottom": 765.140625,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.9375,
+                "width": 146,
+                "height": 25.59375,
+                "top": 744.9375,
+                "right": 160,
+                "bottom": 770.53125,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7234.39999961853
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/audience-live/flowing.gif",
+          "initiatorType": "fetch",
+          "transferSize": 4538642,
+          "encodedBodySize": 4538342,
+          "decodedBodySize": 4538342
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "blob:local-demo",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 529.234375,
+          "width": 362,
+          "height": 192.3125,
+          "top": 529.234375,
+          "right": 376,
+          "bottom": 721.546875,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "Pause",
+          "rect": {
+            "x": 308.203125,
+            "y": 739.546875,
+            "width": 67.796875,
+            "height": 36.390625,
+            "top": 739.546875,
+            "right": 376,
+            "bottom": 775.9375,
+            "left": 308.203125
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 5631006,
+        "requests": 12,
+        "completeRequests": 12,
+        "records": [
+          {
+            "path": "/",
+            "type": "Document",
+            "receivedBodyBytes": 24210,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 24398,
+            "startMs": 0,
+            "endMs": 282.33700012788177
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 170.90799985453486,
+            "endMs": 356.79699992761016
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 170.99800007417798,
+            "endMs": 942.1600000932813
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 176.10300006344914,
+            "endMs": 448.3429999090731
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 176.14400014281273,
+            "endMs": 1270.7409998402
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 176.1659998446703,
+            "endMs": 1961.1370000056922
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 186.14899972453713,
+            "endMs": 1736.5449997596443
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 208.87299999594688,
+            "endMs": 7180.99999986589
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 215.2249999344349,
+            "endMs": 7233.517999760807
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 221.3710001669824,
+            "endMs": 1976.1819997802377
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 4538342,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 4538517,
+            "startMs": 1279.4139999896288,
+            "endMs": 28384.25200013444
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7235.440999735147,
+            "endMs": 7997.988000046462
+          }
+        ]
+      }
+    }
+  },
+  {
+    "language": "ja",
+    "revision": "after",
+    "iteration": 2,
+    "initial": {
+      "time": 12241,
+      "pathname": "/ja/",
+      "lang": "ja",
+      "languageChoice": "ja",
+      "lcp": {
+        "time": 1776,
+        "renderTime": 1776,
+        "loadTime": 1744,
+        "size": 69487,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1108,
+          "renderTime": 1108,
+          "loadTime": 0,
+          "size": 26400,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1776,
+          "renderTime": 1776,
+          "loadTime": 1744,
+          "size": 69487,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1266.5,
+          "value": 0.0009087202986965529,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 788.546875,
+                "width": 362,
+                "height": 55.453125,
+                "top": 788.546875,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.34375,
+                "width": 362,
+                "height": 44.65625,
+                "top": 799.34375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 738.953125,
+                "width": 112,
+                "height": 25.59375,
+                "top": 738.953125,
+                "right": 126,
+                "bottom": 764.546875,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.34375,
+                "width": 112,
+                "height": 25.59375,
+                "top": 744.34375,
+                "right": 126,
+                "bottom": 769.9375,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7236.5
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "/assets/audience-live/flowing.jpg",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 528.640625,
+          "width": 362,
+          "height": 192.3125,
+          "top": 528.640625,
+          "right": 376,
+          "bottom": 720.953125,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "一時停止",
+          "rect": {
+            "x": 294,
+            "y": 738.953125,
+            "width": 82,
+            "height": 36.390625,
+            "top": 738.953125,
+            "right": 376,
+            "bottom": 775.34375,
+            "left": 294
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 1097028,
+        "requests": 12,
+        "completeRequests": 11,
+        "records": [
+          {
+            "path": "/ja/",
+            "type": "Document",
+            "receivedBodyBytes": 28574,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 28762,
+            "startMs": 0,
+            "endMs": 303.317999932915
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 170.76800018548965,
+            "endMs": 363.06599993258715
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 171.6749998740852,
+            "endMs": 920.6139999441803
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 176.67399998754263,
+            "endMs": 448.9179998636246
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 176.69699992984533,
+            "endMs": 1249.0270002745092
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 176.71399982646108,
+            "endMs": 1969.0379998646677
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 183.73600021004677,
+            "endMs": 1743.0690000765026
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 213.94800022244453,
+            "endMs": 7181.563000194728
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 213.9719999395311,
+            "endMs": 7235.795999877155
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 222.04700019210577,
+            "endMs": 1976.3449998572469
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 0,
+            "finished": false,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "startMs": 1268.1510001420975
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7237.6870000734925,
+            "endMs": 8000.465999823064
+          }
+        ]
+      }
+    },
+    "extended": {
+      "time": 33406.09999990463,
+      "pathname": "/ja/",
+      "lang": "ja",
+      "languageChoice": "ja",
+      "lcp": {
+        "time": 1776,
+        "renderTime": 1776,
+        "loadTime": 1744,
+        "size": 69487,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1108,
+          "renderTime": 1108,
+          "loadTime": 0,
+          "size": 26400,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1776,
+          "renderTime": 1776,
+          "loadTime": 1744,
+          "size": 69487,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1266.5,
+          "value": 0.0009087202986965529,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 788.546875,
+                "width": 362,
+                "height": 55.453125,
+                "top": 788.546875,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.34375,
+                "width": 362,
+                "height": 44.65625,
+                "top": 799.34375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 738.953125,
+                "width": 112,
+                "height": 25.59375,
+                "top": 738.953125,
+                "right": 126,
+                "bottom": 764.546875,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.34375,
+                "width": 112,
+                "height": 25.59375,
+                "top": 744.34375,
+                "right": 126,
+                "bottom": 769.9375,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7236.5
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/audience-live/flowing.gif",
+          "initiatorType": "fetch",
+          "transferSize": 4538642,
+          "encodedBodySize": 4538342,
+          "decodedBodySize": 4538342
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "blob:local-demo",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 528.640625,
+          "width": 362,
+          "height": 192.3125,
+          "top": 528.640625,
+          "right": 376,
+          "bottom": 720.953125,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "一時停止",
+          "rect": {
+            "x": 294,
+            "y": 738.953125,
+            "width": 82,
+            "height": 36.390625,
+            "top": 738.953125,
+            "right": 376,
+            "bottom": 775.34375,
+            "left": 294
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 5635370,
+        "requests": 12,
+        "completeRequests": 12,
+        "records": [
+          {
+            "path": "/ja/",
+            "type": "Document",
+            "receivedBodyBytes": 28574,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 28762,
+            "startMs": 0,
+            "endMs": 303.317999932915
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 170.76800018548965,
+            "endMs": 363.06599993258715
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 171.6749998740852,
+            "endMs": 920.6139999441803
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 176.67399998754263,
+            "endMs": 448.9179998636246
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 176.69699992984533,
+            "endMs": 1249.0270002745092
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 176.71399982646108,
+            "endMs": 1969.0379998646677
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 183.73600021004677,
+            "endMs": 1743.0690000765026
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 213.94800022244453,
+            "endMs": 7181.563000194728
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 213.9719999395311,
+            "endMs": 7235.795999877155
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 222.04700019210577,
+            "endMs": 1976.3449998572469
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 4538342,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 4538517,
+            "startMs": 1268.1510001420975,
+            "endMs": 28385.040999855846
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7237.6870000734925,
+            "endMs": 8000.465999823064
+          }
+        ]
+      }
+    }
+  },
+  {
+    "language": "en",
+    "revision": "after",
+    "iteration": 3,
+    "initial": {
+      "time": 12246.39999961853,
+      "pathname": "/",
+      "lang": "en",
+      "languageChoice": "en",
+      "lcp": {
+        "time": 1768,
+        "renderTime": 1768,
+        "loadTime": 1737,
+        "size": 69617,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1084,
+          "renderTime": 1084,
+          "loadTime": 0,
+          "size": 25826,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1768,
+          "renderTime": 1768,
+          "loadTime": 1737,
+          "size": 69617,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1309.5999999046326,
+          "value": 0.0009496830561521241,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 789.140625,
+                "width": 362,
+                "height": 54.859375,
+                "top": 789.140625,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.9375,
+                "width": 362,
+                "height": 44.0625,
+                "top": 799.9375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 739.546875,
+                "width": 146,
+                "height": 25.59375,
+                "top": 739.546875,
+                "right": 160,
+                "bottom": 765.140625,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.9375,
+                "width": 146,
+                "height": 25.59375,
+                "top": 744.9375,
+                "right": 160,
+                "bottom": 770.53125,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7243.599999904633
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "/assets/audience-live/flowing.jpg",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 529.234375,
+          "width": 362,
+          "height": 192.3125,
+          "top": 529.234375,
+          "right": 376,
+          "bottom": 721.546875,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "Pause",
+          "rect": {
+            "x": 308.203125,
+            "y": 739.546875,
+            "width": 67.796875,
+            "height": 36.390625,
+            "top": 739.546875,
+            "right": 376,
+            "bottom": 775.9375,
+            "left": 308.203125
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 1092664,
+        "requests": 12,
+        "completeRequests": 11,
+        "records": [
+          {
+            "path": "/",
+            "type": "Document",
+            "receivedBodyBytes": 24210,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 24398,
+            "startMs": 0,
+            "endMs": 281.31800005212426
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 170.8610001951456,
+            "endMs": 378.5379999317229
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 170.95299996435642,
+            "endMs": 971.4709999971092
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 176.61399999633431,
+            "endMs": 445.6210001371801
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 176.80099979043007,
+            "endMs": 1301.2410001829267
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 176.81699991226196,
+            "endMs": 1953.2749997451901
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 183.19900007918477,
+            "endMs": 1736.316000111401
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 208.0469997599721,
+            "endMs": 7176.25099979341
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 213.8919997960329,
+            "endMs": 7242.8899998776615
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 224.225000012666,
+            "endMs": 1968.6500001698732
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 0,
+            "finished": false,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "startMs": 1311.9990001432598
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7243.919999804348,
+            "endMs": 8007.536999881268
+          }
+        ]
+      }
+    },
+    "extended": {
+      "time": 33413.5,
+      "pathname": "/",
+      "lang": "en",
+      "languageChoice": "en",
+      "lcp": {
+        "time": 1768,
+        "renderTime": 1768,
+        "loadTime": 1737,
+        "size": 69617,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1084,
+          "renderTime": 1084,
+          "loadTime": 0,
+          "size": 25826,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1768,
+          "renderTime": 1768,
+          "loadTime": 1737,
+          "size": 69617,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1309.5999999046326,
+          "value": 0.0009496830561521241,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 789.140625,
+                "width": 362,
+                "height": 54.859375,
+                "top": 789.140625,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.9375,
+                "width": 362,
+                "height": 44.0625,
+                "top": 799.9375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 739.546875,
+                "width": 146,
+                "height": 25.59375,
+                "top": 739.546875,
+                "right": 160,
+                "bottom": 765.140625,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.9375,
+                "width": 146,
+                "height": 25.59375,
+                "top": 744.9375,
+                "right": 160,
+                "bottom": 770.53125,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7243.599999904633
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/audience-live/flowing.gif",
+          "initiatorType": "fetch",
+          "transferSize": 4538642,
+          "encodedBodySize": 4538342,
+          "decodedBodySize": 4538342
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "blob:local-demo",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 529.234375,
+          "width": 362,
+          "height": 192.3125,
+          "top": 529.234375,
+          "right": 376,
+          "bottom": 721.546875,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "Pause",
+          "rect": {
+            "x": 308.203125,
+            "y": 739.546875,
+            "width": 67.796875,
+            "height": 36.390625,
+            "top": 739.546875,
+            "right": 376,
+            "bottom": 775.9375,
+            "left": 308.203125
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 5631006,
+        "requests": 12,
+        "completeRequests": 12,
+        "records": [
+          {
+            "path": "/",
+            "type": "Document",
+            "receivedBodyBytes": 24210,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 24398,
+            "startMs": 0,
+            "endMs": 281.31800005212426
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 170.8610001951456,
+            "endMs": 378.5379999317229
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 170.95299996435642,
+            "endMs": 971.4709999971092
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 176.61399999633431,
+            "endMs": 445.6210001371801
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 176.80099979043007,
+            "endMs": 1301.2410001829267
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 176.81699991226196,
+            "endMs": 1953.2749997451901
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 183.19900007918477,
+            "endMs": 1736.316000111401
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 208.0469997599721,
+            "endMs": 7176.25099979341
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 213.8919997960329,
+            "endMs": 7242.8899998776615
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 224.225000012666,
+            "endMs": 1968.6500001698732
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 4538342,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 4538517,
+            "startMs": 1311.9990001432598,
+            "endMs": 28393.472000025213
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7243.919999804348,
+            "endMs": 8007.536999881268
+          }
+        ]
+      }
+    }
+  },
+  {
+    "language": "ja",
+    "revision": "after",
+    "iteration": 3,
+    "initial": {
+      "time": 12252.60000038147,
+      "pathname": "/ja/",
+      "lang": "ja",
+      "languageChoice": "ja",
+      "lcp": {
+        "time": 1784,
+        "renderTime": 1784,
+        "loadTime": 1744,
+        "size": 69487,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1116,
+          "renderTime": 1116,
+          "loadTime": 0,
+          "size": 26400,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1784,
+          "renderTime": 1784,
+          "loadTime": 1744,
+          "size": 69487,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1274,
+          "value": 0.0009087202986965529,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 788.546875,
+                "width": 362,
+                "height": 55.453125,
+                "top": 788.546875,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.34375,
+                "width": 362,
+                "height": 44.65625,
+                "top": 799.34375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 738.953125,
+                "width": 112,
+                "height": 25.59375,
+                "top": 738.953125,
+                "right": 126,
+                "bottom": 764.546875,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.34375,
+                "width": 112,
+                "height": 25.59375,
+                "top": 744.34375,
+                "right": 126,
+                "bottom": 769.9375,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7249.60000038147
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "/assets/audience-live/flowing.jpg",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 528.640625,
+          "width": 362,
+          "height": 192.3125,
+          "top": 528.640625,
+          "right": 376,
+          "bottom": 720.953125,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "一時停止",
+          "rect": {
+            "x": 294,
+            "y": 738.953125,
+            "width": 82,
+            "height": 36.390625,
+            "top": 738.953125,
+            "right": 376,
+            "bottom": 775.34375,
+            "left": 294
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 1097028,
+        "requests": 12,
+        "completeRequests": 11,
+        "records": [
+          {
+            "path": "/ja/",
+            "type": "Document",
+            "receivedBodyBytes": 28574,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 28762,
+            "startMs": 0,
+            "endMs": 304.5140001922846
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 170.6840000115335,
+            "endMs": 379.6950001269579
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 170.95900001004338,
+            "endMs": 940.8130003139377
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 177.25299997255206,
+            "endMs": 446.4219999499619
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 177.29400005191565,
+            "endMs": 1263.071000110358
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 177.31699999421835,
+            "endMs": 1962.1740002185106
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 184.2990000732243,
+            "endMs": 1743.6720002442598
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 213.97100016474724,
+            "endMs": 7188.374999910593
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 214.0140002593398,
+            "endMs": 7249.32900024578
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 223.06300001218915,
+            "endMs": 1977.0770003087819
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 0,
+            "finished": false,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "startMs": 1277.5079999119043
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7250.438000075519,
+            "endMs": 8013.09600006789
+          }
+        ]
+      }
+    },
+    "extended": {
+      "time": 33409.7000002861,
+      "pathname": "/ja/",
+      "lang": "ja",
+      "languageChoice": "ja",
+      "lcp": {
+        "time": 1784,
+        "renderTime": 1784,
+        "loadTime": 1744,
+        "size": 69487,
+        "element": "img#hero-demo",
+        "url": "/assets/audience-live/flowing.jpg",
+        "originalAnimation": "/assets/audience-live/flowing.gif"
+      },
+      "lcpCandidates": [
+        {
+          "time": 1116,
+          "renderTime": 1116,
+          "loadTime": 0,
+          "size": 26400,
+          "element": "p.live-lead",
+          "url": null,
+          "originalAnimation": null
+        },
+        {
+          "time": 1784,
+          "renderTime": 1784,
+          "loadTime": 1744,
+          "size": 69487,
+          "element": "img#hero-demo",
+          "url": "/assets/audience-live/flowing.jpg",
+          "originalAnimation": "/assets/audience-live/flowing.gif"
+        }
+      ],
+      "cls": 0,
+      "layoutShifts": [
+        {
+          "time": 1274,
+          "value": 0.0009087202986965529,
+          "hadRecentInput": true,
+          "sources": [
+            {
+              "node": "div.home-details",
+              "previousRect": {
+                "x": 14,
+                "y": 788.546875,
+                "width": 362,
+                "height": 55.453125,
+                "top": 788.546875,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 799.34375,
+                "width": 362,
+                "height": 44.65625,
+                "top": 799.34375,
+                "right": 376,
+                "bottom": 844,
+                "left": 14
+              }
+            },
+            {
+              "node": "strong#hero-demo-label",
+              "previousRect": {
+                "x": 14,
+                "y": 738.953125,
+                "width": 112,
+                "height": 25.59375,
+                "top": 738.953125,
+                "right": 126,
+                "bottom": 764.546875,
+                "left": 14
+              },
+              "currentRect": {
+                "x": 14,
+                "y": 744.34375,
+                "width": 112,
+                "height": 25.59375,
+                "top": 744.34375,
+                "right": 126,
+                "bottom": 769.9375,
+                "left": 14
+              }
+            }
+          ]
+        }
+      ],
+      "navigation": {
+        "loadEventEnd": 7249.60000038147
+      },
+      "resources": [
+        {
+          "path": "/language.js",
+          "initiatorType": "script",
+          "transferSize": 1786,
+          "encodedBodySize": 1486,
+          "decodedBodySize": 1486
+        },
+        {
+          "path": "/styles.css",
+          "initiatorType": "link",
+          "transferSize": 24553,
+          "encodedBodySize": 24253,
+          "decodedBodySize": 24253
+        },
+        {
+          "path": "/audience-live.css",
+          "initiatorType": "link",
+          "transferSize": 6058,
+          "encodedBodySize": 5758,
+          "decodedBodySize": 5758
+        },
+        {
+          "path": "/audience-live.js",
+          "initiatorType": "script",
+          "transferSize": 6101,
+          "encodedBodySize": 5801,
+          "decodedBodySize": 5801
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "img",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        },
+        {
+          "path": "/assets/audience-live/flowing.jpg",
+          "initiatorType": "img",
+          "transferSize": 52465,
+          "encodedBodySize": 52165,
+          "decodedBodySize": 52165
+        },
+        {
+          "path": "/assets/interactive-ai-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 402883,
+          "encodedBodySize": 402583,
+          "decodedBodySize": 402583
+        },
+        {
+          "path": "/assets/agentic-presentation-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 404786,
+          "encodedBodySize": 404486,
+          "decodedBodySize": 404486
+        },
+        {
+          "path": "/assets/kokoro-demo-poster.jpg",
+          "initiatorType": "video",
+          "transferSize": 48422,
+          "encodedBodySize": 48122,
+          "decodedBodySize": 48122
+        },
+        {
+          "path": "/assets/audience-live/flowing.gif",
+          "initiatorType": "fetch",
+          "transferSize": 4538642,
+          "encodedBodySize": 4538342,
+          "decodedBodySize": 4538342
+        },
+        {
+          "path": "/assets/quick-presenter-icon-256.png",
+          "initiatorType": "other",
+          "transferSize": 61117,
+          "encodedBodySize": 60817,
+          "decodedBodySize": 60817
+        }
+      ],
+      "demo": {
+        "source": "blob:local-demo",
+        "complete": true,
+        "rect": {
+          "x": 14,
+          "y": 528.640625,
+          "width": 362,
+          "height": 192.3125,
+          "top": 528.640625,
+          "right": 376,
+          "bottom": 720.953125,
+          "left": 14
+        },
+        "button": {
+          "hidden": false,
+          "disabled": false,
+          "text": "一時停止",
+          "rect": {
+            "x": 294,
+            "y": 738.953125,
+            "width": 82,
+            "height": 36.390625,
+            "top": 738.953125,
+            "right": 376,
+            "bottom": 775.34375,
+            "left": 294
+          }
+        }
+      },
+      "network": {
+        "transferredBytes": 5635370,
+        "requests": 12,
+        "completeRequests": 12,
+        "records": [
+          {
+            "path": "/ja/",
+            "type": "Document",
+            "receivedBodyBytes": 28574,
+            "partialEncodedBodyBytes": 0,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/html",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 188,
+            "cached": false,
+            "transferredBytes": 28762,
+            "startMs": 0,
+            "endMs": 304.5140001922846
+          },
+          {
+            "path": "/language.js",
+            "type": "Script",
+            "receivedBodyBytes": 1486,
+            "partialEncodedBodyBytes": 1486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 1679,
+            "startMs": 170.6840000115335,
+            "endMs": 379.6950001269579
+          },
+          {
+            "path": "/styles.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 24253,
+            "partialEncodedBodyBytes": 24253,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 187,
+            "cached": false,
+            "transferredBytes": 24440,
+            "startMs": 170.95900001004338,
+            "endMs": 940.8130003139377
+          },
+          {
+            "path": "/audience-live.css",
+            "type": "Stylesheet",
+            "receivedBodyBytes": 5758,
+            "partialEncodedBodyBytes": 5758,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/css",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 186,
+            "cached": false,
+            "transferredBytes": 5944,
+            "startMs": 177.25299997255206,
+            "endMs": 446.4219999499619
+          },
+          {
+            "path": "/audience-live.js",
+            "type": "Script",
+            "receivedBodyBytes": 5801,
+            "partialEncodedBodyBytes": 5801,
+            "finished": true,
+            "status": 200,
+            "mimeType": "text/javascript",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 193,
+            "cached": false,
+            "transferredBytes": 5994,
+            "startMs": 177.29400005191565,
+            "endMs": 1263.071000110358
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Image",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 177.31699999421835,
+            "endMs": 1962.1740002185106
+          },
+          {
+            "path": "/assets/audience-live/flowing.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 52165,
+            "partialEncodedBodyBytes": 52165,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 52339,
+            "startMs": 184.2990000732243,
+            "endMs": 1743.6720002442598
+          },
+          {
+            "path": "/assets/interactive-ai-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 402583,
+            "partialEncodedBodyBytes": 402583,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 402758,
+            "startMs": 213.97100016474724,
+            "endMs": 7188.374999910593
+          },
+          {
+            "path": "/assets/agentic-presentation-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 404486,
+            "partialEncodedBodyBytes": 404486,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 404661,
+            "startMs": 214.0140002593398,
+            "endMs": 7249.32900024578
+          },
+          {
+            "path": "/assets/kokoro-demo-poster.jpg",
+            "type": "Image",
+            "receivedBodyBytes": 48122,
+            "partialEncodedBodyBytes": 48122,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/jpeg",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 174,
+            "cached": false,
+            "transferredBytes": 48296,
+            "startMs": 223.06300001218915,
+            "endMs": 1977.0770003087819
+          },
+          {
+            "path": "/assets/audience-live/flowing.gif",
+            "type": "Fetch",
+            "receivedBodyBytes": 0,
+            "partialEncodedBodyBytes": 4538342,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/gif",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 175,
+            "cached": false,
+            "transferredBytes": 4538517,
+            "startMs": 1277.5079999119043,
+            "endMs": 28391.015000175685
+          },
+          {
+            "path": "/assets/quick-presenter-icon-256.png",
+            "type": "Other",
+            "receivedBodyBytes": 60817,
+            "partialEncodedBodyBytes": 60817,
+            "finished": true,
+            "status": 200,
+            "mimeType": "image/png",
+            "protocol": "http/1.1",
+            "contentEncoding": "identity",
+            "responseHeadersBytes": 173,
+            "cached": false,
+            "transferredBytes": 60990,
+            "startMs": 7250.438000075519,
+            "endMs": 8013.09600006789
+          }
+        ]
+      }
+    }
+  }
+]

@@ -1,0 +1,2294 @@
+{
+  "revision": "11a56d0304e8b014000a95845517565f4de15c61",
+  "browser": "151.0.7922.34",
+  "cases": [
+    {
+      "name": "audience-live-shared-controller",
+      "language": "en",
+      "settings": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "deviceScaleFactor": 1,
+        "cpuSlowdown": 4,
+        "network": "unthrottled"
+      },
+      "states": [
+        {
+          "step": "landing-connect-settled",
+          "pathname": "/audience-live/",
+          "hash": "#connect",
+          "time": 5344.800000190735,
+          "scrollY": 3341,
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": -2497.984375,
+                "width": 362,
+                "height": 192.3125,
+                "top": -2497.984375,
+                "right": 376,
+                "bottom": -2305.671875,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": -771.71875,
+                "width": 362,
+                "height": 192.3125,
+                "top": -771.71875,
+                "right": 376,
+                "bottom": -579.40625,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 4.283000249415636,
+              "transferredBytes": 15495
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 46.04300018399954,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.356000032275915,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 47.91600024327636,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.83399994671345,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 48.088000155985355,
+              "status": 200,
+              "finished": true,
+              "endMs": 50.86700012907386,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 49.20700006186962,
+              "status": 200,
+              "finished": true,
+              "endMs": 56.26100022345781,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 49.23200001940131,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.51699995622039,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 49.248000141233206,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.90000031143427,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 335.92400001361966,
+              "status": 200,
+              "finished": true,
+              "endMs": 337.28699991479516,
+              "transferredBytes": 60990
+            }
+          ]
+        },
+        {
+          "step": "landing-hero-visible",
+          "pathname": "/audience-live/",
+          "hash": "#connect",
+          "time": 5454.400000095367,
+          "scrollY": 517,
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "blob:local-demo",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 326.015625,
+                "width": 362,
+                "height": 192.3125,
+                "top": 326.015625,
+                "right": 376,
+                "bottom": 518.328125,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 2052.28125,
+                "width": 362,
+                "height": 192.3125,
+                "top": 2052.28125,
+                "right": 376,
+                "bottom": 2244.59375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 4.283000249415636,
+              "transferredBytes": 15495
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 46.04300018399954,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.356000032275915,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 47.91600024327636,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.83399994671345,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 48.088000155985355,
+              "status": 200,
+              "finished": true,
+              "endMs": 50.86700012907386,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 49.20700006186962,
+              "status": 200,
+              "finished": true,
+              "endMs": 56.26100022345781,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 49.23200001940131,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.51699995622039,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 49.248000141233206,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.90000031143427,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 335.92400001361966,
+              "status": 200,
+              "finished": true,
+              "endMs": 337.28699991479516,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5419.9689999222755,
+              "status": 200,
+              "finished": true,
+              "endMs": 5427.7510000392795,
+              "transferredBytes": 4538517
+            }
+          ]
+        },
+        {
+          "step": "fallback-paused",
+          "pathname": "/audience-live/",
+          "hash": "#connect",
+          "time": 5722,
+          "scrollY": 517,
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 326.015625,
+                "width": 362,
+                "height": 192.3125,
+                "top": 326.015625,
+                "right": 376,
+                "bottom": 518.328125,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 2052.28125,
+                "width": 362,
+                "height": 192.3125,
+                "top": 2052.28125,
+                "right": 376,
+                "bottom": 2244.59375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "Play",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 4.283000249415636,
+              "transferredBytes": 15495
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 46.04300018399954,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.356000032275915,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 47.91600024327636,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.83399994671345,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 48.088000155985355,
+              "status": 200,
+              "finished": true,
+              "endMs": 50.86700012907386,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 49.20700006186962,
+              "status": 200,
+              "finished": true,
+              "endMs": 56.26100022345781,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 49.23200001940131,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.51699995622039,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 49.248000141233206,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.90000031143427,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 335.92400001361966,
+              "status": 200,
+              "finished": true,
+              "endMs": 337.28699991479516,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5419.9689999222755,
+              "status": 200,
+              "finished": true,
+              "endMs": 5427.7510000392795,
+              "transferredBytes": 4538517
+            }
+          ]
+        },
+        {
+          "step": "fallback-play",
+          "pathname": "/audience-live/",
+          "hash": "#connect",
+          "time": 5770.099999904633,
+          "scrollY": 517,
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "blob:local-demo",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 326.015625,
+                "width": 362,
+                "height": 192.3125,
+                "top": 326.015625,
+                "right": 376,
+                "bottom": 518.328125,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 2052.28125,
+                "width": 362,
+                "height": 192.3125,
+                "top": 2052.28125,
+                "right": 376,
+                "bottom": 2244.59375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 4.283000249415636,
+              "transferredBytes": 15495
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 46.04300018399954,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.356000032275915,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 47.91600024327636,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.83399994671345,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 48.088000155985355,
+              "status": 200,
+              "finished": true,
+              "endMs": 50.86700012907386,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 49.20700006186962,
+              "status": 200,
+              "finished": true,
+              "endMs": 56.26100022345781,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 49.23200001940131,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.51699995622039,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 49.248000141233206,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.90000031143427,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 335.92400001361966,
+              "status": 200,
+              "finished": true,
+              "endMs": 337.28699991479516,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5419.9689999222755,
+              "status": 200,
+              "finished": true,
+              "endMs": 5427.7510000392795,
+              "transferredBytes": 4538517
+            }
+          ]
+        },
+        {
+          "step": "fallback-resize-small",
+          "pathname": "/audience-live/",
+          "hash": "#connect",
+          "time": 6190.800000190735,
+          "scrollY": 0,
+          "viewport": {
+            "width": 390,
+            "height": 200
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 843.015625,
+                "width": 362,
+                "height": 192.3125,
+                "top": 843.015625,
+                "right": 376,
+                "bottom": 1035.328125,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 2569.28125,
+                "width": 362,
+                "height": 192.3125,
+                "top": 2569.28125,
+                "right": 376,
+                "bottom": 2761.59375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 4.283000249415636,
+              "transferredBytes": 15495
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 46.04300018399954,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.356000032275915,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 47.91600024327636,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.83399994671345,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 48.088000155985355,
+              "status": 200,
+              "finished": true,
+              "endMs": 50.86700012907386,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 49.20700006186962,
+              "status": 200,
+              "finished": true,
+              "endMs": 56.26100022345781,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 49.23200001940131,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.51699995622039,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 49.248000141233206,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.90000031143427,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 335.92400001361966,
+              "status": 200,
+              "finished": true,
+              "endMs": 337.28699991479516,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5419.9689999222755,
+              "status": 200,
+              "finished": true,
+              "endMs": 5427.7510000392795,
+              "transferredBytes": 4538517
+            }
+          ]
+        },
+        {
+          "step": "fallback-resize-large",
+          "pathname": "/audience-live/",
+          "hash": "#connect",
+          "time": 6221,
+          "scrollY": 0,
+          "viewport": {
+            "width": 390,
+            "height": 2000
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "blob:local-demo",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 843.015625,
+                "width": 362,
+                "height": 192.3125,
+                "top": 843.015625,
+                "right": 376,
+                "bottom": 1035.328125,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 2569.28125,
+                "width": 362,
+                "height": 192.3125,
+                "top": 2569.28125,
+                "right": 376,
+                "bottom": 2761.59375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 4.283000249415636,
+              "transferredBytes": 15495
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 46.04300018399954,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.356000032275915,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 47.91600024327636,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.83399994671345,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 48.088000155985355,
+              "status": 200,
+              "finished": true,
+              "endMs": 50.86700012907386,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 49.20700006186962,
+              "status": 200,
+              "finished": true,
+              "endMs": 56.26100022345781,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 49.23200001940131,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.51699995622039,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 49.248000141233206,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.90000031143427,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 335.92400001361966,
+              "status": 200,
+              "finished": true,
+              "endMs": 337.28699991479516,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5419.9689999222755,
+              "status": 200,
+              "finished": true,
+              "endMs": 5427.7510000392795,
+              "transferredBytes": 4538517
+            }
+          ]
+        },
+        {
+          "step": "landing-hero-tabs-shared-fetch",
+          "pathname": "/audience-live/",
+          "hash": "#connect",
+          "time": 6474.5,
+          "scrollY": 2295,
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": -1451.984375,
+                "width": 362,
+                "height": 192.3125,
+                "top": -1451.984375,
+                "right": 376,
+                "bottom": -1259.671875,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "blob:local-demo",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 274.28125,
+                "width": 362,
+                "height": 192.3125,
+                "top": 274.28125,
+                "right": 376,
+                "bottom": 466.59375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": true,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "Pause",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 4.283000249415636,
+              "transferredBytes": 15495
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 46.04300018399954,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.356000032275915,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 47.91600024327636,
+              "status": 200,
+              "finished": true,
+              "endMs": 49.83399994671345,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 48.088000155985355,
+              "status": 200,
+              "finished": true,
+              "endMs": 50.86700012907386,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 49.20700006186962,
+              "status": 200,
+              "finished": true,
+              "endMs": 56.26100022345781,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 49.23200001940131,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.51699995622039,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 49.248000141233206,
+              "status": 200,
+              "finished": true,
+              "endMs": 51.90000031143427,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 335.92400001361966,
+              "status": 200,
+              "finished": true,
+              "endMs": 337.28699991479516,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5419.9689999222755,
+              "status": 200,
+              "finished": true,
+              "endMs": 5427.7510000392795,
+              "transferredBytes": 4538517
+            },
+            {
+              "path": "/assets/audience-live/bubbles.gif",
+              "type": "Fetch",
+              "startMs": 6373.13299998641,
+              "status": 200,
+              "finished": true,
+              "endMs": 6374.838000163436,
+              "transferredBytes": 1048319
+            },
+            {
+              "path": "/assets/audience-live/bubbles.jpg",
+              "type": "Image",
+              "startMs": 6387.296000029892,
+              "status": 200,
+              "finished": true,
+              "endMs": 6389.294000342488,
+              "transferredBytes": 51514
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "audience-live-shared-controller",
+      "language": "ja",
+      "settings": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "deviceScaleFactor": 1,
+        "cpuSlowdown": 4,
+        "network": "unthrottled"
+      },
+      "states": [
+        {
+          "step": "landing-connect-settled",
+          "pathname": "/ja/audience-live/",
+          "hash": "#connect",
+          "time": 5167,
+          "scrollY": 3387,
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": -2472.921875,
+                "width": 362,
+                "height": 192.3125,
+                "top": -2472.921875,
+                "right": 376,
+                "bottom": -2280.609375,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": -778.375,
+                "width": 362,
+                "height": 192.3125,
+                "top": -778.375,
+                "right": 376,
+                "bottom": -586.0625,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/ja/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 0.8479999378323555,
+              "transferredBytes": 17883
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 27.961000334471464,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.41600000485778,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 28.428000397980213,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.937000013887882,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 28.458000160753727,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.977000318467617,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 28.482000343501568,
+              "status": 200,
+              "finished": true,
+              "endMs": 31.977000180631876,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 28.50000001490116,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.236000195145607,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 28.515000361949205,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.105000361800194,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 164.04000017791986,
+              "status": 200,
+              "finished": true,
+              "endMs": 164.90900004282594,
+              "transferredBytes": 60990
+            }
+          ]
+        },
+        {
+          "step": "landing-hero-visible",
+          "pathname": "/ja/audience-live/",
+          "hash": "#connect",
+          "time": 5247.699999809265,
+          "scrollY": 588,
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "blob:local-demo",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 326.078125,
+                "width": 362,
+                "height": 192.3125,
+                "top": 326.078125,
+                "right": 376,
+                "bottom": 518.390625,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 2020.625,
+                "width": 362,
+                "height": 192.3125,
+                "top": 2020.625,
+                "right": 376,
+                "bottom": 2212.9375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/ja/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 0.8479999378323555,
+              "transferredBytes": 17883
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 27.961000334471464,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.41600000485778,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 28.428000397980213,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.937000013887882,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 28.458000160753727,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.977000318467617,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 28.482000343501568,
+              "status": 200,
+              "finished": true,
+              "endMs": 31.977000180631876,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 28.50000001490116,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.236000195145607,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 28.515000361949205,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.105000361800194,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 164.04000017791986,
+              "status": 200,
+              "finished": true,
+              "endMs": 164.90900004282594,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5231.977000366896,
+              "status": 200,
+              "finished": true,
+              "endMs": 5236.979000270367,
+              "transferredBytes": 4538517
+            }
+          ]
+        },
+        {
+          "step": "fallback-paused",
+          "pathname": "/ja/audience-live/",
+          "hash": "#connect",
+          "time": 5488.599999904633,
+          "scrollY": 588,
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 326.078125,
+                "width": 362,
+                "height": 192.3125,
+                "top": 326.078125,
+                "right": 376,
+                "bottom": 518.390625,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 2020.625,
+                "width": 362,
+                "height": 192.3125,
+                "top": 2020.625,
+                "right": 376,
+                "bottom": 2212.9375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "再生",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/ja/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 0.8479999378323555,
+              "transferredBytes": 17883
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 27.961000334471464,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.41600000485778,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 28.428000397980213,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.937000013887882,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 28.458000160753727,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.977000318467617,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 28.482000343501568,
+              "status": 200,
+              "finished": true,
+              "endMs": 31.977000180631876,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 28.50000001490116,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.236000195145607,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 28.515000361949205,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.105000361800194,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 164.04000017791986,
+              "status": 200,
+              "finished": true,
+              "endMs": 164.90900004282594,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5231.977000366896,
+              "status": 200,
+              "finished": true,
+              "endMs": 5236.979000270367,
+              "transferredBytes": 4538517
+            }
+          ]
+        },
+        {
+          "step": "fallback-play",
+          "pathname": "/ja/audience-live/",
+          "hash": "#connect",
+          "time": 5530.199999809265,
+          "scrollY": 588,
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "blob:local-demo",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 326.078125,
+                "width": 362,
+                "height": 192.3125,
+                "top": 326.078125,
+                "right": 376,
+                "bottom": 518.390625,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 2020.625,
+                "width": 362,
+                "height": 192.3125,
+                "top": 2020.625,
+                "right": 376,
+                "bottom": 2212.9375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/ja/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 0.8479999378323555,
+              "transferredBytes": 17883
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 27.961000334471464,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.41600000485778,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 28.428000397980213,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.937000013887882,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 28.458000160753727,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.977000318467617,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 28.482000343501568,
+              "status": 200,
+              "finished": true,
+              "endMs": 31.977000180631876,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 28.50000001490116,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.236000195145607,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 28.515000361949205,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.105000361800194,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 164.04000017791986,
+              "status": 200,
+              "finished": true,
+              "endMs": 164.90900004282594,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5231.977000366896,
+              "status": 200,
+              "finished": true,
+              "endMs": 5236.979000270367,
+              "transferredBytes": 4538517
+            }
+          ]
+        },
+        {
+          "step": "fallback-resize-small",
+          "pathname": "/ja/audience-live/",
+          "hash": "#connect",
+          "time": 5951.5,
+          "scrollY": 0,
+          "viewport": {
+            "width": 390,
+            "height": 200
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 914.078125,
+                "width": 362,
+                "height": 192.3125,
+                "top": 914.078125,
+                "right": 376,
+                "bottom": 1106.390625,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 2608.625,
+                "width": 362,
+                "height": 192.3125,
+                "top": 2608.625,
+                "right": 376,
+                "bottom": 2800.9375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/ja/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 0.8479999378323555,
+              "transferredBytes": 17883
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 27.961000334471464,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.41600000485778,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 28.428000397980213,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.937000013887882,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 28.458000160753727,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.977000318467617,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 28.482000343501568,
+              "status": 200,
+              "finished": true,
+              "endMs": 31.977000180631876,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 28.50000001490116,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.236000195145607,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 28.515000361949205,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.105000361800194,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 164.04000017791986,
+              "status": 200,
+              "finished": true,
+              "endMs": 164.90900004282594,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5231.977000366896,
+              "status": 200,
+              "finished": true,
+              "endMs": 5236.979000270367,
+              "transferredBytes": 4538517
+            }
+          ]
+        },
+        {
+          "step": "fallback-resize-large",
+          "pathname": "/ja/audience-live/",
+          "hash": "#connect",
+          "time": 5997.599999904633,
+          "scrollY": 0,
+          "viewport": {
+            "width": 390,
+            "height": 2000
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "blob:local-demo",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 914.078125,
+                "width": 362,
+                "height": 192.3125,
+                "top": 914.078125,
+                "right": 376,
+                "bottom": 1106.390625,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 2608.625,
+                "width": 362,
+                "height": 192.3125,
+                "top": 2608.625,
+                "right": 376,
+                "bottom": 2800.9375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": false,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/ja/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 0.8479999378323555,
+              "transferredBytes": 17883
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 27.961000334471464,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.41600000485778,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 28.428000397980213,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.937000013887882,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 28.458000160753727,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.977000318467617,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 28.482000343501568,
+              "status": 200,
+              "finished": true,
+              "endMs": 31.977000180631876,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 28.50000001490116,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.236000195145607,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 28.515000361949205,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.105000361800194,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 164.04000017791986,
+              "status": 200,
+              "finished": true,
+              "endMs": 164.90900004282594,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5231.977000366896,
+              "status": 200,
+              "finished": true,
+              "endMs": 5236.979000270367,
+              "transferredBytes": 4538517
+            }
+          ]
+        },
+        {
+          "step": "landing-hero-tabs-shared-fetch",
+          "pathname": "/ja/audience-live/",
+          "hash": "#connect",
+          "time": 6282.5,
+          "scrollY": 2335,
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "observerAvailable": false,
+          "images": [
+            {
+              "id": "hero-demo",
+              "src": "/assets/audience-live/flowing.jpg",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": -1420.921875,
+                "width": 362,
+                "height": 192.3125,
+                "top": -1420.921875,
+                "right": 376,
+                "bottom": -1228.609375,
+                "left": 14
+              }
+            },
+            {
+              "id": "flowing-demo",
+              "src": "blob:local-demo",
+              "complete": true,
+              "rect": {
+                "x": 14,
+                "y": 273.625,
+                "width": 362,
+                "height": 192.3125,
+                "top": 273.625,
+                "right": 376,
+                "bottom": 465.9375,
+                "left": 14
+              }
+            },
+            {
+              "id": "bubble-demo",
+              "src": "/assets/audience-live/bubbles.jpg",
+              "complete": true,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0,
+                "left": 0
+              }
+            }
+          ],
+          "buttons": [
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            },
+            {
+              "text": "一時停止",
+              "hidden": false,
+              "disabled": false
+            }
+          ],
+          "intersections": [],
+          "network": [
+            {
+              "path": "/ja/audience-live/",
+              "type": "Document",
+              "startMs": 0,
+              "status": 200,
+              "finished": true,
+              "endMs": 0.8479999378323555,
+              "transferredBytes": 17883
+            },
+            {
+              "path": "/language.js",
+              "type": "Script",
+              "startMs": 27.961000334471464,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.41600000485778,
+              "transferredBytes": 1679
+            },
+            {
+              "path": "/styles.css",
+              "type": "Stylesheet",
+              "startMs": 28.428000397980213,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.937000013887882,
+              "transferredBytes": 24440
+            },
+            {
+              "path": "/audience-live.css",
+              "type": "Stylesheet",
+              "startMs": 28.458000160753727,
+              "status": 200,
+              "finished": true,
+              "endMs": 29.977000318467617,
+              "transferredBytes": 5944
+            },
+            {
+              "path": "/audience-live.js",
+              "type": "Script",
+              "startMs": 28.482000343501568,
+              "status": 200,
+              "finished": true,
+              "endMs": 31.977000180631876,
+              "transferredBytes": 6501
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Image",
+              "startMs": 28.50000001490116,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.236000195145607,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.jpg",
+              "type": "Image",
+              "startMs": 28.515000361949205,
+              "status": 200,
+              "finished": true,
+              "endMs": 30.105000361800194,
+              "transferredBytes": 52339
+            },
+            {
+              "path": "/assets/quick-presenter-icon-256.png",
+              "type": "Other",
+              "startMs": 164.04000017791986,
+              "status": 200,
+              "finished": true,
+              "endMs": 164.90900004282594,
+              "transferredBytes": 60990
+            },
+            {
+              "path": "/assets/audience-live/flowing.gif",
+              "type": "Fetch",
+              "startMs": 5231.977000366896,
+              "status": 200,
+              "finished": true,
+              "endMs": 5236.979000270367,
+              "transferredBytes": 4538517
+            },
+            {
+              "path": "/assets/audience-live/bubbles.gif",
+              "type": "Fetch",
+              "startMs": 6185.643000062555,
+              "status": 200,
+              "finished": true,
+              "endMs": 6187.23600031808,
+              "transferredBytes": 1048319
+            },
+            {
+              "path": "/assets/audience-live/bubbles.jpg",
+              "type": "Image",
+              "startMs": 6198.538000229746,
+              "status": 200,
+              "finished": true,
+              "endMs": 6199.510000180453,
+              "transferredBytes": 51514
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

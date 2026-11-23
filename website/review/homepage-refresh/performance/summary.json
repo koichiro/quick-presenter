@@ -1,0 +1,50 @@
+[
+  {
+    "language": "en",
+    "revision": "before",
+    "lcpMedianMs": 964,
+    "clsMedian": 0,
+    "transferredBytesMedian": 1397743,
+    "requestsMedian": 10,
+    "lcpElement": "h1.product-headline",
+    "lcpImage": null,
+    "transferWindow": "extended: all HTTP responses complete; GIF displayed and observed at least 5s",
+    "rawPrimaryShiftSumMedian": 0
+  },
+  {
+    "language": "en",
+    "revision": "after",
+    "lcpMedianMs": 1780,
+    "clsMedian": 0,
+    "transferredBytesMedian": 5629485,
+    "requestsMedian": 12,
+    "lcpElement": "img#hero-demo",
+    "lcpImage": "/assets/audience-live/flowing.jpg",
+    "transferWindow": "extended: all HTTP responses complete; GIF displayed and observed at least 5s",
+    "rawPrimaryShiftSumMedian": 0.0009496830561521241
+  },
+  {
+    "language": "ja",
+    "revision": "before",
+    "lcpMedianMs": 996,
+    "clsMedian": 0,
+    "transferredBytesMedian": 1401546,
+    "requestsMedian": 10,
+    "lcpElement": "h1.product-headline",
+    "lcpImage": null,
+    "transferWindow": "extended: all HTTP responses complete; GIF displayed and observed at least 5s",
+    "rawPrimaryShiftSumMedian": 0
+  },
+  {
+    "language": "ja",
+    "revision": "after",
+    "lcpMedianMs": 1780,
+    "clsMedian": 0,
+    "transferredBytesMedian": 5633849,
+    "requestsMedian": 12,
+    "lcpElement": "img#hero-demo",
+    "lcpImage": "/assets/audience-live/flowing.jpg",
+    "transferWindow": "extended: all HTTP responses complete; GIF displayed and observed at least 5s",
+    "rawPrimaryShiftSumMedian": 0.0009087202986965529
+  }
+]
