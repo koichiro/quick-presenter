@@ -61,7 +61,7 @@ jobs:
         run: python scripts/check_pdfium_upgrade.py --baseline-manifest baseline-pdfium.json --review-record scripts/pdfium_upgrade_reviews.json --output artifacts/pdfium-upgrade-ci
       - name: Upload decision and evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: pdfium-upgrade-${{ matrix.os }}
           path: artifacts/pdfium-upgrade-ci
