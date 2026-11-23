@@ -419,6 +419,8 @@ async function demoController({ reduced = false, observe = true, deferred = fals
   return { demos, tabs, panels, document, requests, revoked, settle,
     load() { document.readyState = 'complete'; window.events.load?.(); },
     frame(scrollY = window.scrollY) { window.scrollY = scrollY; const callbacks = frames.splice(0); callbacks.forEach(callback => callback()); },
+    scroll() { window.events.scroll?.(); },
+    resize(height) { window.innerHeight = height; window.events.resize?.(); },
     complete(source, ok = true) { pending.get(source)(response(source, ok)); },
     visible(index, value = true) { observerCallback([{ target: demos[index], isIntersecting: value }]); },
     reduced(value) { motion.matches = value; motion.events.change(); },
@@ -727,4 +729,46 @@ test('fragment settling preserves shared demos, hidden tabs and reduced-motion o
   await c.settle();
   assert.equal(c.demos[0].image.src, 'blob:hero.gif');
   assert.equal(c.requests.length, 1);
+});
+
+test('no-observer fragment fallback tracks scroll, resize and pause intent after returning to Hero', async () => {
+  const c = await demoController({ observe:false, fragment:'#connect' });
+  const [hero,flowing,bubble] = c.demos;
+  flowing.image.dataset.animation = hero.image.dataset.animation;
+  for (const demo of c.demos) demo.bounds = {top:-1000,bottom:-800,left:0,right:300};
+  c.scroll();c.frame(); // Viewport updates must not bypass the initial-fragment gate.
+  assert.deepEqual(c.requests, []);
+  c.load();
+  for (let i=0;i<4;i++) c.frame();
+  await c.settle();
+  assert.deepEqual(c.requests, []);
+  hero.bounds = {top:100,bottom:300,left:0,right:300};
+  c.scroll();c.scroll();c.frame();
+  await c.settle();
+  assert.deepEqual(c.requests, ['hero.gif']);
+  assert.equal(hero.image.src,'blob:hero.gif');
+  hero.button.events.click();
+  assert.equal(hero.image.src,'hero.jpg');
+  c.scroll();c.frame();
+  await c.settle();
+  assert.equal(hero.image.src,'hero.jpg', 'Scrolling must retain an explicit pause');
+  hero.button.events.click();await c.settle();
+  assert.equal(hero.image.src,'blob:hero.gif');
+  c.resize(50);c.frame();
+  assert.equal(hero.image.src,'hero.jpg');
+  c.resize(844);c.frame();await c.settle();
+  assert.equal(hero.image.src,'blob:hero.gif');
+  // Fresh tab geometry is required when a previously hidden panel becomes visible.
+  hero.bounds = {top:-1000,bottom:-800,left:0,right:300};
+  flowing.bounds = {top:100,bottom:300,left:0,right:300};
+  c.tabs[0].events.click();await c.settle();
+  assert.equal(flowing.image.src,'blob:hero.gif');
+  bubble.bounds = {top:100,bottom:300,left:0,right:300};
+  c.tabs[1].events.click();await c.settle();
+  assert.equal(flowing.image.src,'flowing.jpg');
+  assert.equal(bubble.image.src,'blob:bubble.gif');
+  assert.deepEqual(c.requests,['hero.gif','bubble.gif']);
+  c.reduced(true);
+  c.scroll();c.frame();
+  assert.equal(bubble.image.src,'bubble.jpg');
 });

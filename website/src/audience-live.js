@@ -61,7 +61,15 @@
     button.textContent = motion.matches ? demo.dataset.reduced
       : paused ? demo.dataset.play : demo.dataset.pause;
   };
-  const renderAll = () => demos.forEach((_, demo) => render(demo));
+  const refreshVisibility = () => demos.forEach((state, demo) => {
+    const bounds = demo.getBoundingClientRect();
+    state.visible = bounds.bottom > 0 && bounds.right > 0
+      && bounds.top < window.innerHeight && bounds.left < window.innerWidth;
+  });
+  const renderAll = () => {
+    if (!observer) refreshVisibility();
+    demos.forEach((_, demo) => render(demo));
+  };
   const observer = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
     for (const entry of entries) {
       demos.get(entry.target).visible = entry.isIntersecting;
@@ -76,9 +84,23 @@
     button.addEventListener('click', () => {
       const state = demos.get(demo);
       state.paused = !state.paused;
-      render(demo);
+      if (observer) render(demo);
+      else renderAll();
     });
     observer?.observe(demo);
+  }
+  if (!observer) {
+    let scheduled = false;
+    const scheduleVisibility = () => {
+      if (scheduled) return;
+      scheduled = true;
+      window.requestAnimationFrame(() => {
+        scheduled = false;
+        renderAll();
+      });
+    };
+    window.addEventListener('scroll', scheduleVisibility, { passive: true });
+    window.addEventListener('resize', scheduleVisibility);
   }
   motion.addEventListener('change', renderAll);
   document.addEventListener('visibilitychange', renderAll);
@@ -134,11 +156,7 @@
         fragmentPending = false;
         // An early intersection notification may precede the initial smooth scroll.
         // Read current geometry instead of replaying that notification after settling.
-        demos.forEach((state, demo) => {
-          const bounds = demo.getBoundingClientRect();
-          state.visible = bounds.bottom > 0 && bounds.right > 0
-            && bounds.top < window.innerHeight && bounds.left < window.innerWidth;
-        });
+        refreshVisibility();
         renderAll();
       };
       window.requestAnimationFrame(check);
