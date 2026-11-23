@@ -67,7 +67,7 @@ slint-build = "=1.19.0"
 winresource = { version = "0.1.31", default-features = false }
 
 [dev-dependencies]
-tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
 
 [patch.crates-io]
 winit = { path = "vendor/winit" }
