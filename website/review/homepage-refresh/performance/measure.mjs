@@ -115,7 +115,7 @@ async function snapshot(run) {
 }
 try {
   const metadata = { capturedOn: '2026-11-23', before: 'a6a38d1acd14faaf60e34d8b71bf96bf0cab221e',
-    after: 'd5ed4d5fea9d62ef014dd0170b8d3d30c7310a61', browser: version,
+    after: process.env.AFTER_REVISION || 'd5ed4d5fea9d62ef014dd0170b8d3d30c7310a61', browser: version,
     tool: 'Chromium CDP Network + PerformanceObserver via existing Playwright 1.62.1',
     node: process.version, host: { osVersion: execFileSync('sw_vers', ['-productVersion'], {encoding:'utf8'}).trim(), osBuild: execFileSync('sw_vers', ['-buildVersion'], {encoding:'utf8'}).trim(), platform: os.platform(), release: os.release(), architecture: os.arch(), cpu: os.cpus()[0]?.model },
     context: settings, network, cpuSlowdown: 4, server: 'Unmodified website/scripts/preview.mjs; HTTP/1.1, no compression',
@@ -166,7 +166,7 @@ try {
   const results = [];
   // Alternate revision order to reduce time/thermal-order bias; only one measured page runs at a time.
   for (let iteration = 1; iteration <= 3; iteration++) for (const language of ['en','ja']) {
-    for (const revision of iteration % 2 ? ['before','after'] : ['after','before']) {
+    for (const revision of process.env.AFTER_ONLY ? ['after'] : iteration % 2 ? ['before','after'] : ['after','before']) {
       const run = await setup(revision, language);
       console.log(`START ${language} ${revision} ${iteration}`);
       await run.page.goto(run.url, { waitUntil: 'load', timeout: 120000 });
@@ -190,7 +190,7 @@ try {
     }
   }
   const controls = [];
-  for (const language of ['en','ja']) {
+  for (const language of process.env.SKIP_CONTROLS ? [] : ['en','ja']) {
     const run = await setup('after',language);
     await run.page.goto(run.url,{waitUntil:'load'});
     await run.page.waitForFunction(()=>document.querySelector('#hero-demo').src.startsWith('blob:') && document.querySelector('#hero-demo').complete,null, {timeout:120000});

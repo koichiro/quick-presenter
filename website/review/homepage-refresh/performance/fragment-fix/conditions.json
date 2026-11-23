@@ -1,0 +1,44 @@
+{
+  "capturedOn": "2026-11-23",
+  "before": "a6a38d1acd14faaf60e34d8b71bf96bf0cab221e",
+  "after": "5d6237141d8534de9f778b072299f11a5fc1c843",
+  "browser": "151.0.7922.34",
+  "tool": "Chromium CDP Network + PerformanceObserver via existing Playwright 1.62.1",
+  "node": "v26.13.1",
+  "host": {
+    "osVersion": "27.0.1",
+    "osBuild": "26A434",
+    "platform": "darwin",
+    "release": "27.0.0",
+    "architecture": "arm64",
+    "cpu": "Apple M6"
+  },
+  "context": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "deviceScaleFactor": 1,
+    "isMobile": true,
+    "hasTouch": true,
+    "locale": "en-US",
+    "timezoneId": "Asia/Tokyo",
+    "reducedMotion": "no-preference",
+    "serviceWorkers": "block",
+    "userAgent": "Mozilla/5.0 (Linux; Android 10; Lab) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Mobile Safari/537.36"
+  },
+  "network": {
+    "offline": false,
+    "latency": 150,
+    "downloadThroughput": 200000,
+    "uploadThroughput": 93750,
+    "connectionType": "cellular4g"
+  },
+  "cpuSlowdown": 4,
+  "server": "Unmodified website/scripts/preview.mjs; HTTP/1.1, no compression",
+  "initialWindow": "load event + 5000 ms, no input or scrolling",
+  "extendedWindow": "At least 20000 ms after navigation AND at least 5000 ms after GIF Fetch completion/Blob display; before pages use navigation + 20000 ms minimum",
+  "networkByteDefinition": "Completed responses use CDP Network.loadingFinished.encodedDataLength (response headers + encoded body, excluding request/TCP overhead). In-flight responses use only header/body bytes already notified by CDP; fetch body notifications can be deferred, so initial totals are lower bounds until all requests finish.",
+  "cache": "Fresh browser context per run; empty HTTP cache/cookies/storage, CDP cache disabled, Service Workers blocked and bypassed. Only local language choice is seeded before page scripts.",
+  "sanitization": "Only pathnames, media metadata, byte counts, rectangles and performance entries are retained. No headers, cookies, bodies, host ports, user profile, or local absolute paths are exported."
+}

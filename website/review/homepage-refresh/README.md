@@ -4,6 +4,57 @@ Validated on 2026-11-23 against main `a6a38d1` (PRs #562 and #563 merged).
 
 The English and Japanese homepages lead with Audience Live, the approved Hero copy, the existing Flowing recording, and a primary link to the localized Audience Live page. The existing AI, CLI, demo, and PDF preparation sections are preserved byte for byte. Legacy section and description IDs remain available. Presenter screenshots are reused and lazy-loaded.
 
+## Initial-fragment fix and verification — 5d62371
+
+The P2 direct-anchor issue is fixed in **`5d6237141d8534de9f778b072299f11a5fc1c843`**. The old controller could start a GIF Fetch during the brief initial Hero intersection before smooth scrolling reached `#download`.
+
+For a valid initial fragment only, animation activation now waits for `load` and then compares actual scroll coordinates and target geometry over consecutive animation frames. Three unchanged frame-to-frame samples are required; continued scrolling resets that count. On settling, the controller reads each demo's current bounds before rendering, rather than replaying a stale early IntersectionObserver notification. There is no fixed long timeout, permanent hash-based playback restriction, or change to shared Fetch/cache/retry ownership. No-fragment, missing-target and malformed-fragment visits bypass the wait. Copy, design, assets, dependencies, build configuration, and deployment settings are unchanged.
+
+### Post-fix normal-visit measurements
+
+The measured product commit is `5d62371`; subsequent evidence/test-documentation changes do not alter that controller. A fresh archive of that commit was built/served with the same existing scripts and **the same Chrome 151.0.7922.34, macOS/host, 390 × 844 DPR 1 mobile emulation, 1.6 Mbps down / 750 Kbps up / 150 ms latency, 4× CPU slowdown, cold contexts, and observation windows** as the historical captures. English and Japanese normal no-fragment visits were each repeated three times; all six succeeded, none were excluded. These are a new measurement batch, not replacement values for `d5ed4d5` or a claim to isolate millisecond-level host noise.
+
+| Page | d5ed4d5 LCP median | 5d62371 LCP median | CLS median old / fixed | Final transfer old / fixed (B) | Requests old / fixed |
+| --- | --- | --- | --- | --- | --- |
+| English | 1.780 s | 1.768 s | 0 / 0 | 5,629,485 / 5,631,006 | 12 / 12 |
+| Japanese | 1.780 s | 1.784 s | 0 / 0 | 5,633,849 / 5,635,370 | 12 / 12 |
+
+All six fixed-run LCP entries identify the static `flowing.jpg` Hero poster. The median changes are **−12 ms / +4 ms**, with no evidence of an added no-fragment startup delay. The GIF starts at **1.268–1.361 s** and completes at **28.378–28.427 s**; each page fetches it once. The total response-byte increase is exactly **1,521 B** per page, from the added shared JavaScript, not another GIF transfer. Poster/GIF dimensions and the small initial caption shift are unchanged. Standard CLS remains 0; the historical explanation of raw excluded shifts still applies.
+
+| Page | Run | LCP (ms) | CLS | GIF Fetch start (s) | Final cutoff (s) | Final transferred bytes | Requests |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| en | 1 | 1808 | 0 | 1.361 | 33.454 | 5,631,006 | 12 |
+| ja | 1 | 1784 | 0 | 1.278 | 33.396 | 5,635,370 | 12 |
+| en | 2 | 1768 | 0 | 1.279 | 33.410 | 5,631,006 | 12 |
+| ja | 2 | 1776 | 0 | 1.268 | 33.406 | 5,635,370 | 12 |
+| en | 3 | 1768 | 0 | 1.312 | 33.413 | 5,631,006 | 12 |
+| ja | 3 | 1784 | 0 | 1.278 | 33.410 | 5,635,370 | 12 |
+
+The final window again includes every completed response and at least five seconds after GIF completion/Blob display. [Fixed conditions](performance/fragment-fix/conditions.json), [six full runs](performance/fragment-fix/runs.json), and [fixed summary](performance/fragment-fix/summary.json) are separate from the historical files below. Local-lab/CDN, buffering, and desktop CPU-emulation limitations remain the same. The 4.33 MiB GIF and its roughly 28.4 s readiness on this constrained connection remain a payload optimization opportunity; this fix prevents unnecessary *starts* during initial anchor navigation rather than shrinking that asset.
+
+### Post-fix browser regression evidence
+
+[Browser cases and sanitized Network/intersection timelines](performance/fragment-fix/browser-checks.json) record 26 successful fresh-context cases. Direct download screenshots: [English](performance/fragment-fix/download-en.jpg) / [Japanese](performance/fragment-fix/download-ja.jpg); Hero after return: [English](performance/fragment-fix/returned-en.jpg) / [Japanese](performance/fragment-fix/returned-ja.jpg). The `#download` cases use the same slow network/4× CPU/mobile viewport as the measurements; other functional cases use the same browser/viewport/CPU with unthrottled networking to check behavior, not to enter performance medians.
+
+- English `/#download` and Japanese `/ja/#download`: the actual first-view intersection can occur, but no GIF request starts before/during the initial fragment scroll or within `load + 5 s` after landing. The displayed source remains the static poster. Returning to Hero starts one GIF Fetch and displays the Blob image; after three Pause/Play cycles and another offscreen/return cycle, the GIF request count stays one.
+- Both locales also check `#features`, `#automation`, `#authoring`, `#scope`, and `#demo`: zero GIF starts after landing, then exactly one on returning to Hero.
+- Normal no-fragment, missing-target, malformed-fragment and `#top` visits all play a visible Hero; no hash remains a permanent playback lock.
+- Fresh Reduced Motion and JavaScript-disabled pages retain the poster and issue no GIF request. The disabled-JavaScript pages retain both primary CTAs and hide the playback control.
+- English and Japanese Audience Live `#connect` visits issue no initial GIF request. Returning to Hero, visiting the Flowing comparison, switching to Bubbles and back preserves shared fetching: one `flowing.gif` request and one `bubbles.gif` request total.
+- The 21 Web tests include new coverage for post-load scrolling, stale intersection notifications, fresh geometry, valid/missing/malformed fragments, pause/reduced-motion intent and shared/hidden panels. Existing late-response, request-failure, decode-failure, retry and shared-cache tests remain passing.
+
+An earlier Japanese landing-page harness attempt timed out because scrolling to document top did not actually put its lower Hero image in the mobile viewport. The harness was corrected to scroll each demo image explicitly into view, and both landing-page cases were rerun. No primary performance run was excluded or changed for this harness correction.
+
+The original `performance/fragment-diagnostic.json` is intentionally retained as **pre-fix** evidence; current results live under `performance/fragment-fix/`. No raw HAR, headers, cookies, tokens, response bodies, or unnecessary local absolute paths are published.
+
+Reproduce by preparing `CHECKOUT_ROOT/before` from `a6a38d1` and `CHECKOUT_ROOT/after` from `5d62371`, building both with their existing scripts, and setting the existing `PLAYWRIGHT_MODULE`, `CHROME_PATH`, and a separate `OUTPUT_DIR` as in the historical reproduction instructions. Then run:
+
+```sh
+export AFTER_REVISION=5d6237141d8534de9f778b072299f11a5fc1c843
+AFTER_ONLY=1 SKIP_CONTROLS=1 node website/review/homepage-refresh/performance/measure.mjs
+node website/review/homepage-refresh/performance/check-fragments.mjs
+```
+
 ## Screenshots
 
 Responsive review used local fixed-width browser frames containing the built pages. Temporary review wrappers are not part of the build or committed source. Each page's measured viewport width equals its document scroll width; the measurements are in [layout.json](layout.json).
@@ -20,7 +71,7 @@ Desktop places the copy and demo side by side. Mobile places copy, CTAs, demo, t
 
 ## Validation
 
-- `npm test` in `website`: build and all 18 tests passed.
+- `npm test` in `website`: build and all 21 tests passed after the initial-fragment fix (the original refresh had 18 tests).
 - `node --check` for the shared demo controller and language script: passed.
 - `git diff --check`: passed.
 - Internal navigation, fragments, assets, canonical URLs, hreflang, social cards, media identity, language routing, and legacy IDs are covered by the Web tests.
@@ -31,16 +82,16 @@ Desktop places the copy and demo side by side. Mobile places copy, CTAs, demo, t
 
 ## Performance and accessibility
 
-The existing 960 × 510 poster is 52,165 bytes; the unchanged GIF is 4,538,342 bytes (about 4.33 MiB). The poster has high fetch priority and explicit dimensions. The demo preserves its ratio when the GIF replaces the poster, reserving its image space. There is one animated demo on each homepage. The unchanged shared controller fetches only visible, active demos and shares/reuses each asset request. Reduced motion prevents GIF fetching. Presenter screenshots and existing videos do not eagerly load their media.
+The existing 960 × 510 poster is 52,165 bytes; the unchanged GIF is 4,538,342 bytes (about 4.33 MiB). The poster has high fetch priority and explicit dimensions. The demo preserves its ratio when the GIF replaces the poster, reserving its image space. There is one animated demo on each homepage. The shared controller fetches only visible, active demos and shares/reuses each asset request. Reduced motion prevents GIF fetching. Presenter screenshots and existing videos do not eagerly load their media.
 
 Playback has localized button labels, associated image/caption IDs, keyboard controls, and focus styles. A skip link, semantic headings, and descriptive image text remain available. Desktop Japanese headline spans keep the approved text intact while allowing a break between its two clauses.
 
 The throttled browser-native measurements below replace the previous unmeasured LCP/CLS limitation. The GIF remains a material mobile transfer when it becomes visible. No product dependencies or replacement/generated media were introduced.
 
 
-## Throttled performance comparison (2026-11-23)
+## Historical throttled performance comparison — d5ed4d5 (2026-11-23)
 
-Measured the reviewed PR HEAD **`d5ed4d5fea9d62ef014dd0170b8d3d30c7310a61`** against **`a6a38d1acd14faaf60e34d8b71bf96bf0cab221e`**. The PR HEAD was unchanged when measurement started. Later commits in this task only add review evidence and the standalone capture script; the measured product HTML/CSS/JS is unchanged.
+Measured the reviewed PR HEAD **`d5ed4d5fea9d62ef014dd0170b8d3d30c7310a61`** against **`a6a38d1acd14faaf60e34d8b71bf96bf0cab221e`**. The PR HEAD was unchanged when that measurement started. The measurement-only follow-up `d2fdbb7` preserved that product revision. The subsequent initial-fragment fix changes the shared JavaScript controller; its separate measurements and evidence are documented above. The historical numbers below remain unchanged.
 
 Both revisions were exported into separate temporary directories with `git archive`, built with their existing `node website/scripts/build.mjs`, and served with the unchanged `website/scripts/preview.mjs` on loopback HTTP servers with identical settings. There was no CDN, TLS, or response compression. Measurements use a single page at a time, alternating revision order between iterations. All 12 runs succeeded; none were discarded. No Lighthouse run or score is reported: the measurements come directly from Chromium's performance timeline and CDP Network events.
 
@@ -134,13 +185,13 @@ The primary initial/final demo image rectangles are identical: the JPG-to-Blob/G
 
 This is a **local lab measurement**, not the deployed CDN or a real mobile network. Loopback HTTP has no CDN cache, TLS, protocol multiplexing, or compression; OS file caching and host activity are not representative of a handset. CPU throttling is relative to this host. This is not a Lighthouse simulation, a Lighthouse score, or a field Core Web Vitals assessment. The initial in-flight-byte limitation is disclosed above; final transfer totals are complete. No raw HAR, cookies, authentication headers, request/response bodies, personal data, or machine-specific absolute paths are published in the JSON evidence.
 
-### Direct-fragment edge case and probe accounting
+### Historical direct-fragment edge case and probe accounting
 
 An exploratory offscreen-first probe initially used `/#download` and stopped at its assertion that no GIF request should exist. That setup did **not** satisfy the intended precondition: the Hero was briefly visible before the initial smooth fragment scroll moved it offscreen. This was a supplemental probe, not one of the 12 primary measurements; no primary measurement was excluded.
 
 [The follow-up visibility/Network diagnostic](performance/fragment-diagnostic.json) records the English demo as visible at **1.291 s**, the GIF Fetch starting at **1.294 s**, and the demo becoming offscreen at **1.500 s**. The image returns to its poster offscreen, but the already-started Fetch is not canceled. The strict offscreen-first tests were therefore rerun with the 390 × 480 viewport described above and passed in both languages.
 
-This is a real remaining transfer-cost edge case for direct-anchor visitors: visibility gating does not cancel an asset whose download started while it was momentarily visible. A focused follow-up could delay animation activation until initial fragment scrolling settles, or cancel an in-flight fetch when all consumers become inactive, with shared-consumer/retry tests. No such product change is included in this measurement task.
+This historical defect was fixed in `5d62371`: initial valid-fragment navigation now defers animation activation until scrolling settles, then rechecks actual geometry. The post-fix direct-anchor Network checks above supersede this old diagnostic; the JSON is retained as the original failure evidence. No shared-fetch cancellation was introduced.
 
 ### Reproduction and evidence handling
 
@@ -158,7 +209,7 @@ FRAGMENT_ONLY=1 node website/review/homepage-refresh/performance/measure.mjs
 
 The first command captures all 12 primary runs and both locales' normal/reduced-motion/no-JS control checks; the second records the strict offscreen-first checks; the third records the optional direct-fragment diagnostic. The latter two do not alter `runs.json` or `controls.json`. The final script also exports Resource Timing body sizes when taking snapshots; those are present in the supplemental visibility evidence. Version/byte/geometry data and static URL pathnames were retained instead of exporting a raw HAR or full browser trace. All published JSON was checked for private URLs, local absolute paths, cookies, authentication data, and request/response bodies. Only the expected static page/asset pathnames are present.
 
-Final checks for this review-only follow-up: `npm test` built the site and passed all 18 Web tests; `node --check performance/measure.mjs` and `git diff --check` passed. Product source, Hero copy, design, dependencies, build configuration, and deployment settings are unchanged.
+Historical checks for the measurement-only follow-up `d2fdbb7`: `npm test` built the site and passed all 18 Web tests; `node --check performance/measure.mjs` and `git diff --check` passed. Product source, Hero copy, design, dependencies, build configuration, and deployment settings are unchanged.
 
 ## Public release state checked
 

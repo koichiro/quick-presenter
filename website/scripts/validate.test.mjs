@@ -708,10 +708,11 @@ test('settled visible, missing and malformed fragments do not strand visible dem
 });
 
 test('fragment settling preserves shared demos, hidden tabs and reduced-motion or pause intent', async () => {
-  const c = await demoController({ fragment:'#demos', reduced:true });
+  const c = await demoController({ fragment:'#demos' });
   c.demos[1].image.dataset.animation = c.demos[0].image.dataset.animation;
   c.demos.forEach((_,i)=>c.visible(i));
   c.demos[0].button.events.click(); // Preserve a pause chosen while waiting.
+  c.reduced(true);
   c.load();
   for (let i=0;i<4;i++) c.frame();
   await c.settle();

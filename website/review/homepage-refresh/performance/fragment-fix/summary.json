@@ -1,0 +1,36 @@
+[
+  {
+    "language": "en",
+    "revision": "5d6237141d8534de9f778b072299f11a5fc1c843",
+    "lcpMedianMs": 1768,
+    "clsMedian": 0,
+    "finalTransferredBytesMedian": 5631006,
+    "requestsMedian": 12,
+    "gifFetchCountPerRun": 1,
+    "gifStartRangeMs": [
+      1279.4139999896288,
+      1360.8809998258948
+    ],
+    "gifCompletionRangeMs": [
+      28384.25200013444,
+      28427.298000082374
+    ]
+  },
+  {
+    "language": "ja",
+    "revision": "5d6237141d8534de9f778b072299f11a5fc1c843",
+    "lcpMedianMs": 1784,
+    "clsMedian": 0,
+    "finalTransferredBytesMedian": 5635370,
+    "requestsMedian": 12,
+    "gifFetchCountPerRun": 1,
+    "gifStartRangeMs": [
+      1268.1510001420975,
+      1277.5790002197027
+    ],
+    "gifCompletionRangeMs": [
+      28377.650000154972,
+      28391.015000175685
+    ]
+  }
+]
