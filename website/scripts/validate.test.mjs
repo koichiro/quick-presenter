@@ -343,7 +343,7 @@ test("Audience Live media retain PR #561 byte identity and provide static no-JS 
 });
 
 // Exercise the browser controller without adding a DOM dependency.
-async function demoController({ reduced = false, observe = true, deferred = false, decodeFailures = 0, homepage = false } = {}) {
+async function demoController({ reduced = false, observe = true, deferred = false, decodeFailures = 0, homepage = false, fragment = '', loaded = false, fragmentExists = true } = {}) {
   const script = await readFile(join(dist, 'audience-live.js'), 'utf8');
   function element(dataset = {}) {
     return {
@@ -365,6 +365,8 @@ async function demoController({ reduced = false, observe = true, deferred = fals
     demo.button = element();
     demo.querySelector = selector => selector === 'img' ? demo.image : demo.button;
     demo.closest = () => i ? panels[i - 1] : null;
+    demo.bounds = { top: 100, left: 0, bottom: 300, right: 300 };
+    demo.getBoundingClientRect = () => demo.bounds;
     return demo;
   });
   const tabs = panels.map((_, i) => element({ tab: `panel-${i}` }));
@@ -376,6 +378,10 @@ async function demoController({ reduced = false, observe = true, deferred = fals
   };
   const document = element();
   document.querySelectorAll = selector => selector === '[data-demo]' ? demos : homepage ? [] : [comparison];
+  const target = { getBoundingClientRect: () => ({top: 1200 - window.scrollY, left: 0}) };
+  document.getElementById = () => fragmentExists ? target : null;
+  document.readyState = loaded ? 'complete' : 'loading';
+  const frames = [];
   const motion = element();
   motion.matches = reduced;
   let observerCallback;
@@ -383,7 +389,9 @@ async function demoController({ reduced = false, observe = true, deferred = fals
     constructor(callback) { observerCallback = callback; }
     observe() {}
   }
-  const window = { matchMedia: () => motion };
+  const window = { ...element(), matchMedia: () => motion, location: {hash: fragment},
+    scrollX: 0, scrollY: 0, innerWidth: 390, innerHeight: 844,
+    requestAnimationFrame: callback => frames.push(callback) };
   if (observe) window.IntersectionObserver = Observer;
   const revoked = [];
   class Image {
@@ -409,6 +417,8 @@ async function demoController({ reduced = false, observe = true, deferred = fals
   });
   await settle();
   return { demos, tabs, panels, document, requests, revoked, settle,
+    load() { document.readyState = 'complete'; window.events.load?.(); },
+    frame(scrollY = window.scrollY) { window.scrollY = scrollY; const callbacks = frames.splice(0); callbacks.forEach(callback => callback()); },
     complete(source, ok = true) { pending.get(source)(response(source, ok)); },
     visible(index, value = true) { observerCallback([{ target: demos[index], isIntersecting: value }]); },
     reduced(value) { motion.matches = value; motion.events.change(); },
@@ -653,4 +663,67 @@ test('homepage single-demo playback works without comparison tabs', async () => 
   await reduced.settle();
   assert.deepEqual(reduced.requests, []);
   assert.equal(reduced.demos[0].button.disabled, true);
+});
+
+test('initial fragments defer GIF requests until scrolling settles and recheck current visibility', async () => {
+  const c = await demoController({ homepage: true, fragment: '#download' });
+  c.visible(0); // The Hero can intersect before initial smooth scrolling begins.
+  await c.settle();
+  assert.deepEqual(c.requests, []);
+  c.frame(); // No frame loop is started before load.
+  assert.deepEqual(c.requests, []);
+  c.load();
+  c.frame(0);
+  c.frame(0);
+  c.frame(300); // Scrolling can still begin after load; restart the stable-frame count.
+  c.frame(600);
+  c.demos[0].bounds = { top: -1000, bottom: -800, left: 0, right: 300 };
+  // Leave the cached IntersectionObserver state stale on purpose.
+  for (let i = 0; i < 3; i++) c.frame(600);
+  await c.settle();
+  assert.deepEqual(c.requests, [], 'A stale visible notification must not start an offscreen GIF');
+  c.demos[0].bounds = { top: 100, bottom: 300, left: 0, right: 300 };
+  c.visible(0);
+  await c.settle();
+  assert.deepEqual(c.requests, ['hero.gif']);
+  assert.equal(c.demos[0].image.src, 'blob:hero.gif');
+  c.demos[0].button.events.click();
+  c.demos[0].button.events.click();
+  await c.settle();
+  assert.equal(c.requests.length, 1);
+});
+
+test('settled visible, missing and malformed fragments do not strand visible demos', async () => {
+  const top = await demoController({ homepage: true, fragment: '#top', loaded: true });
+  top.visible(0);
+  for (let i = 0; i < 4; i++) top.frame();
+  await top.settle();
+  assert.deepEqual(top.requests, ['hero.gif']);
+  for (const options of [{fragment:'#missing', fragmentExists:false}, {fragment:'#%invalid'}]) {
+    const c = await demoController({homepage:true, ...options});
+    c.visible(0);
+    await c.settle();
+    assert.deepEqual(c.requests, ['hero.gif']);
+  }
+});
+
+test('fragment settling preserves shared demos, hidden tabs and reduced-motion or pause intent', async () => {
+  const c = await demoController({ fragment:'#demos', reduced:true });
+  c.demos[1].image.dataset.animation = c.demos[0].image.dataset.animation;
+  c.demos.forEach((_,i)=>c.visible(i));
+  c.demos[0].button.events.click(); // Preserve a pause chosen while waiting.
+  c.load();
+  for (let i=0;i<4;i++) c.frame();
+  await c.settle();
+  assert.deepEqual(c.requests, []);
+  c.reduced(false);
+  await c.settle();
+  assert.deepEqual(c.requests, ['hero.gif']);
+  assert.equal(c.demos[0].image.src, 'hero.jpg');
+  assert.equal(c.demos[1].image.src, 'blob:hero.gif');
+  assert.equal(c.demos[2].image.src, 'bubble.jpg');
+  c.demos[0].button.events.click();
+  await c.settle();
+  assert.equal(c.demos[0].image.src, 'blob:hero.gif');
+  assert.equal(c.requests.length, 1);
 });

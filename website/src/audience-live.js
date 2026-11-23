@@ -2,6 +2,14 @@
 (() => {
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const demos = new Map();
+  let fragmentTarget;
+  try {
+    const hash = window.location.hash.slice(1);
+    if (hash) fragmentTarget = document.getElementById(decodeURIComponent(hash));
+  } catch {
+    // Malformed fragments must not prevent visible demos from playing.
+  }
+  let fragmentPending = Boolean(fragmentTarget);
   // Share one fetch per asset, including Hero/Flowing. Blob URLs live with the page.
   const animations = new Map();
   const animation = (source) => {
@@ -35,7 +43,7 @@
     const state = demos.get(demo);
     const { image, button, paused, visible } = state;
     const active = !demo.closest('[data-panel]')?.hidden;
-    const playing = !motion.matches && !document.hidden && active && visible && !paused;
+    const playing = !fragmentPending && !motion.matches && !document.hidden && active && visible && !paused;
     const wasPlaying = state.playing;
     state.playing = playing;
     if (!playing) {
@@ -109,4 +117,33 @@
     tablist.hidden = false;
   }
   renderAll();
+  if (fragmentPending) {
+    const settleFragment = () => {
+      let previous;
+      let stableFrames = 0;
+      const check = () => {
+        const rect = fragmentTarget.getBoundingClientRect();
+        const position = [window.scrollX, window.scrollY, rect.top, rect.left];
+        stableFrames = previous?.every((value, i) => value === position[i])
+          ? stableFrames + 1 : 0;
+        previous = position;
+        if (stableFrames < 3) {
+          window.requestAnimationFrame(check);
+          return;
+        }
+        fragmentPending = false;
+        // An early intersection notification may precede the initial smooth scroll.
+        // Read current geometry instead of replaying that notification after settling.
+        demos.forEach((state, demo) => {
+          const bounds = demo.getBoundingClientRect();
+          state.visible = bounds.bottom > 0 && bounds.right > 0
+            && bounds.top < window.innerHeight && bounds.left < window.innerWidth;
+        });
+        renderAll();
+      };
+      window.requestAnimationFrame(check);
+    };
+    if (document.readyState === 'complete') settleFragment();
+    else window.addEventListener('load', settleFragment, { once: true });
+  }
 })();
